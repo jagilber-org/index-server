@@ -1,0 +1,71 @@
+{
+  "root": true,
+  "parser": "@typescript-eslint/parser",
+  "parserOptions": { "project": ["./tsconfig.eslint.json"], "sourceType": "module" },
+  "plugins": ["@typescript-eslint"],
+  "env": { "es2022": true, "node": true },
+  "extends": [
+    "eslint:recommended",
+    "plugin:@typescript-eslint/recommended"
+  ],
+  "rules": {
+    "@typescript-eslint/explicit-function-return-type": "off",
+    "@typescript-eslint/no-unused-vars": ["warn", { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_", "ignoreRestSiblings": true }]
+  },
+  "ignorePatterns": [
+    "vitest.config.ts",
+    ".eslintrc.cjs",
+    // Build output
+    "dist/**",
+    // Parked legacy tests (belt + suspenders; also excluded in tsconfig.eslint.json)
+    "src/tests._park/**",
+  // Declaration guard script (no type-aware lint needed)
+  "scripts/guard-declarations.mjs",
+  "scripts/purge-extra-decls.mjs"
+  ],
+  "overrides": [
+    {
+      // Parked legacy tests: disable typed project parsing to avoid TS program mismatch errors
+      "files": ["src/tests._park/**/*.ts", "src/tests._park/**/*.tsx"],
+      "parserOptions": { "project": null },
+      "rules": { "@typescript-eslint/no-unused-vars": "off" }
+    },
+    {
+      // Global test setup file: allow unused global types (Buffer) without noise
+      "files": ["src/tests/setupDistReady.ts"],
+      "rules": { "@typescript-eslint/no-unused-vars": "off" }
+    },
+    {
+      "files": ["scripts/*.cjs","scripts/*.js"],
+      "parserOptions": { "project": [] },
+      "rules": { }
+    }
+    ,{
+      "files": ["scripts/*.ts"],
+      "parserOptions": { "project": [] },
+      "rules": { }
+    }
+    ,{
+      "files": ["scripts/*.mjs"],
+      "parserOptions": { "project": [] },
+      "rules": { }
+    }
+    ,{
+  // Declaration files: explicitly disable typed-linting (project null) so excluded or placeholder .d.ts do not error
+  "files": ["**/*.d.ts"],
+  "parserOptions": { "project": null },
+  "rules": { "@typescript-eslint/no-explicit-any": "off" }
+    }
+    ,{
+      "files": ["src/tests/**/*.spec.ts"],
+      "rules": { "@typescript-eslint/no-explicit-any": "off" }
+    }
+    ,{
+      // Client-side extracted JS modules: treat as plain JS (no type-aware parsing)
+      "files": ["src/dashboard/client/js/**/*.js"],
+      "parserOptions": { "project": null },
+      "env": { "browser": true },
+      "rules": {}
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "templateName": "layered-hook-security-template",
+  "adoptedTemplateVersion": "1.0.0",
+  "hookStandardVersion": "1.0.0",
+  "adoptedAt": "YYYY-MM-DD",
+  "localDeviations": [
+    "Document intentional differences from the template here."
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "$id": "https://example.local/schemas/usage-event.schema.json",
+  "title": "InstructionUsageEvent",
+  "type": "object",
+  "description": "Single instruction usage observation prior to aggregation.",
+  "required": ["id","ts"],
+  "additionalProperties": false,
+  "properties": {
+    "id": { "type": "string", "description": "Instruction id." },
+    "ts": { "type": "string", "format": "date-time", "description": "Timestamp of usage event (ISO 8601)." },
+    "agentId": { "type": "string" },
+    "workspace": { "type": "string" },
+    "context": { "type": "string", "maxLength": 2000 },
+    "source": { "type": "string", "enum": ["tool-call","dispatch","search","batch","other"] }
+  }
+}

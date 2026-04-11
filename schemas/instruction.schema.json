@@ -1,0 +1,262 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "$id": "https://example.local/schemas/instruction.schema.json",
+  "title": "InstructionEntry",
+  "description": "Canonical on-disk instruction record (author + system managed governance metadata).",
+  "type": "object",
+  "definitions": {
+    "changeLogEntry": {
+      "type": "object",
+      "required": [
+        "version",
+        "changedAt",
+        "summary"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "version": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+$",
+          "description": "Semantic version after this change"
+        },
+        "changedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp the change was recorded (ISO 8601)"
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Human readable summary of change"
+        }
+      }
+    }
+  },
+  "required": [
+    "id",
+    "title",
+    "body",
+    "priority",
+    "audience",
+    "requirement",
+    "categories",
+    "contentType"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9](?:[a-z0-9-_]{0,118}[a-z0-9])?$",
+      "maxLength": 120,
+      "description": "Stable identifier (file name without .json) lower-case, no leading/trailing hyphen/underscore"
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "description": "Short display title"
+    },
+    "body": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1000000,
+      "description": "Primary instruction content (markdown / plain text)"
+    },
+    "rationale": {
+      "type": "string",
+      "description": "Optional rationale / context for the instruction"
+    },
+    "priority": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 100,
+      "description": "Relative ordering: lower = higher importance"
+    },
+    "audience": {
+      "enum": [
+        "individual",
+        "group",
+        "all"
+      ],
+      "description": "Intended audience scope"
+    },
+    "requirement": {
+      "enum": [
+        "mandatory",
+        "critical",
+        "recommended",
+        "optional",
+        "deprecated"
+      ],
+      "description": "Lifecycle requirement status"
+    },
+    "categories": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z0-9][a-z0-9-_]{0,48}$"
+      },
+      "uniqueItems": true,
+      "minItems": 0,
+      "maxItems": 25,
+      "description": "Normalized lower-case tags (max 25, each <=49 chars). Empty array permitted for backward compatibility; runtime may auto-fill 'uncategorized'."
+    },
+    "primaryCategory": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-_]{0,48}$",
+      "description": "Primary/default category (must be a member of categories when present)"
+    },
+    "contentType": {
+      "enum": [
+        "instruction",
+        "template",
+        "chat-session",
+        "reference",
+        "example",
+        "agent"
+      ],
+      "default": "instruction",
+      "description": "Content type classification: instruction (actionable guidance), template (scaffolds/error templates), chat-session (conversation history), reference (docs/guides), example (code samples), agent (AI agent definitions/personas)"
+    },
+    "schemaVersion": {
+      "type": "string",
+      "enum": [
+        "4"
+      ],
+      "description": "Internal schema version for migration"
+    },
+    "sourceHash": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$",
+      "description": "SHA256 hash of body for drift detection"
+    },
+    "deprecatedBy": {
+      "type": "string",
+      "description": "ID of instruction that supersedes this one"
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Creation timestamp (ISO 8601)"
+    },
+    "updatedAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Last mutation timestamp (ISO 8601)"
+    },
+    "usageCount": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Number of tracked usage events"
+    },
+    "lastUsedAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Last usage timestamp (ISO 8601)"
+    },
+    "riskScore": {
+      "type": "number",
+      "description": "Optional numeric risk indicator (higher = riskier)"
+    },
+    "reviewIntervalDays": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 365,
+      "description": "Governance review interval in days"
+    },
+    "workspaceId": {
+      "type": "string",
+      "description": "Scoped workspace identifier (if specific)"
+    },
+    "userId": {
+      "type": "string",
+      "description": "Scoped user identifier (if specific)"
+    },
+    "teamIds": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true,
+      "description": "Scoped team identifiers (if any)"
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "description": "Semantic version of the instruction"
+    },
+    "status": {
+      "enum": [
+        "draft",
+        "review",
+        "approved",
+        "deprecated"
+      ],
+      "description": "Governance workflow status"
+    },
+    "owner": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Assigned owning entity (team / user / group)"
+    },
+    "priorityTier": {
+      "enum": [
+        "P1",
+        "P2",
+        "P3",
+        "P4"
+      ],
+      "description": "Tier bucket derived from priority or governance policy"
+    },
+    "classification": {
+      "enum": [
+        "public",
+        "internal",
+        "restricted"
+      ],
+      "description": "Information classification level"
+    },
+    "lastReviewedAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Timestamp of last governance review"
+    },
+    "nextReviewDue": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Scheduled next review timestamp"
+    },
+    "changeLog": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/changeLogEntry"
+      },
+      "minItems": 1,
+      "description": "Chronological list of notable changes"
+    },
+    "supersedes": {
+      "type": "string",
+      "description": "ID of instruction this one replaces"
+    },
+    "semanticSummary": {
+      "type": "string",
+      "maxLength": 600,
+      "description": "Cached short natural-language summary of body"
+    },
+    "sourceWorkspace": {
+      "type": "string",
+      "maxLength": 200,
+      "description": "Logical workspace or repository identifier from which this instruction was promoted or created"
+    },
+    "createdByAgent": {
+      "type": "string",
+      "maxLength": 200,
+      "description": "Identifier of the MCP agent or client that created or promoted this entry"
+    },
+    "extensions": {
+      "type": "object",
+      "description": "Future-proof vendor / experimental fields",
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": false
+}

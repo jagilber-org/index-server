@@ -1,0 +1,54 @@
+name: UI Drift Detection
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  # DISABLED: Nightly drift checks causing workflow queue buildup
+  # schedule:
+  #   # Nightly drift verification (02:30 UTC)
+  #   - cron: '30 2 * * *'
+  workflow_dispatch: {}
+
+jobs:
+  ui-drift:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - name: Use Node.js 20
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm ci
+      - name: Build server
+        run: npm run build
+      - name: Ensure instructions directory exists
+        run: |
+          mkdir -p instructions
+          if [ ! "$(ls instructions/*.json 2>/dev/null)" ]; then
+            echo '{"id":"ci-seed","title":"CI Seed","body":"Seed instruction for CI.","version":"1.0.0","status":"active","tags":["ci"]}' > instructions/ci-seed.json
+          fi
+      - name: Install Playwright browsers (all)
+        run: npm run pw:init
+      - name: Run multi-browser drift comparison + report
+        env:
+          INDEX_SERVER_DASHBOARD: '1'
+          # Limit default CI run to chromium & firefox for time balance; adjust as needed
+          DRIFT_BROWSERS: 'chromium,firefox'
+        run: npm run pw:drift:report
+      - name: Upload Playwright artifacts (snapshots, report, traces)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-drift-artifacts
+          path: |
+            tests/playwright/baseline.spec.ts-snapshots/
+            playwright-report/
+            playwright-report/drift-report.json
+            playwright-report/drift-report.md
+          if-no-files-found: warn
+          retention-days: 14

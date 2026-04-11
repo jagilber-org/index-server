@@ -1,0 +1,54 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$ref": "#/definitions/PersistedWebSocketConnection",
+  "definitions": {
+    "PersistedWebSocketConnection": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "clientId": {
+          "type": "string"
+        },
+        "connectedAt": {
+          "type": "string"
+        },
+        "lastActivity": {
+          "type": "string"
+        },
+        "ipAddress": {
+          "type": "string"
+        },
+        "userAgent": {
+          "type": "string"
+        },
+        "isActive": {
+          "type": "boolean"
+        },
+        "disconnectedAt": {
+          "type": "string"
+        },
+        "disconnectReason": {
+          "type": "string"
+        },
+        "persistedAt": {
+          "type": "string"
+        },
+        "version": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "id",
+        "clientId",
+        "connectedAt",
+        "lastActivity",
+        "isActive",
+        "persistedAt",
+        "version"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

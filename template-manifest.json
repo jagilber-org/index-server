@@ -1,0 +1,27 @@
+{
+  "templateName": "layered-hook-security-template",
+  "templateVersion": "1.0.0",
+  "schemaVersion": "1.0.0",
+  "hookStandardVersion": "1.0.0",
+  "knowledgeModelVersion": "1.0.0",
+  "copilotInstructions": ".github/copilot-instructions.md",
+  "promotionMap": ".specify/config/promotion-map.json",
+  "adoptionMarker": ".template-adoption.json",
+  "managedFiles": [
+    { "path": ".pre-commit-config.yaml", "strategy": "MergeReview" },
+    { "path": ".github/copilot-instructions.md", "strategy": "MergeReview" },
+    { "path": "constitution.json", "strategy": "MergeReview" },
+    { "path": "constitution.md", "strategy": "ExactMatch" },
+    { "path": ".specify/config/promotion-map.json", "strategy": "MergeReview" },
+    { "path": "scripts/pre-commit.ps1", "strategy": "MergeReview" },
+    { "path": "scripts/pre-push.ps1", "strategy": "MergeReview" },
+    { "path": "scripts/setup-hooks.ps1", "strategy": "ExactMatch" },
+    { "path": "scripts/sync-constitution.ps1", "strategy": "ExactMatch" },
+    { "path": ".instructions/README.md", "strategy": "RepoSpecific" },
+    { "path": ".instructions/local/project-context.md", "strategy": "RepoSpecific" },
+    { "path": ".instructions/shared/index-server-bootstrap.md", "strategy": "MergeReview" },
+    { "path": ".instructions/shared/squad-index-server-complement.md", "strategy": "MergeReview" },
+    { "path": ".instructions/shared/template-adoption-workflow.md", "strategy": "MergeReview" },
+    { "path": ".template-adoption.json", "strategy": "AdoptionMarker" }
+  ]
+}

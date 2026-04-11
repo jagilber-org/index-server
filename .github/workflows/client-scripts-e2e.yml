@@ -1,0 +1,91 @@
+name: Client Scripts E2E
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/index-server-client.*'
+      - 'src/dashboard/server/routes/scripts.routes.ts'
+      - 'src/tests/clientScriptsE2e.spec.ts'
+      - '.github/workflows/client-scripts-e2e.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/index-server-client.*'
+      - 'src/dashboard/server/routes/scripts.routes.ts'
+      - 'src/tests/clientScriptsE2e.spec.ts'
+      - '.github/workflows/client-scripts-e2e.yml'
+  workflow_dispatch: {}
+
+jobs:
+  client-scripts-e2e:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [22]
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Install nmap
+        run: sudo apt-get update && sudo apt-get install -y nmap
+
+      - name: Run client scripts E2E tests
+        run: npx vitest run src/tests/clientScriptsE2e.spec.ts --reporter=verbose
+        env:
+          INDEX_SERVER_MUTATION: '1'
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: client-scripts-e2e-results
+          path: test-results
+          if-no-files-found: warn
+
+      - name: Upload server logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: client-scripts-e2e-server-logs
+          path: |
+            logs/
+            *.log
+          retention-days: 7
+          if-no-files-found: warn
+
+  client-scripts-e2e-windows:
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        node-version: [22]
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Run client scripts E2E tests (PowerShell focus)
+        run: npx vitest run src/tests/clientScriptsE2e.spec.ts --reporter=verbose
+        env:
+          INDEX_SERVER_MUTATION: '1'

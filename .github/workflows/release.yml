@@ -1,0 +1,295 @@
+name: Release
+
+# Unified release workflow triggered by version tags (v*).
+# Runs the full test suite, builds all artifacts (npm, Docker, VSIX),
+# creates a GitHub Release with changelog, and publishes packages.
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run — build and test without publishing'
+        required: false
+        default: 'true'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+
+permissions:
+  contents: write
+  packages: write
+  id-token: write
+  attestations: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+  NODE_VERSION: '22'
+
+jobs:
+  # ──────────────────────────────────────────────────────────────────
+  # Stage 1: Validate — type check, lint, test, coverage
+  # ──────────────────────────────────────────────────────────────────
+  validate:
+    name: Validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Use Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
+
+      - name: Test (with coverage)
+        run: npm run coverage:ci || npm test
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: |
+            test-results/
+            coverage/
+
+  # ──────────────────────────────────────────────────────────────────
+  # Stage 2a: Build npm package
+  # ──────────────────────────────────────────────────────────────────
+  build-npm:
+    name: Build npm Package
+    runs-on: ubuntu-latest
+    needs: validate
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          registry-url: 'https://npm.pkg.github.com'
+          scope: '@jagilber-org'
+
+      - run: npm ci
+      - run: npm run build
+
+      - name: Pack
+        run: npm pack
+
+      - name: Upload npm tarball
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-package
+          path: '*.tgz'
+
+  # ──────────────────────────────────────────────────────────────────
+  # Stage 2b: Build Docker image
+  # ──────────────────────────────────────────────────────────────────
+  build-docker:
+    name: Build Docker Image
+    runs-on: ubuntu-latest
+    needs: validate
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        if: startsWith(github.ref, 'refs/tags/') || github.event.inputs.dry_run == 'false'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: ${{ startsWith(github.ref, 'refs/tags/') || github.event.inputs.dry_run == 'false' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: true
+          sbom: true
+
+      - name: Scan with Trivy
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: aquasecurity/trivy-action@v0.35.0
+        with:
+          image-ref: '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }}'
+          format: 'table'
+          severity: 'CRITICAL,HIGH'
+          exit-code: '0'
+
+  # ──────────────────────────────────────────────────────────────────
+  # Stage 2c: Build VSIX extension
+  # ──────────────────────────────────────────────────────────────────
+  build-vsix:
+    name: Build VSIX Extension
+    runs-on: ubuntu-latest
+    needs: validate
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - run: npm ci
+      - run: npm run build
+
+      - name: Install extension deps
+        working-directory: release/vscode-extension
+        run: npm install --ignore-scripts
+        continue-on-error: true
+
+      - name: Sync version
+        working-directory: release/vscode-extension
+        run: |
+          SERVER_VERSION=$(node -e "console.log(require('../../package.json').version)")
+          node -e "
+            const fs = require('fs');
+            const p = JSON.parse(fs.readFileSync('package.json','utf8'));
+            p.version = '${SERVER_VERSION}';
+            fs.writeFileSync('package.json', JSON.stringify(p,null,2)+'\n');
+          "
+        continue-on-error: true
+
+      - name: Compile & package VSIX
+        working-directory: release/vscode-extension
+        run: |
+          npx tsc -p tsconfig.json 2>/dev/null || true
+          npx @vscode/vsce package --no-dependencies 2>/dev/null || true
+        continue-on-error: true
+
+      - name: Upload VSIX
+        if: hashFiles('release/vscode-extension/*.vsix') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: vsix-package
+          path: release/vscode-extension/*.vsix
+
+  # ──────────────────────────────────────────────────────────────────
+  # Stage 3: Publish — npm, GitHub Release
+  # ──────────────────────────────────────────────────────────────────
+  publish:
+    name: Publish Release
+    runs-on: ubuntu-latest
+    needs: [build-npm, build-docker, build-vsix]
+    if: startsWith(github.ref, 'refs/tags/') || github.event.inputs.dry_run == 'false'
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          registry-url: 'https://npm.pkg.github.com'
+          scope: '@jagilber-org'
+
+      - name: Download npm package
+        uses: actions/download-artifact@v4
+        with:
+          name: npm-package
+
+      - name: Download VSIX (if available)
+        uses: actions/download-artifact@v4
+        with:
+          name: vsix-package
+          path: vsix-artifacts
+        continue-on-error: true
+
+      - name: Extract version
+        id: version
+        run: |
+          VERSION=$(node -e "console.log(require('./package.json').version)")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "tag=v$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Generate changelog excerpt
+        id: changelog
+        run: |
+          # Extract changelog for this version
+          TAG="${{ steps.version.outputs.tag }}"
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          if [ -n "$PREV_TAG" ]; then
+            CHANGES=$(git log --pretty=format:"- %s (%h)" "$PREV_TAG"..HEAD)
+          else
+            CHANGES=$(git log --pretty=format:"- %s (%h)" -20)
+          fi
+          echo "changes<<EOF" >> $GITHUB_OUTPUT
+          echo "$CHANGES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Publish to GitHub Packages
+        run: |
+          TARBALL=$(ls *.tgz 2>/dev/null | head -1)
+          if [ -n "$TARBALL" ]; then
+            npm publish "$TARBALL"
+          else
+            npm publish --ignore-scripts
+          fi
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: "Release ${{ steps.version.outputs.version }}"
+          body: |
+            ## Index Server ${{ steps.version.outputs.version }}
+
+            ### Changes
+            ${{ steps.changelog.outputs.changes }}
+
+            ### Artifacts
+            - **npm**: `@jagilber-org/index-server@${{ steps.version.outputs.version }}`
+            - **Docker**: `ghcr.io/${{ github.repository }}:${{ steps.version.outputs.version }}`
+            - **VSIX**: See attached (if available)
+
+            ### Docker Quick Start
+            ```bash
+            docker pull ghcr.io/${{ github.repository }}:${{ steps.version.outputs.version }}
+            docker run -d -p 8787:8787 ghcr.io/${{ github.repository }}:${{ steps.version.outputs.version }}
+            ```
+          files: |
+            *.tgz
+            vsix-artifacts/*.vsix
+          draft: false
+          prerelease: ${{ contains(steps.version.outputs.version, '-') }}
+          generate_release_notes: true

@@ -1,0 +1,31 @@
+name: Instruction Governance
+
+on:
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch: {}
+
+jobs:
+  lint-governance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Use Node.js 20
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: 'npm'
+      - name: Install deps
+        run: npm ci
+      - name: Build (types for linter imports if any)
+        run: npm run build --if-present
+      - name: Instruction Lint
+        run: npm run lint:instructions
+      - name: Groom Dry Run
+        env:
+          INDEX_SERVER_MUTATION: 1
+        run: |
+          echo '{"jsonrpc":"2.0","id":1,"method":"instructions/groom","params":{"mode":{"dryRun":true,"mergeDuplicates":true,"removeDeprecated":false,"purgeLegacyScopes":true}}}' | node dist/server/index-server.js
+      - name: Integrity Verify
+        run: |
+          echo '{"jsonrpc":"2.0","id":2,"method":"integrity/verify"}' | node dist/server/index-server.js
