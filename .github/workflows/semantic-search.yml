@@ -40,7 +40,7 @@ jobs:
       INDEX_SERVER_SEMANTIC_LOCAL_ONLY: '0'
       INDEX_SERVER_MUTATION: '1'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Use Node.js 22
         uses: actions/setup-node@v6
