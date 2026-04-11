@@ -523,6 +523,42 @@ try {
         $env:PUBLISH_OVERRIDE = $publishToken
         $env:PUBLISH_TAG = $Tag
         try {
+            $staleBranches = @(
+                (git -C $tmpDir ls-remote --refs --heads $RemoteName 2>$null) |
+                    ForEach-Object {
+                        $parts = $_ -split "\s+"
+                        if ($parts.Count -ge 2 -and $parts[1].StartsWith('refs/heads/')) {
+                            $parts[1].Substring('refs/heads/'.Length)
+                        }
+                    } |
+                    Where-Object { $_ -and $_ -ne 'main' }
+            )
+            if ($staleBranches.Count -gt 0) {
+                Write-Host "Removing $($staleBranches.Count) stale remote branch(es)..."
+                foreach ($branchName in $staleBranches) {
+                    Write-Host "  - $branchName"
+                    git -C $tmpDir push $RemoteName ":refs/heads/$branchName"
+                }
+            }
+
+            $existingTags = @(
+                (git -C $tmpDir ls-remote --refs --tags $RemoteName 2>$null) |
+                    ForEach-Object {
+                        $parts = $_ -split "\s+"
+                        if ($parts.Count -ge 2 -and $parts[1].StartsWith('refs/tags/')) {
+                            $parts[1].Substring('refs/tags/'.Length)
+                        }
+                    } |
+                    Where-Object { $_ }
+            )
+            if ($existingTags.Count -gt 0) {
+                Write-Host "Removing $($existingTags.Count) existing remote tag(s)..."
+                foreach ($tagName in $existingTags) {
+                    Write-Host "  - $tagName"
+                    git -C $tmpDir push $RemoteName ":refs/tags/$tagName"
+                }
+            }
+
             git -C $tmpDir push --force $RemoteName main
             if ($LASTEXITCODE -ne 0) {
                 $ErrorActionPreference = $savedEAP

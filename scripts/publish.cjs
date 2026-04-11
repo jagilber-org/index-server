@@ -219,6 +219,23 @@ function scanDirForEnvLeaks(dir, envLeakMap) {
   return leaks;
 }
 
+function listRemoteRefs(remoteName, refKind, cwd) {
+  try {
+    const output = run(`git ls-remote --refs --${refKind} ${remoteName}`, { cwd });
+    if (!output) return [];
+
+    const prefix = refKind === 'heads' ? 'refs/heads/' : 'refs/tags/';
+    return output
+      .split(/\r?\n/)
+      .map(line => line.trim().split(/\s+/)[1])
+      .filter(Boolean)
+      .filter(ref => ref.startsWith(prefix))
+      .map(ref => ref.slice(prefix.length));
+  } catch {
+    return [];
+  }
+}
+
 // Exported for testability
 if (typeof module !== 'undefined') {
   module.exports = { PRIVATE_DOTFILES, verifyNoLeakedArtifacts, copyRecursive, loadExcludeList, buildEnvLeakMap, scanDirForEnvLeaks };
@@ -393,13 +410,29 @@ Files: ${fileCount}`;
   // Compute hardened bypass token: sha256("publish-<tag>-<YYYY-MM-DD>")
   const today = new Date().toISOString().split('T')[0];
   const publishToken = crypto.createHash('sha256').update(`publish-${tag}-${today}`).digest('hex');
-  process.env.PUBLISH_OVERRIDE = publishToken;
-  process.env.PUBLISH_TAG = tag;
+  const publishEnv = { ...process.env, PUBLISH_OVERRIDE: publishToken, PUBLISH_TAG: tag };
+
+  const staleBranches = listRemoteRefs('public', 'heads', tmpDir).filter(branchName => branchName !== 'main');
+  if (staleBranches.length > 0) {
+    console.log(`Removing ${staleBranches.length} stale remote branch(es)...`);
+    for (const branchName of staleBranches) {
+      console.log(`  - ${branchName}`);
+      runShow(`git push public --delete "${branchName}"`, { cwd: tmpDir, env: publishEnv });
+    }
+  }
+
+  const existingTags = listRemoteRefs('public', 'tags', tmpDir);
+  if (existingTags.length > 0) {
+    console.log(`Removing ${existingTags.length} existing remote tag(s)...`);
+    for (const tagName of existingTags) {
+      console.log(`  - ${tagName}`);
+      runShow(`git push public ":refs/tags/${tagName}"`, { cwd: tmpDir, env: publishEnv });
+    }
+  }
+
   try {
-    runShow('git push --force public main', { cwd: tmpDir });
+    runShow('git push --force public main', { cwd: tmpDir, env: publishEnv });
   } finally {
-    delete process.env.PUBLISH_OVERRIDE;
-    delete process.env.PUBLISH_TAG;
   }
 
   // ── Tag ─────────────────────────────────────────────────────────────────────
@@ -412,7 +445,7 @@ Files: ${fileCount}`;
     run(`git tag -a ${tag} -m "Release ${tag}"`, { cwd: tmpDir });
     console.log(`Created annotated tag ${tag} (unsigned — no signing key configured)`);
   }
-  runShow(`git push public ${tag}`, { cwd: tmpDir, env: { ...process.env, PUBLISH_OVERRIDE: publishToken, PUBLISH_TAG: tag } });
+  runShow(`git push public ${tag}`, { cwd: tmpDir, env: publishEnv });
 
   console.log('\n✅ Published successfully!');
   console.log(`   Remote: ${publicUrl}`);
