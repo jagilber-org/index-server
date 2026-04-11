@@ -1,0 +1,2149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Index Server Admin</title>
+    <link rel="stylesheet" href="css/admin.css">
+    <script defer src="js/admin.utils.js"></script>
+    <script defer src="js/admin.overview.js"></script>
+    <script defer src="js/admin.sessions.js"></script>
+    <script defer src="js/admin.monitor.js"></script>
+    <script defer src="js/admin.graph.js"></script>
+    <script defer src="js/marked.umd.js"></script>
+    <script defer src="js/admin.instructions.js"></script>
+    <script defer src="js/admin.logs.js"></script>
+    <script defer src="js/admin.maintenance.js"></script>
+    <script defer src="js/admin.config.js"></script>
+    <script defer src="js/admin.performance.js"></script>
+    <script defer src="js/admin.instances.js"></script>
+    <script defer src="js/admin.embeddings.js"></script>
+    <script defer src="js/admin.messaging.js"></script>
+    <script defer src="js/admin.sqlite.js"></script>
+    <script defer src="js/admin.boot.js"></script>
+</head>
+<body>
+    <div class="admin-container admin-root">
+        <div class="admin-header">
+            <h1>Index Server</h1>
+            <span id="storage-badge" class="storage-badge" style="display:none;margin-left:8px;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;letter-spacing:0.5px"></span>
+            <div id="instances-widget" class="instances-widget" style="display:none;">
+                <button id="instances-badge" class="instances-badge" title="Running instances">
+                    <span id="instances-count">1</span> instance<span id="instances-plural">s</span>
+                </button>
+                <div id="instances-dropdown" class="instances-dropdown hidden">
+                    <div class="instances-dropdown-header">Running Instances</div>
+                    <div id="instances-list" class="instances-list"></div>
+                </div>
+            </div>
+            <div id="buildMeta" class="build-meta">Loading build metadata…</div>
+            <div class="admin-nav">
+                <!-- Added explicit data-section attributes so JS can reliably map buttons to sections after HTML refactor -->
+                <!-- Redundant inline onclick fallback keeps basic navigation working even if JS wiring changes -->
+                <button class="nav-btn active" data-section="overview" onclick="window.showSection && window.showSection('overview')">Overview</button>
+                <button class="nav-btn" data-section="config" onclick="window.showSection && window.showSection('config')">Configuration</button>
+                <button id="nav-sessions" class="nav-btn" data-section="sessions" onclick="window.showSection && window.showSection('sessions')">Sessions</button>
+                <button class="nav-btn" data-section="maintenance" onclick="window.showSection && window.showSection('maintenance')">Maintenance</button>
+                <button class="nav-btn" data-section="monitoring" onclick="window.showSection && window.showSection('monitoring')">Monitoring</button>
+                <button class="nav-btn" data-section="instructions" onclick="window.showSection && window.showSection('instructions')">Instructions</button>
+                <button class="nav-btn" data-section="graph" onclick="window.showSection && window.showSection('graph')">Graph</button>
+                <button class="nav-btn" data-section="embeddings" onclick="window.showSection && window.showSection('embeddings')">Embeddings</button>
+                <button class="nav-btn" data-section="messaging" onclick="window.showSection && window.showSection('messaging')">Messaging</button>
+                <button class="nav-btn" data-section="sqlite" id="nav-sqlite" onclick="window.showSection && window.showSection('sqlite')" style="display:none">SQLite</button>
+            </div>
+        </div>
+
+        <!-- Overview Section -->
+        <div id="overview-section" class="admin-section">
+            <div class="admin-grid">
+                <div class="admin-card">
+                    <div class="card-header">
+                        <div class="card-icon">📊</div>
+                        <div class="card-title">System Statistics <a class="doc-link" href="/api/docs/overview" target="_blank" title="Panel documentation">?</a></div>
+                    </div>
+                    <div id="system-stats" class="loading metrics-list">Loading system statistics...</div>
+                </div>
+
+                <div class="admin-card">
+                    <div class="card-header">
+                        <div class="card-icon">💚</div>
+                        <div class="card-title">System Health <a class="doc-link" href="/api/docs/overview" target="_blank" title="Panel documentation">?</a></div>
+                    </div>
+                    <div id="system-health" class="loading metrics-list">Loading system health...</div>
+                </div>
+
+                <div class="admin-card">
+                    <div class="card-header">
+                        <div class="card-icon">⚡</div>
+                        <div class="card-title">Performance <a class="doc-link" href="/api/docs/overview" target="_blank" title="Panel documentation">?</a></div>
+                    </div>
+                    <div id="performance-stats" class="loading metrics-list">Loading performance data...</div>
+                </div>
+
+                <!-- index Status merged into System Statistics card -->
+            </div>
+
+            <!-- Individual Tool Metrics -->
+            <div class="admin-card mt-30">
+                <div class="card-header">
+                    <div class="card-icon">🔧</div>
+                    <div class="card-title">Individual Tool Call Metrics <a class="doc-link" href="/api/docs/overview" target="_blank" title="Panel documentation">?</a></div>
+                </div>
+                <div id="tool-metrics" class="loading">Loading tool metrics...</div>
+            </div>
+
+            <!-- Usage Signals Summary -->
+            <div class="admin-card mt-30">
+                <div class="card-header">
+                    <div class="card-icon">📡</div>
+                    <div class="card-title">Usage Signals <a class="doc-link" href="/api/docs/overview" target="_blank" title="Panel documentation">?</a></div>
+                </div>
+                <div id="usage-signals-panel" class="loading">Loading usage signals...</div>
+            </div>
+        </div>
+        <!-- Graph Section -->
+        <div id="graph-section" class="admin-section hidden">
+            <div class="admin-card">
+                <div class="card-header">
+                    <div class="card-icon">🗺️</div>
+                    <div class="card-title">Instruction Relationship Graph <a class="doc-link" href="/api/docs/graph" target="_blank" title="Panel documentation">?</a></div>
+                </div>
+                <div id="graph-toolbar" class="graph-toolbar toolbar mb-lg">
+                    <label class="block order-0">Sel Categories
+                        <select id="drill-categories" multiple size="5" onchange="coordinatedFilterChanged()"></select>
+                    </label>
+                    <label class="block order-1">Sel Instructions
+                        <select id="drill-instructions" multiple size="5" onchange="coordinatedFilterChanged()"></select>
+                    </label>
+                    <div class="stack order-2">
+                        <button class="action-btn sm" title="Reload categories list" onclick="refreshDrillCategories()">🔄 Load Categories</button>
+                        <button class="action-btn sm btn-info" title="Load instructions (all or filtered by selected categories)" onclick="loadDrillInstructions()">📥 Load Instructions</button>
+                        <button class="action-btn sm btn-success-gradient" title="Clear selections" onclick="clearSelections()">🧹 Clear Selections</button>
+                    </div>
+                    <label class="block layout-label" title="Graph layout engine (elk = hierarchical; default = Mermaid native)"><span class="lbl-icon">🧩</span><span>Layout</span>
+                        <select id="graph-layout" class="form-input pill">
+                            <option value="elk" selected>elk</option>
+                            <option value="default">default</option>
+                        </select>
+                    </label>
+                    <div class="actions order-6">
+                        <button id="graph-refresh-btn" class="action-btn btn-success-gradient" title="Refresh Mermaid diagram from current filters">🔄 Refresh Graph</button>
+                    </div>
+                </div>
+
+                <div id="graph-meta" class="graph-meta"></div>
+                <div id="graph-meta2" class="graph-meta2"></div>
+
+                <!-- Advanced Options (collapsed) -->
+                <details id="graph-advanced-options" class="graph-details">
+                    <summary>⚙️ Advanced Options</summary>
+                    <div class="graph-advanced-content">
+                        <div class="flags">
+                            <label class="chk simple"><input id="graph-enrich" type="checkbox" checked> Enrich</label>
+                            <label class="chk simple"><input id="graph-categories" type="checkbox" checked> Categories</label>
+                            <label class="chk simple"><input id="graph-usage" type="checkbox"> Usage</label>
+                        </div>
+                        <div class="flags edge-layout-group">
+                            <label class="block etypes-label" title="Filter specific edge types (comma separated). Leave blank for all."><span class="lbl-icon">🔗</span><span>Edge Types</span>
+                                <input id="graph-edgeTypes" class="form-input pill" placeholder="all (comma list)" autocomplete="off">
+                            </label>
+                        </div>
+                        <div class="stack">
+                            <label class="chk" title="Toggle high Mermaid maxEdges secure limit (forces re-init)"><input id="mermaid-high-edges" type="checkbox"> High edge cap</label>
+                            <label class="chk" title="Enable Large Graph Mode (raises maxEdges & maxTextSize caps)"><input id="mermaid-large-graph" type="checkbox"> Large graph mode</label>
+                            <label class="chk simple" title="Enable debug logging"><input id="graph-debug" type="checkbox"> Debug</label>
+                        </div>
+                    </div>
+                </details>
+            </div>
+
+            <!-- DIAGRAM FIRST -->
+            <div class="admin-card mt-xl" id="graph-render-card">
+                <div class="graph-zoom-controls">
+                    <button id="graph-zoom-in" class="action-btn sm" title="Zoom in">➕</button>
+                    <button id="graph-zoom-out" class="action-btn sm" title="Zoom out">➖</button>
+                    <button id="graph-zoom-reset" class="action-btn sm" title="Reset zoom">🔍</button>
+                    <button id="graph-fullscreen-btn" class="action-btn sm" title="Toggle fullscreen">⛶</button>
+                </div>
+                <div class="card-header">
+                    <span class="card-icon">🧪</span>
+                    <span class="card-title">Rendered Diagram <a class="doc-link" href="/api/docs/graph" target="_blank" title="Panel documentation">?</a></span>
+                </div>
+                <div id="graph-mermaid-rendered" class="graph-rendered">
+                    <div class="graph-loading-skeleton">Loading diagram...</div>
+                    <div id="graph-mermaid-svg" class="graph-svg-min">(diagram not loaded)</div>
+                </div>
+                <div class="graph-render-note">Copy source into <a href="https://mermaid.live" target="_blank" rel="noopener" class="mermaid-link">Mermaid Live Editor</a> for advanced tweaks. Layout 'elk' leverages experimental ELK engine; fallback auto-applies legacy init directive if frontmatter unsupported.</div>
+            </div>
+
+            <!-- SOURCE SECOND (collapsed) -->
+            <details id="graph-source-details" class="graph-details mt-xl">
+                <summary>📝 Mermaid Source</summary>
+                <div class="admin-card">
+                    <div class="source-actions">
+                        <button id="graph-copy-btn" class="action-btn btn-info" title="Copy Mermaid source to clipboard" onclick="window.copyMermaidSource && window.copyMermaidSource()">📋 Copy Source</button>
+                        <button id="graph-edit-btn" class="action-btn btn-edit" title="Edit Mermaid source inline" onclick="window.toggleGraphEdit && window.toggleGraphEdit()">✏️ Edit Source</button>
+                        <button id="graph-apply-btn" class="action-btn btn-success-gradient" style="display:none" title="Apply manual edits" onclick="window.applyGraphEdit && window.applyGraphEdit()">💾 Apply Edits</button>
+                        <button id="graph-cancel-btn" class="action-btn danger" style="display:none;" title="Cancel manual edits" onclick="window.cancelGraphEdit && window.cancelGraphEdit()">↩️ Cancel Edit</button>
+                        <label class="graph-auto-label"><input type="checkbox" id="graph-auto-render" checked> auto-render</label>
+                    </div>
+                    <div id="graph-mermaid-wrapper" class="graph-wrapper">
+                        <pre id="graph-mermaid" class="graph-source-pre">(loading graph...)</pre>
+                    </div>
+                    <div class="graph-source-note">Mermaid source shown above. Rendered diagram above uses same code.</div>
+                </div>
+            </details>
+
+        </div>
+
+        <!-- Configuration Section -->
+        <div id="config-section" class="admin-section hidden">
+            <div class="admin-card">
+                <div class="card-header">
+                    <div class="card-icon">⚙️</div>
+                    <div class="card-title">Server Configuration <a class="doc-link" href="/api/docs/config" target="_blank" title="Panel documentation">?</a></div>
+                </div>
+                <div id="config-form" class="loading config-loading">Loading configuration...</div>
+            </div>
+        </div>
+
+        <!-- Sessions Section -->
+        <div id="sessions-section" class="admin-section hidden">
+            <div class="admin-grid grid-single-col">
+                <div class="admin-card">
+                    <div class="card-header">
+                        <div class="card-icon">👥</div>
+                        <div class="card-title">Active Admin Sessions <a class="doc-link" href="/api/docs/sessions" target="_blank" title="Panel documentation">?</a></div>
+                    </div>
+                    <div id="sessions-list" class="loading index-list">Loading sessions...</div>
+                    <div id="sessions-pagination" class="index-pagination sessions-pagination" style="display:none">
+                        <button data-role="prev-page" class="action-btn page-btn" onclick="setSessionsPage(window.__sessionsPage-1)">Prev</button>
+                        <div data-role="page-info" class="page-info">Page 1 / 1</div>
+                        <button data-role="next-page" class="action-btn page-btn" onclick="setSessionsPage(window.__sessionsPage+1)">Next</button>
+                        <label class="page-size-label">
+                            Size
+                            <select data-role="page-size" class="form-input page-size-select" onchange="changeSessionsPageSize(parseInt(this.value,10))">
+                                <option value="10">10</option>
+                                <option value="25" selected>25</option>
+                                <option value="50">50</option>
+                                <option value="100">100</option>
+                            </select>
+                        </label>
+                    </div>
+                    <div class="session-actions">
+                        <button class="action-btn">Create Test Session</button>
+                        <button class="action-btn">🔄 Refresh</button>
+                    </div>
+                </div>
+                <div class="admin-card mt-xxl">
+                    <div class="card-header">
+                        <div class="card-icon">🔌</div>
+                        <div class="card-title">Active WebSocket Connections <a class="doc-link" href="/api/docs/sessions" target="_blank" title="Panel documentation">?</a></div>
+                    </div>
+                    <div id="connections-list" class="loading">Loading connections...</div>
+                </div>
+                <div class="admin-card mt-xxl">
+                    <div class="card-header">
+                        <div class="card-icon">🗂️</div>
+                        <div class="card-title">Session History <a class="doc-link" href="/api/docs/sessions" target="_blank" title="Panel documentation">?</a></div>
+                    </div>
+                    <div class="flex-row mb-md">
+                        <label class="form-label-sm">Limit
+                            <select id="session-history-limit" class="form-input w-80" onchange="refreshSessionHistory()">
+                                <option value="25">25</option>
+                                <option value="50" selected>50</option>
+                                <option value="100">100</option>
+                                <option value="250">250</option>
+                            </select>
+                        </label>
+                        <button class="action-btn">🔄 Refresh History</button>
+                    </div>
+                    <div id="session-history-list" class="loading index-list">History not loaded...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Maintenance Section -->
+        <div id="maintenance-section" class="admin-section hidden">
+            <div class="admin-grid">
+                <div class="admin-card">
+                    <div class="card-header">
+                        <div class="card-icon">🔧</div>
+                        <div class="card-title">Maintenance Control <a class="doc-link" href="/api/docs/maintenance" target="_blank" title="Panel documentation">?</a></div>
+                    </div>
+                    <div id="maintenance-control" class="loading">Loading maintenance status...</div>
+                </div>
+
+                <div class="admin-card">
+                    <div class="card-header">
+                        <div class="card-icon">💾</div>
+                        <div class="card-title">System Operations <a class="doc-link" href="/api/docs/maintenance" target="_blank" title="Panel documentation">?</a></div>
+                    </div>
+                    <div class="action-buttons sys-ops flex-row">
+                        <button id="btn-create-backup" class="action-btn primary" data-op="create-backup" title="Create a new instruction + data backup">💾 Create Backup</button>
+                        <button id="btn-clear-caches" class="action-btn warning" data-op="clear-caches" title="Clear in-memory caches (manifest, stats, etc.)">🗑️ Clear Caches</button>
+                        <button id="btn-restart-server" class="action-btn danger" data-op="restart-server" title="Gracefully restart the server">🔄 Restart Server</button>
+                    </div>
+                    <div class="action-buttons sys-ops flex-row" style="margin-top:8px;">
+                        <button class="action-btn success" onclick="exportBackupToFile()" title="Export the selected backup to a downloadable JSON file">📥 Backup to File</button>
+                        <button class="action-btn primary" onclick="importBackupFromFile()" title="Import a backup from a JSON file">📤 Restore from File</button>
+                        <input type="file" id="backup-file-input" accept=".json" style="display:none" onchange="handleBackupFileSelected(event)" />
+                    </div>
+                    <div class="mt-lg">
+                        <div class="restore-header">Restore Backup <button class="action-btn page-btn font-sm">Refresh</button></div>
+                        <div id="backup-restore-area" class="restore-area">
+                            <select id="backup-select" class="form-input backup-select">
+                                <option value="">(no backups)</option>
+                            </select>
+                            <button id="btn-restore-backup" class="action-btn success" data-op="restore-backup" title="Restore selected backup">♻️ Restore</button>
+                            <span id="backup-restore-status" class="backup-status"></span>
+                        </div>
+                        <div id="backup-list-meta" class="backup-meta"></div>
+                    </div>
+                </div>
+
+                <!-- Signal Groom Card -->
+                <div class="admin-card">
+                    <div class="card-header">
+                        <div class="card-icon">📡</div>
+                        <div class="card-title">Signal Feedback Groom</div>
+                    </div>
+                    <div style="padding:8px 0;font-size:12px;opacity:.7;">
+                        Apply usage signals (helpful/applied/not-relevant/outdated) to instruction priority and requirement fields.
+                    </div>
+                    <div class="action-buttons sys-ops flex-row">
+                        <button class="action-btn primary" onclick="runSignalGroom(true)">🔍 Dry Run</button>
+                        <button class="action-btn warning" onclick="if(confirm('Apply signal feedback to instructions?')) runSignalGroom(false)">⚡ Apply Signals</button>
+                    </div>
+                    <div id="signal-groom-status" class="mt-sm" style="font-size:12px;"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Monitoring Section -->
+        <div id="monitoring-section" class="admin-section hidden">
+            <div class="admin-card">
+                <div class="card-header">
+                    <div class="card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 14 10 14 12 10 16 20 18 14 22 14"/><circle cx="6" cy="6" r="2"/></svg></div>
+                    <div class="card-title">Real-time Monitoring <a class="doc-link" href="/api/docs/monitoring" target="_blank" title="Panel documentation">?</a></div>
+                </div>
+                <div id="monitoring-data" class="loading monitoring-loading">Loading monitoring data...</div>
+            </div>
+            <div class="admin-card mt-xxl">
+                <div class="card-header">
+                    <div class="card-icon">🧪</div>
+                    <div class="card-title">Synthetic Activity <a class="doc-link" href="/api/docs/monitoring" target="_blank" title="Panel documentation">?</a></div>
+                </div>
+                <div class="synthetic-form">
+                    <div>
+                        <label class="form-label form-label-sm">Iterations</label>
+                        <input id="synthetic-iterations" class="form-input form-input-sm" type="number" value="25" />
+                    </div>
+                    <div>
+                        <label class="form-label form-label-sm">Concurrency</label>
+                        <input id="synthetic-concurrency" class="form-input form-input-sm" type="number" value="3" />
+                    </div>
+                    <button id="synthetic-run-btn" class="action-btn">Run Synthetic Activity</button>
+                    <div id="synthetic-output" class="synthetic-output"></div>
+                </div>
+                <div class="synthetic-note">Executes random safe tools to exercise metrics &amp; health. <span id="synthetic-last-meta" class="text-italic"></span></div>
+                                <div id="synthetic-traces-wrapper" class="mt-lg" style="display:none">
+                                    <div class="trace-header">
+                                        Per‑Call Trace
+                                        <label class="trace-toggle-label">
+                                            <input id="synthetic-trace-toggle" type="checkbox" checked onchange="toggleSyntheticTraceVisibility()" /> show
+                                        </label>
+                                    </div>
+                                    <div class="trace-scroll">
+                                        <table class="trace-table">
+                                            <thead class="trace-thead">
+                                                <tr>
+                                                    <th class="trace-th">#</th>
+                                                    <th class="trace-th">Tool</th>
+                                                    <th class="trace-th">Success</th>
+                                                    <th class="trace-th">Duration</th>
+                                                    <th class="trace-th">Error</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="synthetic-traces-body"></tbody>
+                                        </table>
+                                    </div>
+                                </div>
+            </div>
+
+            <!-- Log Viewer Section -->
+            <div class="admin-card mt-xxl">
+                <div class="card-header">
+                    <div class="card-icon">📋</div>
+                    <div class="card-title">Server Logs <a class="doc-link" href="/api/docs/monitoring" target="_blank" title="Panel documentation">?</a></div>
+                </div>
+                <div class="log-controls">
+                    <div>
+                        <label class="form-label text-xs">Lines</label>
+                        <input id="log-lines" class="form-input w-80" type="number" value="100" />
+                    </div>
+                    <button id="log-refresh-btn" class="action-btn" onclick="window.loadLogs && window.loadLogs()">🔄 Refresh</button>
+                    <button id="log-tail-btn" class="action-btn" onclick="window.toggleLogTail && window.toggleLogTail()">▶️ Start Tail</button>
+                    <button id="log-clear-btn" class="action-btn" onclick="window.clearLogViewer && window.clearLogViewer()">🗑️ Clear</button>
+                    <div id="log-status" class="log-status-text"></div>
+                </div>
+                <!-- Log content container id expected by scripts (was log-viewer) -->
+                <div id="log-content" class="log-content-box">
+                    <div class="log-placeholder">Click "Refresh" to load server logs...</div>
+                </div>
+                <div class="log-note">
+                    Real-time server log viewer. Set INDEX_SERVER_LOG_FILE to a path OR simply '1' (auto => logs/mcp-server.log).
+                </div>
+            </div>
+        </div>
+
+        <!-- Embeddings Visualization Section -->
+        <div id="embeddings-section" class="admin-section hidden">
+            <div class="admin-card" style="padding:0;overflow:hidden">
+                <div class="emb-layout">
+                    <!-- Sidebar -->
+                    <div class="emb-sidebar">
+                        <div class="emb-section">
+                            <input id="emb-search" class="emb-search-box" type="text" placeholder="Search instruction IDs…" />
+                            <div class="emb-controls">
+                                <button class="emb-btn" data-emb-action="compute">Compute</button>
+                                <button class="emb-btn" data-emb-action="load">Load</button>
+                                <button class="emb-btn" data-emb-action="reset">Reset</button>
+                                <button class="emb-btn" id="emb-norm-btn" data-emb-action="norm">Norm</button>
+                            </div>
+                            <span id="emb-status" class="emb-status-text"></span>
+                        </div>
+                        <div class="emb-section" id="emb-stats-section">
+                            <div class="emb-section-title">Statistics</div>
+                            <div id="emb-stats"></div>
+                        </div>
+                        <div class="emb-section">
+                            <div class="emb-section-title">Categories</div>
+                            <div id="emb-legend"></div>
+                        </div>
+                        <div class="emb-section">
+                            <div class="emb-section-title">Most Similar Pairs</div>
+                            <div id="emb-similar"></div>
+                        </div>
+                        <div class="emb-section">
+                            <div class="emb-section-title">Selected Point</div>
+                            <div id="emb-detail"><em style="color:var(--admin-text-dim)">Click a point to inspect</em></div>
+                        </div>
+                    </div>
+                    <!-- Canvas area -->
+                    <div class="emb-canvas-wrap">
+                        <canvas id="embeddings-canvas"></canvas>
+                        <div id="emb-tooltip" class="emb-tooltip"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    <!-- Instruction Management Section -->
+        <div id="instructions-section" class="admin-section hidden">
+            <div class="admin-card">
+                <div class="card-header">
+                    <div class="card-icon">📚</div>
+                    <div class="card-title">Instruction index <a class="doc-link" href="/api/docs/instructions" target="_blank" title="Panel documentation">?</a></div>
+                </div>
+                <div class="instr-toolbar">
+                    <button class="action-btn" onclick="loadInstructions()">🔄 Refresh</button>
+                    <button class="action-btn" onclick="showCreateInstruction()">➕ Create</button>
+                    <input id="instruction-filter" placeholder="Filter by name (supports regex)..." class="form-input instr-filter" oninput="filterInstructions()" />
+                    <label class="regex-toggle" title="Enable regex matching"><input type="checkbox" id="instruction-regex-toggle" onchange="filterInstructions()" /><span class="regex-label">.*</span></label>
+                    <select id="instruction-category-filter" class="form-input w-130" onchange="filterInstructions()">
+                        <option value="">All Categories</option>
+                        <!-- Categories will be populated dynamically -->
+                    </select>
+                    <select id="instruction-size-filter" class="form-input w-120" onchange="filterInstructions()">
+                        <option value="">All Sizes</option>
+                        <option value="small">small</option>
+                        <option value="medium">medium</option>
+                        <option value="large">large</option>
+                    </select>
+                    <select id="instruction-sort" class="form-input w-150" onchange="filterInstructions()">
+                        <option value="name-asc">Name A-Z</option>
+                        <option value="name-desc">Name Z-A</option>
+                        <option value="size-asc">Size ↑</option>
+                        <option value="size-desc">Size ↓</option>
+                        <option value="mtime-desc">Modified ↓</option>
+                        <option value="mtime-asc">Modified ↑</option>
+                        <option value="category">Category</option>
+                        <option value="usage-desc">Usage ↓</option>
+                        <option value="signal">Signal</option>
+                    </select>
+                </div>
+                <!-- Global Search Row -->
+                <div class="instr-search-row">
+                    <input id="instruction-global-search" placeholder="Global search (id, title, body, categories — supports regex)..." class="form-input instr-global" />
+                    <label class="regex-toggle" title="Enable regex matching for global search"><input type="checkbox" id="instruction-global-regex-toggle" /><span class="regex-label">.*</span></label>
+                    <button id="instruction-global-search-btn" class="action-btn btn-purple" onclick="(function(){ try { if(window.performGlobalInstructionSearch){ const v = document.getElementById('instruction-global-search')?.value||''; window.performGlobalInstructionSearch(v); } } catch(e){ console.warn('inline global search fallback failed', e); } })();">🌍 Search All</button>
+                    <span class="text-dim">Fallback substring search across all instruction files.</span>
+                </div>
+                <div id="instruction-global-results" class="instr-results"></div>
+                <div id="instructions-list" class="loading">Loading instructions...</div>
+                <div id="instruction-pagination" class="mt-md"></div>
+                <!-- Editor will be dynamically repositioned above the list when activated -->
+                <div id="instruction-editor" class="hidden mt-lg">
+                    <h3 id="instruction-editor-title" class="mb-sm">New Instruction</h3>
+                    <div class="form-group">
+                        <label class="form-label">File Name (no extension)</label>
+                        <input id="instruction-filename" class="form-input" placeholder="example-instruction" />
+                    </div>
+                    <div class="form-group mt-sm">
+                        <label class="form-label">JSON Content</label>
+                        <textarea id="instruction-content" class="form-input instr-textarea" oninput="updateInstructionEditorDiagnostics()" placeholder="{\n  \"id\": \"example\",\n  \"title\": \"Example Instruction\"\n}"></textarea>
+                        <div id="instruction-diagnostics" class="instr-diagnostics">
+                            <em>Editor idle.</em>
+                        </div>
+                        <div id="instruction-preview-container" class="hidden instr-preview-wrap">
+                            <div class="instr-preview-header">
+                                <span class="instr-preview-label">Body Preview (Markdown)</span>
+                            </div>
+                            <div id="instruction-preview" class="instr-preview-content"></div>
+                        </div>
+                        <div id="instruction-diff-container" class="hidden instr-diff-wrap">
+                            <div class="instr-diff-label">Diff (original vs current)</div>
+                            <pre id="instruction-diff" class="instr-diff-pre"></pre>
+                        </div>
+                    </div>
+                    <div class="instr-actions">
+                        <button id="instruction-save-btn" class="action-btn" onclick="saveInstruction()">💾 Save</button>
+                        <button id="instruction-preview-btn" class="action-btn btn-green" onclick="toggleInstructionPreview()">📖 Preview</button>
+                        <button id="instruction-format-btn" class="action-btn btn-info" onclick="formatInstructionJson()">🧹 Format</button>
+                        <button id="instruction-diff-btn" class="action-btn btn-purple" onclick="toggleInstructionDiff()">🔍 Diff</button>
+                        <button id="instruction-template-btn" class="action-btn btn-teal" onclick="applyInstructionTemplate()">📐 Template</button>
+                        <button id="instruction-cancel-btn" class="action-btn warning" onclick="cancelEditInstruction()">✖ Cancel</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    <!-- Messaging Section -->
+        <div id="messaging-section" class="admin-section hidden">
+            <div class="admin-card">
+                <div class="card-header">
+                    <div class="card-icon">💬</div>
+                    <div class="card-title">Inter-Agent Messaging</div>
+                </div>
+                <div class="msg-layout">
+                    <!-- Sidebar -->
+                    <div class="msg-sidebar">
+                        <div style="padding:0 12px 8px;font-size:14px;font-weight:600;color:var(--admin-text)">Messages <span id="msg-summary" style="font-weight:400;font-size:12px;color:var(--admin-text-dim)"></span></div>
+                        <div class="msg-sidebar-heading">CHANNELS</div>
+                        <div id="messaging-channel-list"></div>
+                        <div class="msg-sidebar-heading" style="margin-top:12px">SENDERS</div>
+                        <div id="messaging-sender-list"></div>
+                    </div>
+                    <!-- Main content -->
+                    <div class="msg-main">
+                        <!-- Toolbar -->
+                        <div class="msg-toolbar">
+                            <input id="msg-search" type="text" placeholder="Search messages…" class="form-input"
+                                   data-action="filter-input" />
+                            <select id="msg-priority-filter" data-action="filter-priority">
+                                <option value="">Priority</option>
+                                <option value="critical">Critical</option>
+                                <option value="high">High</option>
+                                <option value="normal">Normal</option>
+                                <option value="low">Low</option>
+                            </select>
+                            <select id="msg-sort" data-action="sort">
+                                <option value="newest">Newest</option>
+                                <option value="oldest">Oldest</option>
+                                <option value="priority">Priority</option>
+                            </select>
+                            <div class="msg-toolbar-group">
+                                <button class="msg-toggle-btn active" id="msg-view-list" data-action="view-mode" data-mode="list">List</button>
+                                <button class="msg-toggle-btn" id="msg-view-timeline" data-action="view-mode" data-mode="timeline">Timeline</button>
+                            </div>
+                            <label style="display:flex;align-items:center;gap:4px;font-size:12px;color:var(--admin-text-dim);cursor:pointer;white-space:nowrap">
+                                <input type="checkbox" id="msg-select-all" data-action="select-all" style="accent-color:var(--admin-accent)"> Select All
+                            </label>
+                            <span class="msg-toolbar-count" id="msg-count"></span>
+                            <button class="action-btn" data-action="refresh">🔄 Refresh</button>
+                            <button class="action-btn" data-action="download">⬇ Download</button>
+                        </div>
+                        <!-- Message list -->
+                        <div id="messaging-message-list"></div>
+                        <div id="messaging-pagination" class="msg-pagination"></div>
+                    </div>
+                </div>
+                <!-- Compose -->
+                <div class="msg-compose">
+                    <h4>Compose Message</h4>
+                    <div class="msg-compose-row">
+                        <input id="msg-compose-channel" type="text" placeholder="Channel" class="form-input" />
+                        <input id="msg-compose-sender" type="text" placeholder="Sender (default: dashboard)" class="form-input" />
+                        <input id="msg-compose-recipients" type="text" placeholder="Recipients (* = broadcast)" class="form-input" value="*" />
+                    </div>
+                    <div class="msg-compose-row">
+                        <input id="msg-compose-tags" type="text" placeholder="Tags (comma-separated)" class="form-input" />
+                        <select id="msg-compose-priority" class="form-input" style="max-width:140px">
+                            <option value="normal">Normal</option>
+                            <option value="low">Low</option>
+                            <option value="high">High</option>
+                            <option value="critical">Critical</option>
+                        </select>
+                    </div>
+                    <textarea id="msg-compose-body" placeholder="Message body…" class="form-input" rows="3" style="width:100%;resize:vertical"></textarea>
+                    <button class="action-btn" style="margin-top:8px" data-action="send">📤 Send</button>
+                </div>
+            </div>
+            <div id="messaging-detail"></div>
+        </div>
+
+        <!-- SQLite Section -->
+        <div id="sqlite-section" class="admin-section hidden">
+            <div class="admin-grid">
+                <div class="admin-card">
+                    <div class="card-header">
+                        <div class="card-icon">🗄️</div>
+                        <div class="card-title">Database Info</div>
+                    </div>
+                    <div id="sqlite-info" class="loading metrics-list">Loading database info…</div>
+                </div>
+                <div class="admin-card">
+                    <div class="card-header">
+                        <div class="card-icon">📊</div>
+                        <div class="card-title">Table Statistics</div>
+                    </div>
+                    <div id="sqlite-tables" class="metrics-list">—</div>
+                </div>
+                <div class="admin-card">
+                    <div class="card-header">
+                        <div class="card-icon">🔧</div>
+                        <div class="card-title">Maintenance</div>
+                    </div>
+                    <div class="sqlite-maintenance-btns" style="display:flex;gap:8px;flex-wrap:wrap;padding:8px 0">
+                        <button class="action-btn" data-sqlite-action="vacuum">🧹 VACUUM</button>
+                        <button class="action-btn" data-sqlite-action="optimize">⚡ Optimize FTS5</button>
+                        <button class="action-btn" data-sqlite-action="integrity">✅ Integrity Check</button>
+                        <button class="action-btn" data-sqlite-action="analyze">📈 ANALYZE</button>
+                        <button class="action-btn" data-sqlite-action="reindex">🔄 REINDEX</button>
+                        <button class="action-btn" data-sqlite-action="groom">🧽 Groom</button>
+                    </div>
+                    <div id="sqlite-maintenance-result" style="margin-top:8px;font-size:13px"></div>
+                </div>
+            </div>
+            <div class="admin-grid" style="margin-top:16px">
+                <div class="admin-card">
+                    <div class="card-header">
+                        <div class="card-icon">💾</div>
+                        <div class="card-title">Backup &amp; Restore</div>
+                    </div>
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;padding:8px 0">
+                        <button class="action-btn" data-sqlite-action="backup">📦 Create Backup</button>
+                        <button class="action-btn" data-sqlite-action="wal-checkpoint">📝 WAL Checkpoint</button>
+                    </div>
+                    <div id="sqlite-backup-result" style="margin-top:8px;font-size:13px"></div>
+                    <div style="margin-top:12px">
+                        <div style="font-weight:600;font-size:13px;color:var(--admin-text,#e2e8f0);margin-bottom:6px">Available Backups</div>
+                        <div id="sqlite-backups-list" style="font-size:13px;color:var(--admin-text-dim,#94a3b8)">Loading…</div>
+                    </div>
+                </div>
+                <div class="admin-card">
+                    <div class="card-header">
+                        <div class="card-icon">🔄</div>
+                        <div class="card-title">Migration &amp; Recovery</div>
+                    </div>
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;padding:8px 0">
+                        <button class="action-btn" data-sqlite-action="migrate">📥 Import from JSON</button>
+                        <button class="action-btn" data-sqlite-action="export">📤 Export to JSON</button>
+                        <button class="action-btn" data-sqlite-action="reset" style="background:#7f1d1d;border-color:#ef4444">🗑️ Reset Database</button>
+                    </div>
+                    <div id="sqlite-migration-result" style="margin-top:8px;font-size:13px"></div>
+                </div>
+            </div>
+            <div class="admin-card" style="margin-top:16px">
+                <div class="card-header">
+                    <div class="card-icon">🔍</div>
+                    <div class="card-title">Query Console</div>
+                </div>
+                <div style="padding:8px 0">
+                    <textarea id="sqlite-query-input" class="form-input" rows="4" style="width:100%;font-family:monospace;font-size:13px;resize:vertical" placeholder="SELECT * FROM instructions LIMIT 10"></textarea>
+                    <div style="display:flex;gap:8px;margin-top:8px;align-items:center">
+                        <button class="action-btn" data-sqlite-action="run-query">▶ Run Query</button>
+                        <span id="sqlite-query-status" style="font-size:12px;color:var(--admin-text-dim)"></span>
+                    </div>
+                </div>
+                <div id="sqlite-query-result" style="margin-top:8px;overflow-x:auto"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Admin Panel JavaScript
+        let currentSection = 'overview';
+        let refreshInterval;
+    // Track if /api/admin/stats responded successfully on most recent loadOverviewData()
+    // Used to downgrade health display (memory/errors) when stats are missing.
+    // NOTE: use window-scoped flag so extracted overview script and inline health renderer share state
+    // Previously a local 'let statsAvailable' caused displaySystemHealth() to always treat statistics as unavailable
+    // which produced a persistent 'Statistics unavailable' issue despite stats loading successfully.
+    window.statsAvailable = false;
+    // WebSocket for live events (metrics + synthetic trace streaming)
+    let dashboardSocket = null;
+    let lastSyntheticRunId = null;
+    function initDashboardSocket(){
+        try {
+            if (dashboardSocket && dashboardSocket.readyState === WebSocket.OPEN) return;
+            const proto = (location.protocol === 'https:') ? 'wss' : 'ws';
+            dashboardSocket = new WebSocket(`${proto}://${location.host}/ws`);
+            dashboardSocket.onopen = ()=>{/* noop */};
+            dashboardSocket.onmessage = ev => {
+                try {
+                    const msg = JSON.parse(ev.data);
+                    if (msg.type === 'synthetic_trace' && msg.data) {
+                        handleSyntheticTrace(msg.data);
+                    }
+                } catch {/* ignore */}
+            };
+            dashboardSocket.onclose = ()=>{ setTimeout(initDashboardSocket, 4000); };
+        } catch(e){ console.warn('ws init failed', e); }
+    }
+    function handleSyntheticTrace(data){
+        if (!data || !data.runId) return;
+        // If new run starts while traces visible, auto-clear
+        if (lastSyntheticRunId && data.runId !== lastSyntheticRunId) {
+            const body = document.getElementById('synthetic-traces-body');
+            if (body) body.innerHTML='';
+        }
+        lastSyntheticRunId = data.runId;
+        const body = document.getElementById('synthetic-traces-body');
+        if (!body) return;
+        const clr = data.success ? '#0a0' : '#a00';
+        const err = data.error ? String(data.error).slice(0,80) : '';
+        const skipped = data.skipped ? ' (skipped)' : '';
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td class="trace-cell">${data.seq}</td>
+            <td class="trace-cell trace-mono">${data.method}${skipped}</td>
+            <td class="trace-cell ${data.success ? 'text-ok' : 'text-fail'}">${data.success?'✓':'✗'}</td>
+            <td class="trace-cell">${data.durationMs}ms</td>
+            <td class="trace-cell ${data.error ? 'text-err' : 'text-muted'}">${err}</td>`;
+        body.appendChild(tr);
+        const wrap = document.getElementById('synthetic-traces-wrapper');
+        if (wrap && wrap.style.display === 'none') wrap.style.display='block';
+    }
+
+        // Initialize admin panel
+        document.addEventListener('DOMContentLoaded', function() {
+            showSection('overview');
+            startAutoRefresh();
+            // Attempt to auto-create a dashboard admin session if none exists for this browser tab
+            try { maybeEnsureAdminSession(); } catch(e) { console.warn('auto session create failed', e); }
+            initDashboardSocket();
+        });
+
+        function showSection(section) {
+            // Hide all sections
+            document.querySelectorAll('.admin-section').forEach(s => s.classList.add('hidden'));
+
+            // Show selected section if present
+            const activeSection = document.getElementById(section + '-section');
+            if (activeSection) activeSection.classList.remove('hidden');
+
+            // Update nav buttons without relying on implicit event
+            document.querySelectorAll('.nav-btn').forEach(btn => {
+                const isTarget = btn.getAttribute('onclick')?.includes(`showSection('${section}')`);
+                if (isTarget) {
+                    btn.classList.add('active');
+                } else {
+                    btn.classList.remove('active');
+                }
+            });
+
+            currentSection = section;
+            loadSectionData(section);
+        }
+
+        function loadSectionData(section) {
+            switch(section) {
+                case 'overview':
+                    loadOverviewData();
+                    break;
+                case 'graph':
+                    initGraphScopeDefaults();
+                    break;
+                case 'config':
+                    loadConfiguration();
+                    break;
+                case 'sessions':
+                    loadSessions();
+                    break;
+                case 'maintenance':
+                    loadMaintenanceStatus();
+                    loadBackups();
+                    break;
+                case 'monitoring':
+                    loadMonitoringData();
+                    ensureMonitoringPoll();
+                    break;
+                case 'instructions':
+                    loadInstructions();
+                    break;
+                case 'messaging':
+                    if (window.initMessaging) window.initMessaging();
+                    break;
+            }
+        }
+
+        // Graph logic was extracted to js/admin.graph.js
+        // Functions available globally: reloadGraphMermaid, initGraphScopeDefaults, copyMermaidSource, toggleGraphEdit, applyGraphEdit, cancelGraphEdit, refreshDrillCategories, loadDrillInstructions, clearSelections
+
+        <!-- overview functions moved to js/admin.overview.js -->
+
+        // Lightweight overview-level maintenance display (optional)
+        // Intentionally minimal to avoid blocking overview rendering.
+        // If an element with id 'maintenance-overview' exists, populate it; otherwise no-op.
+        function displayMaintenanceInfo(maintenance) {
+            try {
+                const el = document.getElementById('maintenance-overview');
+                if (!el || !maintenance) return; // Safe no-op if overview element not present
+                const mode = maintenance.maintenanceMode ? 'ENABLED' : 'Disabled';
+                el.innerHTML = `
+                    <div class="stat-row">
+                        <span class="stat-label">Last Backup</span>
+                        <span class="stat-value">${maintenance.lastBackup ? new Date(maintenance.lastBackup).toLocaleString() : 'Never'}</span>
+                    </div>`;
+            } catch (err) {
+                console.warn('displayMaintenanceInfo error:', err);
+            }
+        }
+
+        function displaySystemHealth(health) {
+            // Defensive normalization: /api/health returns { status, checks, uptime, timestamp } (no issues/recommendations)
+            // while richer maintenance/system health objects may include arrays. Avoid assuming presence.
+            if(!health || typeof health !== 'object') {
+                document.getElementById('system-health').innerHTML = '<div class="error-message">Health data unavailable</div>';
+                return;
+            }
+            const normalized = {
+                status: (health.status || 'unknown').toString(),
+                issues: Array.isArray(health.issues) ? health.issues : [],
+                recommendations: Array.isArray(health.recommendations) ? health.recommendations : [],
+                uptime: typeof health.uptime === 'number' ? health.uptime : (typeof health.server?.uptime === 'number' ? health.server.uptime : undefined),
+                checks: health.checks || {}
+            };
+            // Inject CPU check if not present using last resource cache / stats
+            try {
+                if(!normalized.checks.cpu){
+                    let cpuVal = undefined;
+                    if(window.__resourceTrendCache && typeof window.__resourceTrendCache.latestCpu === 'number') cpuVal = window.__resourceTrendCache.latestCpu;
+                    else if(window.lastSystemStats && window.lastSystemStats.cpuUsage && typeof window.lastSystemStats.cpuUsage.percent==='number') cpuVal = window.lastSystemStats.cpuUsage.percent;
+                    if(typeof cpuVal === 'number'){
+                        // simple thresholds: <50 ok, 50-80 warn (ok), >80 fail
+                        normalized.checks.cpu = cpuVal < 85; // treat >85 as fail
+                        if(cpuVal >=85 && !normalized.issues.some(i=>/high cpu/i.test(i))) normalized.issues.push('High CPU usage');
+                    }
+                }
+                // Inject Memory check if not present (heap usage based) using resource trend cache or lastSystemStats
+                if(!normalized.checks.memory){
+                    let memPercent = undefined;
+                    // Use heapLimit (V8 heap_size_limit) when available for accurate memory health.
+                    // heapTotal tracks current V8 heap reservation which stays close to heapUsed, causing false alarms.
+                    const mu = window.lastSystemStats && window.lastSystemStats.memoryUsage;
+                    if(mu && typeof mu.heapUsed === 'number' && typeof mu.heapLimit === 'number' && mu.heapLimit > 0){
+                        memPercent = (mu.heapUsed / mu.heapLimit) * 100;
+                    } else if(mu && typeof mu.heapUsed === 'number' && typeof mu.heapTotal === 'number' && mu.heapTotal > 0){
+                        memPercent = (mu.heapUsed / mu.heapTotal) * 100;
+                    }
+                    if(typeof memPercent === 'number'){
+                        // Thresholds: <70 ok, 70-90 warn (still ok), >90 fail
+                        normalized.checks.memory = memPercent < 90;
+                        if(memPercent >= 90 && !normalized.issues.some(i=>/high memory/i.test(i))) normalized.issues.push('High memory usage');
+                        // Provide a leak / growth recommendation if increasing trend and above moderate threshold
+                        if(health.memoryTrend === 'increasing' && memPercent >= 75 && !normalized.recommendations.some(r=>/investigate memory growth/i.test(r))){
+                            normalized.recommendations.push('Investigate memory growth – potential leak risk');
+                        }
+                    }
+                }
+            } catch{/*ignore*/}
+            // Uptime regression styling escalation: if an issue contains 'Uptime regression' force critical indicator
+            let statusOverride = normalized.status;
+            if (normalized.issues.some(i => /uptime regression/i.test(i))) {
+                statusOverride = 'critical';
+            }
+
+            // If stats are unavailable, degrade overall status (but don't alarm) – rely on shared window.statsAvailable
+            if (!window.statsAvailable) {
+                // degrade to 'unknown' instead of forced failure to avoid alarming UI when stats temporarily missing
+                if (!normalized.issues.some(i => /statistics unavailable/i.test(i))) normalized.issues.push('Statistics unavailable');
+                if (statusOverride === 'healthy') statusOverride = 'unknown';
+            }
+            const statusClass = `status-${statusOverride}`;
+            let html = `
+                <div class="stat-row">
+                    <span class="stat-label">Overall Status</span>
+                    <span class="stat-value">
+                        ${statusOverride.toUpperCase()}
+                        <span class="${statusClass} status-indicator"></span>
+                    </span>
+                </div>
+            `;
+
+            // Show basic check breakdown if present
+            try {
+                const checkKeys = Object.keys(normalized.checks);
+                if(checkKeys.length){
+                    html += '<div class="health-mt"><strong>Checks:</strong><ul class="health-list">' +
+                        checkKeys.map(k => `<li class="${normalized.checks[k]?'text-ok':'text-fail'}">${k}: ${normalized.checks[k]?'ok':'fail'}</li>`).join('') + '</ul></div>';
+                }
+            } catch { /* ignore */ }
+
+            // Add CPU trend information if available
+            if (health.cpuTrend) {
+                html += `
+                    <div class="health-mt">
+                        <strong>CPU Trend:</strong>
+                        <span class="${health.cpuTrend === 'stable' ? 'text-ok' : health.cpuTrend === 'increasing' ? 'text-warn' : 'text-fail'}">
+                            ${health.cpuTrend}
+                        </span>
+                    </div>
+                `;
+            }
+
+            // Add memory trend information if available
+            if (health.memoryTrend) {
+                const formatGrowthRate = (rate) => {
+                    if (Math.abs(rate) < 1024) return `${rate.toFixed(0)} B/min`;
+                    if (Math.abs(rate) < 1024 * 1024) return `${(rate / 1024).toFixed(1)} KB/min`;
+                    return `${(rate / (1024 * 1024)).toFixed(1)} MB/min`;
+                };
+
+                html += `
+                    <div class="health-mt">
+                        <strong>Memory Trend:</strong>
+                        <span class="${health.memoryTrend === 'stable' ? 'text-ok' : health.memoryTrend === 'increasing' ? 'text-warn' : 'text-fail'}">
+                            ${health.memoryTrend}
+                        </span>
+                        ${health.memoryGrowthRate ? ` (${formatGrowthRate(health.memoryGrowthRate)})` : ''}
+                    </div>
+                `;
+            }
+
+            if (normalized.issues.length > 0) {
+                html += `
+                    <div class="health-mt-lg">
+                        <strong>Issues:</strong>
+                        <ul class="health-list">
+                            ${normalized.issues.map(issue => `<li class="text-fail">${issue}</li>`).join('')}
+                        </ul>
+                    </div>
+                `;
+            }
+
+            if (normalized.recommendations.length > 0) {
+                html += `
+                    <div class="health-mt-lg">
+                        <strong>Recommendations:</strong>
+                        <ul class="health-list">
+                            ${normalized.recommendations.map(rec => `<li class="text-warn">${rec}</li>`).join('')}
+                        </ul>
+                    </div>
+                `;
+            }
+
+            // Append CPU / Memory spark lines (moved from performance card)
+            try {
+                if (window.__resourceTrendCache) {
+                    const t = window.__resourceTrendCache;
+                    const sparkHtml = `
+                        <div class="mt-lg">
+                            <div class="resource-trend-label">Resource Trend</div>
+                            <div class="resource-trend-col">
+                                <div class="spark-col">
+                                    <span class="spark-label">CPU Spark (last ${Math.min(40, t.sampleCount || 0)} samples)</span>
+                                    <span class="spark-value">${t.spark || ''}</span>
+                                    <span class="spark-stats">Latest ${t.latestCpu?.toFixed ? t.latestCpu.toFixed(1) : '0'}% • Min ${(t.minCpu??0).toFixed(1)}% • Max ${(t.maxCpu??0).toFixed(1)}%</span>
+                                </div>
+                                <div class="spark-col">
+                                    <span class="spark-label">Mem Spark (heap)</span>
+                                    <span class="spark-value">${t.memSpark || ''}</span>
+                                    <span class="spark-stats">Latest ${(t.latestHeap/1024/1024).toFixed(2)} MB • Min ${(t.minHeap/1024/1024).toFixed(2)} MB • Max ${(t.maxHeap/1024/1024).toFixed(2)} MB</span>
+                                </div>
+                            </div>
+                        </div>`;
+                    html += sparkHtml;
+                }
+            } catch {/* ignore */}
+
+            document.getElementById('system-health').innerHTML = html;
+            try { window.lastSystemHealth = health; } catch {/* ignore */}
+        }
+
+        // --- Backup / Restore ---
+        // Extracted to js/admin.maintenance.js
+
+        async function performBackup() {
+            try {
+                showSuccess('Backup started...');
+                const response = await fetch('/api/admin/maintenance/backup', {
+                    method: 'POST'
+                });
+
+                const data = await response.json();
+                if (data.success) {
+                    showSuccess(`Backup completed: ${data.backupId}`);
+                    loadMaintenanceStatus();
+                } else {
+                    showError('Backup failed');
+                }
+            } catch (error) {
+                console.error('Error performing backup:', error);
+                showError('Backup failed');
+            }
+        }
+
+        async function clearCaches() {
+            try {
+                const response = await fetch('/api/admin/cache/clear', {
+                    method: 'POST'
+                });
+
+                const data = await response.json();
+                if (data.success) {
+                    showSuccess(`Caches cleared: ${data.cleared.join(', ')}`);
+                } else {
+                    showError('Failed to clear caches');
+                }
+            } catch (error) {
+                console.error('Error clearing caches:', error);
+                showError('Failed to clear caches');
+            }
+        }
+
+        async function restartServer() {
+            if (!confirm('Are you sure you want to restart the server? This may temporarily interrupt service.')) {
+                return;
+            }
+
+            try {
+                showSuccess('Server restart initiated...');
+                const response = await fetch('/api/admin/restart', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ component: 'all' })
+                });
+
+                const data = await response.json();
+                if (data.success) {
+                    showSuccess(data.message);
+                } else {
+                    showError('Server restart failed');
+                }
+            } catch (error) {
+                console.error('Error restarting server:', error);
+                showError('Server restart failed');
+            }
+        }
+
+                async function loadConfiguration() {
+                    // Primary implementation in js/admin.config.js (loaded via defer).
+                    // This inline fallback only fires if the external script failed to load.
+                    if (window.__configExternalLoaded) return;
+                    try {
+                        var res = await fetch('/api/admin/config');
+                        var data = await res.json();
+                        if (!data.success) throw new Error('Failed to load config');
+                        var cfg = data.config;
+                        var html = '<form onsubmit="return updateConfiguration(event)">'
+                            + '<div class="form-group"><label class="form-label">Max Connections</label>'
+                            + '<input class="form-input" type="number" id="cfg-maxConnections" value="' + cfg.serverSettings.maxConnections + '" /></div>'
+                            + '<div class="form-group"><label class="form-label">Request Timeout (ms)</label>'
+                            + '<input class="form-input" type="number" id="cfg-requestTimeout" value="' + cfg.serverSettings.requestTimeout + '" /></div>'
+                            + '<div class="form-group"><label class="form-label">Verbose Logging</label>'
+                            + '<select class="form-input" id="cfg-verbose"><option value="1"' + (cfg.serverSettings.enableVerboseLogging ? ' selected' : '') + '>Enabled</option>'
+                            + '<option value="0"' + (!cfg.serverSettings.enableVerboseLogging ? ' selected' : '') + '>Disabled</option></select></div>'
+                            + '<div class="form-group"><label class="form-label">Enable Mutation</label>'
+                            + '<select class="form-input" id="cfg-mutation"><option value="1"' + (cfg.serverSettings.enableMutation ? ' selected' : '') + '>Enabled</option>'
+                            + '<option value="0"' + (!cfg.serverSettings.enableMutation ? ' selected' : '') + '>Disabled</option></select></div>'
+                            + '<div style="margin-top:10px;"><button class="action-btn" type="submit">💾 Save Config</button></div>'
+                            + '</form>'
+                            + '<div style="opacity:0.5; margin-top:12px; font-size:11px;">Inline fallback — external config JS not loaded. Flags panel unavailable.</div>';
+                        document.getElementById('config-form').innerHTML = html;
+                    } catch (e) {
+                        document.getElementById('config-form').innerHTML = '<div class="error">Failed to load configuration</div>';
+                    }
+                }
+
+        async function updateConfiguration(ev) {
+            ev.preventDefault();
+            var flagSelects = document.querySelectorAll('[data-flag]');
+            var featureFlags = {};
+                        flagSelects.forEach(function(sel){
+                            var name = sel.getAttribute('data-flag');
+                            if(!name) return;
+                            featureFlags[name] = sel.value === '1';
+                        });
+            var updates = {
+                serverSettings: {
+                    maxConnections: parseInt(document.getElementById('cfg-maxConnections').value),
+                    requestTimeout: parseInt(document.getElementById('cfg-requestTimeout').value),
+                    enableVerboseLogging: document.getElementById('cfg-verbose').value === '1',
+                    enableMutation: document.getElementById('cfg-mutation').value === '1',
+                    rateLimit: {
+                        windowMs: parseInt((document.getElementById('cfg-windowMs') || {}).value || '60000'),
+                        maxRequests: parseInt((document.getElementById('cfg-maxRequests') || {}).value || '100')
+                    }
+                },
+                featureFlags: featureFlags
+            };
+                        try {
+                                var res = await fetch('/api/admin/config', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(updates)});
+                                var data = await res.json();
+                                if (data.success) { showSuccess('Configuration updated'); loadConfiguration(); } else { showError(data.error || 'Update failed'); }
+                        } catch (e) { showError('Update failed'); }
+                        return false;
+                }
+
+        // Monitoring functions moved to js/admin.monitor.js
+
+        // ===== Log Viewer =====
+        // Extracted to js/admin.logs.js
+
+        // ===== Instruction Management =====
+        let instructionEditing = null;
+                // Pagination state
+                let allInstructions = [];
+                let instructionPage = 1;
+                let instructionPageSize = 25; // default page size
+
+                function getInstructionPageSizes() { return [10,25,50,100, 'All']; }
+
+                function buildInstructionPaginationControls(totalFiltered) {
+                        const container = document.getElementById('instruction-pagination');
+                        if (!container) return;
+                        const total = totalFiltered;
+                        const pageSize = instructionPageSize === 'All' ? total : instructionPageSize;
+                        const totalPages = pageSize === 0 ? 1 : Math.max(1, Math.ceil(total / pageSize));
+                        if (instructionPage > totalPages) instructionPage = totalPages; // clamp
+
+                        const disablePrev = instructionPage <= 1;
+                        const disableNext = instructionPage >= totalPages;
+
+                        const sizeOptions = getInstructionPageSizes().map(s => `<option value="${s}" ${s===instructionPageSize? 'selected':''}>${s}</option>`).join('');
+                        container.innerHTML = `
+                            <div class="ipag-row">
+                                <label class="ipag-label">Page Size:
+                                    <select id="instruction-page-size" class="form-input ipag-select">${sizeOptions}</select>
+                                </label>
+                                <div class="ipag-nav">
+                                    <button class="action-btn" ${disablePrev?'disabled':''}>⏮ First</button>
+                                    <button class="action-btn" ${disablePrev?'disabled':''}>◀ Prev</button>
+                                    <span class="ipag-page">Page ${instructionPage} / ${totalPages}</span>
+                                    <button class="action-btn" ${disableNext?'disabled':''}>Next ▶</button>
+                                    <button class="action-btn" ${disableNext?'disabled':''}>Last ⏭</button>
+                                </div>
+                                <span class="ipag-total">Filtered: ${total} total</span>
+                            </div>`;
+                        const sizeSelect = document.getElementById('instruction-page-size');
+                        sizeSelect.onchange = () => {
+                                instructionPageSize = sizeSelect.value === 'All' ? 'All' : parseInt(sizeSelect.value,10);
+                                instructionPage = 1; // reset to first page when size changes
+                                renderInstructionList(allInstructions);
+                        };
+                }
+
+                function changeInstructionPage(dir) {
+                        const totalFiltered = getFilteredInstructions(allInstructions).length;
+                        const pageSizeVal = instructionPageSize === 'All' ? totalFiltered : instructionPageSize;
+                        const totalPages = pageSizeVal === 0 ? 1 : Math.max(1, Math.ceil(totalFiltered / pageSizeVal));
+                        if (dir === 'first') instructionPage = 1;
+                        else if (dir === 'prev' && instructionPage > 1) instructionPage--;
+                        else if (dir === 'next' && instructionPage < totalPages) instructionPage++;
+                        else if (dir === 'last') instructionPage = totalPages;
+                        renderInstructionList(allInstructions);
+                }
+
+                // Instruction filtering & sorting enhancements
+                function getFilteredInstructions(list) {
+                    const nameFilter = (document.getElementById('instruction-filter').value || '').toLowerCase();
+                    const categoryFilter = (document.getElementById('instruction-category-filter')?.value || '');
+                    const sizeFilter = (document.getElementById('instruction-size-filter')?.value || '');
+                    let filtered = list.filter(i => i.name.toLowerCase().includes(nameFilter));
+                    if (categoryFilter) {
+                        filtered = filtered.filter(i => {
+                            if (i.category === categoryFilter) return true;
+                            if (Array.isArray(i.categories) && i.categories.includes(categoryFilter)) return true;
+                            return false;
+                        });
+                    }
+                    if (sizeFilter) filtered = filtered.filter(i => i.sizeCategory === sizeFilter);
+                    const sortSelect = document.getElementById('instruction-sort');
+                    const sortVal = sortSelect ? sortSelect.value : 'name-asc';
+                    const cmp = (a,b, key, dir='asc') => {
+                        if (a[key] === b[key]) return 0;
+                        return (a[key] < b[key] ? -1 : 1) * (dir === 'asc' ? 1 : -1);
+                    };
+                    switch(sortVal) {
+                        case 'name-desc': filtered.sort((a,b)=>cmp(a,b,'name','desc')); break;
+                        case 'size-asc': filtered.sort((a,b)=>cmp(a,b,'size','asc')); break;
+                        case 'size-desc': filtered.sort((a,b)=>cmp(a,b,'size','desc')); break;
+                        case 'mtime-asc': filtered.sort((a,b)=>cmp(a,b,'mtime','asc')); break;
+                        case 'mtime-desc': filtered.sort((a,b)=>cmp(a,b,'mtime','desc')); break;
+                        case 'category': filtered.sort((a,b)=>cmp(a,b,'category','asc') || cmp(a,b,'name','asc')); break;
+                        default: // name-asc
+                            filtered.sort((a,b)=>cmp(a,b,'name','asc'));
+                    }
+                    return filtered;
+                }
+
+    /* Removed legacy duplicate loadInstructions; unified enhanced version defined later */
+
+        async function loadInstructionCategories() {
+            try {
+                const res = await fetch('/api/instructions/categories');
+                if(!res.ok) throw new Error('http '+res.status);
+                const data = await res.json();
+                // Accept shapes: {success:true,categories:[{name,count}]}, {success:true,data:{categories:[...]}}
+                let cats = data.categories || data.data?.categories || [];
+                if(Array.isArray(cats) && cats.length && typeof cats[0] === 'string') {
+                    cats = cats.map(n=>({ name:n, count: undefined }));
+                }
+                if(!Array.isArray(cats)) cats = [];
+                const select = document.getElementById('instruction-category-filter');
+                if(select){
+                    select.innerHTML = '<option value="">All Categories</option>';
+                    cats.forEach(cat => {
+                        if(!cat || !cat.name) return;
+                        const option = document.createElement('option');
+                        option.value = cat.name;
+                        option.textContent = cat.count != null ? `${cat.name} (${cat.count})` : cat.name;
+                        select.appendChild(option);
+                    });
+                }
+                return cats.map(c=>c.name);
+            } catch (e) {
+                console.warn('Failed to load instruction categories:', e);
+                return [];
+            }
+        }
+
+        function renderInstructionList(instructions) {
+                        const filtered = getFilteredInstructions(instructions);
+            if (filtered.length === 0) {
+                document.getElementById('instructions-list').innerHTML = '<p>No instructions found</p>';
+                                buildInstructionPaginationControls(0);
+                return;
+            }
+                        const totalFiltered = filtered.length;
+                        let pageItems = filtered;
+                        if (instructionPageSize !== 'All') {
+                                const start = (instructionPage - 1) * instructionPageSize;
+                                const end = start + instructionPageSize;
+                                pageItems = filtered.slice(start, end);
+                        }
+                        const rows = pageItems.map(instr => {
+                            const rawSummary = (instr.semanticSummary || '').trim();
+                            let short = rawSummary.slice(0, 160);
+                            if (rawSummary.length > 160) short += '…';
+                            const safeSummary = escapeHtml(short);
+                            return `
+                <div class="session-item instr-item-bg">
+                    <div class="session-header">
+                        <span class="session-id instr-id-bg">${instr.name}</span>
+                        <div>
+                           <button class="action-btn" onclick="editInstruction('${instr.name}')">✏ Edit</button>
+                           <button class="action-btn danger" onclick="deleteInstruction('${instr.name}')">🗑 Delete</button>
+                        </div>
+                    </div>
+                    <div class="stat-row"><span class="stat-label">Category</span><span class="stat-value">${instr.category || '—'}</span></div>
+                    <div class="stat-row"><span class="stat-label">Size</span><span class="stat-value">${instr.size} bytes (${instr.sizeCategory})</span></div>
+                    <div class="stat-row"><span class="stat-label">Modified</span><span class="stat-value">${new Date(instr.mtime).toLocaleString()}</span></div>
+                    <div class="stat-row stat-row-top">
+                        <span class="stat-label stat-label-pt">Summary</span>
+                        <span class="stat-value stat-value-wrap">
+                            ${safeSummary || '<span style=\"opacity:.5;\">—</span>'}
+                        </span>
+                    </div>
+                </div>`;
+                        }).join('');
+            document.getElementById('instructions-list').innerHTML = rows;
+                        buildInstructionPaginationControls(totalFiltered);
+        }
+
+        function filterInstructions() {
+                        instructionPage = 1; // reset to first page on filter change
+                        renderInstructionList(allInstructions);
+        }
+
+        function showCreateInstruction() {
+            instructionEditing = null;
+            document.getElementById('instruction-editor-title').textContent = 'New Instruction';
+            document.getElementById('instruction-filename').value = '';
+            document.getElementById('instruction-filename').disabled = false;
+            document.getElementById('instruction-content').value = '{\n  "description": "New instruction"\n}';
+            ensureInstructionEditorAtTop();
+            const ed = document.getElementById('instruction-editor');
+            ed.classList.remove('hidden');
+            // Smooth scroll to make editor visible at top
+            try { ed.scrollIntoView({ behavior:'smooth', block:'start' }); } catch {}
+            document.getElementById('instruction-filename').focus();
+            instructionOriginalContent = document.getElementById('instruction-content').value;
+            updateInstructionEditorDiagnostics();
+        }
+
+        async function editInstruction(name) {
+            const editor = document.getElementById('instruction-editor');
+            const filenameEl = document.getElementById('instruction-filename');
+            const contentEl = document.getElementById('instruction-content');
+            let attempts = 0;
+            const maxAttempts = 2; // one retry after initial attempt
+            let lastError;
+            while (attempts < maxAttempts) {
+                try {
+                    attempts++;
+                    // lightweight loading indicator
+                    if (contentEl && attempts === 1) {
+                        contentEl.value = '// Loading ' + name + '...';
+                    }
+                    const res = await fetch('/api/instructions/' + encodeURIComponent(name));
+                    if (!res.ok) throw new Error('http ' + res.status);
+                    const data = await res.json();
+                    if (data.success === false && !data.content && !data.data?.content) throw new Error('server reported failure');
+                    if (!data.content && data.data?.content) data.content = data.data.content;
+                    if (!data.content) throw new Error('missing content');
+                    instructionEditing = name;
+                    document.getElementById('instruction-editor-title').textContent = 'Edit Instruction: ' + name;
+                    filenameEl.value = name;
+                    filenameEl.disabled = true;
+                    const pretty = JSON.stringify(data.content, null, 2);
+                    contentEl.value = pretty;
+                    ensureInstructionEditorAtTop();
+                    editor.classList.remove('hidden');
+                    try { editor.scrollIntoView({ behavior:'smooth', block:'start' }); } catch {}
+                    instructionOriginalContent = pretty;
+                    updateInstructionEditorDiagnostics();
+                    return; // success
+                } catch (e) {
+                    lastError = e;
+                    // brief delay before retry to allow file system settle or server warm path
+                    if (attempts < maxAttempts) {
+                        await new Promise(r => setTimeout(r, 120));
+                        continue;
+                    }
+                }
+            }
+            console.warn('editInstruction failed after retries', lastError);
+            showError('Failed to load instruction');
+        }
+
+        function cancelEditInstruction() {
+            document.getElementById('instruction-editor').classList.add('hidden');
+            const diff = document.getElementById('instruction-diff-container');
+            if(diff) diff.classList.add('hidden');
+            instructionOriginalContent='';
+        }
+
+        // Reposition editor just below the toolbar (before the instruction list) when activated
+        function ensureInstructionEditorAtTop(){
+            try {
+                const editor = document.getElementById('instruction-editor');
+                const list = document.getElementById('instructions-list');
+                if(!editor || !list) return;
+                const parent = list.parentElement; // card body
+                // The toolbar is the element immediately before instructions-list (with buttons + filters)
+                if(parent && parent.contains(list)){
+                    // Insert editor right BEFORE instructions-list so it appears at top
+                    if(editor.nextElementSibling !== list){
+                        parent.insertBefore(editor, list);
+                    }
+                }
+            } catch {/* ignore */}
+        }
+
+        // --- Instruction Editor Helpers (added patch) ---
+        let instructionOriginalContent = '';
+        let instructionDiffVisible = false;
+
+        function safeParseInstruction(raw){
+            try { return JSON.parse(raw); } catch { return null; }
+        }
+
+        function updateInstructionEditorDiagnostics(){
+            const ta = document.getElementById('instruction-content');
+            const diag = document.getElementById('instruction-diagnostics');
+            if(!ta||!diag) return;
+            const raw = ta.value;
+            if(!raw.trim()){ diag.innerHTML = '<em>Empty.</em>'; return; }
+            const parsed = safeParseInstruction(raw);
+            if(!parsed){
+                diag.innerHTML = '<span class="text-danger">Invalid JSON</span>';
+            } else {
+                const size = raw.length;
+                const cats = Array.isArray(parsed.categories)? parsed.categories.length : 0;
+                const schemaVer = parsed.schemaVersion || parsed.schema || '?';
+                const changed = instructionOriginalContent && raw !== instructionOriginalContent;
+                diag.innerHTML = `Size: ${size} chars • Categories: ${cats} • Schema: ${schemaVer} ${changed?'<span class="text-warn">(modified)</span>':''}`;
+            }
+            if(instructionDiffVisible) refreshInstructionDiff();
+        }
+
+        function refreshInstructionDiff(){
+            const diffWrap = document.getElementById('instruction-diff-container');
+            const diffPre = document.getElementById('instruction-diff');
+            const ta = document.getElementById('instruction-content');
+            if(!diffWrap||!diffPre||!ta) return;
+            if(!instructionOriginalContent){ diffPre.textContent='(no baseline)'; return; }
+            if(ta.value === instructionOriginalContent){ diffPre.textContent='(no changes)'; return; }
+            // Simple line diff (not optimal but lightweight)
+            const before = instructionOriginalContent.split(/\r?\n/);
+            const after = ta.value.split(/\r?\n/);
+            const max = Math.max(before.length, after.length);
+            const out = [];
+            for(let i=0;i<max;i++){
+                const a = before[i];
+                const b = after[i];
+                if(a === b){
+                    if(a !== undefined) out.push('  ' + a);
+                } else {
+                    if(a !== undefined) out.push('- ' + a);
+                    if(b !== undefined) out.push('+ ' + b);
+                }
+            }
+            diffPre.textContent = out.join('\n');
+        }
+
+        function toggleInstructionDiff(){
+            instructionDiffVisible = !instructionDiffVisible;
+            const wrap = document.getElementById('instruction-diff-container');
+            if(!wrap) return;
+            if(instructionDiffVisible){
+                wrap.classList.remove('hidden');
+                refreshInstructionDiff();
+            } else {
+                wrap.classList.add('hidden');
+            }
+        }
+
+        async function saveInstruction(){
+            const nameEl = document.getElementById('instruction-filename');
+            const ta = document.getElementById('instruction-content');
+            if(!nameEl||!ta) return;
+            const raw = ta.value;
+            const parsed = safeParseInstruction(raw);
+            if(!parsed){ showError('Cannot save: invalid JSON'); return; }
+            // Auto-upgrade template schemaVersion if legacy 1.x
+            if(parsed && parsed.schemaVersion && /^1(\.|$)/.test(String(parsed.schemaVersion))){
+                parsed.schemaVersion = '2';
+            }
+            const body = { content: parsed };
+            let url = '/api/instructions';
+            let method = 'POST';
+            if(instructionEditing){
+                url += '/' + encodeURIComponent(instructionEditing);
+                method = 'PUT';
+            } else {
+                body.name = nameEl.value.trim();
+                if(!body.name){ showError('Provide file name'); return; }
+            }
+            try {
+                const res = await fetch(url, { method, headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+                const data = await res.json();
+                if(!res.ok || !data.success){ throw new Error(data.error || data.message || 'Save failed'); }
+                showSuccess(instructionEditing? 'Instruction updated':'Instruction created');
+                instructionOriginalContent = JSON.stringify(parsed, null, 2);
+                ta.value = instructionOriginalContent; // normalized pretty
+                if(!instructionEditing) instructionEditing = body.name;
+                updateInstructionEditorDiagnostics();
+                loadInstructions();
+            } catch(e){ showError(e.message || 'Save failed'); }
+        }
+
+        async function loadInstructions() {
+            const listEl = document.getElementById('instructions-list');
+            listEl.innerHTML = 'Loading...';
+            try {
+                // Load categories first to populate the dropdown (ignore errors; we'll derive later if needed)
+                const catNames = await loadInstructionCategories();
+                const res = await fetch('/api/instructions');
+                if(!res.ok) throw new Error('http '+res.status);
+                const data = await res.json();
+                // Accept shapes: {success:true,instructions:[...]}, {data:{instructions:[...]}}, or legacy {instructions:[...]}
+                if (!('success' in data) && !('data' in data) && !('instructions' in data)) throw new Error('unrecognized instructions payload');
+                const rawList = data.instructions || data.data?.instructions || [];
+                allInstructions = Array.isArray(rawList) ? rawList : [];
+                try { console.log('[dashboard] fetched instructions:', allInstructions.length); } catch {}
+                // If categories endpoint failed / returned empty, derive from instruction list
+                if(!catNames.length) {
+                    try {
+                        const select = document.getElementById('instruction-category-filter');
+                        if(select){
+                            const derived = Array.from(new Set(allInstructions.flatMap(i=> [i.category, ...(Array.isArray(i.categories)? i.categories: [])]).filter(Boolean))).sort();
+                            derived.forEach(n=>{
+                                const opt = document.createElement('option');
+                                opt.value = n; opt.textContent = n; select.appendChild(opt);
+                            });
+                        }
+                    } catch(_) { /* ignore */ }
+                }
+                instructionPage = 1; // reset page whenever we reload
+                renderInstructionList(allInstructions);
+            } catch (e) {
+                console.warn('loadInstructions error', e);
+                listEl.innerHTML = '<div class="error">Failed to load instructions</div>';
+            }
+        }
+
+            // Re-introduced after patch: formatInstructionJson utility (was accidentally truncated)
+            function formatInstructionJson(){
+                const ta = document.getElementById('instruction-content');
+                if(!ta) return;
+                try {
+                    const parsed = JSON.parse(ta.value);
+                    ta.value = JSON.stringify(parsed, null, 2);
+                    updateInstructionEditorDiagnostics();
+                } catch { showError('Cannot format: invalid JSON'); }
+            }
+
+        function applyInstructionTemplate(){
+            const ta = document.getElementById('instruction-content');
+            if(!ta) return;
+            if(ta.value.trim() && !confirm('Replace current content with template?')) return;
+            const now = new Date().toISOString();
+            const template = {
+                id: 'sample-instruction',
+                title: 'Sample Instruction',
+                body: 'Detailed instruction content here.\nAdd multi-line guidance and steps.',
+                priority: 50,
+                audience: 'all',
+                requirement: 'optional',
+                categories: ['general'],
+                primaryCategory: 'general',
+                reviewIntervalDays: 180,
+                schemaVersion: '4',
+                description: 'Describe purpose and scope.',
+                createdAt: now,
+                updatedAt: now
+            };
+            ta.value = JSON.stringify(template, null, 2);
+            updateInstructionEditorDiagnostics();
+        }
+
+    // ===== Resource Trend (CPU/Mem) Long-Term History (merged into Performance card) =====
+        (function initResourceTrendMerge(){
+            async function fetchResourceTrends(){
+                try {
+                    const res = await fetch('/api/system/resources?limit=300');
+                    if(!res.ok) throw new Error('http '+res.status);
+                    const json = await res.json();
+                    const samples = json?.data?.samples || [];
+                    const trend = json?.data?.trend || { cpuSlope:0, memSlope:0 };
+                    if(samples.length === 0){
+                        window.__resourceTrendCache = { windowSec:0, sampleCount:0, latestCpu:0, latestHeap:0, cpuSlope:0, memSlope:0, spark:'' };
+                        // trigger re-render next stats update
+                        return;
+                    }
+                    const latest = samples[samples.length-1];
+                    const first = samples[0];
+                    const durationSec = ((latest.timestamp - first.timestamp)/1000).toFixed(0);
+                    const tail = samples.slice(-40);
+                    const spark = tail.map(s=>{
+                        const v = Math.min(100, Math.max(0, s.cpuPercent));
+                        const idx = Math.round(v/12.5);
+                        const blocks = ['▁','▂','▃','▄','▅','▆','▇','█'];
+                        return blocks[Math.min(blocks.length-1, idx)];
+                    }).join('');
+                    const minCpu = tail.reduce((m,s)=> s.cpuPercent<m? s.cpuPercent:m, tail[0].cpuPercent);
+                    const maxCpu = tail.reduce((m,s)=> s.cpuPercent>m? s.cpuPercent:m, tail[0].cpuPercent);
+                    // Memory spark (scale heap delta relative to max in window)
+                    const maxHeap = tail.reduce((m,s)=> s.heapUsed>m?s.heapUsed:m,0) || 1;
+                    const minHeap = tail.reduce((m,s)=> s.heapUsed<m?s.heapUsed:m, tail[0].heapUsed);
+                    const memSpark = tail.map(s=>{
+                        const ratio = Math.min(1, Math.max(0, s.heapUsed / maxHeap));
+                        const idx = Math.round(ratio*7);
+                        const blocks = ['▁','▂','▃','▄','▅','▆','▇','█'];
+                        return blocks[Math.min(blocks.length-1, idx)];
+                    }).join('');
+                    window.__resourceTrendCache = {
+                        windowSec: durationSec,
+                        sampleCount: samples.length,
+                        latestCpu: latest.cpuPercent,
+                        latestHeap: latest.heapUsed,
+                        minCpu,
+                        maxCpu,
+                        minHeap,
+                        maxHeap,
+                        cpuSlope: trend.cpuSlope || 0,
+                        memSlope: trend.memSlope || 0,
+                        spark,
+                        memSpark
+                    };
+                    // Re-render performance card if stats already loaded
+                    try {
+                        if(typeof window.lastSystemStats === 'object') displaySystemStats(window.lastSystemStats);
+                        if(typeof window.lastSystemHealth === 'object') displaySystemHealth(window.lastSystemHealth);
+                    } catch(e){/*ignore*/}
+                } catch(e){
+                    // ignore failures; card will just show base stats
+                }
+            }
+            // periodic fetch
+            fetchResourceTrends();
+            setInterval(fetchResourceTrends, 10000);
+        })();
+
+        // Instruction management logic extracted to js/admin.instructions.js
+        // Functions exposed globally: loadInstructions, renderInstructionList, editInstruction, saveInstruction, deleteInstruction, etc.
+
+        function startAutoRefresh() {
+            refreshInterval = setInterval(() => {
+                if (currentSection === 'overview') {
+                    loadOverviewData();
+                } else if (currentSection === 'sessions') {
+                    loadSessions();
+                } else if (currentSection === 'maintenance') {
+                    loadMaintenanceStatus();
+                }
+            }, 30000); // Refresh every 30 seconds
+    }
+    // Build metadata loader
+    (async function fetchBuildMeta(){
+            try {
+        // Cache bust query param to avoid any intermediary caching of status response
+        const r = await fetch('/api/status?t=' + Date.now());
+                const j = await r.json();
+                const el = document.getElementById('buildMeta');
+                const ver = j.version || '?.?.?';
+                const commit = j.build ? `<span class=\"build-badge\">${j.build}</span>` : '';
+                const bt = j.buildTime ? new Date(j.buildTime).toLocaleString() : 'unknown';
+                el.innerHTML = `Version <strong>${ver}</strong> ${commit} • Built ${bt}`;
+            } catch { const el = document.getElementById('buildMeta'); if(el) el.textContent='Build metadata unavailable'; }
+        })();
+
+        function showError(message) {
+            // Remove existing notifications (only toast notifications, not styled buttons)
+            document.querySelectorAll('.toast-notification').forEach(el => el.remove());
+
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'error toast-notification';
+            errorDiv.textContent = message;
+            document.querySelector('.admin-container').insertBefore(errorDiv, document.querySelector('.admin-container').firstChild.nextSibling);
+
+            setTimeout(() => errorDiv.remove(), 5000);
+        }
+
+        function showSuccess(message) {
+            // Remove existing notifications (only toast notifications, not styled buttons)
+            document.querySelectorAll('.toast-notification').forEach(el => el.remove());
+
+            const successDiv = document.createElement('div');
+            successDiv.className = 'success toast-notification';
+            successDiv.textContent = message;
+            document.querySelector('.admin-container').insertBefore(successDiv, document.querySelector('.admin-container').firstChild.nextSibling);
+
+            setTimeout(() => successDiv.remove(), 5000);
+        }
+
+        // Utility functions
+        function formatUptime(seconds) {
+            const days = Math.floor(seconds / 86400);
+            const hours = Math.floor((seconds % 86400) / 3600);
+            const minutes = Math.floor((seconds % 3600) / 60);
+
+            if (days > 0) return `${days}d ${hours}h ${minutes}m`;
+            if (hours > 0) return `${hours}h ${minutes}m`;
+            return `${minutes}m`;
+        }
+
+        function formatBytes(bytes) {
+            const sizes = ['B', 'KB', 'MB', 'GB'];
+            if (bytes === 0) return '0 B';
+            const i = Math.floor(Math.log(bytes) / Math.log(1024));
+            return Math.round(bytes / Math.pow(1024, i) * 100) / 100 + ' ' + sizes[i];
+        }
+        function escapeHtml(str) {
+            if (str == null) return '';
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+        // ---------------- Drilldown Layered SVG (Experimental) -----------------
+        // ELK auto-layout integration (Option A): dynamically load elkjs for layered layout.
+        // Falls back to prior manual lane layout if ELK load fails or toggle disabled.
+        const ELK_LOCAL_URL = '/js/elk.bundled.js';
+        let __elkLoading = null; let __elkInstance = null;
+        function ensureElk(){
+            if(__elkInstance) return Promise.resolve(__elkInstance);
+            if(__elkLoading) return __elkLoading;
+            __elkLoading = new Promise((resolve,reject)=>{
+                if(window.ELK){ try { __elkInstance = new window.ELK(); return resolve(__elkInstance); } catch(e){ return reject(e);} }
+                const s = document.createElement('script');
+                s.src = ELK_LOCAL_URL; s.async = true; s.onload = ()=>{ try { __elkInstance = new window.ELK(); resolve(__elkInstance);} catch(e){ reject(e);} };
+                s.onerror = (e)=> reject(new Error('elk load failed'));
+                document.head.appendChild(s);
+            });
+            return __elkLoading;
+        }
+        function drilldownUseElk(){
+            const cb = document.getElementById('drill-use-elk');
+            return !!(cb && cb.checked);
+        }
+        async function refreshDrillCategories(){
+            const status = document.getElementById('drill-status');
+            const sel = document.getElementById('drill-categories');
+            if(status) status.textContent='loading categories...';
+            try {
+                const r = await fetch('/api/graph/categories');
+                const j = await r.json();
+                if(!j.success) throw new Error(j.error||'failed');
+                if(sel){
+                    sel.innerHTML='';
+                    j.categories.forEach(c=>{
+                        const o = document.createElement('option');
+                        o.value = c.id; o.textContent = `${c.id} (${c.count})`;
+                        sel.appendChild(o);
+                    });
+                }
+                if(status) status.textContent=`loaded ${j.total} categories`;
+            } catch(e){ if(status) status.textContent='category load error: '+ (e?.message||e); }
+        }
+        async function loadDrillInstructions(){
+            const catSel = document.getElementById('drill-categories');
+            const instSel = document.getElementById('drill-instructions');
+            const status = document.getElementById('drill-status');
+            if(!catSel || !instSel) return;
+            const cats = [...catSel.selectedOptions].map(o=> o.value).join(',');
+            if(status) status.textContent='loading instructions...';
+            try {
+                const r = await fetch('/api/graph/instructions?categories=' + encodeURIComponent(cats));
+                const j = await r.json();
+                if(!j.success) throw new Error(j.error||'failed');
+                instSel.innerHTML='';
+                j.instructions.forEach(i=>{
+                    const o = document.createElement('option');
+                    o.value = i.id; o.textContent = i.id; instSel.appendChild(o);
+                });
+                if(status) status.textContent=`loaded ${j.count} instructions`;
+            } catch(e){ if(status) status.textContent='instruction load error: '+ (e?.message||e); }
+        }
+        function clearDrillSvg(){
+            const svg = document.getElementById('drill-svg');
+            const status = document.getElementById('drill-status');
+            const catSel = document.getElementById('drill-categories');
+            const instSel = document.getElementById('drill-instructions');
+
+            if(svg) svg.innerHTML='';
+            if(status) status.textContent='selections cleared';
+
+            // Clear selections in both dropdowns
+            if(catSel) {
+                for(let i = 0; i < catSel.options.length; i++) {
+                    catSel.options[i].selected = false;
+                }
+            }
+            if(instSel) {
+                for(let i = 0; i < instSel.options.length; i++) {
+                    instSel.options[i].selected = false;
+                }
+            }
+        }
+        async function renderDrillSvg(){
+            const instSel = document.getElementById('drill-instructions');
+            const status = document.getElementById('drill-status');
+            const svg = document.getElementById('drill-svg');
+            if(!instSel || !svg) return;
+            // Clear detail panel each render
+            const detail = document.getElementById('drill-detail');
+            if(detail){ detail.style.display='none'; detail.textContent=''; }
+            // Persistent for click handlers
+            window.__lastDrillData = null;
+            const ids = [...instSel.selectedOptions].map(o=> o.value);
+            if(!ids.length){ if(status) status.textContent='select instructions first'; return; }
+            const expandEnabled = !!document.getElementById('drill-expand') && document.getElementById('drill-expand').checked;
+            const membershipEnabled = !!document.getElementById('drill-show-membership') && document.getElementById('drill-show-membership').checked;
+            if(status) status.textContent='fetching relations...';
+            try {
+                const r = await fetch('/api/graph/relations?instructions=' + encodeURIComponent(ids.join(',')) + (expandEnabled? '&expand=1':'') );
+                const j = await r.json();
+                if(!j.success) throw new Error(j.error||'failed');
+                const instructions = j.nodes.filter(n=> n.nodeType==='instruction');
+                // Keep full structure for interactions
+                window.__lastDrillData = { raw:j, instructions };
+                const nodeWidth = 140; const nodeHeight = 32;
+                // Decide layout strategy
+                let usedElk = false;
+                let positions = new Map();
+                let categories = [];
+                let instrEdgeCount = 0; // unified edge count for legend
+                if(drilldownUseElk()){
+                    if(status) status.textContent='loading ELK layout...';
+                    try {
+                        const elk = await ensureElk();
+                        if(!elk) throw new Error('ELK unavailable');
+                        const elkGraph = {
+                            id:'root',
+                            layoutOptions: {
+                                'elk.algorithm':'layered',
+                                'elk.direction':'RIGHT',
+                                'elk.layered.spacing.nodeNodeBetweenLayers':'55',
+                                'elk.spacing.nodeNode':'30'
+                            },
+                            children: instructions.map(inst=> ({ id: inst.id, width: nodeWidth, height: nodeHeight })),
+                            edges: j.edges.filter(e=> e.type!=='category' && instructions.find(n=> n.id===e.from) && instructions.find(n=> n.id===e.to)).map((e,i)=> ({ id:'e'+i, sources:[e.from], targets:[e.to] }))
+                        };
+                        const laidOut = await elk.layout(elkGraph);
+                        // Initial raw positions from ELK
+                        laidOut.children.forEach(c=>{ positions.set(c.id,{ x:c.x||0, y:c.y||0 }); });
+                        usedElk = true;
+                        // Derive categories (primary only for now)
+                        categories = [...new Set(instructions.map(i=> (i.categories&&i.categories[0])||'uncategorized'))];
+                        // Order categories by average original y so visual order is stable / data-driven
+                        categories.sort((a,b)=>{
+                            const ay = avg(instructions.filter(i=> (i.categories&&i.categories[0])===a).map(i=> positions.get(i.id)?.y||0));
+                            const by = avg(instructions.filter(i=> (i.categories&&i.categories[0])===b).map(i=> positions.get(i.id)?.y||0));
+                            return ay - by;
+                        });
+                        // Snap categories into uniform horizontal lanes for readability
+                        const laneHeight = 70; // vertical space per category lane
+                        const gutterWidth = 140; // reserved space on left for labels + connectors
+                        const padX = 40; const padY = 40; // outer vertical padding + x padding after gutter
+                        const categoryLaneY = new Map();
+                        categories.forEach((c,i)=> categoryLaneY.set(c, padY + i*laneHeight));
+                        // Reposition nodes: keep original x, quantize y to lane + small intra-lane spread based on original y ordering
+                        const laneOffsets = new Map();
+                        instructions.forEach(inst=>{
+                            const cat = (inst.categories&&inst.categories[0])||'uncategorized';
+                            const baseY = categoryLaneY.get(cat) || padY;
+                            const p = positions.get(inst.id); if(!p) return;
+                            p.y = baseY; // snap exactly
+                            // shift x by gutter + padX so nodes never overlap labels
+                            p.x = p.x + gutterWidth + padX;
+                        });
+                        // Compute new bounding box after snapping
+                        let maxX=0,maxY=0,minX=Infinity,minY=Infinity;
+                        positions.forEach(p=>{ maxX=Math.max(maxX,p.x+nodeWidth); maxY=Math.max(maxY,p.y+nodeHeight); minX=Math.min(minX,p.x); minY=Math.min(minY,p.y); });
+                        const totalWidth = Math.max(900, maxX - minX + padX*2 + gutterWidth);
+                        const totalHeight = Math.max(160, (categories.length? (padY + categories.length*laneHeight) : (maxY-minY+padY*2)));
+                        svg.setAttribute('width', String(totalWidth));
+                        svg.setAttribute('height', String(totalHeight));
+                        // Prepare drawing surface
+                        svg.innerHTML='';
+                        // Lane backgrounds (subtle)
+                        categories.forEach((cat,i)=>{
+                            const y = categoryLaneY.get(cat);
+                            if(y==null) return;
+                            const laneRect = document.createElementNS('http://www.w3.org/2000/svg','rect');
+                            laneRect.setAttribute('x', String(gutterWidth - 8)); laneRect.setAttribute('y', String(y - 10));
+                            laneRect.setAttribute('width', String(totalWidth - (gutterWidth - 8))); laneRect.setAttribute('height', String(laneHeight));
+                            laneRect.setAttribute('fill', i % 2 === 0 ? '#1b2734' : '#1d2c3b'); laneRect.setAttribute('opacity','0.55');
+                            svg.appendChild(laneRect);
+                        });
+                        // Gutter separator line
+                        const gutterSep = document.createElementNS('http://www.w3.org/2000/svg','line');
+                        gutterSep.setAttribute('x1', String(gutterWidth - 12)); gutterSep.setAttribute('x2', String(gutterWidth - 12));
+                        gutterSep.setAttribute('y1','0'); gutterSep.setAttribute('y2', String(totalHeight));
+                        gutterSep.setAttribute('stroke','#253548'); gutterSep.setAttribute('stroke-width','1'); gutterSep.setAttribute('opacity','0.9');
+                        svg.appendChild(gutterSep);
+                        // Vertical guideline (optional future: grid) -- skipped for now
+                        // Continue with edges & nodes below
+                        // NOTE: status text updated later includes '(ELK snapped)'
+                        function avg(arr){ return arr.length? arr.reduce((s,v)=> s+v,0)/arr.length : 0; }
+                        // Draw edges from elkGraph edges using node centers (after snapping)
+                        const edgeGroup = document.createElementNS('http://www.w3.org/2000/svg','g');
+                        edgeGroup.setAttribute('stroke','#5479ff'); edgeGroup.setAttribute('stroke-width','1.1'); edgeGroup.setAttribute('fill','none'); edgeGroup.setAttribute('opacity','0.9');
+                        elkGraph.edges.forEach(e=>{
+                            const a = positions.get(e.sources[0]); const b = positions.get(e.targets[0]); if(!a||!b) return;
+                            const path = document.createElementNS('http://www.w3.org/2000/svg','path');
+                            const hdx = Math.max(40, (b.x - a.x)/3);
+                            const d = `M ${a.x + nodeWidth} ${a.y + nodeHeight/2} C ${a.x + nodeWidth + hdx} ${a.y + nodeHeight/2}, ${b.x - hdx} ${b.y + nodeHeight/2}, ${b.x} ${b.y + nodeHeight/2}`;
+                            path.setAttribute('d', d);
+                            edgeGroup.appendChild(path);
+                            instrEdgeCount++;
+                        });
+                        svg.appendChild(edgeGroup);
+                        // Arrowhead marker definition (once)
+                        const defs = document.createElementNS('http://www.w3.org/2000/svg','defs');
+                        const marker = document.createElementNS('http://www.w3.org/2000/svg','marker');
+                        marker.setAttribute('id','drill-arrow'); marker.setAttribute('markerWidth','10'); marker.setAttribute('markerHeight','6'); marker.setAttribute('refX','10'); marker.setAttribute('refY','3'); marker.setAttribute('orient','auto');
+                        const mpath = document.createElementNS('http://www.w3.org/2000/svg','path'); mpath.setAttribute('d','M0,0 L10,3 L0,6 Z'); mpath.setAttribute('fill','#5479ff'); marker.appendChild(mpath); defs.appendChild(marker); svg.appendChild(defs);
+                        edgeGroup.setAttribute('marker-end','url(#drill-arrow)');
+                        // Category membership connectors (pseudo category anchors in gutter)
+                        if(membershipEnabled){
+                            const membershipGroup = document.createElementNS('http://www.w3.org/2000/svg','g');
+                            membershipGroup.setAttribute('stroke','#44566d'); membershipGroup.setAttribute('stroke-width','1'); membershipGroup.setAttribute('opacity','0.8');
+                            membershipGroup.setAttribute('data-role','membership-group');
+                            instructions.forEach(inst=>{
+                                const p = positions.get(inst.id); if(!p) return;
+                                const yMid = p.y + nodeHeight/2;
+                                const startX = gutterWidth - 15; const endX = p.x; // horizontal connector
+                                const conn = document.createElementNS('http://www.w3.org/2000/svg','path');
+                                conn.setAttribute('d', `M ${startX} ${yMid} L ${endX} ${yMid}`);
+                                membershipGroup.appendChild(conn);
+                            });
+                            svg.appendChild(membershipGroup);
+                        }
+                        // Nodes (interactive)
+                        instructions.forEach(inst=>{
+                            const pos = positions.get(inst.id); if(!pos) return;
+                            const g = document.createElementNS('http://www.w3.org/2000/svg','g');
+                            g.setAttribute('transform', `translate(${pos.x},${pos.y})`);
+                            g.setAttribute('data-id', inst.id);
+                            g.setAttribute('data-cat', (inst.categories&&inst.categories[0])||'uncategorized');
+                            g.style.cursor='pointer';
+                            const rect = document.createElementNS('http://www.w3.org/2000/svg','rect');
+                            rect.setAttribute('width', String(nodeWidth)); rect.setAttribute('height', String(nodeHeight)); rect.setAttribute('rx','6');
+                            rect.setAttribute('fill','#3a4554'); rect.setAttribute('stroke','#6b8cff');
+                            rect.classList.add('drill-node-rect');
+                            const label = document.createElementNS('http://www.w3.org/2000/svg','text');
+                            label.setAttribute('x','8'); label.setAttribute('y','20'); label.setAttribute('fill','#e3ebf5'); label.textContent = inst.id;
+                            label.setAttribute('pointer-events','none');
+                            // Tooltip
+                            const title = document.createElementNS('http://www.w3.org/2000/svg','title'); title.textContent = inst.id; g.appendChild(title);
+                            g.appendChild(rect); g.appendChild(label); svg.appendChild(g);
+                            g.addEventListener('mouseenter', ()=> rect.setAttribute('stroke','#8fb2ff'));
+                            g.addEventListener('mouseleave', ()=>{ if(!g.classList.contains('selected')) rect.setAttribute('stroke','#6b8cff'); });
+                            g.addEventListener('click', ()=> selectDrillNode(inst.id));
+                        });
+                        // Category labels (lane centered)
+                        categories.forEach((cat,i)=>{
+                            const yCenter = (categoryLaneY.get(cat)||0) + (laneHeight/2) - 10; // adjust for padding applied earlier
+                            const t = document.createElementNS('http://www.w3.org/2000/svg','text');
+                            t.setAttribute('x','10'); t.setAttribute('y', String(yCenter)); t.setAttribute('fill','#9fb5cc'); t.setAttribute('font-weight','600'); t.textContent = cat; svg.appendChild(t);
+                            // Anchor circle for filtering
+                            const anchor = document.createElementNS('http://www.w3.org/2000/svg','circle');
+                            anchor.setAttribute('cx', String(110)); // inside gutter
+                            anchor.setAttribute('cy', String(yCenter-2));
+                            anchor.setAttribute('r','6');
+                            anchor.setAttribute('fill','#2e3d50');
+                            anchor.setAttribute('stroke','#6b8cff');
+                            anchor.setAttribute('data-cat-anchor', cat);
+                            anchor.style.cursor='pointer';
+                            anchor.addEventListener('click', ()=> toggleLaneFilter(cat));
+                            const anchorTitle = document.createElementNS('http://www.w3.org/2000/svg','title'); anchorTitle.textContent = 'Filter lane: '+cat; anchor.appendChild(anchorTitle);
+                            svg.appendChild(anchor);
+                        });
+                        if(status) status.textContent = `rendered ${instructions.length} nodes (ELK snapped) - categories ${categories.length}`;
+                    } catch(elkErr){ if(status) status.textContent = 'ELK layout failed; using manual lanes (' + (elkErr?.message||elkErr) + ')'; }
+                }
+                if(!usedElk){
+                    // Manual lane fallback (original implementation)
+                    const categoriesManual = [...new Set(instructions.map(i=> (i.categories&&i.categories[0])||'uncategorized'))].sort();
+                    const catIndex = new Map(categoriesManual.map((c,i)=> [c,i]));
+                    const laneHeight = 70; const marginLeft = 180; const hGap = 40; const vPad = 24;
+                    const laneCounters = new Map(categoriesManual.map(c=> [c,0]));
+                    positions = new Map();
+                    instructions.forEach(inst=>{
+                        const lane = (inst.categories&&inst.categories[0])||'uncategorized';
+                        const idx = laneCounters.get(lane) || 0;
+                        laneCounters.set(lane, idx+1);
+                        const x = marginLeft + idx*(nodeWidth + hGap);
+                        const y = vPad + (catIndex.get(lane)||0)*laneHeight;
+                        positions.set(inst.id, { x, y });
+                    });
+                    const totalWidth = Math.max(800, marginLeft + Math.max(1, ...[...laneCounters.values()])* (nodeWidth + hGap));
+                    const totalHeight = vPad + categoriesManual.length * laneHeight;
+                    svg.setAttribute('width', String(totalWidth));
+                    svg.setAttribute('height', String(totalHeight));
+                    svg.innerHTML='';
+                    // Lane separators + labels
+                    categoriesManual.forEach(cat=>{
+                        const laneY = vPad + (catIndex.get(cat)||0)*laneHeight;
+                        const yMid = laneY + nodeHeight/2;
+                        const sep = document.createElementNS('http://www.w3.org/2000/svg','line');
+                        sep.setAttribute('x1','0'); sep.setAttribute('x2', String(totalWidth)); sep.setAttribute('y1', String(laneY + laneHeight - 8)); sep.setAttribute('y2', String(laneY + laneHeight - 8)); sep.setAttribute('stroke','#1f2e40'); sep.setAttribute('stroke-width','1'); sep.setAttribute('opacity','0.35'); svg.appendChild(sep);
+                        const text = document.createElementNS('http://www.w3.org/2000/svg','text');
+                        text.setAttribute('x','10'); text.setAttribute('y', String(yMid)); text.setAttribute('fill','#9fb5cc'); text.setAttribute('font-weight','600'); text.textContent = cat; svg.appendChild(text);
+                    });
+                    const edgeGroup = document.createElementNS('http://www.w3.org/2000/svg','g');
+                    edgeGroup.setAttribute('stroke','#5479ff'); edgeGroup.setAttribute('stroke-width','1.2'); edgeGroup.setAttribute('fill','none'); edgeGroup.setAttribute('opacity','0.9');
+                    const defs = document.createElementNS('http://www.w3.org/2000/svg','defs');
+                    const marker = document.createElementNS('http://www.w3.org/2000/svg','marker');
+                    marker.setAttribute('id','drill-arrow'); marker.setAttribute('markerWidth','10'); marker.setAttribute('markerHeight','6'); marker.setAttribute('refX','10'); marker.setAttribute('refY','3'); marker.setAttribute('orient','auto');
+                    const mpath = document.createElementNS('http://www.w3.org/2000/svg','path'); mpath.setAttribute('d','M0,0 L10,3 L0,6 Z'); mpath.setAttribute('fill','#5479ff'); marker.appendChild(mpath); defs.appendChild(marker); svg.appendChild(defs);
+                    edgeGroup.setAttribute('marker-end','url(#drill-arrow)');
+                    j.edges.filter(e=> positions.has(e.from) && positions.has(e.to)).forEach(e=>{
+                        const a = positions.get(e.from); const b = positions.get(e.to); if(!a||!b) return;
+                        const path = document.createElementNS('http://www.w3.org/2000/svg','path');
+                        const dx = (b.x - a.x)/2;
+                        const d = `M ${a.x + nodeWidth} ${a.y + nodeHeight/2} C ${a.x + nodeWidth + dx} ${a.y + nodeHeight/2}, ${b.x - dx} ${b.y + nodeHeight/2}, ${b.x} ${b.y + nodeHeight/2}`;
+                        path.setAttribute('d', d); path.setAttribute('stroke', e.type==='category'? '#8fb2ff':'#5479ff'); edgeGroup.appendChild(path);
+                        instrEdgeCount++;
+                    });
+                    svg.appendChild(edgeGroup);
+                    if(membershipEnabled){
+                        const membershipGroup = document.createElementNS('http://www.w3.org/2000/svg','g');
+                        membershipGroup.setAttribute('stroke','#44566d'); membershipGroup.setAttribute('stroke-width','1'); membershipGroup.setAttribute('opacity','0.8');
+                        membershipGroup.setAttribute('data-role','membership-group');
+                        instructions.forEach(inst=>{
+                            const pos = positions.get(inst.id); if(!pos) return;
+                            const yMid = pos.y + nodeHeight/2;
+                            const conn = document.createElementNS('http://www.w3.org/2000/svg','path');
+                            conn.setAttribute('d', `M 150 ${yMid} L ${pos.x} ${yMid}`);
+                            membershipGroup.appendChild(conn);
+                        });
+                        svg.appendChild(membershipGroup);
+                    }
+                    instructions.forEach(inst=>{
+                        const pos = positions.get(inst.id); if(!pos) return;
+                        const g = document.createElementNS('http://www.w3.org/2000/svg','g'); g.setAttribute('transform', `translate(${pos.x},${pos.y})`); g.setAttribute('data-id', inst.id); g.style.cursor='pointer';
+                        g.setAttribute('data-cat', (inst.categories&&inst.categories[0])||'uncategorized');
+                        const rect = document.createElementNS('http://www.w3.org/2000/svg','rect'); rect.setAttribute('width', String(nodeWidth)); rect.setAttribute('height', String(nodeHeight)); rect.setAttribute('rx','6'); rect.setAttribute('fill','#3a4554'); rect.setAttribute('stroke','#6b8cff'); rect.classList.add('drill-node-rect');
+                        const label = document.createElementNS('http://www.w3.org/2000/svg','text'); label.setAttribute('x','8'); label.setAttribute('y','20'); label.setAttribute('fill','#e3ebf5'); label.textContent = inst.id; label.setAttribute('pointer-events','none');
+                        const title = document.createElementNS('http://www.w3.org/2000/svg','title'); title.textContent = inst.id; g.appendChild(title);
+                        g.appendChild(rect); g.appendChild(label); svg.appendChild(g);
+                        g.addEventListener('mouseenter', ()=> rect.setAttribute('stroke','#8fb2ff'));
+                        g.addEventListener('mouseleave', ()=>{ if(!g.classList.contains('selected')) rect.setAttribute('stroke','#6b8cff'); });
+                        g.addEventListener('click', ()=> selectDrillNode(inst.id));
+                    });
+                    if(status) status.textContent = `rendered ${instructions.length} nodes across ${categoriesManual.length} lane(s)`;
+                }
+                // Legend update
+                updateDrillLegend({
+                    selected: ids.length,
+                    expanded: j.expanded||0,
+                    total: instructions.length,
+                    edges: instrEdgeCount,
+                    membership: membershipEnabled? instructions.length:0,
+                    layout: usedElk? 'ELK':'Manual',
+                    expansionEnabled: expandEnabled
+                });
+            } catch(e){ if(status) status.textContent='render error: ' + (e?.message||e); }
+        }
+        function updateDrillLegend(data){
+            const el = document.getElementById('drill-legend'); if(!el) return;
+            el.innerHTML = `<div class="drill-legend-title">Legend / Stats</div>` +
+                `<div class="drill-legend-body">`+
+                `Selected: <b>${data.selected}</b>${data.expansionEnabled? ' (expand '+(data.expanded||0)+')':''}<br>`+
+                `Rendered Instructions: <b>${data.total}</b><br>`+
+                `Instruction Edges: <b>${data.edges}</b><br>`+
+                `Membership Lines: <b>${data.membership}</b> ${data.membership? '(primary category connectors)':''}<br>`+
+                `Layout: <b>${data.layout}</b>${data.expansionEnabled? ' + expand':''}`+
+                `</div>`;
+        }
+        function exportDrillSvg(){
+            const svg = document.getElementById('drill-svg'); if(!svg || !svg.firstChild) return;
+            const clone = svg.cloneNode(true);
+            if(clone instanceof SVGElement){
+                clone.setAttribute('xmlns','http://www.w3.org/2000/svg');
+            }
+            const ser = new XMLSerializer();
+            const data = ser.serializeToString(clone);
+            const blob = new Blob([data], { type:'image/svg+xml;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            const ts = new Date().toISOString().replace(/[:T]/g,'-').slice(0,19);
+            a.href = url; a.download = 'drilldown-graph-'+ts+'.svg';
+            document.body.appendChild(a); a.click(); document.body.removeChild(a);
+            setTimeout(()=> URL.revokeObjectURL(url), 2500);
+        }
+        function applyLaneFilter(){
+            const active = window.__drillLaneFilter || null;
+            const svg = document.getElementById('drill-svg'); if(!svg) return;
+            const nodes = svg.querySelectorAll('g[data-id]');
+            nodes.forEach(n=>{
+                const cat = n.getAttribute('data-cat');
+                if(!active || cat===active){
+                    n.style.opacity='1';
+                } else {
+                    n.style.opacity='0.15';
+                }
+            });
+            // Dull membership lines when filter active
+            const membershipGroup = svg.querySelector('[data-role="membership-group"]');
+            if(membershipGroup){ membershipGroup.setAttribute('opacity', active? '0.25':'0.8'); }
+            // Highlight anchors
+            svg.querySelectorAll('[data-cat-anchor]').forEach(a=>{
+                if(a.getAttribute('data-cat-anchor')===active){ a.setAttribute('fill','#6b8cff'); a.setAttribute('stroke','#ffd36b'); }
+                else { a.setAttribute('fill','#2e3d50'); a.setAttribute('stroke','#6b8cff'); }
+            });
+        }
+        function toggleLaneFilter(cat){
+            if(window.__drillLaneFilter === cat){ window.__drillLaneFilter = null; }
+            else { window.__drillLaneFilter = cat; }
+            applyLaneFilter();
+        }
+        // Control wiring (idempotent safeguard)
+        (function(){
+            const exp = document.getElementById('drill-expand'); if(exp && !exp.__wired){ exp.addEventListener('change', ()=> renderDrillSvg()); exp.__wired=true; }
+            const mem = document.getElementById('drill-show-membership'); if(mem && !mem.__wired){ mem.addEventListener('change', ()=> renderDrillSvg()); mem.__wired=true; }
+            const exb = document.getElementById('drill-export'); if(exb && !exb.__wired){ exb.addEventListener('click', exportDrillSvg); exb.__wired=true; }
+            const hed = document.getElementById('mermaid-high-edges');
+            if(hed && !hed.__wired){
+                hed.addEventListener('change', async ()=>{
+                    // Set override variable then force reload mermaid core
+                    if(hed.checked){ window.__MERMAID_MAX_EDGES = 10000; } else { window.__MERMAID_MAX_EDGES = 3000; }
+                    await ensureMermaid(true);
+                    // Re-render existing mermaid graph if source present
+                    try {
+                        const srcEl = document.getElementById('graph-mermaid');
+                        const host = document.getElementById('graph-mermaid-svg');
+                        if(srcEl && host && window.mermaid){
+                            const codeRaw = srcEl.textContent || '';
+                            const code = ensureMermaidDirective(codeRaw);
+                            host.innerHTML = `<div class="mermaid">${code}</div>`;
+                            await window.mermaid.run({ querySelector:'#graph-mermaid-svg .mermaid' });
+                            if(window.__GRAPH_DEBUG || document.getElementById('graph-debug')?.checked){
+                                graphLog('re-render after high edge cap toggle', { firstLine: code.split(/\n/)[0] });
+                            }
+                        }
+                        const meta2 = document.getElementById('graph-meta2');
+                        if(meta2){ meta2.textContent = (meta2.textContent||'') + ` | maxEdges=${window.__MERMAID_ACTIVE_MAX_EDGES}`; }
+                    } catch(e){ console.warn('Mermaid re-render after high-edge toggle failed', e); }
+                });
+                hed.__wired = true;
+            }
+            const lg = document.getElementById('mermaid-large-graph');
+            if(lg && !lg.__wired){
+                lg.addEventListener('change', async ()=>{
+                    window.__MERMAID_LARGE_GRAPH_FLAG = !!lg.checked;
+                    // Clear explicit override so flag logic chooses caps unless high-edge override also set.
+                    if(!window.__MERMAID_LARGE_GRAPH_FLAG && typeof window.__MERMAID_MAX_EDGES === 'number'){
+                        // keep existing manual override; do nothing
+                    }
+                    await ensureMermaid(true);
+                    try {
+                        const srcEl = document.getElementById('graph-mermaid');
+                        const host = document.getElementById('graph-mermaid-svg');
+                        if(srcEl && host && window.mermaid){
+                            const codeRaw = srcEl.textContent || '';
+                            const code = ensureMermaidDirective(codeRaw);
+                            host.innerHTML = `<div class=\"mermaid\">${code}</div>`;
+                            await window.mermaid.run({ querySelector:'#graph-mermaid-svg .mermaid' });
+                            if(window.__GRAPH_DEBUG || document.getElementById('graph-debug')?.checked){
+                                graphLog('re-render after large graph toggle', { firstLine: code.split(/\n/)[0], largeGraph: window.__MERMAID_LARGE_GRAPH_FLAG });
+                            }
+                        }
+                        const meta2 = document.getElementById('graph-meta2');
+                        if(meta2){ meta2.textContent = (meta2.textContent||'') + ` | largeGraph=${window.__MERMAID_LARGE_GRAPH_FLAG} maxEdges=${window.__MERMAID_ACTIVE_MAX_EDGES} maxTextSize=${window.__MERMAID_ACTIVE_MAX_TEXT_SIZE}`; }
+                    } catch(e){ console.warn('Mermaid re-render after large-graph toggle failed', e); }
+                });
+                lg.__wired = true;
+            }
+        })();
+        function selectDrillNode(id){
+            const svg = document.getElementById('drill-svg'); if(!svg) return;
+            // Clear previous selection
+            [...svg.querySelectorAll('g.selected')].forEach(g=>{ g.classList.remove('selected'); const rect = g.querySelector('rect.drill-node-rect'); if(rect) rect.setAttribute('stroke','#6b8cff'); });
+            const target = svg.querySelector(`g[data-id="${CSS.escape(id)}"]`);
+            if(target){
+                target.classList.add('selected'); const rect = target.querySelector('rect.drill-node-rect'); if(rect) rect.setAttribute('stroke','#ffd36b');
+            }
+            const data = window.__lastDrillData; const detail = document.getElementById('drill-detail');
+            if(!data || !detail) return;
+            const inst = data.instructions.find(i=> i.id===id); if(!inst){ detail.style.display='none'; return; }
+            // Compute incident edges
+            const edges = data.raw.edges.filter(e=> e.from===id || e.to===id);
+            const incoming = edges.filter(e=> e.to===id).map(e=> e.from);
+            const outgoing = edges.filter(e=> e.from===id).map(e=> e.to);
+            const cats = inst.categories || [];
+            detail.style.display='block';
+            detail.innerHTML = `<div class="drill-detail-heading">📄 ${id}</div>` +
+                `<div class="drill-detail-sub">Primary: ${(inst.primaryCategory||cats[0]||'–')}` +
+                (cats.length? ` | Categories: ${cats.join(', ')}`:'') + `</div>` +
+                `<div class="drill-detail-section">Incoming (${incoming.length}): ${incoming.length? incoming.join(', '):'none'}</div>` +
+                `<div class="drill-detail-section">Outgoing (${outgoing.length}): ${outgoing.length? outgoing.join(', '):'none'}</div>` +
+                `<div class="drill-detail-footer">Click another node to update. (Future: open file / copy / filter.)</div>`;
+        }
+        // Auto-preload categories when graph section first opened (best-effort)
+        document.addEventListener('visibilitychange', ()=>{
+            if(!document.hidden){ const catSel = document.getElementById('drill-categories'); if(catSel && !catSel.options.length) refreshDrillCategories(); }
+        });
+        // ----------------------------------------------------------------------
+    </script>
+</body>
+</html>

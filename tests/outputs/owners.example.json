@@ -1,0 +1,7 @@
+{
+  "ownership": [
+    { "pattern": "^auth_", "owner": "security-team" },
+    { "pattern": "^db_", "owner": "data-team" },
+    { "pattern": ".*", "owner": "unowned" }
+  ]
+}

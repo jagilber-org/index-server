@@ -1,0 +1,6 @@
+{
+  "_comment": "Initial flake baseline: empty set. Populate 'files' array with objects { file: string, since: ISO8601 } as legitimate historical flakes are identified.",
+  "version": 1,
+  "generatedAt": "${ISO_TIMESTAMP}",
+  "files": []
+}

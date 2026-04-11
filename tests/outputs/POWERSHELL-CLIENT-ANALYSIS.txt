@@ -1,0 +1,348 @@
+================================================================================
+VAULT - POWERSHELL CLIENT TIMEOUT ANALYSIS
+================================================================================
+Date: 2025-10-27
+Analyst: GitHub Copilot (index-server repository)
+Target: PowerShell MCP Client (<user>/mcp-client)
+Issue: PowerShell client timeout (~12s) vs successful connection with other clients
+
+================================================================================
+EXECUTIVE SUMMARY
+================================================================================
+
+PowerShell MCP client consistently FAILS to connect to Vault with
+12-second timeout, while Node.js test clients succeed in ~600ms.
+
+ROOT CAUSE: NOT a race condition. NOT a framing mismatch. 
+LIKELY CAUSE: Client-side timeout/retry logic or initialization sequence issue.
+
+================================================================================
+TEST RESULTS
+================================================================================
+
+Node.js Test Client (test-stdin-race.js):
+------------------------------------------
+- Connection: SUCCESSFUL
+- Response time: 602ms
+- Initialize response: RECEIVED
+- Tools/list: RECEIVED (41 tools)
+- Framing: Newline-delimited (spec-compliant)
+- Server diagnostic: buffered=0 totalBytes=0 hasContentLength=false
+  (Initialize arrived AFTER SDK ready - no race condition)
+
+PowerShell Test Client (SimpleMCPClient.psm1):
+-----------------------------------------------
+- Connection: FAILED
+- Response time: 12.146s (timeout)
+- Error: "Failed to initialize with supported protocols"
+- Framing: UseLineMode=$true (newline-delimited, spec-compliant)
+- Test command:
+  pwsh -NoProfile -File .\test-powershell-client.ps1 -TimeoutMs 10000
+
+Server startup timeline:
+------------------------
++0ms    : Client sends initialize (immediate)
++143ms  : Server metrics collector ready
++395ms  : Server dashboard check
++569ms  : Tools registered (43 tools), Index loaded
++574ms  : Trace logging configured
++574ms  : [handshake-buffer] buffered=0 totalBytes=0 hasContentLength=false
++598ms  : [transport-init] creating StdioServerTransport
++599ms  : [transport-init] transport connected stdin.readable=true dataListeners=4
++599ms  : [transport-init] keepalive setup complete dataListeners=5
++599ms  : [handshake-buffer] replay skipped (no buffered chunks)
++599ms  : [startup] SDK server started (stdio only)
++602ms  : Initialize response sent (Node.js client receives this)
+
+Conclusion: Server is ready and responding within 600ms. 
+           PowerShell client waits 12+ seconds before failing.
+
+================================================================================
+MCP SPECIFICATION COMPLIANCE CHECK
+================================================================================
+
+MCP Spec (stdio transport) - modelcontextprotocol.io:
+------------------------------------------------------
+"Messages are delimited by newlines, and MUST NOT contain embedded newlines."
+
+@modelcontextprotocol/sdk v0.6.1:
+----------------------------------
+File: src/shared/stdio.ts
+Code: serializeMessage(message) { return JSON.stringify(message) + '\n'; }
+Code: readMessage() { const index = buffer.indexOf('\n'); ... }
+STATUS: SPEC-COMPLIANT (newline-delimited)
+
+PowerShell SimpleMCPClient.psm1:
+---------------------------------
+Code: UseLineMode=$true  # TEMP: Force line mode since Content-Length has issues
+Code: if (UseLineMode) { $client.Writer.WriteLine($json) }
+STATUS: SPEC-COMPLIANT (newline-delimited when UseLineMode=true)
+
+VERDICT: Both client and server use newline-delimited framing per MCP spec.
+         Framing mismatch is NOT the issue.
+
+================================================================================
+RACE CONDITION INVESTIGATION
+================================================================================
+
+Hypothesis (from bug report):
+------------------------------
+"The initialize message arrives before SDK transport stdin handlers are attached,
+causing the message to be lost/ignored."
+
+Evidence from diagnostics:
+---------------------------
+[handshake-buffer] pre-start buffered=0 totalBytes=0 hasContentLength=false
+
+INTERPRETATION:
+- Early stdin buffer was EMPTY
+- Initialize message arrived AFTER transport initialization
+- stdin.dataListeners=4 then =5 (SDK successfully attached handlers)
+- No race condition exists with current implementation
+
+EXISTING MITIGATION (already in Vault):
+---------------------------------------------------
+File: src/server/index-server.ts (lines 25-50, 405-430)
+Code: __earlyCapture() buffers all stdin data before SDK ready
+Code: Replay mechanism uses process.stdin.emit('data', chunk)
+Status: Present but NOT TRIGGERED (buffered=0)
+
+VERDICT: The proposed fix (await transport.start()) is NOT NEEDED.
+         Race condition does not exist in current implementation.
+
+================================================================================
+LIKELY ROOT CAUSES (PowerShell Client Side)
+================================================================================
+
+1. INITIALIZATION TIMEOUT TOO SHORT
+   ---------------------------------
+   File: MCPClient-ThreadPool.psm1
+   Default: InitTimeoutMs = 8000 (8 seconds)
+   Server startup: ~600ms (well within timeout)
+   
+   Issue: PowerShell client fails after ~12s (longer than InitTimeoutMs)
+   Suggests: Retry logic or multiple timeout periods being added together
+
+2. PROTOCOL VERSION FALLBACK LOGIC
+   --------------------------------
+   Code pattern observed:
+   ```
+   $Client.UseLineMode = $true  # Force line mode
+   ...
+   if (timeout) {
+       $Client.FailedProtocols.Add($protocolVersion)
+       # Try next protocol version?
+   }
+   throw 'Failed to initialize with supported protocols'
+   ```
+   
+   Question: Is client trying multiple protocol versions and timing out on each?
+   Question: Is there a 4-second timeout per protocol attempt? (3 protocols × 4s = 12s)
+
+3. READER/WRITER STREAM SETUP
+   ---------------------------
+   Code uses: StreamReader + StreamWriter with BaseStream
+   Code uses: Task.WaitAny for async I/O
+   
+   Potential issues:
+   - StreamReader buffering might be delaying message reads
+   - Task.WaitAny timeout handling might be cumulative
+   - ReadLineAsync() might not be reading full messages
+
+4. PROTOCOL VERSION MISMATCH
+   --------------------------
+   Vault returns: protocolVersion: "2024-11-05"
+   PowerShell client expects: 2024-11-05? 2025-03-26? 2025-06-18?
+   
+   If client rejects 2024-11-05 and retries with other versions,
+   this could explain multiple timeout cycles.
+
+================================================================================
+DIAGNOSTIC RECOMMENDATIONS FOR POWERSHELL CLIENT
+================================================================================
+
+1. ADD DETAILED TIMING LOGS
+   -------------------------
+   Log timestamps for:
+   - Process spawn
+   - First stdin write (initialize request)
+   - StreamReader.ReadLineAsync() call
+   - First stdout read (any data)
+   - Protocol version attempts
+   - Each timeout event
+
+2. VERIFY STREAM BUFFERING
+   ------------------------
+   StreamReader constructor: Ensure no buffering delays
+   Suggestion: Try using smaller buffer size or AutoFlush=true
+   
+   Current code inspection needed:
+   - How is StreamReader created?
+   - What buffer size is used?
+   - Is there a flush after every write?
+
+3. CHECK PROTOCOL VERSION NEGOTIATION
+   -----------------------------------
+   Add logging for:
+   - Which protocol versions are being attempted?
+   - Is server response being rejected due to version mismatch?
+   - Are multiple initialize requests being sent?
+
+4. SIMPLIFY TIMEOUT LOGIC
+   -----------------------
+   Recommendation: Use single Stopwatch for entire handshake
+   Avoid: Multiple Task.WaitAny calls with separate timeouts
+   
+   Example fix:
+   ```powershell
+   $sw = [System.Diagnostics.Stopwatch]::StartNew()
+   $remainingMs = $InitTimeoutMs
+   while ($sw.ElapsedMilliseconds -lt $InitTimeoutMs) {
+       $remainingMs = $InitTimeoutMs - $sw.ElapsedMilliseconds
+       # Use $remainingMs for Task.WaitAny
+   }
+   ```
+
+5. TEST WITH INCREASED VERBOSITY
+   ------------------------------
+   Try: $env:MCP_TRACE_INIT='1'
+   Try: $DebugPreference = 'Continue'
+   Try: Add Write-Host with timestamps at every I/O operation
+
+================================================================================
+COMPARISON: WHY NODE.JS CLIENT SUCCEEDS
+================================================================================
+
+Node.js test client (test-stdin-race.js):
+------------------------------------------
+1. Uses child_process.spawn() with stdio: ['pipe', 'pipe', 'pipe']
+2. Sends initialize immediately via stdin.write()
+3. Listens to stdout.on('data') with simple buffering
+4. No protocol version negotiation fallback
+5. No retry logic - single attempt with 5s timeout
+6. Receives response in 602ms
+
+Key difference: SIMPLER handshake logic, no retries, no fallbacks
+
+================================================================================
+PROPOSED FIX FOR POWERSHELL CLIENT
+================================================================================
+
+Option A: INCREASE TIMEOUT (Quick fix, not ideal)
+--------------------------------------------------
+Change: $InitTimeoutMs = 8000 → $InitTimeoutMs = 15000
+Rationale: If retries are involved, give more time
+Downside: Doesn't fix root cause, slower failure
+
+Option B: DISABLE PROTOCOL FALLBACK (Recommended)
+--------------------------------------------------
+Change: Remove protocol version retry logic for stdio transport
+Rationale: Vault only supports one version at a time
+Code: Skip FailedProtocols array for stdio connections
+Benefit: Faster failure with clearer error message
+
+Option C: FIX TIMEOUT ACCUMULATION (Best)
+------------------------------------------
+Change: Use single timeout for entire handshake, not per-attempt
+Implementation:
+```powershell
+$handshakeTimer = [System.Diagnostics.Stopwatch]::StartNew()
+while (-not $initialized) {
+    $remainingMs = [Math]::Max(0, $InitTimeoutMs - $handshakeTimer.ElapsedMilliseconds)
+    if ($remainingMs -eq 0) {
+        throw "Handshake timeout after $($handshakeTimer.ElapsedMilliseconds)ms"
+    }
+    # Use $remainingMs for this attempt
+}
+```
+
+Option D: ADD EARLY DETECTION (Defense)
+----------------------------------------
+Add check: Read first byte from stdout before timeout starts
+Rationale: Confirms server process spawned successfully
+Code:
+```powershell
+# After spawn, wait for ANY stdout data (max 2s)
+$anyDataTimer = [System.Diagnostics.Stopwatch]::StartNew()
+while ($client.Reader.Peek() -lt 0 -and $anyDataTimer.ElapsedMilliseconds -lt 2000) {
+    Start-Sleep -Milliseconds 50
+}
+if ($client.Reader.Peek() -lt 0) {
+    throw "Server process not responding (no stdout after 2s)"
+}
+# Now proceed with initialize handshake
+```
+
+================================================================================
+TEST CASE FOR POWERSHELL CLIENT
+================================================================================
+
+Target server: Vault (<user>/index-server)
+Server path: <root>\index-server\dist\server\index-server.js
+Expected behavior: Connection success within 1-2 seconds
+
+Test command:
+-------------
+$env:MCP_LOG_DIAG='1'
+$env:MCP_TRACE_INIT='1'
+Import-Module <root>\mcp-client\SimpleMCPClient.psm1 -Force
+
+$session = Connect-MCP -Command 'node' `
+    -ArgList @('<root>\index-server\dist\server\index-server.js') `
+    -InitTimeoutMs 15000 `
+    -ErrorAction Stop
+
+if ($session -and $session.ServerProcess) {
+    Write-Host "SUCCESS: Connected in X ms"
+    $tools = Get-MCPTools -Session $session
+    Write-Host "Tool count: $($tools.Count)"
+    Disconnect-MCP -Session $session
+} else {
+    Write-Host "FAILED: No session returned"
+}
+
+Expected output:
+----------------
+SUCCESS: Connected in 600-1200ms
+Tool count: 41
+
+Actual output (current):
+------------------------
+Exception: Failed to initialize with supported protocols
+(after ~12 seconds)
+
+================================================================================
+REFERENCES
+================================================================================
+
+MCP Specification:
+https://modelcontextprotocol.io/specification/2025-06-18/basic/transports#stdio
+
+MCP SDK Source (stdio transport):
+https://github.com/modelcontextprotocol/typescript-sdk/blob/main/src/shared/stdio.ts
+https://github.com/modelcontextprotocol/typescript-sdk/blob/main/src/server/stdio.ts
+
+Key quotes from spec:
+"Messages are delimited by newlines, and MUST NOT contain embedded newlines."
+"The server reads JSON-RPC messages from stdin and sends messages to stdout."
+
+Vault diagnostic logs:
+- MCP_LOG_DIAG=1 enables handshake-buffer, transport-init, startup logging
+- Shows buffered chunk count, Content-Length detection, replay status
+- Confirms SDK initialization timeline
+
+================================================================================
+CONTACT
+================================================================================
+
+If you need server-side logs or additional diagnostics from Vault,
+please request specific MCP_LOG_DIAG output or test scenarios.
+
+Vault is working correctly and is spec-compliant.
+The issue appears to be in PowerShell client timeout/retry logic.
+
+Good luck debugging!
+
+================================================================================
+EOF
+================================================================================

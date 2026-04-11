@@ -1,0 +1,41 @@
+# Enforce consistent line endings and diff behavior
+
+# Text defaults (auto normalize to LF in repo)
+*          text=auto eol=lf
+
+# Explicitly mark common text/code types
+*.js       text eol=lf
+*.ts       text eol=lf
+*.tsx      text eol=lf
+*.json     text eol=lf
+*.md       text eol=lf
+*.yml      text eol=lf
+*.yaml     text eol=lf
+*.sh       text eol=lf
+*.mjs      text eol=lf
+*.cjs      text eol=lf
+*.html     text eol=lf
+*.css      text eol=lf
+*.svg      text eol=lf
+
+# Windows PowerShell / batch scripts keep CRLF for native execution comfort
+*.ps1      text eol=crlf
+*.psm1     text eol=crlf
+*.bat      text eol=crlf
+
+# Binary assets
+*.png      binary
+*.jpg      binary
+*.jpeg     binary
+*.gif      binary
+*.zip      binary
+*.gz       binary
+*.tgz      binary
+
+# Prevent LF->CRLF churn warnings by having Git know authoritative settings.
+# After adding this file run: git add --renormalize .
+# Squad: union merge for append-only team state files
+.squad/decisions.md merge=union
+.squad/agents/*/history.md merge=union
+.squad/log/** merge=union
+.squad/orchestration-log/** merge=union

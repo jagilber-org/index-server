@@ -1,0 +1,552 @@
+/* eslint-disable */
+// Extracted instruction management from admin.html
+(function(){
+  'use strict';
+
+  // Helper: safe global references (these live on page scope)
+  const globals = window;
+
+  // Defensive defaults so first render has a valid page context even if loadInstructions
+  // has not executed yet (prevents slice(NaN, NaN) -> empty list artifact).
+  if (globals.instructionPage == null || Number.isNaN(globals.instructionPage)) globals.instructionPage = 1;
+  if (globals.instructionPageSize == null || (globals.instructionPageSize !== 'All' && !Number.isFinite(globals.instructionPageSize))) globals.instructionPageSize = 25;
+
+  // Usage snapshot cache (loaded once per loadInstructions call)
+  let usageSnapshot = {};
+  async function fetchUsageSnapshot() {
+    try {
+      const res = await fetch('/api/usage/snapshot');
+      if (!res.ok) return {};
+      const data = await res.json();
+      return data.snapshot || {};
+    } catch { return {}; }
+  }
+
+  function getSignalBadge(signal) {
+    if (!signal) return '';
+    const colors = { 'outdated': '#f2495c', 'not-relevant': '#ff9830', 'helpful': '#73bf69', 'applied': '#5794f2' };
+    const color = colors[signal] || '#888';
+    return '<span class="signal-badge" style="background:' + color + '22;color:' + color + ';border:1px solid ' + color + '44;padding:1px 6px;border-radius:3px;font-size:10px;font-weight:600;">' + signal + '</span>';
+  }
+
+  async function loadInstructionCategories() {
+    try {
+      const res = await fetch('/api/instructions_categories');
+      if(!res.ok) throw new Error('http '+res.status);
+      const data = await res.json();
+      let cats = data.categories || data.data?.categories || [];
+      if(Array.isArray(cats) && cats.length && typeof cats[0] === 'string') {
+        cats = cats.map(n=>({ name:n, count: undefined }));
+      }
+      if(!Array.isArray(cats)) cats = [];
+      const select = document.getElementById('instruction-category-filter');
+      if(select){
+        select.innerHTML = '<option value="">All Categories</option>';
+        cats.forEach(cat => {
+          if(!cat || !cat.name) return;
+          const option = document.createElement('option');
+          option.value = cat.name;
+          option.textContent = cat.count != null ? `${cat.name} (${cat.count})` : cat.name;
+          select.appendChild(option);
+        });
+      }
+      return cats.map(c=>c.name);
+    } catch (e) {
+      console.warn('Failed to load instruction categories:', e);
+      return [];
+    }
+  }
+
+  function getFilteredInstructions(list) {
+    const nameFilter = (document.getElementById('instruction-filter').value || '');
+    const isRegex = document.getElementById('instruction-regex-toggle')?.checked || false;
+    const categoryFilter = (document.getElementById('instruction-category-filter')?.value || '');
+    const sizeFilter = (document.getElementById('instruction-size-filter')?.value || '');
+    const filterInput = document.getElementById('instruction-filter');
+    let filtered;
+    if (isRegex && nameFilter) {
+      try {
+        const re = new RegExp(nameFilter, 'i');
+        filtered = list.filter(i => re.test(i.name || ''));
+        if (filterInput) filterInput.style.borderColor = '';
+      } catch (e) {
+        filtered = [];
+        if (filterInput) filterInput.style.borderColor = '#f2495c';
+      }
+    } else {
+      if (filterInput) filterInput.style.borderColor = '';
+      filtered = list.filter(i => (i.name||'').toLowerCase().includes(nameFilter.toLowerCase()));
+    }
+    if (categoryFilter) {
+      filtered = filtered.filter(i => {
+        if (i.category === categoryFilter) return true;
+        if (Array.isArray(i.categories) && i.categories.includes(categoryFilter)) return true;
+        return false;
+      });
+    }
+    if (sizeFilter) filtered = filtered.filter(i => i.sizeCategory === sizeFilter);
+    const sortSelect = document.getElementById('instruction-sort');
+    const sortVal = sortSelect ? sortSelect.value : 'name-asc';
+    const cmp = (a,b, key, dir='asc') => {
+      if (a[key] === b[key]) return 0;
+      return (a[key] < b[key] ? -1 : 1) * (dir === 'asc' ? 1 : -1);
+    };
+    switch(sortVal) {
+      case 'name-desc': filtered.sort((a,b)=>cmp(a,b,'name','desc')); break;
+      case 'size-asc': filtered.sort((a,b)=>cmp(a,b,'size','asc')); break;
+      case 'size-desc': filtered.sort((a,b)=>cmp(a,b,'size','desc')); break;
+      case 'mtime-asc': filtered.sort((a,b)=>cmp(a,b,'mtime','asc')); break;
+      case 'mtime-desc': filtered.sort((a,b)=>cmp(a,b,'mtime','desc')); break;
+      case 'category': filtered.sort((a,b)=>cmp(a,b,'category','asc') || cmp(a,b,'name','asc')); break;
+      case 'usage-desc': filtered.sort((a,b)=> {
+        const ua = (usageSnapshot[a.name]?.usageCount ?? 0);
+        const ub = (usageSnapshot[b.name]?.usageCount ?? 0);
+        return ub - ua || cmp(a,b,'name','asc');
+      }); break;
+      case 'signal': filtered.sort((a,b)=> {
+        const sa = usageSnapshot[a.name]?.lastSignal || '';
+        const sb = usageSnapshot[b.name]?.lastSignal || '';
+        return sa.localeCompare(sb) || cmp(a,b,'name','asc');
+      }); break;
+      default:
+        filtered.sort((a,b)=>cmp(a,b,'name','asc'));
+    }
+    return filtered;
+  }
+
+  function highlightMatch(text, filter, isRegex) {
+    if (!filter || !text) return text;
+    try {
+      const re = isRegex ? new RegExp('(' + filter + ')', 'gi') : new RegExp('(' + filter.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')', 'gi');
+      return text.replace(re, '<mark class="search-highlight">$1</mark>');
+    } catch { return text; }
+  }
+
+  function buildInstructionPaginationControls(totalFiltered) {
+    const container = document.getElementById('instruction-pagination');
+    if (!container) return;
+    const total = totalFiltered;
+    const pageSize = globals.instructionPageSize === 'All' ? total : globals.instructionPageSize;
+    const totalPages = pageSize === 0 ? 1 : Math.max(1, Math.ceil(total / pageSize));
+    if (globals.instructionPage > totalPages) globals.instructionPage = totalPages;
+    const disablePrev = globals.instructionPage <= 1;
+    const disableNext = globals.instructionPage >= totalPages;
+    const sizeOptions = [10,25,50,100,'All'].map(s => `<option value="${s}" ${s===globals.instructionPageSize? 'selected':''}>${s}</option>`).join('');
+    container.innerHTML = `
+      <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+        <label style="display:flex; align-items:center; gap:4px;">Page Size:
+          <select id="instruction-page-size" class="form-input" style="width:auto; padding:4px;">${sizeOptions}</select>
+        </label>
+        <div style="display:flex; align-items:center; gap:4px;">
+          <button class="action-btn" onclick="changeInstructionPage('first')" ${disablePrev?'disabled':''}>⏮ First</button>
+          <button class="action-btn" onclick="changeInstructionPage('prev')" ${disablePrev?'disabled':''}>◀ Prev</button>
+          <span style="font-size:12px;">Page ${globals.instructionPage} / ${totalPages}</span>
+          <button class="action-btn" onclick="changeInstructionPage('next')" ${disableNext?'disabled':''}>Next ▶</button>
+          <button class="action-btn" onclick="changeInstructionPage('last')" ${disableNext?'disabled':''}>Last ⏭</button>
+        </div>
+        <span style="margin-left:auto; font-size:12px; opacity:0.8;">Filtered: ${total} total</span>
+      </div>`;
+    const sizeSelect = document.getElementById('instruction-page-size');
+    if(sizeSelect) sizeSelect.onchange = () => {
+      globals.instructionPageSize = sizeSelect.value === 'All' ? 'All' : parseInt(sizeSelect.value,10);
+      globals.instructionPage = 1;
+      renderInstructionList(globals.allInstructions || []);
+    };
+  }
+
+  function changeInstructionPage(dir) {
+    const totalFiltered = getFilteredInstructions(globals.allInstructions || []).length;
+    const pageSizeVal = globals.instructionPageSize === 'All' ? totalFiltered : globals.instructionPageSize;
+    const totalPages = pageSizeVal === 0 ? 1 : Math.max(1, Math.ceil(totalFiltered / pageSizeVal));
+    if (dir === 'first') globals.instructionPage = 1;
+    else if (dir === 'prev' && globals.instructionPage > 1) globals.instructionPage--;
+    else if (dir === 'next' && globals.instructionPage < totalPages) globals.instructionPage++;
+    else if (dir === 'last') globals.instructionPage = totalPages;
+    renderInstructionList(globals.allInstructions || []);
+  }
+
+  function renderInstructionList(instructions) {
+    const filtered = getFilteredInstructions(instructions || []);
+    try { console.debug('[admin.instructions] renderInstructionList: filteredCount=', filtered.length, 'pageSize=', globals.instructionPageSize, 'page=', globals.instructionPage); } catch(e){}
+    if (filtered.length === 0) {
+      const el = document.getElementById('instructions-list'); if(el) el.innerHTML = '<p>No instructions found</p>';
+      buildInstructionPaginationControls(0);
+      try { console.debug('[admin.instructions] renderInstructionList: no items rendered'); } catch(e){}
+      try { const dbg = document.getElementById('admin-debug'); if(dbg) dbg.textContent = JSON.stringify({ stage:'renderInstructionList', filtered:0, page: globals.instructionPage }, null, 2); } catch(e){}
+      return;
+    }
+    const totalFiltered = filtered.length;
+    let pageItems = filtered;
+    if (globals.instructionPageSize !== 'All') {
+      const start = (globals.instructionPage - 1) * globals.instructionPageSize;
+      const end = start + globals.instructionPageSize;
+      pageItems = filtered.slice(start, end);
+    }
+    const nameFilter = (document.getElementById('instruction-filter')?.value || '').trim();
+    const isRegex = document.getElementById('instruction-regex-toggle')?.checked || false;
+    const rows = pageItems.map(instr => {
+      const rawSummary = (instr.semanticSummary || '').trim();
+      let short = rawSummary.slice(0, 200);
+      if (rawSummary.length > 200) short += '…';
+      const safeSummary = globals.escapeHtml ? globals.escapeHtml(short) : (short.replace(/&/g,'&amp;'));
+      const cat = instr.category || (Array.isArray(instr.categories) && instr.categories[0]) || '—';
+      const highlightedName = nameFilter ? highlightMatch(instr.name, nameFilter, isRegex) : instr.name;
+      const highlightedSummary = nameFilter ? highlightMatch(safeSummary, nameFilter, isRegex) : safeSummary;
+      const usage = usageSnapshot[instr.name] || {};
+      const usageCount = usage.usageCount ?? 0;
+      const signal = usage.lastSignal || '';
+      const comment = usage.lastComment || '';
+      const signalHtml = signal ? getSignalBadge(signal) : '<span style="opacity:.4;font-size:10px;">none</span>';
+      const commentTip = comment ? ' title="Last comment: ' + comment.replace(/"/g, '&quot;').slice(0, 200) + '"' : '';
+      return `
+        <div class="instruction-item" data-instruction="${instr.name}">
+          <div class="instruction-item-header">
+            <div class="instruction-name">${highlightedName}</div>
+            <div class="instruction-actions">
+              <button class="action-btn" onclick="editInstruction('${instr.name}')">✏ Edit</button>
+              <button class="action-btn danger" onclick="deleteInstruction('${instr.name}')">🗑 Delete</button>
+            </div>
+          </div>
+          <div class="instruction-meta">
+            <div class="meta-chip" title="Category"><span class="chip-label">CAT</span><span class="chip-value">${cat}</span></div>
+            <div class="meta-chip" title="Size"><span class="chip-label">SIZE</span><span class="chip-value">${instr.size}</span><span class="chip-sub">(${instr.sizeCategory})</span></div>
+            <div class="meta-chip" title="Last Modified"><span class="chip-label">MTIME</span><span class="chip-value">${new Date(instr.mtime).toLocaleString()}</span></div>
+            <div class="meta-chip" title="Usage Count"><span class="chip-label">USES</span><span class="chip-value">${usageCount}</span></div>
+            <div class="meta-chip"${commentTip}><span class="chip-label">SIGNAL</span><span class="chip-value">${signalHtml}</span></div>
+          </div>
+          <div class="instruction-summary">${highlightedSummary || '<span class="summary-empty">No summary</span>'}</div>
+        </div>`;
+    }).join('');
+    const listEl = document.getElementById('instructions-list'); if(listEl) listEl.innerHTML = rows;
+    buildInstructionPaginationControls(totalFiltered);
+    try { console.debug('[admin.instructions] renderInstructionList: rendered rows=', pageItems.length); } catch(e){}
+    try { const dbg = document.getElementById('admin-debug'); if(dbg) dbg.textContent = JSON.stringify({ stage:'renderInstructionList', filtered: totalFiltered, rendered: pageItems.length, page: globals.instructionPage }, null, 2); } catch(e){}
+  }
+
+  function filterInstructions(){ globals.instructionPage = 1; renderInstructionList(globals.allInstructions || []); }
+
+  function showCreateInstruction(){
+    globals.instructionEditing = null;
+    const title = document.getElementById('instruction-editor-title'); if(title) title.textContent = 'New Instruction';
+    const filename = document.getElementById('instruction-filename'); if(filename){ filename.value=''; filename.disabled=false; }
+    const content = document.getElementById('instruction-content'); if(content) content.value = '';
+    applyInstructionTemplate();
+    globals.ensureInstructionEditorAtTop && globals.ensureInstructionEditorAtTop();
+    const ed = document.getElementById('instruction-editor'); if(ed) ed.classList.remove('hidden');
+    try { ed.scrollIntoView({ behavior:'smooth', block:'start' }); } catch {}
+    const fn = document.getElementById('instruction-filename'); if(fn) fn.focus();
+    globals.instructionOriginalContent = document.getElementById('instruction-content').value;
+    updateInstructionEditorDiagnostics();
+  }
+
+  async function editInstruction(name){
+    const editor = document.getElementById('instruction-editor');
+    const filenameEl = document.getElementById('instruction-filename');
+    const contentEl = document.getElementById('instruction-content');
+    let attempts = 0; const maxAttempts = 2; let lastError;
+    while(attempts < maxAttempts){
+      try{
+        attempts++;
+        if(contentEl && attempts===1) contentEl.value = '// Loading ' + name + '...';
+        const res = await fetch('/api/instructions/' + encodeURIComponent(name));
+        if(!res.ok) throw new Error('http '+res.status);
+        const data = await res.json();
+        if(data.success === false && !data.content && !data.data?.content) throw new Error('server reported failure');
+        if(!data.content && data.data?.content) data.content = data.data.content;
+        if(!data.content) throw new Error('missing content');
+        globals.instructionEditing = name;
+        const title = document.getElementById('instruction-editor-title'); if(title) title.textContent = 'Edit Instruction: ' + name;
+        if(filenameEl){ filenameEl.value = name; filenameEl.disabled = true; }
+        const pretty = JSON.stringify(data.content, null, 2);
+        if(contentEl) contentEl.value = pretty;
+        globals.ensureInstructionEditorAtTop && globals.ensureInstructionEditorAtTop();
+        if(editor) editor.classList.remove('hidden');
+        try { editor.scrollIntoView({ behavior:'smooth', block:'start' }); } catch {}
+        globals.instructionOriginalContent = pretty;
+        updateInstructionEditorDiagnostics();
+        return;
+      } catch(e){ lastError = e; if(attempts < maxAttempts) await new Promise(r=>setTimeout(r,120)); }
+    }
+    console.warn('editInstruction failed after retries', lastError);
+    globals.showError && globals.showError('Failed to load instruction');
+  }
+
+  function cancelEditInstruction(){ const ed = document.getElementById('instruction-editor'); if(ed) ed.classList.add('hidden'); const diff = document.getElementById('instruction-diff-container'); if(diff) diff.classList.add('hidden'); const preview = document.getElementById('instruction-preview-container'); if(preview) preview.classList.add('hidden'); globals.instructionOriginalContent=''; globals.instructionPreviewVisible = false; const btn = document.getElementById('instruction-preview-btn'); if(btn) btn.textContent = '📖 Preview'; }
+
+  function ensureInstructionEditorAtTop(){
+    try{
+      const editor = document.getElementById('instruction-editor');
+      const list = document.getElementById('instructions-list');
+      if(!editor || !list) return;
+      const parent = list.parentElement;
+      if(parent && parent.contains(list)){
+        if(editor.nextElementSibling !== list) parent.insertBefore(editor, list);
+      }
+    }catch{}
+  }
+
+  function safeParseInstruction(raw){ try { return JSON.parse(raw); } catch { return null; } }
+
+  function updateInstructionEditorDiagnostics(){
+    const ta = document.getElementById('instruction-content');
+    const diag = document.getElementById('instruction-diagnostics');
+    if(!ta||!diag) return;
+    const raw = ta.value;
+    if(!raw.trim()){ diag.innerHTML = '<em>Empty.</em>'; return; }
+    const parsed = safeParseInstruction(raw);
+    if(!parsed){ diag.innerHTML = '<span style="color:#f2495c;">Invalid JSON</span>'; }
+    else {
+      const size = raw.length;
+      const cats = Array.isArray(parsed.categories)? parsed.categories.length : 0;
+      const schemaVer = parsed.schemaVersion || parsed.schema || '?';
+      const changed = globals.instructionOriginalContent && raw !== globals.instructionOriginalContent;
+      diag.innerHTML = `Size: ${size} chars • Categories: ${cats} • Schema: ${schemaVer} ${changed?'<span style="color:#ff9830;' + '">(modified)</span>':''}`;
+    }
+    if(globals.instructionDiffVisible) refreshInstructionDiff();
+    if(globals.instructionPreviewVisible) refreshInstructionPreview();
+  }
+
+  function refreshInstructionDiff(){
+    const diffWrap = document.getElementById('instruction-diff-container');
+    const diffPre = document.getElementById('instruction-diff');
+    const ta = document.getElementById('instruction-content');
+    if(!diffWrap||!diffPre||!ta) return;
+    if(!globals.instructionOriginalContent){ diffPre.textContent='(no baseline)'; return; }
+    if(ta.value === globals.instructionOriginalContent){ diffPre.textContent='(no changes)'; return; }
+    const before = globals.instructionOriginalContent.split(/\r?\n/);
+    const after = ta.value.split(/\r?\n/);
+    const max = Math.max(before.length, after.length);
+    const out = [];
+    for(let i=0;i<max;i++){ const a = before[i]; const b = after[i]; if(a === b){ if(a !== undefined) out.push('  ' + a); } else { if(a !== undefined) out.push('- ' + a); if(b !== undefined) out.push('+ ' + b); } }
+    diffPre.textContent = out.join('\n');
+  }
+
+  function toggleInstructionDiff(){ globals.instructionDiffVisible = !globals.instructionDiffVisible; const wrap = document.getElementById('instruction-diff-container'); if(!wrap) return; if(globals.instructionDiffVisible){ wrap.classList.remove('hidden'); refreshInstructionDiff(); } else { wrap.classList.add('hidden'); } }
+
+  function toggleInstructionPreview(){
+    globals.instructionPreviewVisible = !globals.instructionPreviewVisible;
+    const wrap = document.getElementById('instruction-preview-container');
+    const btn = document.getElementById('instruction-preview-btn');
+    if(!wrap) return;
+    if(globals.instructionPreviewVisible){
+      wrap.classList.remove('hidden');
+      if(btn) btn.textContent = '📖 Hide Preview';
+      refreshInstructionPreview();
+    } else {
+      wrap.classList.add('hidden');
+      if(btn) btn.textContent = '📖 Preview';
+    }
+  }
+
+  function refreshInstructionPreview(){
+    const previewEl = document.getElementById('instruction-preview');
+    const ta = document.getElementById('instruction-content');
+    if(!previewEl || !ta) return;
+    const raw = ta.value;
+    const parsed = safeParseInstruction(raw);
+    if(!parsed){ previewEl.innerHTML = '<em style="opacity:.5;">Cannot preview: invalid JSON</em>'; return; }
+    const body = parsed.body || '';
+    if(!body.trim()){ previewEl.innerHTML = '<em style="opacity:.5;">No body content to preview</em>'; return; }
+    try {
+      if(typeof marked !== 'undefined' && marked.parse){
+        previewEl.innerHTML = marked.parse(body, { breaks: false, gfm: true });
+      } else {
+        previewEl.textContent = body;
+      }
+    } catch(e){
+      previewEl.textContent = body;
+    }
+  }
+
+  async function saveInstruction(){
+    const nameEl = document.getElementById('instruction-filename');
+    const ta = document.getElementById('instruction-content');
+    if(!nameEl||!ta) return;
+    const raw = ta.value;
+    const parsed = safeParseInstruction(raw);
+    if(!parsed){ globals.showError && globals.showError('Cannot save: invalid JSON'); return; }
+    if(parsed && parsed.schemaVersion && /^1(\.|$)/.test(String(parsed.schemaVersion))){ parsed.schemaVersion = '2'; }
+    const body = { content: parsed };
+    let url = '/api/instructions'; let method = 'POST';
+    if(globals.instructionEditing){ url += '/' + encodeURIComponent(globals.instructionEditing); method = 'PUT'; }
+    else { body.name = nameEl.value.trim(); if(!body.name){ globals.showError && globals.showError('Provide file name'); return; } }
+    try{
+      const res = await fetch(url, { method, headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+      const data = await res.json();
+      if(!res.ok || !data.success){ throw new Error(data.error || data.message || 'Save failed'); }
+      globals.showSuccess && globals.showSuccess(globals.instructionEditing? 'Instruction updated':'Instruction created');
+      globals.instructionOriginalContent = JSON.stringify(parsed, null, 2);
+      ta.value = globals.instructionOriginalContent;
+      if(!globals.instructionEditing) globals.instructionEditing = body.name;
+      updateInstructionEditorDiagnostics();
+      loadInstructions();
+    } catch(e){ globals.showError && globals.showError(e.message || 'Save failed'); }
+  }
+
+  async function loadInstructions() {
+    const listEl = document.getElementById('instructions-list'); if(listEl) listEl.innerHTML = 'Loading...';
+    // create hidden debug sink so Playwright can read client diagnostics from DOM
+    try {
+      let dbg = document.getElementById('admin-debug');
+      if(!dbg){ dbg = document.createElement('div'); dbg.id = 'admin-debug'; dbg.style.display='none'; dbg.style.whiteSpace='pre'; document.body.appendChild(dbg); }
+    } catch(e){}
+    try{
+      try { console.debug('[admin.instructions] loadInstructions: start'); } catch(e){}
+      const [catNames, snapData] = await Promise.all([loadInstructionCategories(), fetchUsageSnapshot()]);
+      usageSnapshot = snapData;
+      const res = await fetch('/api/instructions'); if(!res.ok) throw new Error('http '+res.status);
+      const data = await res.json();
+      if (!('success' in data) && !('data' in data) && !('instructions' in data)) throw new Error('unrecognized instructions payload');
+      const rawList = data.instructions || data.data?.instructions || [];
+      globals.allInstructions = Array.isArray(rawList) ? rawList : [];
+      try { console.log('[admin.instructions] fetched instructions:', globals.allInstructions.length); } catch {}
+  try { console.debug('[admin.instructions] loadInstructions: sampleNames=', (globals.allInstructions||[]).slice(0,6).map(i=>i.name)); } catch(e){}
+  try { const dbg = document.getElementById('admin-debug'); if(dbg) dbg.textContent = JSON.stringify({ stage:'loadInstructions', count: (globals.allInstructions||[]).length, sample: (globals.allInstructions||[]).slice(0,6).map(i=>i.name) }, null, 2); } catch(e){}
+      if(!catNames.length){ try { const select = document.getElementById('instruction-category-filter'); if(select){ select.innerHTML = '<option value="">All Categories</option>'; const derived = Array.from(new Set(globals.allInstructions.flatMap(i=> [i.category, ...(Array.isArray(i.categories)? i.categories: [])]).filter(Boolean))).sort(); derived.forEach(n=>{ const opt = document.createElement('option'); opt.value = n; opt.textContent = n; select.appendChild(opt); }); } } catch(_){} }
+      globals.instructionPage = 1;
+      renderInstructionList(globals.allInstructions || []);
+    } catch(e){ console.warn('loadInstructions error', e); if(listEl) listEl.innerHTML = '<div class="error">Failed to load instructions</div>'; }
+  }
+
+  function formatInstructionJson(){ const ta = document.getElementById('instruction-content'); if(!ta) return; try{ const parsed = JSON.parse(ta.value); ta.value = JSON.stringify(parsed, null, 2); updateInstructionEditorDiagnostics(); } catch { globals.showError && globals.showError('Cannot format: invalid JSON'); } }
+
+  function applyInstructionTemplate(){ const ta = document.getElementById('instruction-content'); if(!ta) return; if(ta.value.trim() && !confirm('Replace current content with template?')) return; const now = new Date().toISOString(); const template = { id:'sample-instruction', title:'Sample Instruction', body:'Detailed instruction content here.\nAdd multi-line guidance and steps.', contentType:'instruction', priority:50, audience:'all', requirement:'optional', categories:['general'], primaryCategory:'general', schemaVersion:'4', status:'draft', owner:'you@example.com', version:'1.0.0', reviewIntervalDays:180, semanticSummary:'Brief summary of what this instruction covers.', createdAt: now, updatedAt: now }; ta.value = JSON.stringify(template, null, 2); updateInstructionEditorDiagnostics(); }
+
+  async function deleteInstruction(name) {
+    if (!confirm('Delete instruction ' + name + '?')) return;
+    try {
+      const res = await fetch('/api/instructions/' + encodeURIComponent(name), { method:'DELETE' });
+      const data = await res.json();
+      if (data.success) { globals.showSuccess && globals.showSuccess('Deleted'); loadInstructions(); } else { globals.showError && globals.showError(data.error || 'Delete failed'); }
+    } catch { globals.showError && globals.showError('Delete failed'); }
+  }
+
+  async function performGlobalInstructionSearch(query){
+    const outEl = document.getElementById('instruction-global-results');
+    if(!outEl) return;
+    const trimmed = (query||'').trim();
+    const isRegex = document.getElementById('instruction-global-regex-toggle')?.checked || false;
+    if(!trimmed || trimmed.length < 2){ outEl.innerHTML = '<em style="opacity:.6;">Enter 2+ chars for global search.</em>'; return; }
+    let re = null;
+    if (isRegex) {
+      try { re = new RegExp(trimmed, 'i'); } catch (e) { outEl.innerHTML = '<span style="color:#f2495c;">Invalid regex: ' + (e.message||e) + '</span>'; return; }
+    }
+    const started = performance.now();
+    outEl.innerHTML = '<span style="opacity:.75;">🔍 Searching…</span>';
+    try {
+      let results;
+      if (re) {
+        // Regex mode: fetch all instructions and filter client-side
+        const res = await fetch('/api/instructions');
+        const data = await res.json();
+        if(!res.ok) throw new Error('http ' + res.status);
+        const allInstrs = data.instructions || data.data?.instructions || [];
+        // Load full content for each matching instruction
+        const matched = [];
+        for (const instr of allInstrs) {
+          const nameMatch = re.test(instr.name || '');
+          const catMatch = Array.isArray(instr.categories) && instr.categories.some(c => re.test(c));
+          const summaryMatch = re.test(instr.semanticSummary || '');
+          if (nameMatch || catMatch || summaryMatch) {
+            matched.push({ name: instr.name, snippet: instr.semanticSummary || '', categories: instr.categories || [instr.category].filter(Boolean), score: nameMatch ? 1 : 0.5 });
+          }
+        }
+        results = { results: matched, count: matched.length };
+      } else {
+        const res = await fetch('/api/instructions_search?q=' + encodeURIComponent(trimmed));
+        results = await res.json();
+        if(!res.ok || results.success === false){ throw new Error(results.error||'Search failed'); }
+      }
+      const elapsed = Math.round(performance.now() - started);
+      if(!Array.isArray(results.results) || !results.results.length){ outEl.innerHTML = `<span style="opacity:.6;">No global matches (${isRegex ? 'regex' : 'q'}='${trimmed}', ${elapsed}ms).</span>`; return; }
+      const rows = results.results.map(r=>{
+        let safeName = (r.name||'').replace(/[&<>]/g, c=> ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+        let safeSnippet = (r.snippet||'').replace(/[&<>]/g, c=> ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])).replace(/\*\*(.+?)\*\*/g,'<mark>$1</mark>');
+        safeName = highlightMatch(safeName, trimmed, isRegex);
+        safeSnippet = highlightMatch(safeSnippet, trimmed, isRegex);
+        const cats = Array.isArray(r.categories) && r.categories.length? r.categories.slice(0,6).join(', ') : '—';
+        return `<div class="instruction-global-result" style="background:#1f2228; border:1px solid #2c3038; border-radius:4px; padding:6px 8px; margin-bottom:6px;">
+          <div style="font-weight:600; font-size:12px;">${safeName} <span style="opacity:.55; font-weight:400;">(${cats})</span></div>
+          <div style="font-size:11px; white-space:normal;">${safeSnippet}</div>
+        </div>`; }).join('');
+      outEl.innerHTML = `<div style="margin-bottom:6px; font-weight:600;">Global Search Results (${results.count})${isRegex ? ' <span style="color:#73bf69;">[regex]</span>' : ''} <span style="opacity:.55; font-weight:400;">${elapsed}ms</span></div>` + rows;
+      try { outEl.scrollIntoView({ behavior:'smooth', block:'center' }); } catch { /* ignore */ }
+    } catch(e){ outEl.innerHTML = '<span style="color:#f2495c;">Global search error: '+ (e.message||e) +'</span>'; }
+  }
+
+  function attachGlobalSearchHandlers(){
+    const btn = document.getElementById('instruction-global-search-btn');
+    const input = document.getElementById('instruction-global-search');
+    if(btn) btn.onclick = ()=> performGlobalInstructionSearch(input.value);
+    if(input) input.addEventListener('keydown', e=>{ if(e.key==='Enter'){ performGlobalInstructionSearch(input.value); }});
+  }
+
+  // fallback integration: if local filter returns zero but name filter has >=3 chars run global
+  function maybeTriggerGlobalFallback(){
+    try {
+      const nameFilter = (document.getElementById('instruction-filter')?.value||'').trim();
+      const list = globals.allInstructions || [];
+      const filtered = getFilteredInstructions(list);
+      if(filtered.length === 0 && nameFilter.length >= 3){
+        performGlobalInstructionSearch(nameFilter);
+      }
+    } catch{/* ignore */
+    }
+  }
+
+  // Override legacy global renderer with new chip-based implementation.
+  // The inline <script> block in admin.html (legacy) runs before deferred external scripts,
+  // so its renderInstructionList is captured here (if present). We intentionally DO NOT
+  // call the legacy renderer because it emits the old stacked meta layout. Instead we
+  // invoke our enhanced local renderInstructionList and optionally fall back to the legacy
+  // one only if an unexpected error occurs (defensive resilience).
+  const legacyRenderInstructionList = window.renderInstructionList;
+  window.renderInstructionList = function(list){
+    if (globals.instructionPage == null || Number.isNaN(globals.instructionPage)) globals.instructionPage = 1;
+    if (globals.instructionPageSize == null) globals.instructionPageSize = 25;
+    try {
+      renderInstructionList(list);
+    } catch(e){
+      try { legacyRenderInstructionList && legacyRenderInstructionList(list); } catch { /* ignore */ }
+    }
+    const filtered = getFilteredInstructions(list||[]);
+    if(filtered.length === 0) maybeTriggerGlobalFallback();
+  };
+
+  // If the legacy script already fetched instructions and populated window.allInstructions,
+  // force a re-render so the UI upgrades to the new chip styling without requiring user action.
+  try {
+    if(Array.isArray(window.allInstructions) && window.allInstructions.length){
+      setTimeout(()=>{ try { window.renderInstructionList(window.allInstructions); } catch { /* ignore */ } }, 0);
+    }
+  } catch { /* ignore */ }
+
+  // Expose key functions used by inline HTML event handlers (oninput/onclick) so they
+  // continue to work after the extraction + IIFE encapsulation.
+  try {
+    Object.assign(window, {
+      filterInstructions,
+      editInstruction,
+      deleteInstruction,
+      showCreateInstruction,
+      changeInstructionPage,
+      loadInstructions, // optional manual trigger
+      saveInstruction,
+      formatInstructionJson,
+      toggleInstructionDiff,
+      toggleInstructionPreview,
+      applyInstructionTemplate,
+      cancelEditInstruction,
+      updateInstructionEditorDiagnostics
+    });
+  } catch { /* ignore */ }
+
+  // Expose for manual trigger if needed
+  window.performGlobalInstructionSearch = performGlobalInstructionSearch;
+
+  // Hook after DOM ready if instructions section becomes active later
+  document.addEventListener('DOMContentLoaded', attachGlobalSearchHandlers);
+  // If script injected after DOMContentLoaded (defer), also call immediately
+  if(document.readyState === 'interactive' || document.readyState === 'complete') attachGlobalSearchHandlers();
+
+})();

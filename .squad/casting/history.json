@@ -1,0 +1,16 @@
+{
+  "assignments": [
+    {
+      "assignment_id": "matrix-mcp-index-001",
+      "universe": "the-matrix",
+      "created_at": "2026-02-26T15:20:00Z",
+      "repo": "jagilber-org/index-server-dev",
+      "agents": [
+        { "name": "Morpheus", "role": "Lead" },
+        { "name": "Trinity", "role": "Backend Dev" },
+        { "name": "Tank", "role": "Tester" },
+        { "name": "Oracle", "role": "DevRel" }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,43 @@
+{
+  "mcpServers": {
+    "mcp-index-test": {
+      "type": "stdio",
+      "command": "node",
+      "args": [
+        "dist/server/index-server.js"
+      ],
+      "tools": [
+        "*"
+      ],
+      "env": {
+        "INDEX_SERVER_MODE": "standalone",
+        "INDEX_SERVER_MUTATION": "1",
+        "INDEX_SERVER_DASHBOARD": "0",
+        "INDEX_SERVER_AUTO_BACKUP": "0",
+        "INDEX_SERVER_SEMANTIC_ENABLED": "0",
+        "INDEX_SERVER_FLAG_TOOLS_EXTENDED": "1",
+        "NODE_ENV": "test"
+      }
+    },
+    "mcp-index-readonly": {
+      "type": "stdio",
+      "command": "node",
+      "args": [
+        "dist/server/index-server.js"
+      ],
+      "tools": [
+        "health_check",
+        "instructions_search",
+        "instructions_dispatch"
+      ],
+      "env": {
+        "INDEX_SERVER_MODE": "standalone",
+        "INDEX_SERVER_MUTATION": "0",
+        "INDEX_SERVER_DASHBOARD": "0",
+        "INDEX_SERVER_AUTO_BACKUP": "0",
+        "INDEX_SERVER_SEMANTIC_ENABLED": "0",
+        "NODE_ENV": "test"
+      }
+    }
+  }
+}

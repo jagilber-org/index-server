@@ -1,0 +1,76 @@
+{
+  "mcpServers": {
+    "Index-repo": {
+      "description": "Index using repository instructions directory (mutation enabled)",
+      "command": "node",
+      "args": [
+        "<root>/index-server/dist/server/index-server.js"
+      ],
+      "transport": "stdio",
+      "cwd": "<root>/index-server",
+      "env": {
+        "INDEX_SERVER_DIR": "<root>/index-server/instructions",
+        "INDEX_SERVER_MUTATION": "1",
+        "INDEX_SERVER_LOG_DIAG": "0"
+      },
+      "restart": "onExit",
+      "tags": ["index", "Index", "mutable"],
+      "notes": [
+        "Absolute INDEX_SERVER_DIR avoids workspace vs global cwd mismatch.",
+        "cwd pinned to repo so usage-snapshot.json lands under data/ and relative schema loads stay consistent.",
+        "Set INDEX_SERVER_LOG_DIAG=1 temporarily to verify startup line shows writable=true.",
+        "Disable mutation by removing INDEX_SERVER_MUTATION or setting it to empty string."
+      ]
+    },
+    "Index-external-data": {
+      "description": "Index with external writable data directory (keeps repo clean)",
+      "command": "node",
+      "args": [
+        "<root>/index-server/dist/server/index-server.js"
+      ],
+      "transport": "stdio",
+      "cwd": "<root>/index-server",
+      "env": {
+        "INDEX_SERVER_DIR": "C:/mcp-data/instructions",
+        "INDEX_SERVER_MUTATION": "1",
+        "INDEX_SERVER_LOG_DIAG": "1"
+      },
+      "restart": "onExit",
+      "tags": ["index", "Index", "external-data"],
+      "notes": [
+        "Create C:/mcp-data/instructions beforehand with write permissions.",
+        "Diagnostic logging enabled on first run; set INDEX_SERVER_LOG_DIAG back to 0 afterward.",
+        "Ensures global instance does not clash with workspace instructions directory."
+      ]
+    },
+    "Index-readonly": {
+      "description": "Read-only mode (no mutation) referencing existing Index",
+      "command": "node",
+      "args": [
+        "<root>/index-server/dist/server/index-server.js"
+      ],
+      "transport": "stdio",
+      "cwd": "<root>/index-server",
+      "env": {
+        "INDEX_SERVER_DIR": "<root>/index-server/instructions",
+        "INDEX_SERVER_MUTATION": ""
+      },
+      "restart": "onExit",
+      "tags": ["index", "Index", "readonly"],
+      "notes": [
+        "No writes will occur; useful for auditors or secondary viewers.",
+        "If add/import calls are attempted they will return Mutation disabled errors."
+      ]
+    }
+  },
+  "__meta": {
+    "lessonsLearned": [
+      "Always specify absolute INDEX_SERVER_DIR in global configs to avoid silent writes to unintended directories.",
+      "Pin cwd so relative paths (schemas/, data/) resolve predictably.",
+      "Use INDEX_SERVER_LOG_DIAG=1 on first launch to confirm instructionsDir path and writable flag.",
+      "Avoid running multiple instances pointing to different Indexs unless intentional; if sharing, point both to the exact same INDEX_SERVER_DIR.",
+      "For clean separation, dedicate an external data directory (e.g. C:/mcp-data/instructions)."
+    ],
+    "version": 1
+  }
+}

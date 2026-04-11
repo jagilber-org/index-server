@@ -1,0 +1,323 @@
+================================================================================
+                    GPT-5 MCP CLIENT SCRIPT - COMPLEX CRUD TEST
+                            ELI5 REPRODUCTION GUIDE
+================================================================================
+
+OBJECTIVE: Reproduce the exact complex CRUD test that was just performed on the 
+Vault MCP server to identify and reproduce Index state issues.
+
+================================================================================
+                               STEP 1: DISCOVERY
+================================================================================
+
+First, you need to find and connect to the MCP server. As GPT-5, you should 
+have access to MCP tools. Look for tools that start with "mcp_vault_".
+
+DISCOVERY COMMAND:
+Ask your system: "What MCP tools are available that start with mcp_vault?"
+
+You should see tools like:
+- mcp_vault_instructions_dispatch
+- mcp_vault_instructions_add  
+- mcp_vault_instructions_remove
+- mcp_vault_instructions_categories
+- mcp_vault_health_check
+- And many others...
+
+================================================================================
+                               STEP 2: LEARN THE TOOLS
+================================================================================
+
+Before starting the test, learn what tools are available:
+
+COMMAND 1 - Get tool Index:
+Call: mcp_vault_meta_tools
+Parameters: {} (empty object)
+
+COMMAND 2 - Check server health:
+Call: mcp_vault_health_check  
+Parameters: {} (empty object)
+
+COMMAND 3 - Get current instruction count:
+Call: mcp_vault_instructions_dispatch
+Parameters: {"action": "list"}
+
+Write down the current count of instructions (should be around 35).
+
+================================================================================
+                               STEP 3: COMPLEX CRUD TEST
+================================================================================
+
+Now reproduce the EXACT same complex CRUD test sequence:
+
+-------------------------------------------------------------------------------
+                              PHASE 1: BASELINE READ
+-------------------------------------------------------------------------------
+
+COMMAND 1 - Get current Index state:
+Call: mcp_vault_instructions_dispatch
+Parameters: {"action": "list"}
+
+Expected: Should return a list with "count" field around 35 entries.
+Record the exact count: _______
+
+-------------------------------------------------------------------------------
+                         PHASE 2: COMPLEX BATCH CREATE ATTEMPT
+-------------------------------------------------------------------------------
+
+COMMAND 2 - Try batch import (this should partially fail):
+Call: mcp_vault_instructions_import
+Parameters: {
+  "entries": [
+    {
+      "id": "complex-crud-test-001",
+      "title": "Complex CRUD Test Entry 001", 
+      "body": "This is a complex test entry with multiple categories and high priority for comprehensive CRUD testing scenarios.",
+      "priority": 5,
+      "audience": "all",
+      "requirement": "critical",
+      "categories": ["testing", "crud", "automation", "validation"]
+    },
+    {
+      "id": "complex-crud-test-002",
+      "title": "Complex CRUD Test Entry 002",
+      "body": "Second complex test entry with different metadata patterns, including markdown formatting and special characters: @#$%^&*().",
+      "priority": 15,
+      "audience": "individual", 
+      "requirement": "recommended",
+      "categories": ["testing", "edge-cases", "special-chars"]
+    },
+    {
+      "id": "complex-crud-test-003", 
+      "title": "Complex CRUD Test Entry 003",
+      "body": "Third entry with minimal priority and optional requirement for testing various priority tiers and requirement levels.",
+      "priority": 90,
+      "audience": "team",
+      "requirement": "optional", 
+      "categories": ["testing", "priority-testing"]
+    }
+  ]
+}
+
+Expected Result: Should show some entries failed due to missing required fields.
+Record what happened: _________________________________
+
+-------------------------------------------------------------------------------
+                         PHASE 3: QUERY OPERATIONS TESTING  
+-------------------------------------------------------------------------------
+
+COMMAND 3 - Search for entries we tried to create:
+Call: mcp_vault_instructions_query
+Parameters: {
+  "categoriesAny": ["crud", "testing"],
+  "text": "complex-crud-test"
+}
+
+Expected: Should return empty or very few results if create failed.
+Record result count: _______
+
+COMMAND 4 - Try specific ID lookup:
+Call: mcp_vault_instructions_dispatch
+Parameters: {
+  "action": "get", 
+  "id": "complex-crud-test-001"
+}
+
+Expected: Should return {"notFound": true}
+Record result: _________________________________
+
+-------------------------------------------------------------------------------
+                         PHASE 4: INDIVIDUAL CREATE OPERATIONS
+-------------------------------------------------------------------------------
+
+COMMAND 5 - Create single entry with proper metadata:
+Call: mcp_vault_instructions_add
+Parameters: {
+  "entry": {
+    "id": "complex-crud-test-single",
+    "title": "Complex CRUD Single Test", 
+    "body": "Single entry created with full metadata to test individual create operations.",
+    "priority": 25,
+    "audience": "all",
+    "requirement": "optional",
+    "categories": ["testing", "crud", "individual"],
+    "rationale": "Testing individual CRUD operations"
+  },
+  "overwrite": false
+}
+
+Expected: Should succeed with created: true
+Record hash returned: _________________________________
+
+COMMAND 6 - Verify the single create worked:
+Call: mcp_vault_instructions_dispatch  
+Parameters: {
+  "action": "get",
+  "id": "complex-crud-test-single" 
+}
+
+Expected: Should return the full entry with metadata
+Record if successful: YES/NO _______
+
+-------------------------------------------------------------------------------
+                              PHASE 5: UPDATE OPERATIONS
+-------------------------------------------------------------------------------
+
+COMMAND 7 - Update governance on the created entry:
+Call: mcp_vault_instructions_governanceUpdate
+Parameters: {
+  "id": "complex-crud-test-single",
+  "owner": "complex-test-team",
+  "status": "approved", 
+  "bump": "minor"
+}
+
+Expected: Should bump version from 1.0.0 to 1.1.0
+Record new version: _________________________________
+
+COMMAND 8 - Verify the update:
+Call: mcp_vault_instructions_dispatch
+Parameters: {
+  "action": "get", 
+  "id": "complex-crud-test-single"
+}
+
+Check these fields in response:
+- version should be "1.1.0": YES/NO _______
+- owner should be "complex-test-team": YES/NO _______  
+- changeLog should have 2 entries: YES/NO _______
+
+-------------------------------------------------------------------------------
+                             PHASE 6: COMPLEX QUERIES
+-------------------------------------------------------------------------------
+
+COMMAND 9 - Multi-category search:
+Call: mcp_vault_instructions_query
+Parameters: {
+  "categoriesAll": ["testing", "crud"],
+  "priorityMin": 20,
+  "priorityMax": 30
+}
+
+Record how many results: _______
+
+COMMAND 10 - Text search across body content:
+Call: mcp_vault_instructions_query  
+Parameters: {
+  "text": "comprehensive CRUD testing",
+  "limit": 10
+}
+
+Record results: _________________________________
+
+-------------------------------------------------------------------------------
+                               PHASE 7: DELETE OPERATIONS
+-------------------------------------------------------------------------------
+
+COMMAND 11 - Remove the test entry:
+Call: mcp_vault_instructions_remove
+Parameters: {
+  "ids": ["complex-crud-test-single"]
+}
+
+Expected: Should return removed: 1
+Record result: _________________________________
+
+COMMAND 12 - Verify deletion:
+Call: mcp_vault_instructions_dispatch
+Parameters: {
+  "action": "get",
+  "id": "complex-crud-test-single"
+}
+
+Expected: Should return {"notFound": true}
+Record result: _________________________________
+
+-------------------------------------------------------------------------------
+                            PHASE 8: Index STATE CHECK  
+-------------------------------------------------------------------------------
+
+COMMAND 13 - Final Index count:
+Call: mcp_vault_instructions_dispatch
+Parameters: {"action": "list"}
+
+Compare final count to initial count from COMMAND 1.
+Initial count: _______
+Final count: _______
+Difference: _______ (should be 0 if all test entries were cleaned up)
+
+================================================================================
+                               ISSUE REPRODUCTION
+================================================================================
+
+THE SPECIFIC ISSUE TO REPRODUCE:
+
+During the complex CRUD test, the following issue occurred:
+
+1. Batch import failed with validation errors (expected)
+2. Individual creates were initially being "skipped" even with unique IDs
+3. Index appeared to have indexing or state consistency issues  
+4. Some operations returned unexpected results before stabilizing
+
+SYMPTOMS TO WATCH FOR:
+
+- Operations returning "skipped": true unexpectedly
+- Inconsistent Index counts between operations
+- Entries not appearing in queries immediately after creation
+- "notFound" results for entries that should exist
+- Health check anomalies
+
+DEBUGGING COMMANDS TO TRY IF ISSUES OCCUR:
+
+COMMAND A - Health check:
+Call: mcp_vault_health_check
+Parameters: {}
+
+COMMAND B - Integrity verification:
+Call: mcp_vault_integrity_verify  
+Parameters: {}
+
+COMMAND C - Reload Index:
+Call: mcp_vault_instructions_reload
+Parameters: {}
+
+================================================================================
+                              EXPECTED OUTCOME
+================================================================================
+
+If everything works correctly:
+- All creates should succeed or fail predictably
+- Queries should return consistent results
+- Updates should modify fields as expected
+- Deletes should remove entries permanently
+- Index count should remain stable
+
+If the issue reproduces:
+- Document which specific commands exhibit unexpected behavior
+- Note any error messages or unexpected responses
+- Record the sequence that leads to inconsistent state
+- Try the debugging commands to identify root cause
+
+================================================================================
+                                 FINAL NOTES  
+================================================================================
+
+This script reproduces a complex CRUD test scenario that previously revealed
+potential state consistency issues in Vault. The goal is to
+identify if these issues are reproducible and under what conditions they occur.
+
+Pay special attention to:
+1. Response consistency between similar operations
+2. Timing of when entries appear in searches vs individual lookups
+3. Index count stability throughout the test sequence
+4. Any "skipped" or unexpected operation results
+
+Document ALL unexpected behaviors for debugging purposes.
+
+================================================================================
+                                   END SCRIPT
+================================================================================
+
+Execute this script step-by-step, recording results at each checkpoint.
+If any step fails or behaves unexpectedly, note it and continue to see
+if the issue compounds or resolves itself.

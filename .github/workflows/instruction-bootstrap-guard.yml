@@ -1,0 +1,51 @@
+name: Instruction Bootstrap Guard
+
+on:
+  workflow_dispatch: {}
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  bootstrap-guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Use Node.js 20
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: 'npm'
+      - name: Install
+        run: npm ci
+      - name: Build
+        run: npm run build --if-present
+      - name: Run Bootstrap Enrichment
+        run: |
+          if [ -f scripts/bootstrap-Index.mjs ]; then
+            node scripts/bootstrap-Index.mjs
+          else
+            echo "bootstrap-Index.mjs not found — skipping enrichment step"
+          fi
+      - name: Governance Validation
+        run: |
+          if [ -d instructions ] && ls instructions/*.json 1>/dev/null 2>&1; then
+            node scripts/validate-governance.mjs
+          else
+            echo "No instructions/ directory — skipping governance validation"
+          fi
+      - name: Fail on Uncommitted Enrichment Drift
+        run: |
+          if [ ! -d instructions ]; then
+            echo "No instructions/ directory — skipping drift check"
+            exit 0
+          fi
+          # Ignore timestamp-only changes (generatedAt, lastReviewedAt) that cause false drift
+          git diff instructions/ -- . ':!*.json' | head -20
+          REAL_DRIFT=$(git diff instructions/ | grep -E '^\+' | grep -v '^\+\+\+' | grep -v '"generatedAt"' | grep -v '"lastReviewedAt"' | grep -v '"sourceHash"' | wc -l)
+          if [ "$REAL_DRIFT" -gt 0 ]; then
+            echo "Index enrichment drift detected (non-timestamp changes). Run: node scripts/bootstrap-Index.mjs and commit changes." >&2
+            git diff --stat instructions/ >&2 || true
+            exit 1
+          else
+            echo "No meaningful enrichment drift in instructions/ (timestamp-only changes ignored)";
+          fi

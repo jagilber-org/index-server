@@ -1,0 +1,172 @@
+# Dual-repo publishing exclusion list
+# Paths listed here are stripped from the public publication repo.
+# One path per line. Directories must end with /
+# Prefix patterns end with * (e.g., .test-run-complete.* matches all files starting with that prefix)
+
+# CI/CD pipeline configs (contain internal ADO org URLs)
+azure-pipelines.yml
+
+.specify/
+specs/
+.github/ISSUE_TEMPLATE/
+.github/copilot-instructions.md
+.github/agents/
+.github/prompts/
+
+# Squad-specific GitHub Actions workflows (internal orchestration)
+.github/workflows/squad-*
+.github/workflows/sync-squad-labels.yml
+.env
+.secrets.baseline
+.pre-commit-config.yaml
+.pii-allowlist
+state/
+logs/
+meta/
+backups/
+feedback/
+governance/
+memory/
+metrics/
+snapshots/
+tmp/
+test-results/
+coverage/
+data/
+agents/
+skills/
+automation/
+config/
+seed/
+.publish-exclude
+
+# Private internal data (instruction Index copies, backups, sensitive configs)
+.private/
+
+# Live instruction Indexs (internal data, not source code)
+instructions/
+devinstructions/
+
+# Internal docs archive (session logs, agent state, internal reports)
+docs/archive/
+
+# Test output directories
+tests/outputs/
+
+# VS Code dev-specific configs (keep launch.json, settings.json, mcp.json)
+.vscode/mcp-dev.json
+.vscode/tasks.json
+
+# Test run markers and status files
+.test-run-complete.*
+.test-run-status.json
+
+# Stray artifact files
+1
+PLAN.md
+push-public.log
+push-origin.log
+
+# NVIDIA driver artifacts (sometimes generated locally)
+NVIDIA Corporation/
+
+# Build/test artifacts
+build-output.txt
+build2.txt
+test-output.txt
+test-output-full.txt
+test-output-rename.txt
+test-output-rename2.txt
+test-run-output.txt
+test3.txt
+tsc-output.txt
+vitest-focused.txt
+vitest-out.txt
+vitest-results.txt
+vitest-schema-results.txt
+vitest-v4.txt
+CLEANUP-RUNTIME-ARTIFACTS.txt
+ACTIVATION_TOOLS_IMPLEMENTATION_SUMMARY.md
+health_response.json
+
+# Internal scripts (keep only essential ones in public)
+scripts/deploy-local.ps1
+scripts/diag-deploy.ps1
+scripts/long-term-monitor.ps1
+scripts/monitor-memory.ps1
+scripts/start-monitoring.ps1
+scripts/migrate-production-index.ps1
+scripts/purge-instructions.ps1
+scripts/restore-instructions.ps1
+scripts/enumerate-prod-instructions.ps1
+scripts/sync-prod-to-devinstructions.ps1
+scripts/mcp-clean-restart.ps1
+scripts/prod-health.ps1
+scripts/smoke-deploy.ps1
+scripts/smoke-prod.ps1
+scripts/run-feedback-repro-with-trace.ps1
+scripts/copilot-e2e.ps1
+scripts/add-contenttype-devinstructions.ps1
+scripts/add-contenttype-prod.ps1
+scripts/test-contenttype-migration.ps1
+scripts/Manage-Instructions.ps1
+scripts/rename-tools.ps1
+scripts/mappings/
+scripts/MCPActivation.psm1
+scripts/powershell-mcp-server.ps1
+scripts/powershell-mcp-template.ps1
+
+# Sync script
+sync-constitution.cjs
+
+# TLS certificates (private keys!)
+.certs/
+
+# Squad internal state and templates (dev orchestration)
+.squad/
+.squad-templates/
+
+# Stray variable-name files
+$excludeFile
+
+# Internal test harnesses (not part of the product)
+tests/debug-memory.js
+tests/temp-dashboard.js
+tests/test-buffer-demo.js
+tests/test-powershell-client.ps1
+tests/test-stdin-race.js
+tests/test-tool-response-order.js
+tests/query-prod-mcp.js
+tests/portable-mcp-client.zip
+
+# Internal scripts (additional)
+scripts/repro-add-get.js
+scripts/offlineDiagnostics.js
+scripts/purge-extra-decls.mjs
+scripts/security-scan.ps1
+
+# Sentinel / keep files
+.baseline.sentinel
+.dist.keep
+
+# Copilot internal state and configuration
+.copilot/
+
+# Machine-readable constitution (needed by Docker build and runtime)
+# constitution.json — included in public
+
+# Internal security review
+CODE_SECURITY_REVIEW.md
+
+# Internal docs archive (session logs, agent state, internal reports)
+docs/archive/
+
+# Templates (internal spec-kit templates)
+templates/
+
+# Dependencies & build output (consumers install from npm/clone)
+node_modules/
+dist/
+# Release artifacts — ENTIRE release/ dir excluded (contains built VSIX, node_modules with
+# vendored dependencies, and instruction JSON files that may contain env-var values)
+release/

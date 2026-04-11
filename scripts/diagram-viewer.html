@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <title>Index Server Diagrams</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    :root {
+      --primary:#BB2528; --primary-border:#7C0000; --accent:#F8B229; --secondary:#006100; --bg:#0f0f10; --text:#eee; --panel:#1e1f22; --radius:6px;
+    }
+    body { margin:0; font-family: system-ui,-apple-system,Segoe UI,Roboto,Ubuntu; background:var(--bg); color:var(--text); display:flex; flex-direction:column; height:100vh; }
+    header { padding:0.75rem 1rem; background:linear-gradient(90deg,var(--primary-border),var(--primary)); display:flex; gap:1rem; align-items:center; flex-wrap:wrap; }
+    header h1 { font-size:1rem; margin:0; font-weight:600; letter-spacing:.5px; }
+    select, button { background:var(--panel); color:var(--text); border:1px solid var(--primary-border); border-radius:var(--radius); padding:0.4rem 0.6rem; font-size:0.85rem; }
+    button { cursor:pointer; }
+    button:hover, select:hover { border-color:var(--accent); }
+    #canvas-wrapper { position:relative; flex:1; overflow:hidden; background:#121314; }
+    #diagram-container { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%) scale(1); transform-origin:0 0; cursor:grab; }
+    #diagram-container.grabbing { cursor:grabbing; }
+    #raw { width:100%; height:200px; font-family:ui-monospace,monospace; font-size:12px; resize:vertical; }
+    footer { font-size:11px; padding:4px 10px; background:#141516; border-top:1px solid #222; display:flex; justify-content:space-between; gap:.75rem; flex-wrap:wrap; }
+    .controls { display:flex; gap:0.4rem; flex-wrap:wrap; }
+    .pill { background:#22252a; padding:2px 8px; border:1px solid #2e3239; border-radius:999px; font-size:11px; }
+    #status { font-family:ui-monospace,monospace; }
+    details summary { cursor:pointer; }
+    #exportBtn { background:var(--secondary); border-color:#004a00; }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.3/dist/mermaid.esm.min.mjs" type="module"></script>
+  <script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.3/dist/mermaid.esm.min.mjs';
+    // Standardized minimal theme config (YAML-equivalent) matching project palette
+    const themeConfig = { startOnLoad:false, theme:'base', themeVariables:{
+        darkMode:'false',
+        primaryColor:'#BB2528',
+        primaryTextColor:'#eee',
+        primaryBorderColor:'#7C0000',
+        secondaryColor:'#006100',
+        secondaryBorderColor:'#004a00',
+        secondaryTextColor:'#eee',
+        tertiaryColor:'#1e1f22',
+        tertiaryBorderColor:'#2a2c30',
+        tertiaryTextColor:'#eee',
+        noteBkgColor:'#fff5ad',
+        noteTextColor:'#333',
+        noteBorderColor:'#e0d27a',
+        lineColor:'#F8B229',
+        textColor:'#eee',
+        mainBkg:'#1e1f22',
+        errorBkgColor:'#1e1f22',
+        errorTextColor:'#eee'
+      }, layout:'elk' };
+    mermaid.initialize(themeConfig);
+
+    const diagrams = {
+      'high-level': `graph TD\n  Index[(Instruction Files)] --> Loader\n  Loader --> Classifier\n  Classifier --> Migrator\n  Migrator --> Cache[IndexContext]\n  Cache --> Tools[ToolHandlers]\n  Tools --> Transport\n  Transport --> Client\n  Tools --> Governance\n  Tools --> Integrity\n  Tools --> Gates\n  Tools --> Metrics\n  Tools --> UsageTrack\n  UsageTrack --> UsageSnap[(usage-snapshot.json)]\n  Cache --> Dashboard`,
+      'data-lifecycle': `graph LR\n  Files --> Validate --> Normalize --> Enrich --> Migrate --> Index --> Serve --> Track --> Persist --> Index\n  Serve --> Metrics\n  Serve --> GovernanceHash`,
+      'manifest-flow': `sequenceDiagram\n  participant Mutator as Mutation Tool\n  participant Index as IndexContext\n  participant Manifest as Manifest Manager\n  participant Ring as BufferRing\n  participant Disk as Disk\n  Mutator->>Index: apply change (add/remove/import/...)\n  Index-->>Mutator: ok\n  Mutator->>Manifest: schedule attemptManifestUpdate()\n  Manifest->>Disk: write index-manifest.json (deferred)\n  Note over Ring: On instrumented events (e.g. snapshots)\n  Ring->>Ring: add(entry)\n  Ring->>Disk: saveToDisk() (full JSON rewrite)`,
+      'buffer-debounced': `sequenceDiagram\n  participant Event as Event Producer\n  participant Ring as BufferRing\n  participant Debounce as Debounce Scheduler\n  participant Disk as Disk\n  Event->>Ring: add(entry)\n  Ring->>Debounce: schedule (if threshold met)\n  Debounce-->>Ring: timer fires or min-add threshold\n  Ring->>Disk: batched save (trim -> checksum -> atomic write)\n  Note over Ring,Disk: Exit signal => immediate flush (if pending)` ,
+      'augmented-components': `graph TD\n  Index[(Instruction Files)] --> Loader\n  Loader --> Classifier\n  Classifier --> Migrator\n  Migrator --> Cache[IndexContext]\n  Cache --> ManifestMgr[Manifest Manager]\n  ManifestMgr --> ManifestFile[(index-manifest.json)]\n  Cache --> SnapshotRing[Historical BufferRing]\n  SnapshotRing --> SnapshotFile[(historical-snapshots.json)]\n  Cache --> Tools[ToolHandlers]\n  Tools --> Transport\n  Transport --> Client\n  Tools --> Governance\n  Tools --> Integrity\n  Tools --> Gates\n  Tools --> Metrics\n  Tools --> UsageTrack\n  UsageTrack --> UsageSnap[(usage-snapshot.json)]\n  Cache --> Dashboard`
+    };
+
+    const selectEl = document.getElementById('diagramSelect');
+    const rawEl = document.getElementById('raw');
+    const container = document.getElementById('diagram-container');
+    const status = document.getElementById('status');
+
+    function render(key){
+      const txt = diagrams[key];
+      rawEl.value = txt; status.textContent = `Rendering: ${key}`;
+      mermaid.render(`m_${key}`, txt).then(({ svg }) => {
+        container.innerHTML = svg; currentScale=1; center(); updateStatus();
+      }).catch(e=>{ container.innerHTML = `<pre style='color:#f55'>${e}</pre>`; });
+    }
+
+    selectEl.addEventListener('change', ()=> render(selectEl.value));
+    rawEl.addEventListener('input', ()=> { diagrams[selectEl.value] = rawEl.value; render(selectEl.value); });
+
+    let isPanning=false, startX=0, startY=0, originX=0, originY=0, currentScale=1;
+
+    function center(){
+      container.style.left = '50%'; container.style.top='50%'; container.style.transform = `translate(-50%,-50%) scale(${currentScale})`;
+    }
+    function updateTransform(){ container.style.transform = `translate(${originX}px, ${originY}px) scale(${currentScale})`; }
+    function updateStatus(){ status.textContent = `${selectEl.value} | scale ${currentScale.toFixed(2)}`; }
+
+    container.addEventListener('mousedown', e=>{ isPanning=true; container.classList.add('grabbing'); startX=e.clientX; startY=e.clientY; });
+    window.addEventListener('mouseup', ()=>{ isPanning=false; container.classList.remove('grabbing'); });
+    window.addEventListener('mousemove', e=>{ if(!isPanning) return; originX += (e.clientX-startX); originY += (e.clientY-startY); startX=e.clientX; startY=e.clientY; updateTransform(); });
+    window.addEventListener('wheel', e=>{ if(!e.ctrlKey) return; e.preventDefault(); const delta = e.deltaY>0?-0.1:0.1; currentScale = Math.min(6, Math.max(0.2, currentScale+delta)); updateTransform(); updateStatus(); }, { passive:false });
+
+    document.getElementById('zoomIn').onclick = ()=> { currentScale=Math.min(6,currentScale+0.2); updateTransform(); updateStatus(); };
+    document.getElementById('zoomOut').onclick= ()=> { currentScale=Math.max(0.2,currentScale-0.2); updateTransform(); updateStatus(); };
+    document.getElementById('reset').onclick = ()=> { originX=0; originY=0; currentScale=1; center(); updateStatus(); };
+    document.getElementById('fit').onclick = ()=> { const svg=container.querySelector('svg'); if(!svg) return; const vb=svg.viewBox.baseVal; const w=container.parentElement.clientWidth; const h=container.parentElement.clientHeight; const scale=Math.min((w*0.9)/vb.width,(h*0.9)/vb.height); currentScale=Math.max(0.2,Math.min(6,scale)); originX=0; originY=0; center(); updateStatus(); };
+
+    document.getElementById('fullscreen').onclick = ()=> { const wrap=document.getElementById('canvas-wrapper'); if(!document.fullscreenElement){ wrap.requestFullscreen?.(); } else { document.exitFullscreen?.(); } };
+
+    document.getElementById('exportBtn').onclick = ()=> { const svg=container.querySelector('svg'); if(!svg) return; const blob = new Blob([svg.outerHTML], {type:'image/svg+xml'}); const a=document.createElement('a'); a.download=`diagram-${selectEl.value}.svg`; a.href=URL.createObjectURL(blob); a.click(); setTimeout(()=>URL.revokeObjectURL(a.href), 5000); };
+
+    // Initial population
+    render('high-level');
+  </script>
+</head>
+<body>
+<header>
+  <h1>Index Server Diagram Viewer</h1>
+  <select id="diagramSelect" aria-label="Select diagram">
+    <option value="high-level">High-Level Components</option>
+    <option value="data-lifecycle">Data Lifecycle</option>
+    <option value="manifest-flow">Manifest Flow (Current)</option>
+    <option value="buffer-debounced">Buffer Debounced Flow (Proposed)</option>
+    <option value="augmented-components">Augmented Components (Manifest + Snapshot)</option>
+  </select>
+  <div class="controls">
+    <button id="zoomIn" title="Zoom In">+</button>
+    <button id="zoomOut" title="Zoom Out">−</button>
+    <button id="reset" title="Reset View">Reset</button>
+    <button id="fit" title="Fit">Fit</button>
+    <button id="fullscreen" title="Toggle Fullscreen">Fullscreen</button>
+    <button id="exportBtn" title="Export SVG">Export</button>
+  </div>
+  <span id="status" class="pill">Ready</span>
+</header>
+<div id="canvas-wrapper">
+  <div id="diagram-container"></div>
+</div>
+<details style="background:var(--panel);border-top:1px solid #222;">
+  <summary style="padding:6px 10px;">Edit / Source (live editable)</summary>
+  <textarea id="raw" aria-label="Raw mermaid source"></textarea>
+</details>
+<footer>
+  <div>Wheel + Ctrl to zoom. Drag to pan. Export for documentation.</div>
+  <div id="footerRight">Mermaid 10 • ELK layout</div>
+</footer>
+</body>
+</html>

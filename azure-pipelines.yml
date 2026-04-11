@@ -1,0 +1,119 @@
+# Azure DevOps Pipeline — Build and publish Index Server VSIX as a private extension
+# Org: https://dev.azure.com/jagilber-org/
+#
+# Setup:
+#   1. Create a VS Code Marketplace publisher at https://marketplace.visualstudio.com/manage
+#      - Set visibility to PRIVATE
+#   2. Generate a PAT at https://dev.azure.com/jagilber-org/_usersSettings/tokens
+#      - Scope: Marketplace (Publish)
+#   3. In ADO pipeline settings, add variable group "vsix-publish" with:
+#      - VSCE_PAT: your marketplace PAT (mark as secret)
+#   4. Point this pipeline at your GitHub repo (or mirror)
+
+trigger:
+  tags:
+    include:
+      - 'v*'
+
+pr: none
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  - group: vsix-publish
+  - name: nodeVersion
+    value: '22.x'
+
+stages:
+  - stage: Build
+    displayName: 'Build VSIX'
+    jobs:
+      - job: BuildVSIX
+        displayName: 'Build and Package'
+        steps:
+          - task: NodeTool@0
+            displayName: 'Use Node.js $(nodeVersion)'
+            inputs:
+              versionSpec: '$(nodeVersion)'
+
+          - script: npm ci
+            displayName: 'Install repo dependencies'
+
+          - script: npm run build
+            displayName: 'Build MCP server'
+
+          - script: npm install --ignore-scripts
+            displayName: 'Install extension dependencies'
+            workingDirectory: 'release/vscode-extension'
+
+          - script: |
+              SERVER_VERSION=$(node -e "console.log(require('../../package.json').version)")
+              node -e "
+                const fs = require('fs');
+                const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+                pkg.version = '${SERVER_VERSION}';
+                fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+              "
+              echo "##vso[task.setvariable variable=ExtVersion]${SERVER_VERSION}"
+              echo "Extension version synced to ${SERVER_VERSION}"
+            displayName: 'Sync extension version'
+            workingDirectory: 'release/vscode-extension'
+
+          - script: npx tsc -p tsconfig.json
+            displayName: 'Compile extension TypeScript'
+            workingDirectory: 'release/vscode-extension'
+
+          - script: |
+              if [ ! -f images/icon.png ]; then
+                node -e "
+                  const fs = require('fs');
+                  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAIAAAACACAYAAADDPmHLAAAABHNCSVQICAgIfAhkiAAAAAlwSFlzAAAOxAAADsQBlSsOGwAAABl0RVh0U29mdHdhcmUAd3d3Lmlua3NjYXBlLm9yZ5vuPBoAAAGASURBVHic7dOxDQAgDASx7L8z0IAEIvnqK6787vt+HGv/DuBfBggzQJgBwgwQZoAwA4QZIMwAYQYIM0CYAcIMEGaAMAOEGSDMAGEGCDNAmAHCDBBmgDADhBkgzABhBggzQJgBwgwQZoAwA4QZIMwAYQYIM0CYAcIMEGaAMAOEGSDMAGEGCDNAmAHCDBBmgDADhBkgzABhBggzQJgBwgwQZoAwA4QZIMwAYQYIM0CYAcIMEGaAMAOEGSDMAGEGCDNAmAHCDBBmgDADhBkgzABhBggzQJgBwgwQZoAwA4QZIMwAYQYIM0CYAcIMEGaAMAOEGSDMAGEGCDNAmAHCDBBmgDADhBkgzABhBggzQJgBwgwQZoAwA4QZIMwAYQYIM0CYAcIMEGaAMAOEGSDMAGEGCDNAmAHCDBBmgDADhBkgzABhBggzQJgBwgwQZoAwA4QZIMwAYQYIM0CYAcIMEGaAMAOEGSDMAGEGCDNAmAHCDBBmgLAPG/oCA2GhJNkAAAAASUVORK5CYII=', 'base64');
+                  fs.writeFileSync('images/icon.png', png);
+                "
+              fi
+            displayName: 'Generate icon placeholder'
+            workingDirectory: 'release/vscode-extension'
+
+          - script: npx @vscode/vsce package --no-dependencies --allow-missing-repository
+            displayName: 'Package VSIX'
+            workingDirectory: 'release/vscode-extension'
+
+          - script: cp release/vscode-extension/*.vsix $(Build.ArtifactStagingDirectory)/
+            displayName: 'Copy VSIX to staging'
+
+          - task: PublishBuildArtifacts@1
+            displayName: 'Publish VSIX artifact'
+            inputs:
+              pathToPublish: '$(Build.ArtifactStagingDirectory)'
+              artifactName: 'vsix'
+
+  - stage: Publish
+    displayName: 'Publish to Marketplace'
+    dependsOn: Build
+    condition: and(succeeded(), startsWith(variables['Build.SourceBranch'], 'refs/tags/v'))
+    jobs:
+      - job: PublishVSIX
+        displayName: 'Publish Private Extension'
+        steps:
+          - task: DownloadBuildArtifacts@0
+            displayName: 'Download VSIX artifact'
+            inputs:
+              buildType: 'current'
+              downloadType: 'single'
+              artifactName: 'vsix'
+              downloadPath: '$(System.ArtifactsDirectory)'
+
+          - task: NodeTool@0
+            displayName: 'Use Node.js $(nodeVersion)'
+            inputs:
+              versionSpec: '$(nodeVersion)'
+
+          - script: |
+              npm install -g @vscode/vsce
+              VSIX_FILE=$(ls $(System.ArtifactsDirectory)/vsix/*.vsix | head -1)
+              echo "Publishing: ${VSIX_FILE}"
+              vsce publish --packagePath "${VSIX_FILE}" --pat "$(VSCE_PAT)"
+            displayName: 'Publish to VS Code Marketplace (private)'
+            env:
+              VSCE_PAT: $(VSCE_PAT)

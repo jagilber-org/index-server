@@ -1,0 +1,172 @@
+{
+  "name": "index-server",
+  "displayName": "Index",
+  "description": "Index Server providing governed, classified, and auditable instruction indexes with analytics and optional admin dashboard.",
+  "version": "1.17.0",
+  "publisher": "jagilber-org",
+  "license": "MIT",
+  "icon": "images/icon.svg",
+  "galleryBanner": {
+    "color": "#1e1e2e",
+    "theme": "dark"
+  },
+  "badges": [
+    {
+      "url": "https://img.shields.io/badge/License-MIT-blue.svg",
+      "href": "https://github.com/jagilber-org/index-server/blob/main/LICENSE",
+      "description": "License: MIT"
+    },
+    {
+      "url": "https://img.shields.io/badge/node-%3E%3D22-brightgreen",
+      "href": "https://github.com/jagilber-org/index-server",
+      "description": "Node.js >= 22"
+    }
+  ],
+  "markdown": "github",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jagilber-org/index-server.git"
+  },
+  "bugs": {
+    "url": "https://github.com/jagilber-org/index-server/issues"
+  },
+  "homepage": "https://github.com/jagilber-org/index-server#readme",
+  "engines": {
+    "vscode": "^1.99.0"
+  },
+  "categories": [
+    "Other",
+    "Machine Learning"
+  ],
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "ai",
+    "instructions",
+    "governance",
+    "index-server"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "mcpServerDefinitionProviders": [
+      {
+        "id": "indexProvider",
+        "label": "Index Server"
+      }
+    ],
+    "walkthroughs": [
+      {
+        "id": "index.gettingStarted",
+        "title": "Get Started with Index Server",
+        "description": "Set up your governed instruction index for AI agents.",
+        "steps": [
+          {
+            "id": "configure",
+            "title": "Configure the Server",
+            "description": "Set the server path and generate MCP client configuration.\n\n[Configure MCP Client](command:index.configure)",
+            "media": {
+              "markdown": "## Configure\n\nRun **Index: Configure MCP Client** to auto-generate your `mcp.json` configuration.\n\nThe extension uses `npx @jagilber-org/index-server` by default — zero config needed.\nOptionally set `index.serverPath` to use a local checkout."
+            }
+          },
+          {
+            "id": "search",
+            "title": "Search Instructions",
+            "description": "Use the index search tools in Copilot Chat agent mode.\n\nTry asking: *Search the instruction index for deployment guidelines*",
+            "media": {
+              "markdown": "## Search\n\nThe MCP server provides **keyword**, **regex**, and **semantic** search across your instruction index.\n\n```\nSearch the index for security best practices\n```"
+            }
+          },
+          {
+            "id": "dashboard",
+            "title": "Open the Dashboard",
+            "description": "Enable the admin dashboard for real-time monitoring.\n\n[Open Dashboard](command:index.openDashboard)",
+            "media": {
+              "markdown": "## Dashboard\n\n1. Enable: `index.dashboard.enabled` -> `true`\n2. Run **Index: Open Dashboard**\n3. Browse analytics, health, and session tracking at `http://localhost:8787`"
+            }
+          },
+          {
+            "id": "status",
+            "title": "Check Status",
+            "description": "Verify your server configuration and connection.\n\n[Show Status](command:index.showStatus)",
+            "media": {
+              "markdown": "## Status\n\nRun **Index: Show Status** to see:\n- Server path and availability\n- Instructions directory\n- Dashboard and mutation settings\n- Extension path"
+            }
+          }
+        ]
+      }
+    ],
+    "commands": [
+      {
+        "command": "index.configure",
+        "title": "Index: Configure MCP Client"
+      },
+      {
+        "command": "index.showStatus",
+        "title": "Index: Show Status"
+      },
+      {
+        "command": "index.openDashboard",
+        "title": "Index: Open Dashboard"
+      }
+    ],
+    "configuration": {
+      "title": "Index Server",
+      "properties": {
+        "index.serverPath": {
+          "type": "string",
+          "default": "",
+          "description": "Absolute path to the Index Server dist/server/index-server.js. Leave empty to use npx @jagilber-org/index-server."
+        },
+        "index.instructionsDir": {
+          "type": "string",
+          "default": "",
+          "description": "Absolute path to the instructions directory. Leave empty for built-in defaults."
+        },
+        "index.dashboard.enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable the admin dashboard HTTP server."
+        },
+        "index.dashboard.port": {
+          "type": "number",
+          "default": 8787,
+          "description": "Port for the admin dashboard HTTP server."
+        },
+        "index.logLevel": {
+          "type": "string",
+          "default": "info",
+          "enum": [
+            "debug",
+            "info",
+            "warn",
+            "error"
+          ],
+          "description": "Log level for the MCP server."
+        },
+        "index.mutation.enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable mutation operations (add, import, remove, etc.)."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p tsconfig.json",
+    "package": "npx @vscode/vsce package --no-dependencies",
+    "publish:marketplace": "npx @vscode/vsce publish --no-dependencies",
+    "publish:openvsx": "npx ovsx publish --no-dependencies",
+    "vscode:prepublish": "npm run compile"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.99.0",
+    "@types/node": "^20.11.0",
+    "typescript": "^5.5.0",
+    "@vscode/vsce": "^3.0.0",
+    "ovsx": "^0.10.0"
+  }
+}
+

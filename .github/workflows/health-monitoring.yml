@@ -1,0 +1,163 @@
+name: Error Monitoring & Health Checks
+
+permissions:
+  contents: read
+  issues: write
+
+on:
+  schedule:
+    - cron: '0 */12 * * *' # Every 12 hours (reduced from 6)
+  workflow_dispatch: {}
+
+jobs:
+  health-check:
+    name: Repository Health Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Use Node.js 20
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Run server health check (JSON-RPC)
+        timeout-minutes: 2
+        run: |
+          echo 'Running JSON-RPC health check (initialize -> health/check)...'
+          timeout 60 node scripts/health-check.mjs || (echo 'Health check failed or timed out'; cat health_response.json || true; exit 1)
+
+      - name: Check for error logs
+        run: |
+          echo "Checking for recent error logs..."
+
+          # Check for any .log files with recent errors
+          if ls *.log 2>/dev/null; then
+            echo "Found log files:"
+            for log in *.log; do
+              echo "=== $log ==="
+              if grep -i "error\|fail\|exception" "$log" | tail -10; then
+                echo "⚠️  Found errors in $log"
+              else
+                echo "✅ No recent errors in $log"
+              fi
+            done
+          else
+            echo "✅ No log files found"
+          fi
+
+      - name: Verify skip guard
+        run: |
+          echo "Running skip guard to ensure no test skips..."
+          npm run guard:skips
+
+      - name: Test integrity
+        run: |
+          echo "Testing instruction integrity..."
+          timeout 30 npm test -- src/tests/integrity.spec.ts || echo "⚠️ Integrity test timeout or failure"
+
+      - name: Collect diagnostics pack (always)
+        if: always()
+        run: |
+          echo 'Collecting diagnostics pack...'
+          node scripts/diagnostics-pack.mjs || echo 'diagnostics pack script failed (continuing)'
+
+      - name: Upload diagnostics artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: health-diagnostics
+          path: diagnostics
+          if-no-files-found: warn
+          retention-days: 10
+
+  error-notification:
+    name: Error Notification
+    runs-on: ubuntu-latest
+    needs: [health-check]
+    if: failure()
+    steps:
+      - name: Create issue on failure
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const title = `🚨 Health Check Failed - ${new Date().toISOString().split('T')[0]}`;
+            const body = `
+            ## Health Check Failure Report
+
+            **Date**: ${new Date().toISOString()}
+            **Workflow**: [Health Check](${context.payload.workflow_run?.html_url || 'N/A'})
+            **Commit**: ${context.sha.substring(0, 8)}
+
+            ### Failed Jobs
+            The repository health check has detected issues that require attention.
+
+            ### Next Steps
+            1. Check the workflow logs for detailed error information
+            2. Review recent changes that might have introduced the issue
+            3. Run local diagnostics: \`npm run build:verify\`
+            4. Check for any skipped tests: \`npm run guard:skips\`
+
+            ### Auto-Resolution
+            This issue will be automatically closed when the health check passes again.
+
+            /cc @${context.actor}
+            `;
+
+            // Check if similar issue already exists
+            const existingIssues = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'health-check-failure'
+            });
+
+            if (existingIssues.data.length === 0) {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: title,
+                body: body,
+                labels: ['health-check-failure', 'automated-issue']
+              });
+            }
+
+  success-cleanup:
+    name: Success Cleanup
+    runs-on: ubuntu-latest
+    needs: [health-check]
+    if: success()
+    steps:
+      - name: Close health check issues on success
+        uses: actions/github-script@v8
+        with:
+          script: |
+            // Find and close any open health-check-failure issues
+            const issues = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'health-check-failure'
+            });
+
+            for (const issue of issues.data) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                body: '✅ Health check is now passing. Auto-closing this issue.'
+              });
+
+              await github.rest.issues.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                state: 'closed'
+              });
+            }

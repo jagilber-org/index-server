@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0078d4;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#005a9e;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  <rect width="128" height="128" rx="16" fill="url(#bg)"/>
+  <text x="64" y="62" text-anchor="middle" fill="white" font-family="Segoe UI,sans-serif" font-size="18" font-weight="bold">INDEX</text>
+  <text x="64" y="84" text-anchor="middle" fill="white" font-family="Segoe UI,sans-serif" font-size="12">SERVER</text>
+  <circle cx="20" cy="108" r="4" fill="#50e6ff"/>
+  <circle cx="108" cy="108" r="4" fill="#50e6ff"/>
+  <circle cx="64" cy="108" r="4" fill="#50e6ff"/>
+</svg>

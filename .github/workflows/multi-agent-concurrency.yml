@@ -1,0 +1,81 @@
+name: Multi-Agent Concurrency Tests
+
+on:
+  pull_request:
+    branches: [master, main]
+    paths:
+      - 'src/**'
+      - 'tests/**'
+      - '.github/workflows/multi-agent-concurrency.yml'
+  workflow_dispatch:
+    inputs:
+      client_count:
+        description: 'Number of concurrent clients (default: 5)'
+        required: false
+        default: '5'
+
+permissions:
+  contents: read
+
+jobs:
+  concurrent-tests:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        node: [20]
+
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Build
+        run: npm run build
+
+      - name: Run concurrent stdio CRUD tests
+        run: npx vitest run src/tests/concurrent/concurrentStdioCrud.spec.ts --reporter=verbose
+        timeout-minutes: 5
+        env:
+          NODE_ENV: test
+          INDEX_SERVER_LOG_LEVEL: warn
+
+      - name: Run concurrent HTTP RPC tests
+        run: npx vitest run src/tests/concurrent/concurrentHttpRpc.spec.ts --reporter=verbose
+        timeout-minutes: 5
+        env:
+          NODE_ENV: test
+          INDEX_SERVER_LOG_LEVEL: warn
+
+      - name: Run failover under load tests
+        run: npx vitest run src/tests/concurrent/failoverUnderLoad.spec.ts --reporter=verbose
+        timeout-minutes: 5
+        env:
+          NODE_ENV: test
+          INDEX_SERVER_LOG_LEVEL: warn
+
+      - name: Run message ordering tests
+        run: npx vitest run src/tests/concurrent/messageOrdering.spec.ts --reporter=verbose
+        timeout-minutes: 5
+        env:
+          NODE_ENV: test
+          INDEX_SERVER_LOG_LEVEL: warn
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: concurrent-test-results-${{ matrix.os }}-node${{ matrix.node }}
+          path: |
+            test-results/
+            logs/
+          retention-days: 7

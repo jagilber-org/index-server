@@ -1,0 +1,184 @@
+name: Build VSIX Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      include_server:
+        description: 'Bundle the MCP server into the VSIX'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'false'
+          - 'true'
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
+jobs:
+  build-vsix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Install repo dependencies
+        run: npm ci
+
+      - name: Build MCP server
+        run: npm run build
+
+      - name: Install extension dependencies
+        working-directory: release/vscode-extension
+        run: npm install --ignore-scripts
+
+      - name: Sync extension version with server
+        working-directory: release/vscode-extension
+        run: |
+          SERVER_VERSION=$(node -e "console.log(require('../../package.json').version)")
+          node -e "
+            const fs = require('fs');
+            const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+            pkg.version = '${SERVER_VERSION}';
+            fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+          "
+          echo "Extension version synced to $SERVER_VERSION"
+
+      - name: Compile extension
+        working-directory: release/vscode-extension
+        run: npx tsc -p tsconfig.json
+
+      - name: Bundle server (if requested)
+        if: github.event.inputs.include_server == 'true'
+        working-directory: release/vscode-extension
+        run: |
+          mkdir -p server/dist server/instructions
+          cp -r ../../dist server/
+          cp -r ../../instructions server/ 2>/dev/null || true
+          cp ../../package.json server/package.json
+          # Copy production node_modules
+          mkdir -p server/node_modules
+          node -e "
+            const pkg = require('../../package.json');
+            const deps = Object.keys(pkg.dependencies || {});
+            const fs = require('fs');
+            for (const d of deps) {
+              const src = '../../node_modules/' + d;
+              if (fs.existsSync(src)) {
+                fs.cpSync(src, 'server/node_modules/' + d, { recursive: true });
+              }
+            }
+          "
+
+      - name: Generate icon placeholder
+        working-directory: release/vscode-extension
+        run: |
+          if [ ! -f images/icon.png ]; then
+            node -e "
+              const fs = require('fs');
+              const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAIAAAACACAYAAADDPmHLAAAABHNCSVQICAgIfAhkiAAAAAlwSFlzAAAOxAAADsQBlSsOGwAAABl0RVh0U29mdHdhcmUAd3d3Lmlua3NjYXBlLm9yZ5vuPBoAAAGASURBVHic7dOxDQAgDASx7L8z0IAEIvnqK6787vt+HGv/DuBfBggzQJgBwgwQZoAwA4QZIMwAYQYIM0CYAcIMEGaAMAOEGSDMAGEGCDNAmAHCDBBmgDADhBkgzABhBggzQJgBwgwQZoAwA4QZIMwAYQYIM0CYAcIMEGaAMAOEGSDMAGEGCDNAmAHCDBBmgDADhBkgzABhBggzQJgBwgwQZoAwA4QZIMwAYQYIM0CYAcIMEGaAMAOEGSDMAGEGCDNAmAHCDBBmgDADhBkgzABhBggzQJgBwgwQZoAwA4QZIMwAYQYIM0CYAcIMEGaAMAOEGSDMAGEGCDNAmAHCDBBmgDADhBkgzABhBggzQJgBwgwQZoAwA4QZIMwAYQYIM0CYAcIMEGaAMAOEGSDMAGEGCDNAmAHCDBBmgDADhBkgzABhBggzQJgBwgwQZoAwA4QZIMwAYQYIM0CYAcIMEGaAMAOEGSDMAGEGCDNAmAHCDBBmgLAPG/oCA2GhJNkAAAAASUVORK5CYII=', 'base64');
+              fs.writeFileSync('images/icon.png', png);
+            "
+          fi
+
+      - name: Package VSIX
+        working-directory: release/vscode-extension
+        run: npx @vscode/vsce package --no-dependencies --allow-missing-repository
+
+      - name: Copy VSIX to release root
+        run: cp release/vscode-extension/*.vsix release/
+
+      - name: Upload VSIX artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: vsix-package
+          path: release/*.vsix
+
+      - name: Attest VSIX provenance
+        if: startsWith(github.ref, 'refs/tags/')
+        continue-on-error: true
+        id: attest
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: release/*.vsix
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release/*.vsix
+          generate_release_notes: true
+          body: |
+            ## Index — VS Code Extension
+
+            A centralized instruction management server implementing the [Model Context Protocol (MCP)](https://modelcontextprotocol.io). Provides dynamic instruction discovery, Index management, session tracking, and an admin dashboard for AI coding agents.
+
+            ### Quick Install
+
+            1. **Download** the `.vsix` file from the assets below
+            2. **Install** in VS Code:
+               - Open VS Code → Extensions sidebar → `···` menu → **Install from VSIX…**
+               - Or run: `code --install-extension Index-<version>.vsix`
+            3. **Configure** your MCP client (e.g. `mcp.json`):
+               ```json
+               {
+                 "servers": {
+                   "Index": {
+                     "type": "stdio",
+                     "command": "node",
+                     "args": ["<path-to>/dist/server/index-server.js"]
+                   }
+                 }
+               }
+               ```
+            4. **Or run standalone**:
+               ```bash
+               git clone https://github.com/jagilber-org/index-server.git
+               cd index-server
+               npm ci && npm run build
+               node dist/server/index-server.js
+               ```
+
+            ### Key Features
+
+            - 📋 **Instruction Index** — centralized, schema-validated instruction management
+            - 🔍 **Dynamic Discovery** — MCP-compliant tool/resource discovery
+            - 📊 **Admin Dashboard** — real-time monitoring UI (`INDEX_SERVER_DASHBOARD=1`)
+            - 🔄 **Session Management** — per-agent session tracking
+            - 📈 **Health & Metrics** — built-in health checks and performance baselines
+            - 🔒 **Governance** — hash-verified instruction integrity
+
+            ### Environment Variables
+
+            | Variable | Default | Description |
+            |----------|---------|-------------|
+            | `INDEX_SERVER_DIR` | `./instructions` | Path to instruction files |
+            | `INDEX_SERVER_DASHBOARD` | `0` | Enable admin dashboard |
+            | `INDEX_SERVER_MUTATION` | `0` | Allow instruction CRUD operations |
+            | `INDEX_SERVER_BODY_MAX_LENGTH` | `20000` | Max body length (1K–1M range) |
+
+            See [README](https://github.com/jagilber-org/index-server#readme) for full documentation.
+
+      - name: Publish to VS Code Marketplace
+        if: startsWith(github.ref, 'refs/tags/') && env.VSCE_PAT != ''
+        working-directory: release/vscode-extension
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        run: npx @vscode/vsce publish --no-dependencies --packagePath ../*.vsix --pat "$VSCE_PAT"
+
+      - name: Publish to Open VSX
+        if: startsWith(github.ref, 'refs/tags/') && env.OVSX_PAT != ''
+        working-directory: release/vscode-extension
+        env:
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+        run: npx ovsx publish --no-dependencies --packagePath ../*.vsix --pat "$OVSX_PAT"

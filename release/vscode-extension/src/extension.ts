@@ -1,0 +1,291 @@
+import * as vscode from 'vscode';
+import * as path from 'path';
+import * as fs from 'fs';
+
+let outputChannel: vscode.OutputChannel;
+
+export function activate(context: vscode.ExtensionContext): void {
+    outputChannel = vscode.window.createOutputChannel('Index');
+    outputChannel.appendLine('Index Server extension activated');
+
+    // Register MCP server definition provider
+    const didChangeEmitter = new vscode.EventEmitter<void>();
+    context.subscriptions.push(
+        vscode.lm.registerMcpServerDefinitionProvider('indexProvider', {
+            onDidChangeMcpServerDefinitions: didChangeEmitter.event,
+            provideMcpServerDefinitions: async () => {
+                const config = vscode.workspace.getConfiguration('index');
+                const dashboardEnabled = config.get<boolean>('dashboard.enabled', false);
+                const dashboardPort = config.get<number>('dashboard.port', 8787);
+                const logLevel = config.get<string>('logLevel', 'info');
+                const mutationEnabled = config.get<boolean>('mutation.enabled', false);
+                const instructionsDir = resolveInstructionsDir(context);
+
+                const env: Record<string, string> = {
+                    INDEX_SERVER_LOG_LEVEL: logLevel ?? 'info',
+                };
+                if (mutationEnabled) { env.INDEX_SERVER_MUTATION = '1'; }
+                if (dashboardEnabled) {
+                    env.INDEX_SERVER_DASHBOARD = '1';
+                    env.INDEX_SERVER_DASHBOARD_PORT = String(dashboardPort);
+                }
+                if (instructionsDir) { env.INDEX_SERVER_DIR = instructionsDir; }
+
+                // Priority: user setting > workspace checkout > npx (zero-config)
+                const serverPath = resolveServerPath(context);
+                if (serverPath) {
+                    return [
+                        new vscode.McpStdioServerDefinition(
+                            'Index',
+                            'node',
+                            [serverPath],
+                            env
+                        )
+                    ];
+                }
+
+                // Default: use npx to run the published npm package
+                return [
+                    new vscode.McpStdioServerDefinition(
+                        'Index',
+                        'npx',
+                        ['@jagilber-org/index-server'],
+                        env
+                    )
+                ];
+            },
+            resolveMcpServerDefinition: async (definition) => {
+                return definition;
+            }
+        }),
+        didChangeEmitter
+    );
+
+    // Watch for config changes to refresh the MCP server definition
+    context.subscriptions.push(
+        vscode.workspace.onDidChangeConfiguration(e => {
+            if (e.affectsConfiguration('index')) {
+                didChangeEmitter.fire();
+            }
+        })
+    );
+
+    // Register MCP server definition provider
+    const didChangeEmitter = new vscode.EventEmitter<void>();
+    context.subscriptions.push(
+        vscode.lm.registerMcpServerDefinitionProvider('mcpIndexServerProvider', {
+            onDidChangeMcpServerDefinitions: didChangeEmitter.event,
+            provideMcpServerDefinitions: async () => {
+                const serverPath = resolveServerPath(context);
+                if (!serverPath) { return []; }
+
+                const config = vscode.workspace.getConfiguration('mcpIndexServer');
+                const dashboardEnabled = config.get<boolean>('dashboard.enabled', false);
+                const dashboardPort = config.get<number>('dashboard.port', 3210);
+                const logLevel = config.get<string>('logLevel', 'info');
+                const mutationEnabled = config.get<boolean>('mutation.enabled', false);
+                const instructionsDir = resolveInstructionsDir(context);
+
+                const env: Record<string, string> = {
+                    MCP_LOG_LEVEL: logLevel ?? 'info',
+                };
+                if (mutationEnabled) { env.MCP_MUTATION = '1'; }
+                if (dashboardEnabled) {
+                    env.MCP_DASHBOARD = '1';
+                    env.MCP_DASHBOARD_PORT = String(dashboardPort);
+                }
+                if (instructionsDir) { env.MCP_INSTRUCTIONS_DIR = instructionsDir; }
+
+                return [
+                    new vscode.McpStdioServerDefinition(
+                        'MCP Index Server',
+                        'node',
+                        [serverPath],
+                        env
+                    )
+                ];
+            },
+            resolveMcpServerDefinition: async (definition) => {
+                return definition;
+            }
+        }),
+        didChangeEmitter
+    );
+
+    // Watch for config changes to refresh the MCP server definition
+    context.subscriptions.push(
+        vscode.workspace.onDidChangeConfiguration(e => {
+            if (e.affectsConfiguration('mcpIndexServer')) {
+                didChangeEmitter.fire();
+            }
+        })
+    );
+
+    // Register commands
+    context.subscriptions.push(
+        vscode.commands.registerCommand('index.configure', () => configureMcpClient(context)),
+        vscode.commands.registerCommand('index.showStatus', () => showStatus(context)),
+        vscode.commands.registerCommand('index.openDashboard', () => openDashboard()),
+        outputChannel
+    );
+
+    // Show activation info on first install
+    const hasShownWelcome = context.globalState.get<boolean>('hasShownWelcome');
+    if (!hasShownWelcome) {
+        void context.globalState.update('hasShownWelcome', true);
+        void vscode.window.showInformationMessage(
+            'Index Server installed. Configure it now?',
+            'Configure', 'Later'
+        ).then(choice => {
+            if (choice === 'Configure') {
+                void vscode.commands.executeCommand('index.configure');
+            }
+        });
+    }
+}
+
+export function deactivate(): void {
+    outputChannel?.appendLine('Index Server extension deactivated');
+}
+
+/**
+ * Resolves the server entry point path.
+ * Priority: user setting > repo workspace checkout.
+ * Returns undefined to fall back to npx.
+ */
+function resolveServerPath(context: vscode.ExtensionContext): string | undefined {
+    const config = vscode.workspace.getConfiguration('index');
+    const userPath = config.get<string>('serverPath');
+    if (userPath && fs.existsSync(userPath)) {
+        return userPath;
+    }
+
+    // Check if we're in the repo root (developer workflow)
+    const workspaceServer = findWorkspaceServer();
+    if (workspaceServer) {
+        return workspaceServer;
+    }
+
+    return undefined;
+}
+
+function findWorkspaceServer(): string | undefined {
+    const folders = vscode.workspace.workspaceFolders;
+    if (!folders) return undefined;
+    for (const folder of folders) {
+        const candidate = path.join(folder.uri.fsPath, 'dist', 'server', 'index-server.js');
+        if (fs.existsSync(candidate)) {
+            return candidate;
+        }
+    }
+    return undefined;
+}
+
+function resolveInstructionsDir(context: vscode.ExtensionContext): string | undefined {
+    const config = vscode.workspace.getConfiguration('index');
+    const userDir = config.get<string>('instructionsDir');
+    if (userDir && fs.existsSync(userDir)) {
+        return userDir;
+    }
+
+    // Check bundled instructions
+    const bundledDir = path.join(context.extensionPath, 'server', 'instructions');
+    if (fs.existsSync(bundledDir)) {
+        return bundledDir;
+    }
+
+    return undefined;
+}
+
+async function configureMcpClient(context: vscode.ExtensionContext): Promise<void> {
+    const serverPath = resolveServerPath(context);
+
+    const config = vscode.workspace.getConfiguration('index');
+    const dashboardEnabled = config.get<boolean>('dashboard.enabled', false);
+    const dashboardPort = config.get<number>('dashboard.port', 8787);
+    const logLevel = config.get<string>('logLevel', 'info');
+    const mutationEnabled = config.get<boolean>('mutation.enabled', false);
+    const instructionsDir = resolveInstructionsDir(context);
+
+    const envBlock: Record<string, string> = {
+        INDEX_SERVER_LOG_LEVEL: logLevel ?? 'info',
+        ...(mutationEnabled ? { INDEX_SERVER_MUTATION: '1' } : {}),
+        ...(dashboardEnabled ? { INDEX_SERVER_DASHBOARD: '1', INDEX_SERVER_DASHBOARD_PORT: String(dashboardPort) } : {}),
+        ...(instructionsDir ? { INDEX_SERVER_DIR: instructionsDir } : {})
+    };
+
+    // Use local node path if available, otherwise npx (zero-config)
+    const serverEntry: Record<string, unknown> = serverPath
+        ? { type: 'stdio', command: 'node', args: [serverPath], cwd: path.dirname(path.dirname(path.dirname(serverPath))), env: envBlock }
+        : { type: 'stdio', command: 'npx', args: ['@jagilber-org/index-server'], env: envBlock };
+
+    const mcpConfig = { servers: { 'index': serverEntry } };
+
+    const snippet = JSON.stringify(mcpConfig, null, 2);
+
+    // Show the configuration to the user
+    const doc = await vscode.workspace.openTextDocument({ content: snippet, language: 'jsonc' });
+    await vscode.window.showTextDocument(doc, { preview: true });
+
+    const writeAction = await vscode.window.showInformationMessage(
+        'MCP configuration generated. Copy this to your VS Code mcp.json or Claude Desktop config.',
+        'Copy to Clipboard', 'Open mcp.json'
+    );
+
+    if (writeAction === 'Copy to Clipboard') {
+        await vscode.env.clipboard.writeText(snippet);
+        void vscode.window.showInformationMessage('MCP configuration copied to clipboard.');
+    } else if (writeAction === 'Open mcp.json') {
+        void vscode.commands.executeCommand('workbench.action.openSettingsJson', { revealSetting: { key: 'mcp' } });
+    }
+
+    outputChannel.appendLine(`Server path: ${serverPath}`);
+    outputChannel.appendLine(`Configuration generated`);
+}
+
+async function showStatus(context: vscode.ExtensionContext): Promise<void> {
+    const serverPath = resolveServerPath(context);
+    const instructionsDir = resolveInstructionsDir(context);
+    const config = vscode.workspace.getConfiguration('index');
+
+    const lines = [
+        `Index Server Status`,
+        `──────────────`,
+        `Server Path: ${serverPath ?? 'npx @jagilber-org/index-server (default)'}`,
+        `Instructions Dir: ${instructionsDir ?? '(built-in)'}`,
+        `Dashboard: ${config.get('dashboard.enabled') ? `enabled (port ${config.get('dashboard.port')})` : 'disabled'}`,
+        `Mutation: ${config.get('mutation.enabled') ? 'enabled' : 'disabled'}`,
+        `Log Level: ${config.get('logLevel', 'info')}`,
+        `Extension Path: ${context.extensionPath}`
+    ];
+
+    outputChannel.show();
+    for (const line of lines) {
+        outputChannel.appendLine(line);
+    }
+
+    void vscode.window.showInformationMessage(`Index Server: ${serverPath ? 'Local server' : 'Using npx (zero-config)'}`);
+}
+
+async function openDashboard(): Promise<void> {
+    const config = vscode.workspace.getConfiguration('index');
+    const dashboardEnabled = config.get<boolean>('dashboard.enabled', false);
+    const port = config.get<number>('dashboard.port', 3210);
+
+    if (!dashboardEnabled) {
+        const action = await vscode.window.showWarningMessage(
+            'Dashboard is not enabled. Enable it in settings?',
+            'Enable', 'Cancel'
+        );
+        if (action === 'Enable') {
+            await config.update('dashboard.enabled', true, vscode.ConfigurationTarget.Global);
+            void vscode.window.showInformationMessage('Dashboard enabled. Restart the MCP server for changes to take effect.');
+        }
+        return;
+    }
+
+    const url = `http://localhost:${port}`;
+    void vscode.env.openExternal(vscode.Uri.parse(url));
+}
+
+

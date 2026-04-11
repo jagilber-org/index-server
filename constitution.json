@@ -1,0 +1,131 @@
+{
+  "version": "2.0.0",
+  "name": "Index",
+  "ratifiedAt": "2026-02-16",
+  "description": "Index Server — Enterprise instruction indexing platform for AI assistant governance",
+  "articles": {
+    "quality": {
+      "title": "Code Quality & Testing",
+      "rules": [
+        { "id": "Q-1", "rule": "All exported functions and handlers must have unit tests", "severity": "error" },
+        { "id": "Q-2", "rule": "Test coverage must exceed 80% for src/services/ and src/server/", "severity": "warning" },
+        { "id": "Q-3", "rule": "TypeScript strict mode must be enabled (tsc --noEmit must pass)", "severity": "error" },
+        { "id": "Q-4", "rule": "ESLint must report zero errors (warnings allowed)", "severity": "error" },
+        { "id": "Q-5", "rule": "All MCP tool handlers must follow the registerHandler() pattern in src/server/registry", "severity": "error" },
+        { "id": "Q-6", "rule": "Vitest tests must complete within the configured timeout (5s default per test)", "severity": "warning" },
+        { "id": "Q-7", "rule": "Dispatcher action additions must include schema-contract tests verifying dispatch INPUT_SCHEMA properties are a superset of downstream handler schemas", "severity": "error" },
+        { "id": "Q-8", "rule": "Mutation actions routed through index_dispatch must have agent-perspective tests that construct params using only the dispatch schema (no pre-cooked wrappers or direct handler calls)", "severity": "error" }
+      ]
+    },
+    "security": {
+      "title": "Security & Secrets",
+      "rules": [
+        { "id": "S-1", "rule": "No secrets, API keys, or credentials in source code", "severity": "error" },
+        { "id": "S-2", "rule": "Pre-commit hooks must be installed and active (scripts/pre-commit.ps1)", "severity": "error" },
+        { "id": "S-3", "rule": "Mutation tools require INDEX_SERVER_MUTATION=1 and bootstrap gating", "severity": "error" },
+        { "id": "S-4", "rule": "All environment configuration must flow through src/config/runtimeConfig.ts", "severity": "error" }
+      ]
+    },
+    "architecture": {
+      "title": "Architecture & Patterns",
+      "rules": [
+        { "id": "A-1", "rule": "Handler registration uses side-effect imports in src/services/toolHandlers.ts", "severity": "error" },
+        { "id": "A-2", "rule": "Tool registry (INPUT_SCHEMAS, STABLE, MUTATION sets) must be updated for new tools", "severity": "error" },
+        { "id": "A-3", "rule": "IndexContext is the single source of truth for instruction state (writeEntry + ensureLoaded)", "severity": "error" },
+        { "id": "A-4", "rule": "Schema version must be tracked via src/versioning/schemaVersion.ts", "severity": "warning" },
+        { "id": "A-5", "rule": "Audit logging (logAudit) is required for all mutation operations", "severity": "error" },
+        { "id": "A-6", "rule": "Instruction body size must be enforced at write-time: index_add and index_import must reject bodies exceeding bodyMaxLength with actionable split/cross-link guidance", "severity": "error" },
+        { "id": "A-7", "rule": "Canonical seeds in seedBootstrap.ts must contain only generalized, public-safe content about the index server, Index operations, and bootstrapping — no environment-specific, org-specific, or custom configuration data", "severity": "error" }
+      ]
+    },
+    "governance": {
+      "title": "Governance & Process",
+      "rules": [
+        { "id": "G-1", "rule": "All features must begin as specifications in specs/", "severity": "warning" },
+        { "id": "G-2", "rule": "Version bumps follow semver and require CHANGELOG.md updates", "severity": "error" },
+        { "id": "G-3", "rule": "Conventional commits required (feat:, fix:, test:, refactor:, docs:)", "severity": "error" },
+        { "id": "G-4", "rule": "No automatic pushes — explicit user approval required", "severity": "error" },
+        { "id": "G-5", "rule": "Instruction Index changes must pass governance hash validation", "severity": "warning" },
+        { "id": "G-6", "rule": "Documentation filenames use lowercase_underscore convention (e.g. project_prd.md, mcp_configuration.md)", "severity": "warning" }
+      ]
+    },
+    "publishing": {
+      "title": "Dual-Repo Publishing",
+      "rules": [
+        { "id": "PB-1", "rule": "All active repos MUST follow the dual-repo pattern: private dev repo for all development, public pub repo as read-only mirror", "severity": "error" },
+        { "id": "PB-2", "rule": "Public publication repos MUST NOT receive direct pushes; all updates MUST flow through the publish script (scripts/publish.cjs) from the dev repo", "severity": "error" },
+        { "id": "PB-3", "rule": "Internal artifacts (.specify/, specs/, issue templates, state/, logs/) MUST be excluded from publication via .publish-exclude", "severity": "error" },
+        { "id": "PB-4", "rule": "Publishes MUST be release-aligned; the publish script MUST be used (no ad-hoc file copies or direct pushes)", "severity": "error" },
+        { "id": "PB-5", "rule": "Public repos MUST have issues, wiki, and projects disabled; CONTRIBUTING.md MUST explain the contribution policy", "severity": "error" },
+        { "id": "PB-6", "rule": "Dev repos MUST have a pre-push hook that queries GitHub API for repo visibility and blocks pushes to public remotes; bypass requires a SHA-256 token computed by the publish scripts (PUBLISH_OVERRIDE=1 is NOT sufficient)", "severity": "error" }
+      ]
+    },
+    "testing": {
+      "title": "Test Requirements",
+      "rules": [
+        { "id": "TS-1", "rule": "All tests MUST pass before commit", "severity": "error" },
+        { "id": "TS-2", "rule": "New features MUST include test coverage", "severity": "error" },
+        { "id": "TS-3", "rule": "Test count MUST NOT decrease below minTestCount threshold", "severity": "error" },
+        { "id": "TS-4", "rule": "Functional tests MUST validate full pipeline round-trips", "severity": "error" },
+        { "id": "TS-5", "rule": "Test coverage MUST be tracked and maintained above project threshold", "severity": "warning" },
+        { "id": "TS-6", "rule": "Tests MUST be implemented, verified passing, and results stored before commit", "severity": "error" },
+        { "id": "TS-7", "rule": "TDD red/green is NON-NEGOTIABLE: tests MUST be written and verified FAILING before implementation code; failing test first, fix second (red-green-refactor)", "severity": "error" },
+        { "id": "TS-8", "rule": "Every bug fix MUST start with a failing regression test: write a test that reproduces the failure, then fix and verify pass; no fix without a red test first", "severity": "error" },
+        { "id": "TS-9", "rule": "Tests MUST exercise the REAL production code; toy reimplementations and stub copies of the code under test are prohibited; export internal functions if needed for testability", "severity": "error" },
+        { "id": "TS-10", "rule": "Server code MUST have tests; dependencies (I/O, network, external services) MUST be mocked but the code under test itself MUST NOT be mocked or replaced", "severity": "error" },
+        { "id": "TS-11", "rule": "Playwright e2e tests MUST cover dashboard UI, instruction CRUD lifecycle, and search functionality", "severity": "error" },
+        { "id": "TS-12", "rule": "Bug-prone handlers and complex code paths MUST have >= 5 test cases covering normal, edge, error, boundary, and concurrent scenarios", "severity": "error" }
+      ]
+    },
+    "code-quality": {
+      "title": "Code Quality",
+      "rules": [
+        { "id": "CQ-1", "rule": "Source files SHOULD target <=600 lines; MUST NOT exceed 1000 (template literals exempt)", "severity": "warning" },
+        { "id": "CQ-2", "rule": "Each module MUST have a single primary responsibility; god-modules that mix unrelated concerns are prohibited", "severity": "error" },
+        { "id": "CQ-3", "rule": "Source code MUST follow the project declared layered architecture; cross-layer imports MUST flow downward only", "severity": "error" },
+        { "id": "CQ-4", "rule": "Circular dependencies are prohibited; module dependency graphs MUST be acyclic", "severity": "error" },
+        { "id": "CQ-5", "rule": "Dead code MUST be removed before commit; unused imports, variables, and unreachable branches are not allowed", "severity": "warning" },
+        { "id": "CQ-6", "rule": "Error handling MUST be explicit; swallowed exceptions (empty catch blocks) are prohibited — errors MUST be logged, re-thrown, or handled with documented rationale", "severity": "error" },
+        { "id": "CQ-7", "rule": "Public APIs MUST have JSDoc documentation including @param, @returns, and @throws where applicable", "severity": "warning" }
+      ]
+    },
+    "build-deploy": {
+      "title": "Build & Deploy",
+      "rules": [
+        { "id": "BD-1", "rule": "Build MUST succeed with zero errors before commit", "severity": "error" },
+        { "id": "BD-2", "rule": "No hardcoded secrets or credentials in source", "severity": "error" },
+        { "id": "BD-3", "rule": "Dependencies MUST be pinned to exact versions in lock files", "severity": "error" }
+      ]
+    },
+    "data-integrity": {
+      "title": "Data Integrity & Persistence",
+      "rules": [
+        { "id": "DI-1", "rule": "All stateful data MUST persist to disk; startup MUST auto-restore", "severity": "error" },
+        { "id": "DI-2", "rule": "Corrupted or empty files MUST result in safe empty state, not crashes", "severity": "error" },
+        { "id": "DI-3", "rule": "Schema changes to persisted files MUST include migration logic or be backwards-compatible", "severity": "warning" }
+      ]
+    },
+    "pii-precommit": {
+      "title": "PII & Pre-Commit Enforcement",
+      "rules": [
+        { "id": "PH-1", "rule": "PII pre-commit hooks MUST be installed and active; .pre-commit-config.yaml with detect-secrets and detect-private-key MUST be present", "severity": "error" },
+        { "id": "PH-2", "rule": ".secrets.baseline MUST be committed and kept current; new secrets MUST be audited before allowlisting", "severity": "error" },
+        { "id": "PH-3", "rule": "Committed source, data files, and test fixtures MUST NOT contain real PII; use synthetic data for tests", "severity": "error" }
+      ]
+    }
+  },
+  "thresholds": {
+    "minTestCount": 1,
+    "maxTestDurationMs": 5000,
+    "minCoveragePercent": 80,
+    "maxLintErrors": 0
+  },
+  "references": {
+    "architecture": "docs/architecture.md",
+    "prd": "docs/project_prd.md",
+    "contributing": "CONTRIBUTING.md",
+    "tools": "docs/tools.md",
+    "changelog": "CHANGELOG.md"
+  }
+}
+

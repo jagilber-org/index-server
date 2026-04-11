@@ -1,0 +1,205 @@
+name: Docker Build & Security
+
+# Builds the Docker image, runs container security tests,
+# and optionally pushes to GHCR on tag releases.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'Dockerfile'
+      - 'docker-compose.yml'
+      - '.dockerignore'
+      - 'src/**'
+      - 'package*.json'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'Dockerfile'
+      - 'docker-compose.yml'
+      - '.dockerignore'
+      - 'src/**'
+      - 'package*.json'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  packages: write
+  security-events: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  build:
+    name: Build Docker Image
+    runs-on: ubuntu-latest
+    outputs:
+      image-tag: ${{ steps.meta.outputs.tags }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=sha,prefix=
+            type=ref,event=branch
+            type=ref,event=pr
+
+      - name: Build image (no push)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: index-server:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Verify image metadata
+        run: |
+          echo "=== Image labels ==="
+          docker inspect --format='{{json .Config.Labels}}' index-server:test | jq .
+          echo ""
+          echo "=== Exposed ports ==="
+          docker inspect --format='{{json .Config.ExposedPorts}}' index-server:test | jq .
+          echo ""
+          echo "=== User ==="
+          docker inspect --format='{{.Config.User}}' index-server:test
+          echo ""
+          echo "=== Entrypoint ==="
+          docker inspect --format='{{json .Config.Entrypoint}}' index-server:test
+
+      - name: Verify non-root user
+        run: |
+          USER=$(docker inspect --format='{{.Config.User}}' index-server:test)
+          if [ "$USER" != "node" ]; then
+            echo "::error::Container should run as 'node' user, got '$USER'"
+            exit 1
+          fi
+
+      - name: Verify single exposed port
+        run: |
+          PORTS=$(docker inspect --format='{{json .Config.ExposedPorts}}' index-server:test | jq 'keys | length')
+          if [ "$PORTS" != "1" ]; then
+            echo "::error::Container should expose exactly 1 port, got $PORTS"
+            exit 1
+          fi
+
+      - name: Verify tini entrypoint
+        run: |
+          EP=$(docker inspect --format='{{json .Config.Entrypoint}}' index-server:test)
+          if ! echo "$EP" | grep -q "tini"; then
+            echo "::error::Container should use tini as entrypoint"
+            exit 1
+          fi
+
+      - name: Run container and test health
+        run: |
+          docker run -d --name test-server \
+            -p 18787:8787 \
+            -e INDEX_SERVER_DASHBOARD=1 \
+            -e INDEX_SERVER_DASHBOARD_HOST=0.0.0.0 \
+            index-server:test
+
+          echo "Waiting for container to start..."
+          for i in $(seq 1 30); do
+            if curl -sf http://127.0.0.1:18787/api/status > /dev/null 2>&1; then
+              echo "Server healthy on attempt $i"
+              break
+            fi
+            sleep 1
+          done
+
+          # Verify health endpoint responds
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:18787/api/status)
+          echo "Health check HTTP code: $HTTP_CODE"
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "::error::Health check failed with HTTP $HTTP_CODE"
+            docker logs test-server
+            exit 1
+          fi
+
+          # Verify security headers
+          echo "=== Security headers ==="
+          curl -sI http://127.0.0.1:18787/api/status | head -20
+          curl -sI http://127.0.0.1:18787/api/status | grep -qi "x-content-type-options: nosniff" || {
+            echo "::warning::Missing X-Content-Type-Options header"
+          }
+          curl -sI http://127.0.0.1:18787/api/status | grep -qi "x-frame-options" || {
+            echo "::warning::Missing X-Frame-Options header"
+          }
+
+      - name: Verify no dev tools in runtime image
+        run: |
+          for tool in gcc make python3 g++; do
+            if docker exec test-server which $tool 2>/dev/null; then
+              echo "::error::Dev tool '$tool' found in runtime image"
+              exit 1
+            fi
+          done
+          echo "No development tools found in runtime image ✓"
+
+      - name: Check image size
+        run: |
+          SIZE=$(docker image inspect index-server:test --format='{{.Size}}')
+          SIZE_MB=$((SIZE / 1024 / 1024))
+          echo "Image size: ${SIZE_MB}MB"
+          if [ "$SIZE_MB" -gt 500 ]; then
+            echo "::warning::Docker image is ${SIZE_MB}MB — consider optimizing (target <500MB)"
+          fi
+
+      - name: Cleanup
+        if: always()
+        run: docker rm -f test-server 2>/dev/null || true
+
+  scan:
+    name: Container Security Scan
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image for scanning
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: index-server:scan
+          cache-from: type=gha
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@v0.35.0
+        with:
+          image-ref: 'index-server:scan'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH'
+          exit-code: '0'
+
+      - name: Upload Trivy scan results
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'trivy-results.sarif'
+          category: 'container-security'
+        continue-on-error: true
+
+      - name: Trivy summary (table)
+        uses: aquasecurity/trivy-action@v0.35.0
+        with:
+          image-ref: 'index-server:scan'
+          format: 'table'
+          severity: 'CRITICAL,HIGH,MEDIUM'
+          exit-code: '0'

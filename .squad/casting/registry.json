@@ -1,0 +1,68 @@
+{
+  "agents": [
+    {
+      "persistent_name": "Morpheus",
+      "universe": "the-matrix",
+      "role": "Lead",
+      "created_at": "2026-02-26T15:20:00Z",
+      "legacy_named": false,
+      "status": "active"
+    },
+    {
+      "persistent_name": "Trinity",
+      "universe": "the-matrix",
+      "role": "Backend Dev",
+      "created_at": "2026-02-26T15:20:00Z",
+      "legacy_named": false,
+      "status": "active"
+    },
+    {
+      "persistent_name": "Tank",
+      "universe": "the-matrix",
+      "role": "Tester",
+      "created_at": "2026-02-26T15:20:00Z",
+      "legacy_named": false,
+      "status": "active"
+    },
+    {
+      "persistent_name": "Oracle",
+      "universe": "the-matrix",
+      "role": "DevRel",
+      "created_at": "2026-02-26T15:20:00Z",
+      "legacy_named": false,
+      "status": "active"
+    },
+    {
+      "persistent_name": "Mouse",
+      "universe": "the-matrix",
+      "role": "Frontend Dev",
+      "created_at": "2026-02-26T22:00:00Z",
+      "legacy_named": false,
+      "status": "active"
+    },
+    {
+      "persistent_name": "Scribe",
+      "universe": "the-matrix",
+      "role": "Session Logger",
+      "created_at": "2026-02-26T15:20:00Z",
+      "legacy_named": false,
+      "status": "active"
+    },
+    {
+      "persistent_name": "Ralph",
+      "universe": "the-matrix",
+      "role": "Work Monitor",
+      "created_at": "2026-02-26T15:20:00Z",
+      "legacy_named": false,
+      "status": "active"
+    },
+    {
+      "persistent_name": "Briggs",
+      "universe": "the-matrix",
+      "role": "Legal & Compliance",
+      "created_at": "2026-03-27T22:48:00Z",
+      "legacy_named": false,
+      "status": "active"
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "universes": [
+    "the-matrix"
+  ],
+  "max_capacity_per_universe": 15,
+  "overflow_strategy": "diegetic-expansion",
+  "scribe_exempt": true,
+  "ralph_exempt": true,
+  "copilot_exempt": true
+}

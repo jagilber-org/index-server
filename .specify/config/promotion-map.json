@@ -1,0 +1,85 @@
+{
+  "$schema": "https://raw.githubusercontent.com/jagilber-org/index-server/main/schemas/promotion-map.schema.json",
+  "version": "1.1.0",
+  "repoId": "index-server",
+  "description": "Maps index-server docs and shared local-first guidance to promotable instruction entries for the Index.",
+  "sources": [
+    {
+      "id": "index-server-architecture",
+      "file": "docs/architecture.md",
+      "title": "Index Server — Architecture Overview",
+      "scope": "docs",
+      "categories": ["architecture", "index-server"]
+    },
+    {
+      "id": "index-server-prd",
+      "file": "docs/project_prd.md",
+      "title": "Index Server — Product Requirements Document",
+      "scope": "docs",
+      "categories": ["prd", "governance", "index-server"]
+    },
+    {
+      "id": "index-server-tools-reference",
+      "file": "docs/tools.md",
+      "title": "Index Server — Tool Reference",
+      "scope": "docs",
+      "categories": ["tools", "mcp", "index-server"]
+    },
+    {
+      "id": "index-server-contributing",
+      "file": "CONTRIBUTING.md",
+      "title": "Index Server — Contributing Guide",
+      "scope": "docs",
+      "categories": ["contributing", "governance", "index-server"]
+    },
+    {
+      "id": "index-server-constitution",
+      "file": "constitution.json",
+      "title": "Index Server — Constitution (Machine-Checkable)",
+      "scope": "governance",
+      "categories": ["constitution", "governance", "index-server"]
+    },
+    {
+      "id": "index-server-bootstrapper-spec",
+      "file": "specs/000-bootstrapper.md",
+      "title": "Index Server — Bootstrapper Spec",
+      "scope": "specs",
+      "categories": ["specs", "bootstrap", "index-server"]
+    },
+    {
+      "id": "index-server-lifecycle-spec",
+      "file": "specs/001-knowledge-index-lifecycle.md",
+      "title": "Index Server — Knowledge Index Lifecycle Spec",
+      "scope": "specs",
+      "categories": ["specs", "lifecycle", "index-server"]
+    },
+    {
+      "id": "index-server-copilot-local-first",
+      "file": ".github/copilot-instructions.md",
+      "title": "Index Server — Copilot Instructions",
+      "scope": "docs",
+      "categories": ["copilot", "workflow", "index-server"]
+    },
+    {
+      "id": "index-server-bootstrap-guidance",
+      "file": ".instructions/shared/index-server-bootstrap.md",
+      "title": "Index Server — Local-First Bootstrap Guidance",
+      "scope": "docs",
+      "categories": ["bootstrap", "workflow", "index-server"]
+    },
+    {
+      "id": "index-server-squad-complement",
+      "file": ".instructions/shared/squad-index-server-complement.md",
+      "title": "Index Server — Squad And Index-Server Complement",
+      "scope": "docs",
+      "categories": ["squad", "workflow", "index-server"]
+    },
+    {
+      "id": "index-server-template-adoption-workflow",
+      "file": ".instructions/shared/template-adoption-workflow.md",
+      "title": "Index Server — Template Adoption Workflow",
+      "scope": "docs",
+      "categories": ["template-repo", "adoption", "workflow"]
+    }
+  ]
+}
