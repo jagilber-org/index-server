@@ -84,7 +84,7 @@ jobs:
     if: failure()
     steps:
       - name: Create issue on failure
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         with:
           script: |
             const title = `🚨 Health Check Failed - ${new Date().toISOString().split('T')[0]}`;
@@ -135,7 +135,7 @@ jobs:
     if: success()
     steps:
       - name: Close health check issues on success
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         with:
           script: |
             // Find and close any open health-check-failure issues

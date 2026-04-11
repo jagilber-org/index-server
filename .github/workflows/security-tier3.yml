@@ -167,7 +167,7 @@ jobs:
       # --- Auto-create issue on failure ---
       - name: Create issue on security findings
         if: failure()
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         with:
           script: |
             const title = `🔒 Tier 3 Security Scan Findings — ${new Date().toISOString().split('T')[0]}`;
