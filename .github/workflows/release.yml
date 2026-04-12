@@ -84,8 +84,7 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
-          registry-url: 'https://npm.pkg.github.com'
-          scope: '@jagilber-org'
+          registry-url: 'https://registry.npmjs.org'
 
       - run: npm ci
       - run: npm run build
@@ -258,7 +257,7 @@ jobs:
           echo "$CHANGES" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
-      - name: Publish to GitHub Packages
+      - name: Publish to npmjs
         run: |
           TARBALL=$(ls *.tgz 2>/dev/null | head -1)
           if [ -n "$TARBALL" ]; then
@@ -267,7 +266,7 @@ jobs:
             npm publish --ignore-scripts
           fi
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -281,7 +280,7 @@ jobs:
             ${{ steps.changelog.outputs.changes }}
 
             ### Artifacts
-            - **npm**: `@jagilber-org/index-server@${{ steps.version.outputs.version }}`
+            - **npm**: `@jagilber-org/index-server@${{ steps.version.outputs.version }}` on npmjs
             - **Docker**: `ghcr.io/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}`
             - **VSIX**: See attached (if available)
 

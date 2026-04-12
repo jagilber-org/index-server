@@ -167,6 +167,12 @@ templates/
 # Dependencies & build output (consumers install from npm/clone)
 node_modules/
 dist/
-# Release artifacts — ENTIRE release/ dir excluded (contains built VSIX, node_modules with
-# vendored dependencies, and instruction JSON files that may contain env-var values)
-release/
+# Release artifacts: keep release/vscode-extension source in the public mirror so CI can build
+# a VSIX, but exclude generated artifacts and vendored runtime/dependency content.
+release/index-server-*
+release/mcp-index-server-*
+release/vscode-extension/node_modules/
+release/vscode-extension/dist/
+release/vscode-extension/server/
+release/vscode-extension/index-server-*
+release/vscode-extension/mcp-index-server-*
