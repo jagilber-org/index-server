@@ -131,93 +131,11 @@ Both scripts support HTTP/HTTPS, self-signed cert bypass, and return structured 
 
 ### Tool Tier Architecture
 
-```mermaid
----
-config:
-    layout: elk
----
-graph TD
-    subgraph Core Tier
-        bootstrap["bootstrap"]
-        feedback_dispatch["feedback_dispatch"]
-        health_check["health_check"]
-        help_overview["help_overview"]
-        index_dispatch["index_dispatch"]
-        index_search["index_search"]
-        prompt_review["prompt_review"]
-    end
-
-    subgraph Extended Tier
-        gates_evaluate["gates_evaluate"]
-        graph_export["graph_export"]
-        index_add["index_add"]
-        index_import["index_import"]
-        index_remove["index_remove"]
-        integrity_verify["integrity_verify"]
-        metrics_snapshot["metrics_snapshot"]
-        promote_from_repo["promote_from_repo"]
-        usage_track["usage_track"]
-        usage_hotset["usage_hotset"]
-    end
-
-    subgraph Admin Tier
-        bootstrap_sub["bootstrap_*"]
-        diagnostics["diagnostics_*"]
-        feedback_sub["feedback_*"]
-        manifest["manifest_*"]
-        meta_tools["meta_*"]
-        index_adv["index_adv_*"]
-    end
-
-    Client["MCP Client"] --> Core
-    Client -.->|"INDEX_SERVER_FLAG_TOOLS_EXTENDED=1"| Extended
-    Client -.->|"INDEX_SERVER_FLAG_TOOLS_ADMIN=1"| Admin
-
-    style Core fill:#4caf50,stroke:#2e7d32,stroke-width:2px,color:#fff
-    style Extended fill:#2196f3,stroke:#0d47a1,stroke-width:2px,color:#fff
-    style Admin fill:#ff9800,stroke:#e65100,stroke-width:2px,color:#fff
-    style Client fill:#607d8b,stroke:#37474f,stroke-width:2px,color:#fff
-```
+![Tool Tier Architecture](docs/diagrams/tool-tier-architecture.svg)
 
 ### Request Flow
 
-```mermaid
----
-config:
-    layout: elk
----
-graph LR
-    Request["Client Request"] --> Transport["stdio Transport"]
-    Transport --> Router["JSON-RPC Router"]
-    Router --> Dispatch["Action Dispatcher"]
-    
-    Dispatch --> Read["Read Path"]
-    Dispatch --> Write["Write Path"]
-    
-    Read --> Search["index_search"]
-    Read --> Get["index_dispatch"]
-    Read --> Health["health_check"]
-    Read --> Metrics["metrics_snapshot"]
-    
-    Write --> Mutation{"INDEX_SERVER_MUTATION?"}
-    Mutation -->|Yes| Add["index_add"]
-    Mutation -->|Yes| Import["index_import"]
-    Mutation -->|Yes| Remove["index_remove"]
-    Mutation -->|No| Denied["403 Mutation Disabled"]
-    
-    Search --> Catalog["CatalogContext"]
-    Get --> Catalog
-    Add --> Catalog
-    Import --> Catalog
-    Remove --> Catalog
-    Catalog --> Files[("instructions/*.json")]
-    
-    style Transport fill:#607d8b,stroke:#37474f,stroke-width:2px,color:#fff
-    style Catalog fill:#ff9800,stroke:#e65100,stroke-width:2px,color:#fff
-    style Files fill:#4caf50,stroke:#2e7d32,stroke-width:2px,color:#fff
-    style Mutation fill:#f44336,stroke:#c62828,stroke-width:2px,color:#fff
-    style Denied fill:#f44336,stroke:#c62828,stroke-width:2px,color:#fff
-```
+![Request Flow](docs/diagrams/request-flow.svg)
 
 ### Tool Reference
 
@@ -259,23 +177,7 @@ Agents query it automatically:
 
 ### Knowledge Flywheel
 
-```mermaid
----
-config:
-    layout: elk
----
-graph LR
-    A[Agent encounters problem] --> B[Creates local .instructions/]
-    B --> C[Tests & validates solution]
-    C --> D{Valuable to others?}
-    D -->|Yes| E[Promote to shared index]
-    D -->|No| F[Keep local only]
-    E --> G[Other agents benefit]
-    G --> H[They contribute patterns]
-    H --> A
-    style E fill:#238636,stroke:#196c2e,stroke-width:2px,color:#fff
-    style G fill:#1f6feb,stroke:#1158c7,stroke-width:2px,color:#fff
-```
+![Knowledge Flywheel](docs/diagrams/knowledge-flywheel.svg)
 
 Instructions start local in `.instructions/`, get validated over multiple sessions, then proven patterns are promoted to the shared index via `promote_from_repo`.
 
