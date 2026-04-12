@@ -14,6 +14,7 @@
   },
   "ignorePatterns": [
     "vitest.config.ts",
+    "vitest.config.unit.ts",
     ".eslintrc.cjs",
     // Build output
     "dist/**",
