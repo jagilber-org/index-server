@@ -118,8 +118,8 @@ for (const file of staged) {
     }
   }
 
-  // 4b. PII patterns (skip binary-looking files and known docs)
-  if (!/\.(png|jpg|gif|ico|woff|ttf|eot|svg|map)$/i.test(file)) {
+  // 4b. PII patterns (skip binary-looking files, known docs, and the PII allowlist itself)
+  if (!/\.(png|jpg|gif|ico|woff|ttf|eot|svg|map)$/i.test(file) && !file.endsWith('.pii-allowlist')) {
     for (const { pat, label } of PII_PATTERNS) {
       if (pat.test(content)) {
         fail(`PII pattern (${label}) in ${file}`);
