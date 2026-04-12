@@ -146,6 +146,9 @@ jobs:
       - name: Scan with Trivy
         if: startsWith(github.ref, 'refs/tags/')
         uses: aquasecurity/trivy-action@v0.35.0
+        env:
+          TRIVY_USERNAME: ${{ github.actor }}
+          TRIVY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
         with:
           image-ref: '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }}'
           format: 'table'
