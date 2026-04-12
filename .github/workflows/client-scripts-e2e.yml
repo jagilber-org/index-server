@@ -1,20 +1,7 @@
 name: Client Scripts E2E
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'scripts/index-server-client.*'
-      - 'src/dashboard/server/routes/scripts.routes.ts'
-      - 'src/tests/clientScriptsE2e.spec.ts'
-      - '.github/workflows/client-scripts-e2e.yml'
-  pull_request:
-    branches: [main]
-    paths:
-      - 'scripts/index-server-client.*'
-      - 'src/dashboard/server/routes/scripts.routes.ts'
-      - 'src/tests/clientScriptsE2e.spec.ts'
-      - '.github/workflows/client-scripts-e2e.yml'
+  # Tier 3: manual-only due to cross-platform E2E cost.
   workflow_dispatch: {}
 
 jobs:

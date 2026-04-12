@@ -6,8 +6,7 @@ name: "Security — Tier 3 (Nightly)"
 # auto-creates an issue on new findings.
 
 on:
-  schedule:
-    - cron: '0 4 * * 0'  # Weekly Sunday 04:00 UTC
+  # Manual-only deep DAST/TLS scan to conserve action minutes.
   workflow_dispatch: {}
 
 permissions:

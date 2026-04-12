@@ -1,9 +1,7 @@
 name: Publish to npm
 
 on:
-  push:
-    tags:
-      - 'v*'
+  # Manual-only companion workflow. Release.yml is the canonical automatic tag release path.
   workflow_dispatch:
     inputs:
       dry_run:

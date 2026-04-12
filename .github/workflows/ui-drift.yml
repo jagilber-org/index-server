@@ -1,14 +1,7 @@
 name: UI Drift Detection
 
 on:
-  push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
-  # DISABLED: Nightly drift checks causing workflow queue buildup
-  # schedule:
-  #   # Nightly drift verification (02:30 UTC)
-  #   - cron: '30 2 * * *'
+  # Tier 3: manual-only browser drift checks.
   workflow_dispatch: {}
 
 jobs:

@@ -6,24 +6,6 @@ name: Semantic Search Tests
 # end-to-end embedding + cosine similarity + cache generation.
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'src/services/embeddingService.ts'
-      - 'src/services/handlers.search.ts'
-      - 'src/tests/semantic-search.spec.ts'
-      - 'src/tests/embeddingIncremental.spec.ts'
-      - 'src/tests/embeddings-routes.spec.ts'
-      - 'src/tests/concurrentSemanticCrud.spec.ts'
-      - '.github/workflows/semantic-search.yml'
-  pull_request:
-    branches: [main]
-    paths:
-      - 'src/services/embeddingService.ts'
-      - 'src/services/handlers.search.ts'
-      - 'src/tests/semantic-search.spec.ts'
-      - 'src/tests/embeddingIncremental.spec.ts'
-      - 'src/tests/embeddings-routes.spec.ts'
   schedule:
     - cron: '0 6 * * 1'  # Weekly Monday 06:00 UTC
   workflow_dispatch: {}

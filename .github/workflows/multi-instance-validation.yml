@@ -1,8 +1,7 @@
 name: Multi-Instance Validation
 
 on:
-  push:
-    tags: ['v*']
+  # Tier 3: manual release-readiness validation only.
   workflow_dispatch:
     inputs:
       skip_standard_tests:
