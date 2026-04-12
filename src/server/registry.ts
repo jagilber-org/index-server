@@ -59,7 +59,7 @@ export function registerHandler<TParams=unknown>(name: string, fn: Handler<TPara
       }
     }
     const startNs = typeof process.hrtime === 'function' ? process.hrtime.bigint() : BigInt(Date.now()) * 1_000_000n;
-    const timingEnabled = getRuntimeConfig().mutation.dispatcherTiming;
+    const timingEnabled = process.env.INDEX_SERVER_ADD_TIMING === '1' || getRuntimeConfig().mutation.dispatcherTiming;
     let phaseMarks: { p:string; t:number }[] | undefined;
     if(timingEnabled){ phaseMarks = [{ p:'start', t: Date.now() }]; }
     try { log('INFO',`[registry] → ${name}`,{ tool: name, correlationId: corr }); } catch { /* logging should not break */ }
