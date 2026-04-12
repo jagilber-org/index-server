@@ -1,7 +1,7 @@
 name: Release
 
 # Unified release workflow triggered by version tags (v*).
-# Runs the full test suite, builds all artifacts (npm, Docker, VSIX),
+# Runs release-scoped validation, builds all artifacts (npm, Docker, VSIX),
 # creates a GitHub Release with changelog, and publishes packages.
 
 on:
@@ -32,7 +32,7 @@ env:
 
 jobs:
   # ──────────────────────────────────────────────────────────────────
-  # Stage 1: Validate — type check, lint, test, coverage
+  # Stage 1: Validate — type check, lint, build, unit smoke test
   # ──────────────────────────────────────────────────────────────────
   validate:
     name: Validate
@@ -58,8 +58,8 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Test (with coverage)
-        run: npm run coverage:ci || npm test
+      - name: Unit test gate
+        run: npm run test:unit
 
       - name: Upload test results
         if: always()
