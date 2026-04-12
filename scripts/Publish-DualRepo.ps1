@@ -357,7 +357,7 @@ try {
       'KEY_VAULT_1','DEMO_KEY_VAULT_1')
     $envSensitiveKeywords = @('SECRET','KEY','TOKEN','PASSWORD','CREDENTIAL','SAS','SUBSCRIPTION','TENANT','CLIENT_ID')
     $envValueAllowlist = @('true','false','0','1','yes','no','null','undefined','',
-      'eastus','westus','eastus2','westus2','centralus','public','private','default',
+            'eastus','westus','eastus2','westus2','centralus','jagilber','public','private','default',
       './exports','./export',
       '00000000-0000-0000-0000-000000000000')
     $scannableExtensions = @('.ts','.js','.mjs','.cjs','.json','.md','.yml','.yaml',

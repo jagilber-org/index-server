@@ -166,6 +166,7 @@ const SENSITIVE_ENV_EXACT = new Set([
 const VALUE_ALLOWLIST = new Set([
   'true', 'false', '0', '1', 'yes', 'no', 'null', 'undefined', '',
   'eastus', 'westus', 'eastus2', 'westus2', 'centralus',
+  'jagilber', // public GitHub/org identifier used in package names and repo URLs
   'public', 'private', 'default',
   './exports', './export', // generic path values
   '00000000-0000-0000-0000-000000000000', // nil UUID placeholder
