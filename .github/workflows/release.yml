@@ -27,7 +27,7 @@ permissions:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
+  IMAGE_NAME: ${{ github.repository_owner }}/index-server-image
   NODE_VERSION: '22'
 
 jobs:
@@ -279,13 +279,13 @@ jobs:
 
             ### Artifacts
             - **npm**: `@jagilber-org/index-server@${{ steps.version.outputs.version }}`
-            - **Docker**: `ghcr.io/${{ github.repository }}:${{ steps.version.outputs.version }}`
+            - **Docker**: `ghcr.io/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}`
             - **VSIX**: See attached (if available)
 
             ### Docker Quick Start
             ```bash
-            docker pull ghcr.io/${{ github.repository }}:${{ steps.version.outputs.version }}
-            docker run -d -p 8787:8787 ghcr.io/${{ github.repository }}:${{ steps.version.outputs.version }}
+            docker pull ghcr.io/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}
+            docker run -d -p 8787:8787 ghcr.io/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}
             ```
           files: |
             *.tgz
