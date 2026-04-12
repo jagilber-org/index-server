@@ -1,9 +1,101 @@
-Param()
+Param(
+  [Parameter(ValueFromRemainingArguments = $true)]
+  [string[]]$Files
+)
+
+$ErrorActionPreference = 'Stop'
 Write-Host "Running pre-commit checks (PII + env-var leak scan)..." -ForegroundColor Cyan
 $errors = 0
 
 function Fail($msg){ Write-Host "[FAIL] $msg" -ForegroundColor Red; $script:errors++ }
 function Info($msg){ Write-Host "[INFO] $msg" -ForegroundColor Gray }
+
+function Test-IsBinaryFile {
+  param([string]$Path)
+
+  try {
+    $bytes = [System.IO.File]::ReadAllBytes($Path) | Select-Object -First 8000
+    return $bytes -contains 0
+  }
+  catch {
+    return $true
+  }
+}
+
+function Test-LuhnNumber {
+  param([string]$Value)
+
+  $digits = ($Value -replace '[^0-9]', '')
+  if ($digits.Length -lt 13 -or $digits.Length -gt 19) {
+    return $false
+  }
+
+  $sum = 0
+  $double = $false
+  for ($index = $digits.Length - 1; $index -ge 0; $index--) {
+    $digit = [int][string]$digits[$index]
+    if ($double) {
+      $digit *= 2
+      if ($digit -gt 9) {
+        $digit -= 9
+      }
+    }
+
+    $sum += $digit
+    $double = -not $double
+  }
+
+  return ($sum % 10) -eq 0
+}
+
+function Test-IsPublicIpv4 {
+  param([string]$Value)
+
+  $octets = $Value.Split('.')
+  if ($octets.Count -ne 4) {
+    return $false
+  }
+
+  foreach ($octet in $octets) {
+    if ($octet -notmatch '^\d+$') {
+      return $false
+    }
+
+    $number = [int]$octet
+    if ($number -lt 0 -or $number -gt 255) {
+      return $false
+    }
+  }
+
+  if ($Value -match '^(10\.|127\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|169\.254\.|0\.|255\.|224\.)') {
+    return $false
+  }
+
+  return $true
+}
+
+function Get-TargetFiles {
+  param([string[]]$CandidateFiles)
+
+  if ($CandidateFiles -and $CandidateFiles.Count -gt 0) {
+    return $CandidateFiles | Where-Object {
+      $_ -and (Test-Path $_) -and ($_ -notmatch '^scripts/pre-commit\.(ps1|mjs)$')
+    }
+  }
+
+  return git diff --cached --name-only --diff-filter=ACM 2>$null | Where-Object {
+    $_ -and (Test-Path $_) -and ($_ -notmatch '^scripts/pre-commit\.(ps1|mjs)$')
+  }
+}
+
+$allowlistPath = Join-Path $PSScriptRoot '..' '.pii-allowlist'
+$piiAllowlist = @()
+if (Test-Path $allowlistPath) {
+  $piiAllowlist = Get-Content $allowlistPath |
+    Where-Object { $_ -and -not $_.StartsWith('#') } |
+    ForEach-Object { $_.Trim() }
+}
+$piiFileAllowlist = @('package-lock.json', 'security-scan.mjs', 'test_results.txt')
 
 # ── 1. Static secret patterns ──────────────────────────────────────────────
 $secretPatterns = @(
@@ -17,30 +109,42 @@ $secretPatterns = @(
   @{ pat = 'npm_[A-Za-z0-9]{36}'; label = 'npm token' }
   @{ pat = 'xox[bpars]-[0-9A-Za-z-]{10,}'; label = 'Slack token' }
   @{ pat = 'eyJ[A-Za-z0-9_-]{20,}\.eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}'; label = 'JWT token' }
-  @{ pat = 'DefaultEndpointsProtocol=https?;AccountName=[^;]+;AccountKey=[^;]+'; label = 'Azure connection string' }
-  @{ pat = 'SharedAccessSignature=sig=[A-Za-z0-9%+/=]+'; label = 'SAS token' }
 )
 
-# ── 2. PII patterns ────────────────────────────────────────────────────────
+# ── 2. Curated PII and sensitive infrastructure patterns ──────────────────
 $piiPatterns = @(
-  @{ pat = '\b\d{3}-\d{2}-\d{4}\b'; label = 'SSN-like' }
-  @{ pat = '\b\d{16}\b'; label = 'credit card-like' }
+  @{ Name = 'Email address'; Regex = '(?i)\b[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}\b' }
+  @{ Name = 'US phone number'; Regex = '\b(?:\+?1[-.\s]?)?(?:\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4})\b' }
+  @{ Name = 'SSN'; Regex = '\b\d{3}-\d{2}-\d{4}\b' }
+  @{ Name = 'Public IPv4 address'; Regex = '(?<!\d)(?:\d{1,3}\.){3}\d{1,3}(?!\d)' }
+  @{ Name = 'Credit card number'; Regex = '\b(?:\d[ -]?){13,19}\b'; RequiresLuhn = $true }
+  @{ Name = 'Azure connection string'; Regex = 'DefaultEndpointsProtocol=https?;AccountName=[^;]+;AccountKey=[^;]+' }
+  @{ Name = 'SAS token'; Regex = '(?:SharedAccessSignature=[^;\s]+|[?&]sig=[A-Za-z0-9%+/=]+)' }
+  @{ Name = 'Certificate thumbprint'; Regex = '\b[a-fA-F0-9]{40}\b' }
 )
 
 # ── 3. Build env-var leak detection map ────────────────────────────────────
 Info 'Building env-var leak detection map...'
-$sensitivePrefixes = @('AZURE_','ARM_','TF_VAR_','VITE_AZURE_','WEBVIEW_TEST_',
-  'SUBSCRIPTION','TENANT','CLIENT','ADMIN_','SF_','DEMO_','COST_','ADO_','AI_','USER_TENANT')
-$sensitiveExact = @('ANTHROPIC_API_KEY','OPENAI_API_KEY','FIGMA_API_KEY','NPM_TOKEN',
+$sensitivePrefixes = @(
+  'AZURE_','ARM_','AWS_','TF_VAR_','VITE_AZURE_','WEBVIEW_TEST_','NPM_','OPENAI_','ANTHROPIC_',
+  'SUBSCRIPTION','TENANT','CLIENT','ADMIN_','SF_','DEMO_','COST_','ADO_','AI_','USER_TENANT',
+  'SECRET_','TOKEN_','PASSWORD_','KEY_','CONNECTION_'
+)
+$sensitiveExact = @(
+  'ANTHROPIC_API_KEY','OPENAI_API_KEY','FIGMA_API_KEY','NPM_TOKEN','GITHUB_TOKEN',
   'CODECOV_TOKEN','GITHUB_APP_PRIVATE_KEY_FILE','GODADDY_API_KEY','GODADDY_API_SECRET',
-  'KEY_VAULT_1','DEMO_KEY_VAULT_1')
+  'AZURE_CLIENT_SECRET','AZURE_TENANT_ID','AZURE_SUBSCRIPTION_ID','AZURE_STORAGE_CONNECTION_STRING',
+  'KEY_VAULT_1','DEMO_KEY_VAULT_1'
+)
 $sensitiveKeywords = @('SECRET','KEY','TOKEN','PASSWORD','CREDENTIAL','SAS','SUBSCRIPTION','TENANT','CLIENT_ID')
-$valueAllowlist = @('true','false','0','1','yes','no','null','undefined','',
-  'eastus','westus','eastus2','westus2','centralus','public','private','default',
+$valueAllowlist = @(
+  'true','false','0','1','yes','no','null','undefined','',
+  'main','master','eastus','westus','eastus2','westus2','centralus','public','private','default',
   './exports','./export',
   # Public owner slug that appears in repository metadata and schema URLs.
   'jagilber',
-  '00000000-0000-0000-0000-000000000000')
+  '00000000-0000-0000-0000-000000000000'
+)
 
 $envLeakMap = @{}
 foreach($item in (Get-ChildItem env:)) {
@@ -50,47 +154,105 @@ foreach($item in (Get-ChildItem env:)) {
   if ($valueAllowlist -contains $value.ToLower()) { continue }
 
   $isSensitive = $false
-  foreach($p in $sensitivePrefixes) { if ($key.StartsWith($p)) { $isSensitive = $true; break } }
-  if (-not $isSensitive) { if ($sensitiveExact -contains $key) { $isSensitive = $true } }
-  if (-not $isSensitive) {
-    foreach($kw in $sensitiveKeywords) { if ($key -match $kw) { $isSensitive = $true; break } }
+  foreach($prefix in $sensitivePrefixes) {
+    if ($key.StartsWith($prefix)) {
+      $isSensitive = $true
+      break
+    }
   }
-  if ($isSensitive) { $envLeakMap[$value] = $key }
+
+  if (-not $isSensitive -and $sensitiveExact -contains $key) {
+    $isSensitive = $true
+  }
+
+  if (-not $isSensitive) {
+    foreach($keyword in $sensitiveKeywords) {
+      if ($key -match $keyword) {
+        $isSensitive = $true
+        break
+      }
+    }
+  }
+
+  if ($isSensitive) {
+    $envLeakMap[$value] = $key
+  }
 }
 Info "Monitoring $($envLeakMap.Count) sensitive env var values for leaks"
 
-# ── 4. Scan staged files ──────────────────────────────────────────────────
-$staged = git diff --cached --name-only | Where-Object {
-  $_ -and (Test-Path $_) -and ($_ -notmatch '^scripts/pre-commit\.(ps1|mjs)$')
-}
-Info "Scanning $(@($staged).Count) staged files..."
+# ── 4. Scan target files ───────────────────────────────────────────────────
+$targets = @(Get-TargetFiles -CandidateFiles $Files)
+Info "Scanning $($targets.Count) staged files..."
 
-foreach($file in $staged) {
+foreach($file in $targets) {
   $normalized = ($file -replace '\\','/')
   if ($normalized -match '(^|/)\.env$' -or $normalized -match '(^|/)\.env\.(?!example$|sample$|template$|test$)[^/]+$') {
     Fail "Forbidden sensitive file path committed: $file"
     continue
   }
 
-  $content = Get-Content -Raw -ErrorAction SilentlyContinue -Path $file
-  if (-not $content) { continue }
-
-  # 4a. Secret patterns
-  foreach($sp in $secretPatterns) {
-    if ($content -match $sp.pat) { Fail "Secret pattern ($($sp.label)) in $file" }
+  if (Test-IsBinaryFile -Path $file) {
+    continue
   }
 
-  # 4b. PII patterns
-  if ($file -notmatch '\.(png|jpg|gif|ico|woff|ttf|eot|svg|map)$') {
-    foreach($pp in $piiPatterns) {
-      if ($content -match $pp.pat) { Fail "PII pattern ($($pp.label)) in $file" }
+  $content = Get-Content -Raw -ErrorAction SilentlyContinue -Path $file
+  $lines = @(Get-Content -ErrorAction SilentlyContinue -Path $file)
+  $basename = [System.IO.Path]::GetFileName($file)
+  if ($null -eq $content) { $content = '' }
+
+  foreach($sp in $secretPatterns) {
+    if ($content -match $sp.pat) {
+      Fail "Secret pattern ($($sp.label)) in $file"
     }
   }
 
-  # 4c. Env var value leak detection
-  foreach($entry in $envLeakMap.GetEnumerator()) {
-    if ($content.Contains($entry.Key)) {
-      Fail "ENV VAR LEAK: Value of `$$($entry.Value) found in $file"
+  $lineNumber = 0
+  foreach($line in $lines) {
+    $lineNumber++
+
+    if ($basename -notin $piiFileAllowlist -and $line -notmatch '#\s*pii-allowlist') {
+      foreach($pattern in $piiPatterns) {
+        $matches = [regex]::Matches($line, $pattern.Regex)
+        foreach($match in $matches) {
+          $value = $match.Value
+
+          if ($pattern.Name -eq 'Email address' -and $value -match '@(example\.(com|net|org)|contoso\.com|company\.com|localhost)$') {
+            continue
+          }
+
+          if ($pattern.Name -eq 'Public IPv4 address' -and -not (Test-IsPublicIpv4 -Value $value)) {
+            continue
+          }
+
+          if ($pattern.RequiresLuhn -and -not (Test-LuhnNumber -Value $value)) {
+            continue
+          }
+
+          $isAllowlisted = $false
+          foreach($entry in $piiAllowlist) {
+            if ($value -match $entry) {
+              $isAllowlisted = $true
+              break
+            }
+          }
+
+          if ($isAllowlisted) {
+            continue
+          }
+
+          Fail "PII pattern ($($pattern.Name)) in $($file):$lineNumber -> $value"
+        }
+      }
+    }
+
+    if ($line -match 'env-leak-allowlist') {
+      continue
+    }
+
+    foreach($entry in $envLeakMap.GetEnumerator()) {
+      if ($line.Contains($entry.Key)) {
+        Fail ('ENV VAR LEAK: Value of ${0} found in {1}:{2}' -f $entry.Value, $file, $lineNumber)
+      }
     }
   }
 }
@@ -103,11 +265,11 @@ if ($errors -gt 0) {
   Write-Host '╠══════════════════════════════════════════════════════════════╣' -ForegroundColor Red
   Write-Host "║  $errors issue(s) found. Fix before committing." -ForegroundColor Red
   Write-Host '║                                                            ║' -ForegroundColor Red
-  Write-Host '║  If a value is a false positive, add it to valueAllowlist  ║' -ForegroundColor Red
-  Write-Host '║  in scripts/pre-commit.ps1 (with justification comment).   ║' -ForegroundColor Red
+  Write-Host '║  Use .pii-allowlist, # pii-allowlist, or env-leak-allowlist║' -ForegroundColor Red
+  Write-Host '║  only for intentional false positives with rationale.      ║' -ForegroundColor Red
   Write-Host '╚══════════════════════════════════════════════════════════════╝' -ForegroundColor Red
   Write-Host ''
   exit 1
 }
-Write-Host "Pre-commit checks passed ($(@($staged).Count) files scanned, $($envLeakMap.Count) env vars monitored)." -ForegroundColor Green
+Write-Host "Pre-commit checks passed ($($targets.Count) files scanned, $($envLeakMap.Count) env vars monitored)." -ForegroundColor Green
 exit 0

@@ -1,0 +1,140 @@
+{
+	"servers": {
+		"index-server": {
+			"type": "stdio",
+			"cwd": "C:/github/jagilber-dev/index-server",
+			"command": "node",
+			"args": ["dist/server/index-server.js"],
+			"env": {
+				// ── Core Paths — where your data lives ────────────────────────
+				// Configuration profile: default | enhanced | experimental
+				"INDEX_SERVER_PROFILE": "default",
+				// Instruction catalog directory (your knowledge base)
+				"INDEX_SERVER_DIR": "C:/github/jagilber-dev/index-server/instructions",
+				// Feedback entries storage directory
+				"INDEX_SERVER_FEEDBACK_DIR": "C:/github/jagilber-dev/index-server/feedback",
+				// Backup snapshots directory
+				"INDEX_SERVER_BACKUPS_DIR": "C:/github/jagilber-dev/index-server/backups",
+				// Runtime state files directory
+				"INDEX_SERVER_STATE_DIR": "C:/github/jagilber-dev/index-server/data/state",
+				// Message queue storage directory
+				"INDEX_SERVER_MESSAGING_DIR": "C:/github/jagilber-dev/index-server/data/messaging",
+
+				// ── Dashboard — HTTP/HTTPS admin interface ────────────────────
+				// Enable the web dashboard (0=off, 1=on)
+				"INDEX_SERVER_DASHBOARD": "1",
+				// Dashboard listen port
+				"INDEX_SERVER_DASHBOARD_PORT": "8787",
+				// Dashboard bind address (127.0.0.1=local, 0.0.0.0=all)
+				"INDEX_SERVER_DASHBOARD_HOST": "127.0.0.1",
+				// Enable instruction graph visualization (0=off, 1=on)
+				// "INDEX_SERVER_DASHBOARD_GRAPH": "0",
+
+				// ── Security — mutation control, TLS, authentication ──────────
+				// Enable write operations: add, update, delete (0=off, 1=on)
+				"INDEX_SERVER_MUTATION": "0",
+				// Dashboard admin API key (set a strong random value)
+				// "INDEX_SERVER_ADMIN_API_KEY": "",
+				// Enable HTTPS for dashboard (0=off, 1=on)
+				// "INDEX_SERVER_DASHBOARD_TLS": "0",
+				// Path to TLS certificate file (.crt/.pem)
+				// "INDEX_SERVER_DASHBOARD_TLS_CERT": "",
+				// Path to TLS private key file (.key/.pem)
+				// "INDEX_SERVER_DASHBOARD_TLS_KEY": "",
+				// Path to CA certificate for client verification (optional)
+				// "INDEX_SERVER_DASHBOARD_TLS_CA": "",
+
+				// ── Semantic Search — AI-powered instruction search ───────────
+				// Enable semantic (vector) search (0=off, 1=on)
+				// "INDEX_SERVER_SEMANTIC_ENABLED": "0",
+				// HuggingFace model name for embeddings
+				// "INDEX_SERVER_SEMANTIC_MODEL": "Xenova/all-MiniLM-L6-v2",
+				// Compute device: cpu | cuda | dml (Windows ML)
+				// "INDEX_SERVER_SEMANTIC_DEVICE": "cpu",
+				// Directory for downloaded model files (~90MB)
+				// "INDEX_SERVER_SEMANTIC_CACHE_DIR": "C:/github/jagilber-dev/index-server/data/models",
+				// Cached embeddings file (grows with catalog size)
+				// "INDEX_SERVER_EMBEDDING_PATH": "C:/github/jagilber-dev/index-server/data/embeddings.json",
+				// Block remote model downloads (0=allow download, 1=local only)
+				// "INDEX_SERVER_SEMANTIC_LOCAL_ONLY": "1",
+
+				// ── Storage Backend — JSON (default) or SQLite (experimental) ─
+				// Storage engine: json | sqlite
+				// "INDEX_SERVER_STORAGE_BACKEND": "json",
+				// SQLite database file path
+				// "INDEX_SERVER_SQLITE_PATH": "C:/github/jagilber-dev/index-server/data/index.db",
+				// Enable Write-Ahead Logging for SQLite (0=off, 1=on)
+				// "INDEX_SERVER_SQLITE_WAL": "1",
+				// Auto-migrate JSON to SQLite on startup (0=off, 1=on)
+				// "INDEX_SERVER_SQLITE_MIGRATE_ON_START": "1",
+
+				// ── Logging — log level, file output, diagnostics ─────────────
+				// Log level: error | warn | info | debug | trace
+				"INDEX_SERVER_LOG_LEVEL": "info",
+				// Enable file logging (0=off, 1=default path, or absolute path)
+				// "INDEX_SERVER_LOG_FILE": "0",
+				// Verbose stderr output (0=off, 1=on)
+				// "INDEX_SERVER_VERBOSE_LOGGING": "0",
+				// JSON-formatted log output (0=off, 1=on)
+				// "INDEX_SERVER_LOG_JSON": "0",
+				// Diagnostic startup logging (0=off, 1=on)
+				// "INDEX_SERVER_LOG_DIAG": "0",
+				// Audit log path (1=default, 0=disabled, or absolute path)
+				"INDEX_SERVER_AUDIT_LOG": "C:/github/jagilber-dev/index-server/logs/instruction-transactions.log.jsonl",
+
+				// ── Backup — automatic backup scheduling ──────────────────────
+				// Enable automatic backups (0=off, 1=on; defaults to on when mutation is enabled)
+				// "INDEX_SERVER_AUTO_BACKUP": "0",
+				// Backup interval in ms (default: 3600000 = 1 hour)
+				// "INDEX_SERVER_AUTO_BACKUP_INTERVAL_MS": "3600000",
+				// Max backup snapshots to retain (default: 10)
+				// "INDEX_SERVER_AUTO_BACKUP_MAX_COUNT": "10",
+				// Auto-backup before bulk delete operations (0=off, 1=on)
+				// "INDEX_SERVER_BACKUP_BEFORE_BULK_DELETE": "1",
+
+				// ── Features — feature flags and capabilities ─────────────────
+				// Comma-separated feature flags: usage,window,hotness,drift,risk
+				// "INDEX_SERVER_FEATURES": "",
+				// Persist metrics to disk (0=off, 1=on)
+				// "INDEX_SERVER_METRICS_FILE_STORAGE": "0",
+				// Metrics storage directory
+				// "INDEX_SERVER_METRICS_DIR": "C:/github/jagilber-dev/index-server/metrics",
+				// Feature flags JSON file path
+				// "INDEX_SERVER_FLAGS_FILE": "C:/github/jagilber-dev/index-server/flags.json",
+
+				// ── Server — MCP transport and instance mode ──────────────────
+				// Instance mode: standalone | leader | follower | auto
+				// "INDEX_SERVER_MODE": "standalone",
+				// Disable stdin handshake hardening (0=off, 1=on)
+				// "INDEX_SERVER_DISABLE_EARLY_STDIN_BUFFER": "0",
+				// Keepalive interval in ms (default: 30000)
+				// "INDEX_SERVER_IDLE_KEEPALIVE_MS": "30000",
+				// Index filesystem poll interval in ms (default: 10000)
+				// "INDEX_SERVER_POLL_MS": "10000",
+
+				// ── Advanced — tuning, limits, governance (most users can skip) 
+				// Max instruction body length in chars (default: 20000)
+				// "INDEX_SERVER_BODY_MAX_LENGTH": "20000",
+				// Auto-split oversized entries on load (0=off, 1=on)
+				// "INDEX_SERVER_AUTO_SPLIT_OVERSIZED": "0",
+				// File read retry attempts (default: 3)
+				// "INDEX_SERVER_READ_RETRIES": "3",
+				// Max entries in a single bulk delete (default: 5)
+				// "INDEX_SERVER_MAX_BULK_DELETE": "5",
+				// Max feedback entries before rotation (default: 1000)
+				// "INDEX_SERVER_FEEDBACK_MAX_ENTRIES": "1000",
+				// Max messages in queue (default: 10000)
+				// "INDEX_SERVER_MESSAGING_MAX": "10000",
+				// Max concurrent dashboard connections (default: 100)
+				// "INDEX_SERVER_MAX_CONNECTIONS": "100",
+				// Index cache mode: normal | memoize | memoize+hash | reload | reload+memo
+				// "INDEX_SERVER_CACHE_MODE": "normal",
+				// Workspace identifier for multi-tenant setups
+				// "INDEX_SERVER_WORKSPACE": "",
+				// Agent identifier for audit trails
+				// "INDEX_SERVER_AGENT_ID": "",
+			}
+		}
+	},
+	"inputs": []
+}

@@ -38,24 +38,16 @@ exports.deactivate = deactivate;
 const vscode = __importStar(require("vscode"));
 const path = __importStar(require("path"));
 const fs = __importStar(require("fs"));
-const child_process_1 = require("child_process");
 let outputChannel;
 function activate(context) {
-    outputChannel = vscode.window.createOutputChannel('Index Server');
+    outputChannel = vscode.window.createOutputChannel('Index');
     outputChannel.appendLine('Index Server extension activated');
-    outputChannel.appendLine(`Extension path: ${context.extensionPath}`);
-    // Check Node.js availability and version
-    checkNodeVersion();
     // Register MCP server definition provider
     const didChangeEmitter = new vscode.EventEmitter();
     context.subscriptions.push(vscode.lm.registerMcpServerDefinitionProvider('indexProvider', {
         onDidChangeMcpServerDefinitions: didChangeEmitter.event,
         provideMcpServerDefinitions: async () => {
             const config = vscode.workspace.getConfiguration('index');
-            // When managed=false, the user controls mcp.json themselves
-            if (!config.get('managed', true)) {
-                return [];
-            }
             const dashboardEnabled = config.get('dashboard.enabled', false);
             const dashboardPort = config.get('dashboard.port', 8787);
             const logLevel = config.get('logLevel', 'info');
@@ -74,24 +66,16 @@ function activate(context) {
             if (instructionsDir) {
                 env.INDEX_SERVER_DIR = instructionsDir;
             }
-            // Merge user-supplied env vars (overrides built-in defaults)
-            const customEnv = config.get('env', {});
-            for (const [key, value] of Object.entries(customEnv)) {
-                if (typeof value === 'string') {
-                    env[key] = value;
-                }
-            }
             // Priority: user setting > workspace checkout > npx (zero-config)
             const serverPath = resolveServerPath(context);
             if (serverPath) {
                 return [
-                    new vscode.McpStdioServerDefinition('index-server', 'node', [serverPath], env)
+                    new vscode.McpStdioServerDefinition('Index', 'node', [serverPath], env)
                 ];
             }
-            // Last resort: npx (requires package published to npm)
-            outputChannel.appendLine('WARNING: No bundled or local server found — falling back to npx @jagilber-org/index-server. This requires the package to be published to npm.');
+            // Default: use npx to run the published npm package
             return [
-                new vscode.McpStdioServerDefinition('index-server', 'npx', ['@jagilber-org/index-server'], env)
+                new vscode.McpStdioServerDefinition('Index', 'npx', ['@jagilber-org/index-server'], env)
             ];
         },
         resolveMcpServerDefinition: async (definition) => {
@@ -104,15 +88,55 @@ function activate(context) {
             didChangeEmitter.fire();
         }
     }));
+    // Register MCP server definition provider
+    const legacyDidChangeEmitter = new vscode.EventEmitter();
+    context.subscriptions.push(vscode.lm.registerMcpServerDefinitionProvider('mcpIndexServerProvider', {
+        onDidChangeMcpServerDefinitions: legacyDidChangeEmitter.event,
+        provideMcpServerDefinitions: async () => {
+            const serverPath = resolveServerPath(context);
+            if (!serverPath) {
+                return [];
+            }
+            const config = vscode.workspace.getConfiguration('mcpIndexServer');
+            const dashboardEnabled = config.get('dashboard.enabled', false);
+            const dashboardPort = config.get('dashboard.port', 3210);
+            const logLevel = config.get('logLevel', 'info');
+            const mutationEnabled = config.get('mutation.enabled', false);
+            const instructionsDir = resolveInstructionsDir(context);
+            const env = {
+                MCP_LOG_LEVEL: logLevel ?? 'info',
+            };
+            if (mutationEnabled) {
+                env.MCP_MUTATION = '1';
+            }
+            if (dashboardEnabled) {
+                env.MCP_DASHBOARD = '1';
+                env.MCP_DASHBOARD_PORT = String(dashboardPort);
+            }
+            if (instructionsDir) {
+                env.MCP_INSTRUCTIONS_DIR = instructionsDir;
+            }
+            return [
+                new vscode.McpStdioServerDefinition('MCP Index Server', 'node', [serverPath], env)
+            ];
+        },
+        resolveMcpServerDefinition: async (definition) => {
+            return definition;
+        }
+    }), legacyDidChangeEmitter);
+    // Watch for config changes to refresh the MCP server definition
+    context.subscriptions.push(vscode.workspace.onDidChangeConfiguration(e => {
+        if (e.affectsConfiguration('mcpIndexServer')) {
+            legacyDidChangeEmitter.fire();
+        }
+    }));
     // Register commands
     context.subscriptions.push(vscode.commands.registerCommand('index.configure', () => configureMcpClient(context)), vscode.commands.registerCommand('index.showStatus', () => showStatus(context)), vscode.commands.registerCommand('index.openDashboard', () => openDashboard()), outputChannel);
     // Show activation info on first install
     const hasShownWelcome = context.globalState.get('hasShownWelcome');
     if (!hasShownWelcome) {
         void context.globalState.update('hasShownWelcome', true);
-        outputChannel.appendLine(`Extension installed at: ${context.extensionPath}`);
-        outputChannel.show();
-        void vscode.window.showInformationMessage(`Index Server installed at: ${context.extensionPath}`, 'Configure', 'Later').then(choice => {
+        void vscode.window.showInformationMessage('Index Server installed. Configure it now?', 'Configure', 'Later').then(choice => {
             if (choice === 'Configure') {
                 void vscode.commands.executeCommand('index.configure');
             }
@@ -122,100 +146,10 @@ function activate(context) {
 function deactivate() {
     outputChannel?.appendLine('Index Server extension deactivated');
 }
-const MIN_NODE_MAJOR = 22;
-/** Try to locate the node binary. Returns the version string or undefined. */
-function probeNode() {
-    // 1. Direct command (works when node is on system PATH)
-    const directCmds = ['node --version'];
-    // 2. Common Windows installation paths
-    const programFiles = process.env['ProgramFiles'] || 'C:\\Program Files';
-    const localAppData = process.env.LOCALAPPDATA || '';
-    const appData = process.env.APPDATA || '';
-    const candidates = [
-        path.join(programFiles, 'nodejs', 'node.exe'),
-        ...(localAppData ? [
-            path.join(localAppData, 'fnm_multishells'), // fnm
-            path.join(localAppData, 'Programs', 'node', 'node.exe'),
-        ] : []),
-        ...(appData ? [
-            path.join(appData, 'nvm', 'current', 'node.exe'), // nvm-windows
-        ] : []),
-    ];
-    // Try direct command first
-    for (const cmd of directCmds) {
-        try {
-            return (0, child_process_1.execSync)(cmd, { encoding: 'utf-8', timeout: 5000, windowsHide: true }).trim();
-        }
-        catch { /* continue */ }
-    }
-    // Try where.exe to find node on extended PATH
-    try {
-        const wherePath = (0, child_process_1.execSync)('where.exe node', { encoding: 'utf-8', timeout: 5000, windowsHide: true }).trim().split(/\r?\n/)[0];
-        if (wherePath && fs.existsSync(wherePath)) {
-            return (0, child_process_1.execSync)(`"${wherePath}" --version`, { encoding: 'utf-8', timeout: 5000, windowsHide: true }).trim();
-        }
-    }
-    catch { /* continue */ }
-    // Try well-known paths
-    for (const candidate of candidates) {
-        try {
-            if (fs.existsSync(candidate)) {
-                return (0, child_process_1.execSync)(`"${candidate}" --version`, { encoding: 'utf-8', timeout: 5000, windowsHide: true }).trim();
-            }
-        }
-        catch { /* continue */ }
-    }
-    return undefined;
-}
-function checkNodeVersion() {
-    const rawVersion = probeNode();
-    if (rawVersion) {
-        const match = rawVersion.match(/^v?(\d+)/);
-        const major = match ? parseInt(match[1], 10) : 0;
-        outputChannel.appendLine(`Node.js: ${rawVersion}`);
-        if (major < MIN_NODE_MAJOR) {
-            const msg = `Index Server requires Node.js ≥${MIN_NODE_MAJOR} but found ${rawVersion}. The MCP server may not start.`;
-            outputChannel.appendLine(`WARNING: ${msg}`);
-            void vscode.window.showWarningMessage(msg, 'Download Node.js').then(action => {
-                if (action === 'Download Node.js') {
-                    void vscode.env.openExternal(vscode.Uri.parse('https://nodejs.org/'));
-                }
-            });
-        }
-        else {
-            checkNpx();
-        }
-    }
-    else {
-        // Node may still be available to VS Code's MCP runtime — warn, don't error
-        const msg = 'Could not verify Node.js installation. Index Server requires Node.js ≥' + MIN_NODE_MAJOR + '. If Node.js is installed via a version manager (nvm, fnm), restart VS Code to pick up PATH changes.';
-        outputChannel.appendLine(`WARNING: ${msg}`);
-        void vscode.window.showWarningMessage(msg, 'Download Node.js', 'Ignore').then(action => {
-            if (action === 'Download Node.js') {
-                void vscode.env.openExternal(vscode.Uri.parse('https://nodejs.org/'));
-            }
-        });
-    }
-}
-function checkNpx() {
-    try {
-        const npxVersion = (0, child_process_1.execSync)('npx --version', { encoding: 'utf-8', timeout: 5000, windowsHide: true }).trim();
-        outputChannel.appendLine(`npx: ${npxVersion}`);
-    }
-    catch {
-        const msg = 'Could not verify npx installation. Index Server uses npx by default. If using a version manager, restart VS Code.';
-        outputChannel.appendLine(`WARNING: ${msg}`);
-        void vscode.window.showWarningMessage(msg, 'Download Node.js', 'Ignore').then(action => {
-            if (action === 'Download Node.js') {
-                void vscode.env.openExternal(vscode.Uri.parse('https://nodejs.org/'));
-            }
-        });
-    }
-}
 /**
  * Resolves the server entry point path.
- * Priority: user setting > repo workspace checkout > bundled in extension.
- * Returns undefined to fall back to npx (last resort).
+ * Priority: user setting > repo workspace checkout.
+ * Returns undefined to fall back to npx.
  */
 function resolveServerPath(context) {
     const config = vscode.workspace.getConfiguration('index');
@@ -227,12 +161,6 @@ function resolveServerPath(context) {
     const workspaceServer = findWorkspaceServer();
     if (workspaceServer) {
         return workspaceServer;
-    }
-    // Check for server bundled inside the extension
-    const bundledServer = path.join(context.extensionPath, 'server', 'dist', 'server', 'index-server.js');
-    if (fs.existsSync(bundledServer)) {
-        outputChannel.appendLine(`Using bundled server: ${bundledServer}`);
-        return bundledServer;
     }
     return undefined;
 }
@@ -275,93 +203,25 @@ async function configureMcpClient(context) {
         ...(dashboardEnabled ? { INDEX_SERVER_DASHBOARD: '1', INDEX_SERVER_DASHBOARD_PORT: String(dashboardPort) } : {}),
         ...(instructionsDir ? { INDEX_SERVER_DIR: instructionsDir } : {})
     };
-    // Merge user-supplied env vars (overrides built-in defaults)
-    const customEnv = config.get('env', {});
-    for (const [key, value] of Object.entries(customEnv)) {
-        if (typeof value === 'string') {
-            envBlock[key] = value;
-        }
-    }
     // Use local node path if available, otherwise npx (zero-config)
     const serverEntry = serverPath
         ? { type: 'stdio', command: 'node', args: [serverPath], cwd: path.dirname(path.dirname(path.dirname(serverPath))), env: envBlock }
         : { type: 'stdio', command: 'npx', args: ['@jagilber-org/index-server'], env: envBlock };
-    const mcpConfig = { servers: { 'index-server': serverEntry } };
+    const mcpConfig = { servers: { 'index': serverEntry } };
     const snippet = JSON.stringify(mcpConfig, null, 2);
-    // Try to write mcp.json directly
-    const mcpJsonPath = getMcpJsonPath();
-    if (mcpJsonPath) {
-        try {
-            let existing = {};
-            if (fs.existsSync(mcpJsonPath)) {
-                const raw = fs.readFileSync(mcpJsonPath, 'utf-8');
-                // Strip comments for parsing (simple // and /* */ removal)
-                const stripped = raw.replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
-                try {
-                    existing = JSON.parse(stripped);
-                }
-                catch {
-                    existing = {};
-                }
-            }
-            else {
-                // Ensure parent directory exists
-                const dir = path.dirname(mcpJsonPath);
-                if (!fs.existsSync(dir)) {
-                    fs.mkdirSync(dir, { recursive: true });
-                }
-            }
-            // Merge: preserve existing servers, add/update 'index-server'
-            const servers = existing.servers ?? {};
-            servers['index-server'] = serverEntry;
-            existing.servers = servers;
-            fs.writeFileSync(mcpJsonPath, JSON.stringify(existing, null, 2), 'utf-8');
-            outputChannel.appendLine(`MCP config written to: ${mcpJsonPath}`);
-            const action = await vscode.window.showInformationMessage(`MCP client configured at ${mcpJsonPath}`, 'Open mcp.json', 'OK');
-            if (action === 'Open mcp.json') {
-                const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(mcpJsonPath));
-                await vscode.window.showTextDocument(doc);
-            }
-        }
-        catch (err) {
-            outputChannel.appendLine(`Failed to write mcp.json: ${err}`);
-            // Fall back to showing the config for manual copy
-            await showConfigForManualCopy(snippet);
-        }
-    }
-    else {
-        await showConfigForManualCopy(snippet);
-    }
-    outputChannel.appendLine(`Server path: ${serverPath ?? 'npx @jagilber-org/index-server'}`);
-    outputChannel.appendLine(`Configuration generated`);
-}
-function getMcpJsonPath() {
-    // VS Code user-level mcp.json location
-    const homeDir = process.env.USERPROFILE || process.env.HOME || '';
-    if (!homeDir)
-        return undefined;
-    // Check workspace .vscode/mcp.json first
-    const folders = vscode.workspace.workspaceFolders;
-    if (folders && folders.length > 0) {
-        const workspaceMcp = path.join(folders[0].uri.fsPath, '.vscode', 'mcp.json');
-        if (fs.existsSync(workspaceMcp))
-            return workspaceMcp;
-    }
-    // User-level: %APPDATA%/Code/User/mcp.json (Windows) or ~/.config/Code/User/mcp.json
-    const appData = process.env.APPDATA;
-    if (appData) {
-        return path.join(appData, 'Code', 'User', 'mcp.json');
-    }
-    return path.join(homeDir, '.config', 'Code', 'User', 'mcp.json');
-}
-async function showConfigForManualCopy(snippet) {
+    // Show the configuration to the user
     const doc = await vscode.workspace.openTextDocument({ content: snippet, language: 'jsonc' });
     await vscode.window.showTextDocument(doc, { preview: true });
-    const writeAction = await vscode.window.showInformationMessage('Could not auto-write mcp.json. Copy this config manually.', 'Copy to Clipboard');
+    const writeAction = await vscode.window.showInformationMessage('MCP configuration generated. Copy this to your VS Code mcp.json or Claude Desktop config.', 'Copy to Clipboard', 'Open mcp.json');
     if (writeAction === 'Copy to Clipboard') {
         await vscode.env.clipboard.writeText(snippet);
         void vscode.window.showInformationMessage('MCP configuration copied to clipboard.');
     }
+    else if (writeAction === 'Open mcp.json') {
+        void vscode.commands.executeCommand('workbench.action.openSettingsJson', { revealSetting: { key: 'mcp' } });
+    }
+    outputChannel.appendLine(`Server path: ${serverPath}`);
+    outputChannel.appendLine(`Configuration generated`);
 }
 async function showStatus(context) {
     const serverPath = resolveServerPath(context);

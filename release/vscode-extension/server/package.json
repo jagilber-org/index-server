@@ -1,9 +1,10 @@
 {
   "name": "@jagilber-org/index-server",
-  "version": "1.18.12",
+  "version": "1.19.1",
   "description": "MCP instruction indexing server for AI assistant governance — search, CRUD, schema validation, usage tracking, and cross-repo knowledge promotion.",
   "publishConfig": {
-    "registry": "https://npm.pkg.github.com"
+    "registry": "https://registry.npmjs.org/",
+    "access": "public"
   },
   "type": "commonjs",
   "engines": {
@@ -69,6 +70,8 @@
     "perf:ci": "npm run perf:drift && npm run perf:trend && npm run perf:summary",
     "guard:env": "ts-node scripts/enforce-config-usage.ts",
     "build:verify": "npm run typecheck && npm run build && npm run test:fast && npm run guard:env && npm run guard:decl",
+    "test:unit": "vitest run --config vitest.config.unit.ts",
+    "test:unit:watch": "vitest --config vitest.config.unit.ts",
     "test:fast": "node scripts/test-fast.mjs",
     "test:slow": "node scripts/test-slow.mjs",
     "docs:tools": "node scripts/generate-tools-doc.cjs",

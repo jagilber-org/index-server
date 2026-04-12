@@ -93,7 +93,7 @@ test.describe('Dashboard Security @baseline', () => {
 
   test('navigation should render all sections without errors', async ({ page }) => {
     await page.goto('/admin');
-    
+
     const errors: string[] = [];
     page.on('pageerror', (err) => errors.push(err.message));
 

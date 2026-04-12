@@ -29,6 +29,25 @@ repos:
         language: system
         pass_filenames: false
         stages: [pre-commit]
+      - id: gitleaks-pre-push
+        name: Run gitleaks before push
+        entry: gitleaks dir --config .gitleaks.toml . --redact --no-banner
+        language: golang
+        additional_dependencies:
+          - github.com/zricethezav/gitleaks/v8@v8.30.1
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
+      - id: semgrep-pre-push
+        name: Run Semgrep before push
+        entry: pwsh -NoProfile -File scripts/run-semgrep-pre-push.ps1
+        language: python
+        additional_dependencies:
+          - semgrep==1.159.0
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
+        require_serial: true
       - id: public-repo-push-guard
         name: Block pushes to public repos
         entry: node scripts/pre-push-public-guard.cjs
@@ -41,6 +60,12 @@ repos:
         language: system
         pass_filenames: false
         stages: [pre-push]
+  - repo: https://github.com/GitGuardian/ggshield
+    rev: v1.49.0
+    hooks:
+      - id: ggshield
+        language_version: python3
+        stages: [pre-commit]
   # Credential scanning - Critical for security-focused portfolio project
   - repo: https://github.com/Yelp/detect-secrets
     rev: v1.5.0
@@ -52,9 +77,9 @@ repos:
 # Configuration
 default_install_hook_types: [pre-commit, pre-push]
 fail_fast: false
-minimum_pre_commit_version: '3.0.0'
+minimum_pre_commit_version: '3.6.0'
 
-# NOTE: This project's PII detection can be integrated as a custom local hook
-# in future iterations - demonstrating "dogfooding" of our own tool.
-# For portfolio purposes, we use industry-standard tools (detect-secrets) to
-# show professional development practices.
+# NOTE: Curated repo-specific PII and env leak detection lives in
+# scripts/pre-commit.ps1, with ggshield and detect-secrets layered on top for
+# standard secret scanning coverage and pre-push replay using gitleaks and
+# semgrep.

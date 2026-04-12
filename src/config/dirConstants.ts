@@ -16,6 +16,7 @@ export const DIR = {
   DATA_STATE: path.join('data', 'state'),
   DATA_EMBEDDINGS: path.join('data', 'embeddings.json'),
   DATA_SQLITE: path.join('data', 'index.db'),
+  DATA_MESSAGING: path.join('data', 'messaging'),
 
   BACKUPS: 'backups',
   INSTRUCTIONS: 'instructions',

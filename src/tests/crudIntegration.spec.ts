@@ -68,7 +68,7 @@ describe('Instruction CRUD Full Lifecycle', () => {
     invalidate();
   });
 
-  
+
 
   it('should create an instruction and read it back', async () => {
     const id = uniqueId();

@@ -90,7 +90,7 @@ export function parseFeedbackConfig(): FeedbackConfig {
 
 export function parseMessagingConfig(): MessagingConfig {
   return {
-    dir: toAbsolute(process.env.INDEX_SERVER_MESSAGING_DIR, path.join(CWD, DIR.DATA)),
+    dir: toAbsolute(process.env.INDEX_SERVER_MESSAGING_DIR, path.join(CWD, DIR.DATA_MESSAGING)),
     maxMessages: numberFromEnv('INDEX_SERVER_MESSAGING_MAX', DEFAULT_LIMITS.MAX_MESSAGES),
     sweepIntervalMs: numberFromEnv('INDEX_SERVER_MESSAGING_SWEEP_MS', DEFAULT_TIMEOUTS_MS.MESSAGING_SWEEP),
   };
@@ -181,4 +181,3 @@ export function parseStorageConfig(): StorageConfig {
     sqliteMigrateOnStart: parseBooleanEnv(process.env.INDEX_SERVER_SQLITE_MIGRATE_ON_START, true),
   };
 }
-

@@ -1,5 +1,5 @@
 {
-  "templateVersion": "1.8.0",
+  "templateVersion": "1.10.0",
   "schemaVersion": 1,
   "templateName": "layered-hook-security-template",
   "hookStandardInstruction": "repository-hook-security-standard",
@@ -12,12 +12,18 @@
   "adoptionMarker": ".template-adoption.json",
   "managedFiles": [
     { "path": ".pre-commit-config.yaml", "strategy": "MergeReview" },
+    { "path": ".gitleaks.toml", "strategy": "MergeReview" },
+    { "path": ".github/workflows/ggshield-secret-scans.yml", "strategy": "MergeReview" },
+    { "path": ".github/workflows/gitleaks-secret-scans.yml", "strategy": "MergeReview" },
+    { "path": ".github/workflows/precommit.yml", "strategy": "MergeReview" },
+    { "path": ".github/workflows/semgrep.yml", "strategy": "MergeReview" },
     { "path": ".github/copilot-instructions.md", "strategy": "MergeReview" },
     { "path": "constitution.json", "strategy": "MergeReview" },
     { "path": "constitution.md", "strategy": "ExactMatch" },
     { "path": ".specify/config/promotion-map.json", "strategy": "MergeReview" },
     { "path": "scripts/pre-commit.ps1", "strategy": "MergeReview" },
     { "path": "scripts/pre-push.ps1", "strategy": "MergeReview" },
+    { "path": "scripts/run-semgrep-pre-push.ps1", "strategy": "MergeReview" },
     { "path": "scripts/setup-hooks.ps1", "strategy": "ExactMatch" },
     { "path": "scripts/sync-constitution.ps1", "strategy": "ExactMatch" },
     { "path": ".instructions/README.md", "strategy": "RepoSpecific" },
@@ -43,6 +49,8 @@
     "Template version 1.5.3 adds focused metadata-alignment and hook-regression scripts, wires them into CI, and documents the narrow validation path for template-managed changes.",
     "Template version 1.6.0 upgrades the constitution to a structured, guardrail-oriented schema covering agent scope, design simplicity, testing strategy, documentation consistency, and governance policy.",
     "Template version 1.7.0 adds observability guardrails that standardize structured logging, function tracing, and stack-bearing error diagnostics as global template expectations.",
-    "Template version 1.8.0 adds constitutional rules for branch usage, ancestry-preserving merges, branch cleanup, pull-request CI gates, and clean-tree release or deployment discipline."
+    "Template version 1.8.0 adds constitutional rules for branch usage, ancestry-preserving merges, branch cleanup, pull-request CI gates, and clean-tree release or deployment discipline.",
+    "Template version 1.9.0 adds dedicated gitleaks secret-scanning workflows for PR, manual, and scheduled repo or history scans, plus a Semgrep workflow for supplemental workflow and CI/config analysis.",
+    "Template version 1.10.0 makes gitleaks and Semgrep mandatory local pre-push hooks managed by pre-commit, adds a repo-owned .gitleaks.toml baseline, and updates CI to replay the same pre-push policy."
   ]
 }
