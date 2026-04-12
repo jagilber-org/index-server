@@ -5,7 +5,7 @@
   "version": "1.17.0",
   "publisher": "jagilber-org",
   "license": "MIT",
-  "icon": "images/icon.svg",
+  "icon": "images/icon.png",
   "galleryBanner": {
     "color": "#1e1e2e",
     "theme": "dark"

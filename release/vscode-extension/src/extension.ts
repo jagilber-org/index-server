@@ -71,10 +71,10 @@ export function activate(context: vscode.ExtensionContext): void {
     );
 
     // Register MCP server definition provider
-    const didChangeEmitter = new vscode.EventEmitter<void>();
+    const legacyDidChangeEmitter = new vscode.EventEmitter<void>();
     context.subscriptions.push(
         vscode.lm.registerMcpServerDefinitionProvider('mcpIndexServerProvider', {
-            onDidChangeMcpServerDefinitions: didChangeEmitter.event,
+            onDidChangeMcpServerDefinitions: legacyDidChangeEmitter.event,
             provideMcpServerDefinitions: async () => {
                 const serverPath = resolveServerPath(context);
                 if (!serverPath) { return []; }
@@ -109,14 +109,14 @@ export function activate(context: vscode.ExtensionContext): void {
                 return definition;
             }
         }),
-        didChangeEmitter
+        legacyDidChangeEmitter
     );
 
     // Watch for config changes to refresh the MCP server definition
     context.subscriptions.push(
         vscode.workspace.onDidChangeConfiguration(e => {
             if (e.affectsConfiguration('mcpIndexServer')) {
-                didChangeEmitter.fire();
+                legacyDidChangeEmitter.fire();
             }
         })
     );
