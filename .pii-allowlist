@@ -1,0 +1,20 @@
+# PII Allowlist
+
+## Documentation placeholder emails
+
+^.*@contoso\.com$
+^.*@example\.(com|net|org)$
+^.*@company\.com$
+
+## Metadata and documentation IPs
+
+^127\.0\.0\.1$
+^169\.254\.169\.254$
+^192\.0\.2\.
+^198\.51\.100\.
+^203\.0\.113\.
+
+## Intentional test values
+
+^123-45-6789$
+^555-867-5309$

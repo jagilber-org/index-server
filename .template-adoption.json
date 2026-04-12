@@ -1,11 +1,20 @@
 {
   "templateName": "layered-hook-security-template",
-  "adoptedTemplateVersion": "1.0.0",
-  "hookStandardVersion": "1.0.0",
-  "adoptedAt": "2026-04-10",
+  "adoptedTemplateVersion": "1.8.0",
+  "hookStandardInstruction": "repository-hook-security-standard",
+  "hookStandardVersion": "1.1.0",
+  "adoptedAt": "2026-04-12",
+  "notes": [
+    "Adopted from template v1.0.0 -> v1.8.0 in a single parity pass.",
+    "Constitution upgraded to schemaVersion 2 / v2.2.0 with structured rules, rationale, and new articles.",
+    "Template manifest upgraded to v1.8.0 with full version history notes.",
+    "Added observability-logging.md and repository-security-hooks.md shared instructions.",
+    "Added .pii-allowlist with standard placeholder patterns."
+  ],
   "localDeviations": [
     "Hook implementations remain under scripts/ and are orchestrated by .pre-commit-config.yaml rather than hooks/.",
     "instructions/ remains the checked-in runtime instruction catalog; .instructions/ is reserved for repo-local guidance.",
-    "The Node entry point sync-constitution.cjs remains the source implementation, with scripts/sync-constitution.ps1 as the template-compatible wrapper."
+    "The Node entry point sync-constitution.cjs remains the source implementation, with scripts/sync-constitution.ps1 as the template-compatible wrapper.",
+    "ggshield is not wired into .pre-commit-config.yaml; secret scanning uses detect-secrets and the env-leak scanner in scripts/pre-commit.ps1."
   ]
 }

@@ -1,9 +1,12 @@
 {
+  "templateVersion": "1.8.0",
+  "schemaVersion": 1,
   "templateName": "layered-hook-security-template",
-  "templateVersion": "1.0.0",
-  "schemaVersion": "1.0.0",
-  "hookStandardVersion": "1.0.0",
+  "hookStandardInstruction": "repository-hook-security-standard",
+  "hookStandardVersion": "1.1.0",
   "knowledgeModelVersion": "1.0.0",
+  "canonicalTemplateInstruction": "canonical-starter-template-repo",
+  "updatedAt": "2026-04-12T00:00:00.000Z",
   "copilotInstructions": ".github/copilot-instructions.md",
   "promotionMap": ".specify/config/promotion-map.json",
   "adoptionMarker": ".template-adoption.json",
@@ -20,8 +23,26 @@
     { "path": ".instructions/README.md", "strategy": "RepoSpecific" },
     { "path": ".instructions/local/project-context.md", "strategy": "RepoSpecific" },
     { "path": ".instructions/shared/index-server-bootstrap.md", "strategy": "MergeReview" },
+    { "path": ".instructions/shared/observability-logging.md", "strategy": "MergeReview" },
+    { "path": ".instructions/shared/repository-security-hooks.md", "strategy": "MergeReview" },
     { "path": ".instructions/shared/squad-index-server-complement.md", "strategy": "MergeReview" },
     { "path": ".instructions/shared/template-adoption-workflow.md", "strategy": "MergeReview" },
     { "path": ".template-adoption.json", "strategy": "AdoptionMarker" }
+  ],
+  "notes": [
+    "Use this manifest to track intentional template changes.",
+    "Bump templateVersion when the template's required files, workflows, or operational behavior change.",
+    "Bump schemaVersion only when the manifest structure itself changes incompatibly.",
+    "Template version 1.1.0 adds ggshield through the pre-commit framework and requires GITGUARDIAN_API_KEY or ggshield auth for secret scanning.",
+    "Template version 1.2.0 adds CI-side ggshield JSON report generation and uploads the result as a workflow artifact.",
+    "Template version 1.3.0 adds a standard adoption metadata file, a comparison helper script, and explicit update workflow documentation for existing repos.",
+    "Template version 1.4.0 adds a template constitution, sync script, index-server bootstrap guidance, optional spec scaffolding, and stronger Copilot instruction defaults.",
+    "Template version 1.5.0 clarifies .instructions as the default local guidance layer, preserves existing instructions/ product surfaces during adoption, and adds a dedicated ggshield PR and audit workflow template.",
+    "Template version 1.5.1 fixes hook self-match false positives in PII and env-leak scanning, adds line-level env-leak allowlists for documented public metadata, and improves env-leak diagnostics.",
+    "Template version 1.5.2 stops treating non-secret GitHub Actions metadata variables as sensitive by prefix while retaining explicit secret-name coverage such as GITHUB_TOKEN.",
+    "Template version 1.5.3 adds focused metadata-alignment and hook-regression scripts, wires them into CI, and documents the narrow validation path for template-managed changes.",
+    "Template version 1.6.0 upgrades the constitution to a structured, guardrail-oriented schema covering agent scope, design simplicity, testing strategy, documentation consistency, and governance policy.",
+    "Template version 1.7.0 adds observability guardrails that standardize structured logging, function tracing, and stack-bearing error diagnostics as global template expectations.",
+    "Template version 1.8.0 adds constitutional rules for branch usage, ancestry-preserving merges, branch cleanup, pull-request CI gates, and clean-tree release or deployment discipline."
   ]
 }
