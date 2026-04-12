@@ -175,7 +175,6 @@ jobs:
       - name: Install extension deps
         working-directory: release/vscode-extension
         run: npm install --ignore-scripts
-        continue-on-error: true
 
       - name: Sync version
         working-directory: release/vscode-extension
@@ -187,21 +186,19 @@ jobs:
             p.version = '${SERVER_VERSION}';
             fs.writeFileSync('package.json', JSON.stringify(p,null,2)+'\n');
           "
-        continue-on-error: true
 
       - name: Compile & package VSIX
         working-directory: release/vscode-extension
         run: |
-          npx tsc -p tsconfig.json 2>/dev/null || true
-          npx @vscode/vsce package --no-dependencies 2>/dev/null || true
-        continue-on-error: true
+          npx tsc -p tsconfig.json
+          npx @vscode/vsce package --no-dependencies --allow-missing-repository
 
       - name: Upload VSIX
-        if: hashFiles('release/vscode-extension/*.vsix') != ''
         uses: actions/upload-artifact@v4
         with:
           name: vsix-package
           path: release/vscode-extension/*.vsix
+          if-no-files-found: error
 
   # ──────────────────────────────────────────────────────────────────
   # Stage 3: Publish — npm, GitHub Release

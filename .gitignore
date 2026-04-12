@@ -47,7 +47,6 @@ certs/
 # VSIX binary artifacts (built by CI)
 release/*.vsix
 release/vscode-extension/*.vsix
-release/vscode-extension/images/icon.png
 coverage/
 *.log
 logs/
