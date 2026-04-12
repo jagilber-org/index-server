@@ -253,7 +253,19 @@ jobs:
           echo "$CHANGES" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
+      - name: Check npmjs version status
+        id: npm_status
+        run: |
+          PKG=$(node -p "require('./package.json').name")
+          VERSION="${{ steps.version.outputs.version }}"
+          if npm view "$PKG@$VERSION" version --registry=https://registry.npmjs.org >/dev/null 2>&1; then
+            echo "already_published=true" >> $GITHUB_OUTPUT
+          else
+            echo "already_published=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Publish to npmjs
+        if: steps.npm_status.outputs.already_published != 'true'
         run: |
           TARBALL=$(ls *.tgz 2>/dev/null | head -1)
           if [ -n "$TARBALL" ]; then
