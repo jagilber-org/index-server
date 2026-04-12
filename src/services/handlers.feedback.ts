@@ -15,6 +15,7 @@
 
 import { registerHandler, getHandler } from '../server/registry';
 import { logInfo, logWarn, logError } from './logger';
+import { logAudit } from './auditLog';
 import { getRuntimeConfig } from '../config/runtimeConfig';
 import fs from 'fs';
 import path from 'path';
@@ -184,6 +185,11 @@ registerHandler('feedback_submit', (params: {
   saveFeedbackStorage(storage);
 
   // Log feedback submission for audit trail
+  logAudit('feedback_submit', [entry.id], {
+    type: entry.type,
+    severity: entry.severity,
+    title: entry.title
+  });
   logInfo('[feedback] Feedback submitted', {
     id: entry.id,
     type: entry.type,
@@ -329,6 +335,11 @@ registerHandler('feedback_update', (params: {
   storage.entries[entryIndex] = entry;
   saveFeedbackStorage(storage);
 
+  logAudit('feedback_update', [entry.id], {
+    oldStatus,
+    newStatus: entry.status,
+    type: entry.type
+  });
   logInfo('[feedback] Feedback entry updated', {
     id: entry.id,
     oldStatus,
