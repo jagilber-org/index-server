@@ -1,6 +1,6 @@
 {
   "templateName": "layered-hook-security-template",
-  "adoptedTemplateVersion": "1.8.0",
+  "adoptedTemplateVersion": "1.10.0",
   "hookStandardInstruction": "repository-hook-security-standard",
   "hookStandardVersion": "1.1.0",
   "adoptedAt": "2026-04-12",
@@ -9,12 +9,15 @@
     "Constitution upgraded to schemaVersion 2 / v2.2.0 with structured rules, rationale, and new articles.",
     "Template manifest upgraded to v1.8.0 with full version history notes.",
     "Added observability-logging.md and repository-security-hooks.md shared instructions.",
-    "Added .pii-allowlist with standard placeholder patterns."
+    "Added .pii-allowlist with standard placeholder patterns.",
+    "Hook coverage aligned with the template for curated PII, env leak scanning, and ggshield while preserving scripts/ as the implementation surface.",
+    "Added the template's dedicated Gitleaks and Semgrep GitHub Actions workflows for CI-side secret and configuration analysis.",
+    "Added the template's GGShield audit workflow, repo-owned .gitleaks.toml baseline, local pre-push Gitleaks and Semgrep hooks, and CI replay of the security pre-push policy."
   ],
   "localDeviations": [
     "Hook implementations remain under scripts/ and are orchestrated by .pre-commit-config.yaml rather than hooks/.",
     "instructions/ remains the checked-in runtime instruction catalog; .instructions/ is reserved for repo-local guidance.",
     "The Node entry point sync-constitution.cjs remains the source implementation, with scripts/sync-constitution.ps1 as the template-compatible wrapper.",
-    "ggshield is not wired into .pre-commit-config.yaml; secret scanning uses detect-secrets and the env-leak scanner in scripts/pre-commit.ps1."
+    "The precommit.yml workflow replays the dedicated security pre-push hooks directly; the existing repo-local slow pre-push suite remains enforced by its own workflow surfaces rather than being replayed inside precommit.yml."
   ]
 }

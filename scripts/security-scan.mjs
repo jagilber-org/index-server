@@ -1,13 +1,82 @@
 #!/usr/bin/env node
 /**
  * Cross-platform security scan (replaces security-scan.ps1).
- * Runs npm audit + PII pattern scan on source files.
+ * Runs npm audit + repo-wide curated PII pattern scan on source files.
  */
 import { execSync } from 'node:child_process';
-import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join, extname } from 'node:path';
 
 const issues = [];
+
+function testIsBinaryFile(filePath) {
+  try {
+    return readFileSync(filePath).subarray(0, 8000).includes(0);
+  } catch {
+    return true;
+  }
+}
+
+function testLuhnNumber(value) {
+  const digits = value.replace(/[^0-9]/g, '');
+  if (digits.length < 13 || digits.length > 19) {
+    return false;
+  }
+
+  let sum = 0;
+  let shouldDouble = false;
+  for (let index = digits.length - 1; index >= 0; index -= 1) {
+    let digit = Number.parseInt(digits[index], 10);
+    if (shouldDouble) {
+      digit *= 2;
+      if (digit > 9) {
+        digit -= 9;
+      }
+    }
+
+    sum += digit;
+    shouldDouble = !shouldDouble;
+  }
+
+  return sum % 10 === 0;
+}
+
+function testIsPublicIpv4(value) {
+  const octets = value.split('.');
+  if (octets.length !== 4) {
+    return false;
+  }
+
+  for (const octet of octets) {
+    if (!/^\d+$/.test(octet)) {
+      return false;
+    }
+
+    const number = Number.parseInt(octet, 10);
+    if (number < 0 || number > 255) {
+      return false;
+    }
+  }
+
+  return !/^(10\.|127\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|169\.254\.|0\.|255\.|224\.)/.test(value);
+}
+
+function loadPiiAllowlist() {
+  const allowlistPath = join(process.cwd(), '.pii-allowlist');
+  if (!existsSync(allowlistPath)) {
+    return [];
+  }
+
+  return readFileSync(allowlistPath, 'utf8')
+    .split(/\r?\n/)
+    .map(line => line.trim())
+    .filter(line => line && !line.startsWith('#'));
+}
+
+function getRegexMatches(line, pattern) {
+  const flags = pattern.flags.includes('g') ? pattern.flags : `${pattern.flags}g`;
+  return Array.from(line.matchAll(new RegExp(pattern.source, flags)));
+}
 
 // 1. Dependency audit
 console.log('Running security scan...');
@@ -27,20 +96,34 @@ try {
   }
 }
 
-// 2. PII pattern scan
+// 2. PII pattern scan aligned with pre-commit rules
 const PII_PATTERNS = [
-  /[0-9]{3}-[0-9]{2}-[0-9]{4}/,   // SSN-like
-  /\b\d{16}\b/,                     // credit card-like
+  { regex: /\b[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}\b/gi, label: 'Email address' },
+  { regex: /\b(?:\+?1[-.\s]?)?(?:\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4})\b/g, label: 'US phone number' },
+  { regex: /\b\d{3}-\d{2}-\d{4}\b/g, label: 'SSN' },
+  { regex: /(?<!\d)(?:\d{1,3}\.){3}\d{1,3}(?!\d)/g, label: 'Public IPv4 address' },
+  { regex: /\b(?:\d[ -]?){13,19}\b/g, label: 'Credit card number', requiresLuhn: true },
+  { regex: /DefaultEndpointsProtocol=https?;AccountName=[^;]+;AccountKey=[^;]+/gi, label: 'Azure connection string' },
+  { regex: /(?:SharedAccessSignature=[^;\s]+|[?&]sig=[A-Za-z0-9%+/=]+)/g, label: 'SAS token' },
+  { regex: /\b[a-fA-F0-9]{40}\b/g, label: 'Certificate thumbprint' },
 ];
 
 const EXCLUDE = ['node_modules', 'tmp', 'test-results', 'coverage', 'dist', '.git'];
-const EXTENSIONS = new Set(['.ts', '.md', '.js', '.mjs', '.cjs']);
-// Files with known benign PII-like patterns (documentation examples, vendored bundles)
-const PII_ALLOWLIST = [
+const EXTENSIONS = new Set([
+  '.ts', '.js', '.mjs', '.cjs',
+  '.md', '.txt', '.json',
+  '.yml', '.yaml',
+  '.ps1', '.psm1', '.psd1',
+]);
+const PII_FILE_ALLOWLIST = [
   'credential-pii-system-overview.md',
   'elk.bundled.js',
   'mermaid.min.js',
+  'package-lock.json',
+  'security-scan.mjs',
+  'test_results.txt',
 ];
+const piiAllowlist = loadPiiAllowlist();
 
 function walk(dir) {
   const files = [];
@@ -62,12 +145,38 @@ console.log(`Scanning ${files.length} files for PII patterns (excluding dependen
 
 for (const f of files) {
   const basename = f.split(/[\\/]/).pop();
-  if (PII_ALLOWLIST.includes(basename)) continue;
+  if (PII_FILE_ALLOWLIST.includes(basename) || testIsBinaryFile(f)) continue;
   try {
     const text = readFileSync(f, 'utf8');
-    for (const pat of PII_PATTERNS) {
-      if (pat.test(text)) {
-        issues.push(`PII-like pattern in ${f} (${pat.source})`);
+    const lines = text.split(/\r?\n/);
+    for (const [index, line] of lines.entries()) {
+      const lineNumber = index + 1;
+      if (/#\s*pii-allowlist/.test(line)) {
+        continue;
+      }
+
+      for (const pattern of PII_PATTERNS) {
+        for (const match of getRegexMatches(line, pattern.regex)) {
+          const value = match[0];
+
+          if (pattern.label === 'Email address' && /@(example\.(com|net|org)|contoso\.com|company\.com|localhost)$/i.test(value)) {
+            continue;
+          }
+
+          if (pattern.label === 'Public IPv4 address' && !testIsPublicIpv4(value)) {
+            continue;
+          }
+
+          if (pattern.requiresLuhn && !testLuhnNumber(value)) {
+            continue;
+          }
+
+          if (piiAllowlist.some(entry => new RegExp(entry).test(value))) {
+            continue;
+          }
+
+          issues.push(`PII-like pattern [${pattern.label}] in ${f}:${lineNumber} -> ${value}`);
+        }
       }
     }
   } catch {

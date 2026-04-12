@@ -2,7 +2,7 @@
   "name": "index-server",
   "displayName": "Index",
   "description": "Index Server providing governed, classified, and auditable instruction indexes with analytics and optional admin dashboard.",
-  "version": "1.17.0",
+  "version": "1.19.1",
   "publisher": "jagilber-org",
   "license": "MIT",
   "icon": "images/icon.png",
@@ -68,7 +68,7 @@
             "title": "Configure the Server",
             "description": "Set the server path and generate MCP client configuration.\n\n[Configure MCP Client](command:index.configure)",
             "media": {
-              "markdown": "## Configure\n\nRun **Index: Configure MCP Client** to auto-generate your `mcp.json` configuration.\n\nThe extension uses `npx @jagilber-org/index-server` by default — zero config needed.\nOptionally set `index.serverPath` to use a local checkout."
+              "markdown": "walkthroughs/configure.md"
             }
           },
           {
@@ -76,7 +76,7 @@
             "title": "Search Instructions",
             "description": "Use the index search tools in Copilot Chat agent mode.\n\nTry asking: *Search the instruction index for deployment guidelines*",
             "media": {
-              "markdown": "## Search\n\nThe MCP server provides **keyword**, **regex**, and **semantic** search across your instruction index.\n\n```\nSearch the index for security best practices\n```"
+              "markdown": "walkthroughs/search.md"
             }
           },
           {
@@ -84,7 +84,7 @@
             "title": "Open the Dashboard",
             "description": "Enable the admin dashboard for real-time monitoring.\n\n[Open Dashboard](command:index.openDashboard)",
             "media": {
-              "markdown": "## Dashboard\n\n1. Enable: `index.dashboard.enabled` -> `true`\n2. Run **Index: Open Dashboard**\n3. Browse analytics, health, and session tracking at `http://localhost:8787`"
+              "markdown": "walkthroughs/dashboard.md"
             }
           },
           {
@@ -92,7 +92,7 @@
             "title": "Check Status",
             "description": "Verify your server configuration and connection.\n\n[Show Status](command:index.showStatus)",
             "media": {
-              "markdown": "## Status\n\nRun **Index: Show Status** to see:\n- Server path and availability\n- Instructions directory\n- Dashboard and mutation settings\n- Extension path"
+              "markdown": "walkthroughs/status.md"
             }
           }
         ]
@@ -169,4 +169,3 @@
     "ovsx": "^0.10.0"
   }
 }
-

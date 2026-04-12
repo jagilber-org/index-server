@@ -310,4 +310,3 @@ export function startTransport(opts: TransportOptions = {}){
 if(require.main === module){
   startTransport();
 }
-

@@ -52,4 +52,3 @@ Healthy MCP server should:
 
 ---
 **UPDATED**: Portable client removed; replaced by SDK test client and Copilot CLI
-

@@ -287,5 +287,3 @@ async function openDashboard(): Promise<void> {
     const url = `http://localhost:${port}`;
     void vscode.env.openExternal(vscode.Uri.parse(url));
 }
-
-

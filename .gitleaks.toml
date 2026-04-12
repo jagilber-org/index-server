@@ -1,0 +1,28 @@
+title = "Index Server Gitleaks Config"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Detect-secrets baseline hashes"
+paths = [
+	'''^\.secrets\.baseline$''',
+]
+
+[[allowlists]]
+description = "Known test fixture and lockfile false positives"
+paths = [
+	'''^package-lock\.json$''',
+	'''^scripts/gen-ai/test-data/large-files/large-file-2\.txt$''',
+	'''^scripts/gen-ai/test-data/secrets\.txt$''',
+	'''^src/tests/postinstall\.spec\.ts$''',
+	'''^src/tests/integration/auth\.spec\.ts$''',
+	'''^src/tests/unit/config\.spec\.ts$''',
+]
+
+[[allowlists]]
+description = "Local certificate and backup artifacts outside the source review surface"
+paths = [
+	'''^\.certs/''',
+	'''^backups/''',
+]

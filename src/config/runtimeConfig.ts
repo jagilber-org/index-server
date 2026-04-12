@@ -382,15 +382,55 @@ function parseInstructionsConfig(_mutationEnabled: boolean): InstructionsConfig 
 
 
 function parseMutationConfig(mutationEnabled: boolean): MutationConfig {
+  // Auto-backup defaults to true when mutation is enabled (protects against accidental data loss).
+  const autoBackupDefault = mutationEnabled;
   return {
     enabled: mutationEnabled,
     dispatcherTiming: getBooleanEnv('INDEX_SERVER_ADD_TIMING'),
     maxBulkDelete: numberFromEnv('INDEX_SERVER_MAX_BULK_DELETE', DEFAULT_LIMITS.MAX_BULK_DELETE),
     backupBeforeBulkDelete: process.env.INDEX_SERVER_BACKUP_BEFORE_BULK_DELETE === undefined ? true : getBooleanEnv('INDEX_SERVER_BACKUP_BEFORE_BULK_DELETE'),
-    autoBackupEnabled: getBooleanEnv('INDEX_SERVER_AUTO_BACKUP'),
+    autoBackupEnabled: process.env.INDEX_SERVER_AUTO_BACKUP === undefined ? autoBackupDefault : getBooleanEnv('INDEX_SERVER_AUTO_BACKUP'),
     autoBackupIntervalMs: numberFromEnv('INDEX_SERVER_AUTO_BACKUP_INTERVAL_MS', DEFAULT_TIMEOUTS_MS.AUTO_BACKUP_INTERVAL),
     autoBackupMaxCount: numberFromEnv('INDEX_SERVER_AUTO_BACKUP_MAX_COUNT', DEFAULT_LIMITS.AUTO_BACKUP_MAX_COUNT),
   };
+}
+
+/** Valid profile names supported by the wizard and runtime. */
+export const VALID_PROFILES = ['default', 'enhanced', 'experimental'] as const;
+export type ProfileName = typeof VALID_PROFILES[number];
+
+/**
+ * Apply profile-aware environment defaults.
+ * Called early in loadRuntimeConfig, sets env vars only when not already set.
+ * This ensures the wizard's profile choice flows through to all downstream parsers.
+ */
+function applyProfileDefaults(profile: ProfileName): void {
+  const setDefault = (key: string, value: string) => {
+    if (process.env[key] === undefined) process.env[key] = value;
+  };
+
+  // All profiles enable dashboard by default
+  setDefault('INDEX_SERVER_DASHBOARD', '1');
+
+  if (profile === 'enhanced') {
+    setDefault('INDEX_SERVER_SEMANTIC_ENABLED', '1');
+    setDefault('INDEX_SERVER_SEMANTIC_LOCAL_ONLY', '0');
+    setDefault('INDEX_SERVER_LOG_FILE', '1');
+    setDefault('INDEX_SERVER_MUTATION', '1');
+    setDefault('INDEX_SERVER_DASHBOARD_TLS', '1');
+    setDefault('INDEX_SERVER_METRICS_FILE_STORAGE', '1');
+    setDefault('INDEX_SERVER_FEATURES', 'usage');
+  } else if (profile === 'experimental') {
+    setDefault('INDEX_SERVER_SEMANTIC_ENABLED', '1');
+    setDefault('INDEX_SERVER_SEMANTIC_LOCAL_ONLY', '0');
+    setDefault('INDEX_SERVER_LOG_FILE', '1');
+    setDefault('INDEX_SERVER_MUTATION', '1');
+    setDefault('INDEX_SERVER_DASHBOARD_TLS', '1');
+    setDefault('INDEX_SERVER_METRICS_FILE_STORAGE', '1');
+    setDefault('INDEX_SERVER_FEATURES', 'usage');
+    setDefault('INDEX_SERVER_STORAGE_BACKEND', 'sqlite');
+    setDefault('INDEX_SERVER_LOG_LEVEL', 'debug');
+  }
 }
 
 
@@ -400,7 +440,9 @@ function parseMutationConfig(mutationEnabled: boolean): MutationConfig {
  * @returns Fully resolved runtime configuration object
  */
 export function loadRuntimeConfig(): RuntimeConfig {
-  const profile = process.env.INDEX_SERVER_PROFILE || 'default';
+  const rawProfile = (process.env.INDEX_SERVER_PROFILE || 'default').toLowerCase();
+  const profile = (VALID_PROFILES as readonly string[]).includes(rawProfile) ? rawProfile as ProfileName : 'default';
+  applyProfileDefaults(profile);
   const testMode = process.env.INDEX_SERVER_TEST_MODE;
   const rawTiming = parseTiming();
   const trace = parseTrace();
