@@ -2,7 +2,7 @@
   "name": "index-server",
   "displayName": "Index",
   "description": "Index Server providing governed, classified, and auditable instruction indexes with analytics and optional admin dashboard.",
-  "version": "1.19.2",
+  "version": "1.19.3",
   "publisher": "jagilber-org",
   "license": "MIT",
   "icon": "images/icon.png",

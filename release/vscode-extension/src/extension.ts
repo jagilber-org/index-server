@@ -231,28 +231,24 @@ async function configureMcpClient(context: vscode.ExtensionContext): Promise<voi
 
     const serverPath = resolveServerPath(context);
 
-    const dashboardEnabled = config.get<boolean>('dashboard.enabled', false);
     const dashboardPort = config.get<number>('dashboard.port', 8787);
     const logLevel = config.get<string>('logLevel', 'info');
-    const mutationEnabled = config.get<boolean>('mutation.enabled', false);
     const instructionsDir = resolveInstructionsDir(context);
 
-    const envBlock: Record<string, string> = {
-        INDEX_SERVER_PROFILE: profile,
-        INDEX_SERVER_LOG_LEVEL: logLevel ?? 'info',
-        ...(mutationEnabled ? { INDEX_SERVER_MUTATION: '1' } : {}),
-        ...(dashboardEnabled ? { INDEX_SERVER_DASHBOARD: '1', INDEX_SERVER_DASHBOARD_PORT: String(dashboardPort) } : {}),
-        ...(instructionsDir ? { INDEX_SERVER_DIR: instructionsDir } : {})
-    };
+    const envBlock = buildProfileEnvBlock(profile, {
+        logLevel: logLevel ?? 'info',
+        dashboardPort,
+        instructionsDir,
+    });
 
     // Use local node path if available, otherwise npx (zero-config)
     const serverEntry: Record<string, unknown> = serverPath
         ? { type: 'stdio', command: 'node', args: [serverPath], cwd: path.dirname(path.dirname(path.dirname(serverPath))), env: envBlock }
         : { type: 'stdio', command: 'npx', args: ['@jagilber-org/index-server'], env: envBlock };
 
-    const mcpConfig = { servers: { 'index': serverEntry } };
+    const mcpConfig = { servers: { 'index-server': serverEntry } };
 
-    const snippet = JSON.stringify(mcpConfig, null, 2);
+    const snippet = generateJsoncConfig(mcpConfig, profile);
 
     // Show the configuration to the user
     const doc = await vscode.workspace.openTextDocument({ content: snippet, language: 'jsonc' });
@@ -318,4 +314,107 @@ async function openDashboard(): Promise<void> {
 
     const url = `http://localhost:${port}`;
     void vscode.env.openExternal(vscode.Uri.parse(url));
+}
+
+/**
+ * Build a profile-aware env block for the MCP server config.
+ * Enhanced/experimental profiles include semantic, TLS, features, and storage vars.
+ * All vars are included with descriptions as JSONC comments when rendered.
+ */
+function buildProfileEnvBlock(
+    profile: string,
+    opts: { logLevel: string; dashboardPort: number; instructionsDir?: string }
+): Record<string, string> {
+    const isEnhanced = profile === 'enhanced' || profile === 'experimental';
+    const isSqlite = profile === 'experimental';
+
+    const env: Record<string, string> = {
+        // Core
+        INDEX_SERVER_PROFILE: profile,
+        INDEX_SERVER_LOG_LEVEL: opts.logLevel,
+        INDEX_SERVER_DASHBOARD: '1',
+        INDEX_SERVER_DASHBOARD_PORT: String(opts.dashboardPort),
+    };
+
+    if (opts.instructionsDir) {
+        env.INDEX_SERVER_DIR = opts.instructionsDir;
+    }
+
+    // Enhanced + Experimental: mutation, features, semantic, TLS, logging
+    if (isEnhanced) {
+        env.INDEX_SERVER_MUTATION = '1';
+        env.INDEX_SERVER_FEATURES = 'usage';
+        env.INDEX_SERVER_METRICS_FILE_STORAGE = '1';
+        env.INDEX_SERVER_LOG_FILE = '1';
+        // Semantic search
+        env.INDEX_SERVER_SEMANTIC_ENABLED = '1';
+        env.INDEX_SERVER_SEMANTIC_LOCAL_ONLY = '0';
+        env.INDEX_SERVER_SEMANTIC_MODEL = 'Xenova/all-MiniLM-L6-v2';
+        env.INDEX_SERVER_SEMANTIC_DEVICE = 'cpu';
+        // TLS
+        env.INDEX_SERVER_DASHBOARD_TLS = '1';
+        env.INDEX_SERVER_DASHBOARD_TLS_CERT = '';
+        env.INDEX_SERVER_DASHBOARD_TLS_KEY = '';
+    }
+
+    // Experimental: SQLite + debug
+    if (isSqlite) {
+        env.INDEX_SERVER_STORAGE_BACKEND = 'sqlite';
+        env.INDEX_SERVER_LOG_LEVEL = 'debug';
+    }
+
+    return env;
+}
+
+/** Env var descriptions for JSONC output */
+const ENV_DESCRIPTIONS: Record<string, string> = {
+    INDEX_SERVER_PROFILE: 'Configuration profile: default | enhanced | experimental',
+    INDEX_SERVER_LOG_LEVEL: 'Log level: error | warn | info | debug | trace',
+    INDEX_SERVER_DASHBOARD: 'Enable the web dashboard (0=off, 1=on)',
+    INDEX_SERVER_DASHBOARD_PORT: 'Dashboard listen port',
+    INDEX_SERVER_DIR: 'Instruction catalog directory (your knowledge base)',
+    INDEX_SERVER_MUTATION: 'Enable write operations: add, update, delete (0=off, 1=on)',
+    INDEX_SERVER_FEATURES: 'Feature flags: usage,window,hotness,drift,risk',
+    INDEX_SERVER_METRICS_FILE_STORAGE: 'Persist metrics to disk (0=off, 1=on)',
+    INDEX_SERVER_LOG_FILE: 'File logging (0=off, 1=default path, or absolute path)',
+    INDEX_SERVER_SEMANTIC_ENABLED: 'Enable semantic (vector) search (0=off, 1=on)',
+    INDEX_SERVER_SEMANTIC_LOCAL_ONLY: 'Block remote model downloads (0=allow, 1=local only)',
+    INDEX_SERVER_SEMANTIC_MODEL: 'HuggingFace model name for embeddings',
+    INDEX_SERVER_SEMANTIC_DEVICE: 'Compute device: cpu | cuda | dml (Windows ML)',
+    INDEX_SERVER_SEMANTIC_CACHE_DIR: 'Directory for downloaded model files (~90MB)',
+    INDEX_SERVER_EMBEDDING_PATH: 'Cached embeddings file path',
+    INDEX_SERVER_DASHBOARD_TLS: 'Enable HTTPS for dashboard (0=off, 1=on)',
+    INDEX_SERVER_DASHBOARD_TLS_CERT: 'Path to TLS certificate file (.crt/.pem)',
+    INDEX_SERVER_DASHBOARD_TLS_KEY: 'Path to TLS private key file (.key/.pem)',
+    INDEX_SERVER_STORAGE_BACKEND: 'Storage engine: json | sqlite',
+    INDEX_SERVER_FEEDBACK_DIR: 'Feedback entries storage directory',
+    INDEX_SERVER_BACKUPS_DIR: 'Backup snapshots directory',
+    INDEX_SERVER_STATE_DIR: 'Runtime state files directory',
+    INDEX_SERVER_MODE: 'Instance mode: standalone | leader | follower | auto',
+    INDEX_SERVER_AUTO_BACKUP: 'Automatic backups (0=off, 1=on; on by default when mutation enabled)',
+};
+
+/**
+ * Generate JSONC string with inline comments describing each env var.
+ */
+function generateJsoncConfig(mcpConfig: Record<string, unknown>, profile: string): string {
+    // Serialize to JSON first, then add comments to env var lines
+    const json = JSON.stringify(mcpConfig, null, 2);
+    const lines = json.split('\n');
+    const result: string[] = [];
+
+    result.push(`// Index Server MCP configuration — profile: ${profile}`);
+    result.push('// Edit values below, then copy to .vscode/mcp.json');
+
+    for (const line of lines) {
+        const match = line.match(/^(\s*)"(INDEX_SERVER_\w+)":\s*"(.*)"/);
+        if (match) {
+            const desc = ENV_DESCRIPTIONS[match[2]];
+            if (desc) {
+                result.push(`${match[1]}// ${desc}`);
+            }
+        }
+        result.push(line);
+    }
+    return result.join('\n');
 }
