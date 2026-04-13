@@ -38,7 +38,7 @@ This index distinguishes between **active** project documentation and **archived
 | PowerShell MCP | `POWERSHELL-MCP-GUIDE.md` | PowerShell server integration guide |
 | GPT-5 MCP | `GPT5-MCP-CONNECTION-GUIDE.md` | GPT-5 connection quick-start |
 | GPT-5 Testing | `GPT5-MCP-TESTING-KB.md` | Testing tools reference |
-| VS Code MCP | `VSCODE-MCP.md` | VS Code integration guide |
+| VS Code MCP | `vscode_mcp.md` | VS Code integration guide |
 | Agent Graph | `AGENT-GRAPH-INSTRUCTIONS.md` | Operational playbook for agents leveraging graph_export |
 | Process | `FEEDBACK-DEFECT-LIFECYCLE.md` | Feedback-to-fix lifecycle process |
 | Graph | `GRAPH.md` | Graph subsystem documentation |

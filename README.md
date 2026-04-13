@@ -55,9 +55,11 @@ npm run build
 Add to your MCP client configuration (e.g., VS Code `mcp.json` or Claude Desktop config):
 
 ```jsonc
+// VS Code: .vscode/mcp.json
 {
-  "mcpServers": {
-    "catalog": {
+  "servers": {
+    "index-server": {
+      "type": "stdio",
       "command": "node",
       "args": [
         "C:/path/to/index-server/dist/server/index-server.js",
@@ -66,7 +68,7 @@ Add to your MCP client configuration (e.g., VS Code `mcp.json` or Claude Desktop
       ],
       "env": {
         "INDEX_SERVER_LOG_LEVEL": "info",
-        "INDEX_SERVER_MUTATION": "enabled",
+        "INDEX_SERVER_MUTATION": "1",
         "INDEX_SERVER_DIR": "C:/path/to/index-server/instructions"
       }
     }
@@ -215,7 +217,7 @@ See [Configuration Guide](docs/configuration.md) for bootstrap workflow details.
 | `INDEX_SERVER_TEST_MODE` | - | Test mode: `coverage-fast` for accelerated coverage runs |
 | `INDEX_SERVER_TRACE` | - | Trace tokens: comma-separated (e.g., `manifest,bootstrap`) |
 | `INDEX_SERVER_MANIFEST_WRITE` | `1` | Enable manifest writes: `1` or `0` |
-| `INDEX_SERVER_BODY_MAX_LENGTH` | `20000` | Max body length for instructions (1000-1000000) |
+| `INDEX_SERVER_BODY_MAX_LENGTH` | `20000` | Max body length for instructions (1000–1000000) |
 
 **Semantic Search:**
 

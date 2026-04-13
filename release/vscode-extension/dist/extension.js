@@ -55,8 +55,11 @@ function activate(context) {
     const hasShownWelcome = context.globalState.get('hasShownWelcome');
     if (!hasShownWelcome) {
         void context.globalState.update('hasShownWelcome', true);
-        void vscode.window.showInformationMessage('Index Server installed. Configure it now?', 'Configure', 'Later').then(choice => {
-            if (choice === 'Configure') {
+        void vscode.window.showInformationMessage('Index Server installed. Get started with the setup walkthrough?', 'Open Walkthrough', 'Configure', 'Later').then(choice => {
+            if (choice === 'Open Walkthrough') {
+                void vscode.commands.executeCommand('workbench.action.openWalkthrough', 'jagilber-org.index-server#index.gettingStarted', false);
+            }
+            else if (choice === 'Configure') {
                 void vscode.commands.executeCommand('index.configure');
             }
         });

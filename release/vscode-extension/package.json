@@ -2,7 +2,7 @@
   "name": "index-server",
   "displayName": "Index",
   "description": "Index Server providing governed, classified, and auditable instruction indexes with analytics and optional admin dashboard.",
-  "version": "1.19.3",
+  "version": "1.19.4",
   "publisher": "jagilber-org",
   "license": "MIT",
   "icon": "images/icon.png",
@@ -72,6 +72,33 @@
             }
           },
           {
+            "id": "tls-setup",
+            "title": "Set Up TLS Certificates",
+            "description": "Generate a self-signed certificate and enable HTTPS for the dashboard. Required for the Enhanced and Experimental profiles.\n\n[Configure MCP Client](command:index.configure)",
+            "media": {
+              "markdown": "walkthroughs/tls-setup.md"
+            },
+            "when": "config.index.profile != default"
+          },
+          {
+            "id": "semantic-setup",
+            "title": "Set Up Semantic Search",
+            "description": "Download the embedding model and enable meaning-based instruction search. Included in Enhanced and Experimental profiles.\n\n[Configure MCP Client](command:index.configure)",
+            "media": {
+              "markdown": "walkthroughs/semantic-setup.md"
+            },
+            "when": "config.index.profile != default"
+          },
+          {
+            "id": "sqlite-setup",
+            "title": "Set Up SQLite Storage",
+            "description": "Switch from JSON to SQLite for FTS5 full-text search and WAL-mode concurrency. Experimental profile only.\n\n[Configure MCP Client](command:index.configure)",
+            "media": {
+              "markdown": "walkthroughs/sqlite-setup.md"
+            },
+            "when": "config.index.profile == experimental"
+          },
+          {
             "id": "search",
             "title": "Search Instructions",
             "description": "Use the index search tools in Copilot Chat agent mode.\n\nTry asking: *Search the instruction index for deployment guidelines*",
@@ -88,11 +115,11 @@
             }
           },
           {
-            "id": "status",
-            "title": "Check Status",
-            "description": "Verify your server configuration and connection.\n\n[Show Status](command:index.showStatus)",
+            "id": "verify",
+            "title": "Verify Your Setup",
+            "description": "Confirm the server is running and connected. Troubleshoot common issues.\n\n[Show Status](command:index.showStatus)",
             "media": {
-              "markdown": "walkthroughs/status.md"
+              "markdown": "walkthroughs/verify.md"
             }
           }
         ]
