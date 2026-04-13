@@ -101,15 +101,15 @@
     "commands": [
       {
         "command": "index.configure",
-        "title": "Index: Configure MCP Client"
+        "title": "Index Server: Configure MCP Client"
       },
       {
         "command": "index.showStatus",
-        "title": "Index: Show Status"
+        "title": "Index Server: Show Status"
       },
       {
         "command": "index.openDashboard",
-        "title": "Index: Open Dashboard"
+        "title": "Index Server: Open Dashboard"
       }
     ],
     "configuration": {
