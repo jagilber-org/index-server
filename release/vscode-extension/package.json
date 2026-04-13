@@ -66,7 +66,7 @@
           {
             "id": "configure",
             "title": "Choose a Profile & Configure",
-            "description": "Pick a server profile (Default, Enhanced, or Experimental) and generate your MCP client configuration.\n\n[Configure MCP Client](command:index.configure)",
+            "description": "Pick a server profile (Default, Enhanced, or Experimental) and generate your MCP client configuration.\n\n[Configure MCP Client](command:index.configure)\n[Open Settings](command:workbench.action.openSettings?%22index.profile%22)",
             "media": {
               "markdown": "walkthroughs/configure.md"
             }
@@ -74,7 +74,7 @@
           {
             "id": "tls-setup",
             "title": "Set Up TLS Certificates",
-            "description": "Generate a self-signed certificate and enable HTTPS for the dashboard. Required for the Enhanced and Experimental profiles.\n\n[Configure MCP Client](command:index.configure)",
+            "description": "Generate a self-signed certificate and enable HTTPS for the dashboard. Required for the Enhanced and Experimental profiles.\n\n[Re-generate Config](command:index.configure)\n[Open Dashboard](command:index.openDashboard)\n[Show Status](command:index.showStatus)",
             "media": {
               "markdown": "walkthroughs/tls-setup.md"
             },
@@ -83,7 +83,7 @@
           {
             "id": "semantic-setup",
             "title": "Set Up Semantic Search",
-            "description": "Download the embedding model and enable meaning-based instruction search. Included in Enhanced and Experimental profiles.\n\n[Configure MCP Client](command:index.configure)",
+            "description": "Download the embedding model and enable meaning-based instruction search. Included in Enhanced and Experimental profiles.\n\n[Re-generate Config](command:index.configure)\n[Show Status](command:index.showStatus)",
             "media": {
               "markdown": "walkthroughs/semantic-setup.md"
             },
@@ -92,7 +92,7 @@
           {
             "id": "sqlite-setup",
             "title": "Set Up SQLite Storage",
-            "description": "Switch from JSON to SQLite for FTS5 full-text search and WAL-mode concurrency. Experimental profile only.\n\n[Configure MCP Client](command:index.configure)",
+            "description": "Switch from JSON to SQLite for FTS5 full-text search and WAL-mode concurrency. Experimental profile only.\n\n[Re-generate Config](command:index.configure)\n[Show Status](command:index.showStatus)\n[Open Settings](command:workbench.action.openSettings?%22index%22)",
             "media": {
               "markdown": "walkthroughs/sqlite-setup.md"
             },
@@ -101,7 +101,7 @@
           {
             "id": "search",
             "title": "Search Instructions",
-            "description": "Use the index search tools in Copilot Chat agent mode.\n\nTry asking: *search index-server for post installation configuration*",
+            "description": "Use the index search tools in Copilot Chat agent mode.\n\nTry asking: *search index-server for post installation configuration*\n\n[Show Status](command:index.showStatus)\n[Open Dashboard](command:index.openDashboard)",
             "media": {
               "markdown": "walkthroughs/search.md"
             }
@@ -109,7 +109,7 @@
           {
             "id": "dashboard",
             "title": "Open the Dashboard",
-            "description": "Enable the admin dashboard for real-time monitoring.\n\n[Open Dashboard](command:index.openDashboard)",
+            "description": "Enable the admin dashboard for real-time monitoring.\n\n[Open Dashboard](command:index.openDashboard)\n[Open Settings](command:workbench.action.openSettings?%22index.dashboard%22)",
             "media": {
               "markdown": "walkthroughs/dashboard.md"
             }
@@ -117,7 +117,7 @@
           {
             "id": "verify",
             "title": "Verify Your Setup",
-            "description": "Confirm the server is running and connected. Troubleshoot common issues.\n\n[Show Status](command:index.showStatus)",
+            "description": "Confirm the server is running and connected. Troubleshoot common issues.\n\n[Show Status](command:index.showStatus)\n[Configure MCP Client](command:index.configure)\n[Open Dashboard](command:index.openDashboard)",
             "media": {
               "markdown": "walkthroughs/verify.md"
             }
