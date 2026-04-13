@@ -39,6 +39,10 @@ If you enabled the dashboard (`index.dashboard.enabled: true`):
 | Dashboard won't open | Ensure `index.dashboard.enabled` is `true` in settings |
 | MCP tools not appearing | Check that the MCP server shows as connected in VS Code's MCP panel |
 
+---
+
+[Show Status](command:index.showStatus) · [Configure MCP Client](command:index.configure) · [Open Dashboard](command:index.openDashboard) · [Open Settings](command:workbench.action.openSettings?%22index%22)
+
 ### Next Steps
 
 - Add your own instructions to the `INDEX_SERVER_DIR` folder

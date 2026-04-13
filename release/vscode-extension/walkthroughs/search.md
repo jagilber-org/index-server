@@ -9,3 +9,7 @@ search index-server for post installation configuration
 ```
 
 The server exposes `index_search` and `index_dispatch` tools that Copilot calls automatically — no extra setup needed.
+
+---
+
+[Configure MCP Client](command:index.configure) · [Show Status](command:index.showStatus) · [Open Dashboard](command:index.openDashboard)

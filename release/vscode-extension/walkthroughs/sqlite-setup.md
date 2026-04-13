@@ -44,3 +44,7 @@ INDEX_SERVER_STORAGE_BACKEND=json
 The JSON files are preserved alongside the SQLite database.
 
 > **⚠️ Experimental:** SQLite storage is functional but not yet recommended for production workloads.
+
+---
+
+[Show Status](command:index.showStatus) · [Re-generate Config](command:index.configure) · [Open Settings](command:workbench.action.openSettings?%22index%22)

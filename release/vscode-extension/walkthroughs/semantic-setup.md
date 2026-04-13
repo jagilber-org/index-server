@@ -45,10 +45,12 @@ This produces 768-dimensional embeddings and is ~90 MB.
 In Copilot Chat (agent mode), try:
 
 ```
-Search the index for security best practices
+search index-server for post installation configuration
 ```
 
 Results should include semantically related instructions, not just keyword matches.
+
+[Show Status](command:index.showStatus) · [Re-generate Config](command:index.configure)
 
 ### Tips
 

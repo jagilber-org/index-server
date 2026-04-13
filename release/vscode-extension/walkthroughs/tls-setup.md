@@ -31,9 +31,14 @@ In your generated `mcp.json`, update these values:
 ### Verify
 
 1. Restart the MCP server
-2. Run **Index Server: Open Dashboard**
-3. The dashboard should load over `https://localhost:8787`
+2. Open the dashboard — it should load over `https://localhost:8787`
+
+[Open Dashboard](command:index.openDashboard) · [Show Status](command:index.showStatus)
 
 > **Note:** Browsers will warn about self-signed certs. Add an exception or import the CA cert (`certs/ca.crt`) into your trust store.
+
+---
+
+[← Back to Configure](command:workbench.action.openWalkthrough?%22jagilber-org.index-server%23index.gettingStarted%22) · [Re-generate Config](command:index.configure)
 
 See [MCP Configuration Guide](https://github.com/jagilber-dev/index-server/blob/main/docs/mcp_configuration.md) for production TLS patterns.
