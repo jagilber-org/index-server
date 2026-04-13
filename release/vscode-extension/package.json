@@ -101,7 +101,7 @@
           {
             "id": "search",
             "title": "Search Instructions",
-            "description": "Use the index search tools in Copilot Chat agent mode.\n\nTry asking: *Search the instruction index for deployment guidelines*",
+            "description": "Use the index search tools in Copilot Chat agent mode.\n\nTry asking: *search index-server for post installation configuration*",
             "media": {
               "markdown": "walkthroughs/search.md"
             }
