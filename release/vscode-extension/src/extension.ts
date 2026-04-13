@@ -5,9 +5,42 @@ import * as fs from 'fs';
 let outputChannel: vscode.OutputChannel;
 
 export function activate(context: vscode.ExtensionContext): void {
-    outputChannel = vscode.window.createOutputChannel('Index');
-    outputChannel.appendLine('Index Server extension activated');
+    outputChannel = vscode.window.createOutputChannel('Index Server');
+    outputChannel.appendLine('Index Server extension activating...');
 
+    // Register commands first so they're available even if MCP API fails
+    context.subscriptions.push(
+        vscode.commands.registerCommand('index.configure', () => configureMcpClient(context)),
+        vscode.commands.registerCommand('index.showStatus', () => showStatus(context)),
+        vscode.commands.registerCommand('index.openDashboard', () => openDashboard()),
+        outputChannel
+    );
+
+    // Register MCP server definition providers (may not be available on all VS Code versions)
+    try {
+        registerMcpProviders(context);
+    } catch (err) {
+        outputChannel.appendLine(`[warn] MCP provider registration failed (API may not be available): ${err}`);
+    }
+
+    // Show activation info on first install
+    const hasShownWelcome = context.globalState.get<boolean>('hasShownWelcome');
+    if (!hasShownWelcome) {
+        void context.globalState.update('hasShownWelcome', true);
+        void vscode.window.showInformationMessage(
+            'Index Server installed. Configure it now?',
+            'Configure', 'Later'
+        ).then(choice => {
+            if (choice === 'Configure') {
+                void vscode.commands.executeCommand('index.configure');
+            }
+        });
+    }
+
+    outputChannel.appendLine('Index Server extension activated');
+}
+
+function registerMcpProviders(context: vscode.ExtensionContext): void {
     // Register MCP server definition provider
     const didChangeEmitter = new vscode.EventEmitter<void>();
     context.subscriptions.push(
@@ -15,6 +48,7 @@ export function activate(context: vscode.ExtensionContext): void {
             onDidChangeMcpServerDefinitions: didChangeEmitter.event,
             provideMcpServerDefinitions: async () => {
                 const config = vscode.workspace.getConfiguration('index');
+                const profile = config.get<string>('profile', 'default');
                 const dashboardEnabled = config.get<boolean>('dashboard.enabled', false);
                 const dashboardPort = config.get<number>('dashboard.port', 8787);
                 const logLevel = config.get<string>('logLevel', 'info');
@@ -22,6 +56,7 @@ export function activate(context: vscode.ExtensionContext): void {
                 const instructionsDir = resolveInstructionsDir(context);
 
                 const env: Record<string, string> = {
+                    INDEX_SERVER_PROFILE: profile ?? 'default',
                     INDEX_SERVER_LOG_LEVEL: logLevel ?? 'info',
                 };
                 if (mutationEnabled) { env.INDEX_SERVER_MUTATION = '1'; }
@@ -120,28 +155,6 @@ export function activate(context: vscode.ExtensionContext): void {
             }
         })
     );
-
-    // Register commands
-    context.subscriptions.push(
-        vscode.commands.registerCommand('index.configure', () => configureMcpClient(context)),
-        vscode.commands.registerCommand('index.showStatus', () => showStatus(context)),
-        vscode.commands.registerCommand('index.openDashboard', () => openDashboard()),
-        outputChannel
-    );
-
-    // Show activation info on first install
-    const hasShownWelcome = context.globalState.get<boolean>('hasShownWelcome');
-    if (!hasShownWelcome) {
-        void context.globalState.update('hasShownWelcome', true);
-        void vscode.window.showInformationMessage(
-            'Index Server installed. Configure it now?',
-            'Configure', 'Later'
-        ).then(choice => {
-            if (choice === 'Configure') {
-                void vscode.commands.executeCommand('index.configure');
-            }
-        });
-    }
 }
 
 export function deactivate(): void {
@@ -198,9 +211,26 @@ function resolveInstructionsDir(context: vscode.ExtensionContext): string | unde
 }
 
 async function configureMcpClient(context: vscode.ExtensionContext): Promise<void> {
-    const serverPath = resolveServerPath(context);
+    // Profile picker
+    const profileItems: vscode.QuickPickItem[] = [
+        { label: 'Default', description: 'HTTP standalone — local JSON storage, minimal config', detail: 'INDEX_SERVER_PROFILE=default' },
+        { label: 'Enhanced', description: 'Semantic search + HTTPS — TLS, embeddings, file logging, mutation', detail: 'INDEX_SERVER_PROFILE=enhanced' },
+        { label: 'Experimental', description: 'SQLite + debug — all enhanced features plus SQLite backend', detail: 'INDEX_SERVER_PROFILE=experimental' }
+    ];
 
     const config = vscode.workspace.getConfiguration('index');
+
+    const picked = await vscode.window.showQuickPick(profileItems, {
+        title: 'Index Server Profile',
+        placeHolder: 'Choose a server profile (controls default features and storage)',
+    });
+    if (!picked) { return; } // cancelled
+
+    const profile = picked.label.toLowerCase();
+    await config.update('profile', profile, vscode.ConfigurationTarget.Global);
+
+    const serverPath = resolveServerPath(context);
+
     const dashboardEnabled = config.get<boolean>('dashboard.enabled', false);
     const dashboardPort = config.get<number>('dashboard.port', 8787);
     const logLevel = config.get<string>('logLevel', 'info');
@@ -208,6 +238,7 @@ async function configureMcpClient(context: vscode.ExtensionContext): Promise<voi
     const instructionsDir = resolveInstructionsDir(context);
 
     const envBlock: Record<string, string> = {
+        INDEX_SERVER_PROFILE: profile,
         INDEX_SERVER_LOG_LEVEL: logLevel ?? 'info',
         ...(mutationEnabled ? { INDEX_SERVER_MUTATION: '1' } : {}),
         ...(dashboardEnabled ? { INDEX_SERVER_DASHBOARD: '1', INDEX_SERVER_DASHBOARD_PORT: String(dashboardPort) } : {}),
@@ -251,6 +282,7 @@ async function showStatus(context: vscode.ExtensionContext): Promise<void> {
     const lines = [
         `Index Server Status`,
         `──────────────`,
+        `Profile: ${config.get('profile', 'default')}`,
         `Server Path: ${serverPath ?? 'npx @jagilber-org/index-server (default)'}`,
         `Instructions Dir: ${instructionsDir ?? '(built-in)'}`,
         `Dashboard: ${config.get('dashboard.enabled') ? `enabled (port ${config.get('dashboard.port')})` : 'disabled'}`,

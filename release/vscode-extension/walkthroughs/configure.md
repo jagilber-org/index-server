@@ -1,6 +1,14 @@
 ## Configure
 
-Run **Index: Configure MCP Client** to auto-generate your `mcp.json` configuration.
+Run **Index Server: Configure MCP Client** to choose a profile and generate your `mcp.json` configuration.
+
+### Profiles
+
+| Profile | Description |
+|---------|-------------|
+| **Default** | HTTP standalone — local JSON storage, minimal config |
+| **Enhanced** | Semantic search + HTTPS — TLS, embeddings, file logging, mutation, metrics |
+| **Experimental** | SQLite + debug — all enhanced features plus SQLite storage backend |
 
 The extension uses `npx @jagilber-org/index-server` by default — zero config needed.
 

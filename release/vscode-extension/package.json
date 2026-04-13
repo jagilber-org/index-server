@@ -2,7 +2,7 @@
   "name": "index-server",
   "displayName": "Index",
   "description": "Index Server providing governed, classified, and auditable instruction indexes with analytics and optional admin dashboard.",
-  "version": "1.19.1",
+  "version": "1.19.2",
   "publisher": "jagilber-org",
   "license": "MIT",
   "icon": "images/icon.png",
@@ -65,8 +65,8 @@
         "steps": [
           {
             "id": "configure",
-            "title": "Configure the Server",
-            "description": "Set the server path and generate MCP client configuration.\n\n[Configure MCP Client](command:index.configure)",
+            "title": "Choose a Profile & Configure",
+            "description": "Pick a server profile (Default, Enhanced, or Experimental) and generate your MCP client configuration.\n\n[Configure MCP Client](command:index.configure)",
             "media": {
               "markdown": "walkthroughs/configure.md"
             }
@@ -115,6 +115,21 @@
     "configuration": {
       "title": "Index Server",
       "properties": {
+        "index.profile": {
+          "type": "string",
+          "default": "default",
+          "enum": [
+            "default",
+            "enhanced",
+            "experimental"
+          ],
+          "enumDescriptions": [
+            "HTTP standalone — minimal config, local JSON storage",
+            "Semantic search + HTTPS — enables TLS, semantic embeddings, file logging, mutation, metrics",
+            "SQLite + debug — all enhanced features plus SQLite storage backend and debug logging"
+          ],
+          "description": "Server profile that controls default features and storage."
+        },
         "index.serverPath": {
           "type": "string",
           "default": "",

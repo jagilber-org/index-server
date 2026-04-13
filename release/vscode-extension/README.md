@@ -81,16 +81,16 @@ All settings are available under `Index Server.*` in VS Code Settings:
 
 The server provides **50+ tools** organized by category:
 
-### Index Server Management
-- `Index Server_search` — Search by keyword, regex, or semantic similarity
-- `Index Server_dispatch` — Query, list, get, add, import, remove instructions
-- `Index Server_add` — Add a single instruction with validation
-- `Index Server_import` — Bulk import instructions
-- `Index Server_remove` — Delete instructions by ID
+### Index Management
+- `index_search` — Search by keyword, regex, or semantic similarity
+- `index_dispatch` — Query, list, get, add, import, remove instructions
+- `index_add` — Add a single instruction with validation
+- `index_import` — Bulk import instructions
+- `index_remove` — Delete instructions by ID
 
 ### Governance & Health
 - `health_check` — Server health status and version
-- `Index Server_governanceHash` — Deterministic Index Server hash for integrity verification
+- `index_governanceHash` — Deterministic index hash for integrity verification
 - `integrity_verify` — Verify instruction body hashes
 - `usage_track` — Track instruction usage with qualitative signals
 - `usage_hotset` — Most-used instructions (hot set)
