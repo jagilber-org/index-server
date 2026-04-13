@@ -13,6 +13,13 @@ export function activate(context: vscode.ExtensionContext): void {
         vscode.commands.registerCommand('index.configure', () => configureMcpClient(context)),
         vscode.commands.registerCommand('index.showStatus', () => showStatus(context)),
         vscode.commands.registerCommand('index.openDashboard', () => openDashboard()),
+        vscode.commands.registerCommand('index.openWalkthrough', () => {
+            void vscode.commands.executeCommand(
+                'workbench.action.openWalkthrough',
+                'jagilber-org.index-server#index.gettingStarted',
+                false
+            );
+        }),
         outputChannel
     );
 

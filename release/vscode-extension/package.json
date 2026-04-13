@@ -137,6 +137,10 @@
       {
         "command": "index.openDashboard",
         "title": "Index Server: Open Dashboard"
+      },
+      {
+        "command": "index.openWalkthrough",
+        "title": "Index Server: Setup Guide"
       }
     ],
     "configuration": {

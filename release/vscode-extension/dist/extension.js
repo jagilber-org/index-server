@@ -43,7 +43,9 @@ function activate(context) {
     outputChannel = vscode.window.createOutputChannel('Index Server');
     outputChannel.appendLine('Index Server extension activating...');
     // Register commands first so they're available even if MCP API fails
-    context.subscriptions.push(vscode.commands.registerCommand('index.configure', () => configureMcpClient(context)), vscode.commands.registerCommand('index.showStatus', () => showStatus(context)), vscode.commands.registerCommand('index.openDashboard', () => openDashboard()), outputChannel);
+    context.subscriptions.push(vscode.commands.registerCommand('index.configure', () => configureMcpClient(context)), vscode.commands.registerCommand('index.showStatus', () => showStatus(context)), vscode.commands.registerCommand('index.openDashboard', () => openDashboard()), vscode.commands.registerCommand('index.openWalkthrough', () => {
+        void vscode.commands.executeCommand('workbench.action.openWalkthrough', 'jagilber-org.index-server#index.gettingStarted', false);
+    }), outputChannel);
     // Register MCP server definition providers (may not be available on all VS Code versions)
     try {
         registerMcpProviders(context);

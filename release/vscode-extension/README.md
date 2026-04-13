@@ -40,7 +40,8 @@ After installation, the MCP server is automatically registered. You can configur
 
 Or use the command palette:
 
-- `Ctrl+Shift+P` → **"Index Server: Configure MCP Client"**
+- `Ctrl+Shift+P` → **"Index Server: Setup Guide"** — interactive walkthrough with TLS, semantic search, and SQLite guides
+- `Ctrl+Shift+P` → **"Index Server: Configure MCP Client"** — generate your `mcp.json`
 
 ### 3. Start Using Tools in Chat
 
@@ -71,6 +72,7 @@ All settings are available under `Index Server.*` in VS Code Settings:
 
 | Command | Description |
 |---------|-------------|
+| **Index Server: Setup Guide** | Open the interactive setup walkthrough with profile-specific guides |
 | **Index Server: Configure MCP Client** | Generate MCP client configuration for `mcp.json` |
 | **Index Server: Show Status** | Show server path, settings, and connection status |
 | **Index Server: Open Dashboard** | Open the admin dashboard in your browser |
