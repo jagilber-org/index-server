@@ -258,14 +258,16 @@ theoretically possible but requires active exploitation of an admin-only API.
 - **Files:** `src/dashboard/server/routes/instructions.routes.ts` (primary),
   `AdminPanel.ts`, `sqlite.routes.ts` (secondary)
 - **Issue:** Unsanitized route parameters in `path.join()` for GET/PUT/DELETE
-- **Fix:** Apply `replace(/[^a-zA-Z0-9-_]/g, '-')` sanitization + `path.resolve()` boundary check
-- **Effort:** Small — pattern already exists in POST route
+- **Fix:** ✅ **RESOLVED** — Extracted shared `safeInstructionPath()` helper with regex
+  sanitization + `path.resolve()` boundary check. Applied to all CRUD routes.
+- **Commit:** `fix: path traversal in instruction routes and XSS in admin dashboard`
 
 ### 🟡 Priority 2: XSS in Admin Dashboard (6 findings — 1 root cause)
 - **File:** `src/dashboard/client/js/admin.instructions.js`
 - **Issue:** Instruction names inserted into innerHTML without HTML escaping
-- **Fix:** Add `escapeHtml()` utility, escape before template interpolation
-- **Effort:** Small
+- **Fix:** ✅ **RESOLVED** — Added `escapeHtml()` utility, escape all user-derived values
+  (names, categories, comments) before template interpolation into innerHTML.
+- **Commit:** Same as above
 
 ### 🟢 Recommended: Scanner Configuration Tuning
 The scanner should be tuned to reduce the ~62% noise rate:
