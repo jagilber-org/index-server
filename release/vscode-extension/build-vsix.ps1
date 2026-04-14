@@ -83,6 +83,15 @@ try {
         # Copy package.json for the server
         Copy-Item (Join-Path $src 'package.json') (Join-Path $dest 'package.json')
 
+        # Copy distributable user scripts
+        $scriptsSrc = Join-Path $src 'scripts' 'dist'
+        if (Test-Path $scriptsSrc) {
+            $scriptsDest = Join-Path $dest 'scripts'
+            New-Item -ItemType Directory -Path $scriptsDest -Force | Out-Null
+            Copy-Item (Join-Path $scriptsSrc '*') $scriptsDest -Recurse
+            Write-Host "  User scripts bundled ($((Get-ChildItem $scriptsDest -File).Count) files)" -ForegroundColor Gray
+        }
+
         Write-Host "  Server bundled successfully" -ForegroundColor Green
     } else {
         Write-Host "[3/4] Skipping server bundle (use -IncludeServer to embed)" -ForegroundColor Gray
