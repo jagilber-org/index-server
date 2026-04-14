@@ -70,6 +70,11 @@ export function loadCachedEmbeddings(filePath: string): EmbeddingCacheData | nul
     if (!fs.existsSync(filePath)) return null;
     const raw = fs.readFileSync(filePath, 'utf-8');
     const data = JSON.parse(raw);
+    // Backwards-compat: older caches used 'catalogHash' instead of 'indexHash'
+    if (data && typeof data.catalogHash === 'string' && typeof data.indexHash !== 'string') {
+      data.indexHash = data.catalogHash;
+      delete data.catalogHash;
+    }
     if (!data || typeof data.indexHash !== 'string' || typeof data.embeddings !== 'object') return null;
     return data as EmbeddingCacheData;
   } catch {
