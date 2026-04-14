@@ -2,6 +2,15 @@
 
 The Enhanced profile enables HTTPS for the admin dashboard. You need a TLS certificate and key.
 
+### Prerequisites
+
+**OpenSSL** is required to generate certificates. You can get it from:
+- **Git for Windows** (includes OpenSSL) — [git-scm.com/download/win](https://git-scm.com/download/win)
+- **OpenSSL for Windows** — [slproweb.com/products/Win32OpenSSL.html](https://slproweb.com/products/Win32OpenSSL.html)
+- **Linux / macOS** — `sudo apt install openssl` or `brew install openssl`
+
+> The script automatically checks well-known paths like `C:\Program Files\Git\usr\bin` if `openssl` is not on your PATH.
+
 ### Generate a Self-Signed Certificate
 
 From the server directory, run the built-in helper:

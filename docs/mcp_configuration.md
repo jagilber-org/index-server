@@ -10,6 +10,60 @@ This guide provides comprehensive configuration patterns for the index across di
 
 ## 🏗️ Configuration Architecture
 
+### Config File Formats
+
+Different MCP clients use different configuration file formats. Choose the right one for your setup:
+
+| Client | Config File | Root Key | Extra Fields | Notes |
+|--------|-------------|----------|--------------|-------|
+| **VS Code** | `.vscode/mcp.json` (workspace) | `servers` | — | Also: global `User/mcp.json` |
+| **VS Code** (global) | `%APPDATA%/Code/User/mcp.json` | `servers` | — | Use `Code - Insiders` for Insiders |
+| **Copilot CLI** | `~/.copilot/mcp-config.json` | `mcpServers` | `cwd`, `tools` | All env values are quoted strings |
+| **Claude Desktop** | `claude_desktop_config.json` | `mcpServers` | `cwd` | Same root key as Copilot CLI |
+
+> **Tip:** VS Code can auto-discover servers configured for Copilot CLI via `chat.mcp.discovery.enabled`. The VS Code extension's Configure command generates both formats.
+
+#### VS Code format (`servers`)
+
+```jsonc
+{
+  // VS Code: .vscode/mcp.json or global User/mcp.json
+  "servers": {
+    "index-server": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["@jagilber-org/index-server"],
+      "env": {
+        "INDEX_SERVER_PROFILE": "default"
+      }
+    }
+  }
+}
+```
+
+#### Copilot CLI / Claude Desktop format (`mcpServers`)
+
+```json
+{
+  "mcpServers": {
+    "index-server": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["dist/server/index-server.js"],
+      "cwd": "C:/mcp/index-server",
+      "env": {
+        "INDEX_SERVER_PROFILE": "default"
+      },
+      "tools": ["*"]
+    }
+  }
+}
+```
+
+> **Important:** The `mcpServers` format requires `cwd` for local server paths and supports `tools` to filter available tools. The `servers` format used by VS Code does not use these fields.
+
+### Architecture Diagram
+
 ```mermaid
 ---
 config:
@@ -47,6 +101,8 @@ graph TD
 ```
 
 ## 🚀 Quick Start Configurations
+
+> **Note:** The examples below use the `mcpServers` format (Copilot CLI / Claude Desktop). For VS Code's `servers` format, see the [Config File Formats](#config-file-formats) section above, or use the VS Code extension's **Configure MCP Client** command to generate either format.
 
 ### Recommended: Read-Only Production
 

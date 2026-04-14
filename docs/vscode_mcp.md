@@ -14,6 +14,23 @@ Configure a custom MCP server in VS Code (or compatible client) by adding an ent
 }
 ```
 
+### Which Config File?
+
+| Client | File | Root Key |
+|--------|------|----------|
+| **VS Code** (workspace) | `.vscode/mcp.json` | `servers` |
+| **VS Code** (global) | `%APPDATA%/Code/User/mcp.json` | `servers` |
+| **VS Code Insiders** (global) | `%APPDATA%/Code - Insiders/User/mcp.json` | `servers` |
+| **Copilot CLI** (global) | `~/.copilot/mcp-config.json` | `mcpServers` |
+
+VS Code uses the `servers` key. Copilot CLI and Claude Desktop use the `mcpServers` key with additional fields (`cwd`, `tools`).
+
+VS Code can auto-discover Copilot CLI servers when `chat.mcp.discovery.enabled` is set to `true`.
+
+Use the VS Code extension's **Index Server: Configure MCP Client** command to generate the correct format for your target client.
+
+See [MCP Configuration Guide](mcp_configuration.md#config-file-formats) for full format comparison and detailed examples.
+
 ### Notes
 
 - Transport is stdio (newline-delimited JSON-RPC 2.0).

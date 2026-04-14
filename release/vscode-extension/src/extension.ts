@@ -242,6 +242,23 @@ async function configureMcpClient(context: vscode.ExtensionContext): Promise<voi
     const profile = picked.label.toLowerCase();
     await config.update('profile', profile, vscode.ConfigurationTarget.Global);
 
+    // Format picker — VS Code mcp.json vs Copilot CLI mcp-config.json vs Both
+    const formatItems: vscode.QuickPickItem[] = [
+        { label: 'VS Code (mcp.json)', description: 'Uses "servers" key — for .vscode/mcp.json or global VS Code config', detail: 'Recommended for VS Code Copilot Chat' },
+        { label: 'Copilot CLI (mcp-config.json)', description: 'Uses "mcpServers" key — for ~/.copilot/mcp-config.json', detail: 'For GitHub Copilot CLI and compatible clients' },
+        { label: 'Both', description: 'Generate both formats side by side', detail: 'Compare and choose the right one for your setup' },
+    ];
+
+    const formatPicked = await vscode.window.showQuickPick(formatItems, {
+        title: 'Configuration Format',
+        placeHolder: 'Which MCP client are you configuring?',
+    });
+    if (!formatPicked) { return; } // cancelled
+
+    const format = formatPicked.label.startsWith('VS Code') ? 'vscode'
+        : formatPicked.label.startsWith('Copilot') ? 'copilot-cli'
+        : 'both';
+
     const serverPath = resolveServerPath(context);
 
     const dashboardPort = config.get<number>('dashboard.port', 8787);
@@ -254,29 +271,63 @@ async function configureMcpClient(context: vscode.ExtensionContext): Promise<voi
         instructionsDir,
     });
 
-    // Use local node path if available, otherwise npx (zero-config)
-    const serverEntry: Record<string, unknown> = serverPath
-        ? { type: 'stdio', command: 'node', args: [serverPath], cwd: path.dirname(path.dirname(path.dirname(serverPath))), env: envBlock }
-        : { type: 'stdio', command: 'npx', args: ['@jagilber-org/index-server'], env: envBlock };
+    // Build server entry base
+    const serverCwd = serverPath ? path.dirname(path.dirname(path.dirname(serverPath))) : undefined;
 
-    const mcpConfig = { servers: { 'index-server': serverEntry } };
+    let snippet: string;
+    if (format === 'vscode' || format === 'both') {
+        const vscodeEntry: Record<string, unknown> = serverPath
+            ? { type: 'stdio', command: 'node', args: [serverPath], cwd: serverCwd, env: envBlock }
+            : { type: 'stdio', command: 'npx', args: ['@jagilber-org/index-server'], env: envBlock };
+        const vscodeConfig = { servers: { 'index-server': vscodeEntry } };
+        snippet = generateJsoncConfig(vscodeConfig, profile, 'vscode');
+    }
 
-    const snippet = generateJsoncConfig(mcpConfig, profile);
+    if (format === 'copilot-cli' || format === 'both') {
+        const cliEntry: Record<string, unknown> = serverPath
+            ? { type: 'stdio', command: 'node', args: [path.relative(serverCwd!, serverPath).replace(/\\/g, '/')], cwd: serverCwd!.replace(/\\/g, '/'), env: envBlock, tools: ['*'] }
+            : { type: 'stdio', command: 'npx', args: ['@jagilber-org/index-server'], env: envBlock, tools: ['*'] };
+        const cliConfig = { mcpServers: { 'index-server': cliEntry } };
+        const cliSnippet = generateJsoncConfig(cliConfig, profile, 'copilot-cli');
+        snippet = format === 'both'
+            ? snippet! + '\n\n' + '// ' + '─'.repeat(70) + '\n\n' + cliSnippet
+            : cliSnippet;
+    }
 
     // Show the configuration to the user
-    const doc = await vscode.workspace.openTextDocument({ content: snippet, language: 'jsonc' });
+    const doc = await vscode.workspace.openTextDocument({ content: snippet!, language: 'jsonc' });
     await vscode.window.showTextDocument(doc, { preview: true });
 
+    // Build contextual action buttons
+    const actions = ['Copy to Clipboard'];
+    if (format === 'vscode' || format === 'both') { actions.push('Open mcp.json'); }
+    if (format === 'copilot-cli' || format === 'both') { actions.push('Open mcp-config.json'); }
+
     const writeAction = await vscode.window.showInformationMessage(
-        'MCP configuration generated. Copy this to your VS Code mcp.json or Claude Desktop config.',
-        'Copy to Clipboard', 'Open mcp.json'
+        `MCP configuration generated (${formatPicked.label}). Save it to the appropriate config file.`,
+        ...actions
     );
 
     if (writeAction === 'Copy to Clipboard') {
-        await vscode.env.clipboard.writeText(snippet);
+        await vscode.env.clipboard.writeText(snippet!);
         void vscode.window.showInformationMessage('MCP configuration copied to clipboard.');
     } else if (writeAction === 'Open mcp.json') {
         void vscode.commands.executeCommand('workbench.action.openSettingsJson', { revealSetting: { key: 'mcp' } });
+    } else if (writeAction === 'Open mcp-config.json') {
+        const copilotConfigPath = path.join(process.env.USERPROFILE ?? process.env.HOME ?? '~', '.copilot', 'mcp-config.json');
+        try {
+            if (!fs.existsSync(path.dirname(copilotConfigPath))) {
+                fs.mkdirSync(path.dirname(copilotConfigPath), { recursive: true });
+            }
+            if (!fs.existsSync(copilotConfigPath)) {
+                fs.writeFileSync(copilotConfigPath, '{\n  "mcpServers": {}\n}\n', 'utf8');
+            }
+            const uri = vscode.Uri.file(copilotConfigPath);
+            const configDoc = await vscode.workspace.openTextDocument(uri);
+            await vscode.window.showTextDocument(configDoc);
+        } catch (err) {
+            void vscode.window.showErrorMessage(`Could not open ${copilotConfigPath}: ${err}`);
+        }
     }
 
     outputChannel.appendLine(`Server path: ${serverPath}`);
@@ -409,15 +460,34 @@ const ENV_DESCRIPTIONS: Record<string, string> = {
 
 /**
  * Generate JSONC string with inline comments describing each env var.
+ * @param format - 'vscode' for servers key, 'copilot-cli' for mcpServers key
  */
-function generateJsoncConfig(mcpConfig: Record<string, unknown>, profile: string): string {
+function generateJsoncConfig(mcpConfig: Record<string, unknown>, profile: string, format: 'vscode' | 'copilot-cli'): string {
     // Serialize to JSON first, then add comments to env var lines
     const json = JSON.stringify(mcpConfig, null, 2);
     const lines = json.split('\n');
     const result: string[] = [];
 
-    result.push(`// Index Server MCP configuration — profile: ${profile}`);
-    result.push('// Edit values below, then copy to .vscode/mcp.json');
+    const isInsiders = vscode.env.appName.includes('Insiders');
+    const appFolder = isInsiders ? 'Code - Insiders' : 'Code';
+
+    if (format === 'vscode') {
+        result.push(`// Index Server MCP configuration — profile: ${profile}`);
+        result.push(`// Format: VS Code mcp.json (uses "servers" key)`);
+        result.push('// Copy to .vscode/mcp.json (workspace) or global config:');
+        result.push(`//   Windows: %USERPROFILE%\\AppData\\Roaming\\${appFolder}\\User\\mcp.json`);
+        result.push(`//   macOS:   ~/Library/Application Support/${appFolder}/User/mcp.json`);
+        result.push(`//   Linux:   ~/.config/${appFolder}/User/mcp.json`);
+    } else {
+        result.push(`// Index Server MCP configuration — profile: ${profile}`);
+        result.push(`// Format: Copilot CLI mcp-config.json (uses "mcpServers" key)`);
+        result.push('// Copy to ~/.copilot/mcp-config.json (global):');
+        result.push(`//   Windows: %USERPROFILE%\\.copilot\\mcp-config.json`);
+        result.push(`//   macOS:   ~/.copilot/mcp-config.json`);
+        result.push(`//   Linux:   ~/.copilot/mcp-config.json`);
+        result.push('// Note: All values must be strings. VS Code can also discover this config');
+        result.push('// via chat.mcp.discovery.enabled setting.');
+    }
 
     for (const line of lines) {
         const match = line.match(/^(\s*)"(INDEX_SERVER_\w+)":\s*"(.*)"/);

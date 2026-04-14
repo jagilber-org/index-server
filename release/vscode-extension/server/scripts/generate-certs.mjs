@@ -41,11 +41,27 @@ function parseArgs() {
   return config;
 }
 
+const WELL_KNOWN_OPENSSL_DIRS = [
+  'C:\\Program Files\\Git\\usr\\bin',
+  'C:\\Program Files (x86)\\Git\\usr\\bin',
+  'C:\\Program Files\\OpenSSL-Win64\\bin',
+  'C:\\Program Files\\OpenSSL\\bin',
+];
+
 function checkOpenssl() {
   try {
     execSync('openssl version', { stdio: 'pipe' });
     return true;
   } catch {
+    // Try well-known paths on Windows
+    for (const dir of WELL_KNOWN_OPENSSL_DIRS) {
+      const exe = path.join(dir, 'openssl.exe');
+      if (fs.existsSync(exe)) {
+        console.log(`ℹ️  Found OpenSSL at: ${dir}`);
+        process.env.PATH = `${dir}${path.delimiter}${process.env.PATH}`;
+        return true;
+      }
+    }
     return false;
   }
 }
@@ -167,6 +183,10 @@ const config = parseArgs();
 if (!checkOpenssl()) {
   console.error('❌ OpenSSL is not installed or not in PATH.');
   console.error('   Install OpenSSL and try again.');
+  console.error('   Options:');
+  console.error('   - Install Git for Windows (includes OpenSSL): https://git-scm.com/download/win');
+  console.error('   - Install OpenSSL directly: https://slproweb.com/products/Win32OpenSSL.html');
+  console.error('   - On Linux/macOS: sudo apt install openssl / brew install openssl');
   process.exit(1);
 }
 generateCerts(config);

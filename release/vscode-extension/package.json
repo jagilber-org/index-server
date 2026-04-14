@@ -66,7 +66,7 @@
           {
             "id": "configure",
             "title": "Choose a Profile & Configure",
-            "description": "Pick a server profile (Default, Enhanced, or Experimental) and generate your MCP client configuration.\n\n[Configure MCP Client](command:index.configure)\n[Open Settings](command:workbench.action.openSettings?%22index.profile%22)",
+            "description": "Pick a server profile and target format (VS Code mcp.json or Copilot CLI mcp-config.json) to generate your MCP client configuration.\n\n[Configure MCP Client](command:index.configure)\n[Open Settings](command:workbench.action.openSettings?%22index.profile%22)",
             "media": {
               "markdown": "walkthroughs/configure.md"
             }
