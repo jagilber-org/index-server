@@ -35,6 +35,7 @@ test-mermaid*.md
 # Build output and dependencies
 dist/
 !release/vscode-extension/dist/
+!scripts/dist/
 node_modules/
 
 # Generated schema archives (tracked schemas are in schemas/json-schema/)
