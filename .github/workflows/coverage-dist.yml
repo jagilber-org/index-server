@@ -33,14 +33,14 @@ jobs:
           directory: ./coverage
       - name: Upload Coverage
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: coverage-report
           path: coverage
       - name: Generate Manifest
         run: npm run manifest:generate
       - name: Upload Manifest
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: Index-manifest
           path: snapshots/Index-manifest.json
@@ -48,7 +48,7 @@ jobs:
         run: npm run sbom || true
       - name: Upload SBOM
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: sbom
           path: sbom.json

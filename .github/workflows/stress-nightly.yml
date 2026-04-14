@@ -33,7 +33,7 @@ jobs:
           node scripts/diagnostics-pack.mjs || echo 'diagnostics pack script failed'
       - name: Archive stress artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: stress-logs
           path: |

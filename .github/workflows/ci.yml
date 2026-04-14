@@ -51,14 +51,14 @@ jobs:
           directory: ./coverage
       - name: Upload coverage (directory)
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: coverage
           path: coverage
           if-no-files-found: warn
       - name: Upload coverage lcov
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: coverage-lcov
           path: coverage/lcov.info
@@ -72,14 +72,14 @@ jobs:
           fail_ci_if_error: false
       - name: Upload test results JSON
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: test-results
           path: test-results
           if-no-files-found: warn
       - name: Upload server and trace logs
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: server-logs
           path: |

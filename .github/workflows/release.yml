@@ -63,7 +63,7 @@ jobs:
 
       - name: Upload test results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: test-results
           path: |
@@ -93,7 +93,7 @@ jobs:
         run: npm pack
 
       - name: Upload npm tarball
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: npm-package
           path: '*.tgz'
@@ -194,7 +194,7 @@ jobs:
           npx @vscode/vsce package --no-dependencies --allow-missing-repository
 
       - name: Upload VSIX
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: vsix-package
           path: release/vscode-extension/*.vsix
