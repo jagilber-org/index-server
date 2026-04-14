@@ -94,7 +94,7 @@ jobs:
         run: cp release/vscode-extension/*.vsix release/
 
       - name: Upload VSIX artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: vsix-package
           path: release/*.vsix

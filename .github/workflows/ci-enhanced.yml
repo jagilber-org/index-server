@@ -132,7 +132,7 @@ jobs:
 
       - name: Upload coverage
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: coverage-report-${{ matrix.os }}-node${{ matrix.node-version }}
           path: coverage/coverage.xml
@@ -157,7 +157,7 @@ jobs:
 
       - name: Upload flakiness artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: flake-analysis-${{ matrix.os }}
           path: |
@@ -173,7 +173,7 @@ jobs:
 
       - name: Upload manifest (PR only)
         if: github.event_name == 'pull_request' && always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: Index-manifest
           path: snapshots/Index-manifest.json
@@ -184,7 +184,7 @@ jobs:
 
       - name: Upload SBOM (PR only)
         if: github.event_name == 'pull_request' && always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: sbom
           path: sbom.json
@@ -221,7 +221,7 @@ jobs:
       - name: Run performance baseline
         run: npm run perf:baseline
       - name: Upload performance results
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: performance-baseline
           path: perf-results.json
@@ -244,7 +244,7 @@ jobs:
       - name: Generate manifest
         run: npm run manifest:generate
       - name: Upload release artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: release-artifacts
           path: |

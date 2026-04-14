@@ -47,7 +47,7 @@ jobs:
 
       - name: Upload ggshield JSON report
         if: ${{ always() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ggshield-report
           path: reports/ggshield-report.json
