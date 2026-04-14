@@ -78,15 +78,12 @@ jobs:
             }
           "
 
-      - name: Generate icon placeholder
+      - name: Verify icon exists
         working-directory: release/vscode-extension
         run: |
           if [ ! -f images/icon.png ]; then
-            node -e "
-              const fs = require('fs');
-              const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAIAAAACACAYAAADDPmHLAAAABHNCSVQICAgIfAhkiAAAAAlwSFlzAAAOxAAADsQBlSsOGwAAABl0RVh0U29mdHdhcmUAd3d3Lmlua3NjYXBlLm9yZ5vuPBoAAAGASURBVHic7dOxDQAgDASx7L8z0IAEIvnqK6787vt+HGv/DuBfBggzQJgBwgwQZoAwA4QZIMwAYQYIM0CYAcIMEGaAMAOEGSDMAGEGCDNAmAHCDBBmgDADhBkgzABhBggzQJgBwgwQZoAwA4QZIMwAYQYIM0CYAcIMEGaAMAOEGSDMAGEGCDNAmAHCDBBmgDADhBkgzABhBggzQJgBwgwQZoAwA4QZIMwAYQYIM0CYAcIMEGaAMAOEGSDMAGEGCDNAmAHCDBBmgDADhBkgzABhBggzQJgBwgwQZoAwA4QZIMwAYQYIM0CYAcIMEGaAMAOEGSDMAGEGCDNAmAHCDBBmgDADhBkgzABhBggzQJgBwgwQZoAwA4QZIMwAYQYIM0CYAcIMEGaAMAOEGSDMAGEGCDNAmAHCDBBmgDADhBkgzABhBggzQJgBwgwQZoAwA4QZIMwAYQYIM0CYAcIMEGaAMAOEGSDMAGEGCDNAmAHCDBBmgLAPG/oCA2GhJNkAAAAASUVORK5CYII=', 'base64');
-              fs.writeFileSync('images/icon.png', png);
-            "
+            echo "ERROR: images/icon.png not found. The icon PNG should be committed to source control."
+            exit 1
           fi
 
       - name: Package VSIX

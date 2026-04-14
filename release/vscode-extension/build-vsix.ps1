@@ -97,25 +97,10 @@ try {
         Write-Host "[3/4] Skipping server bundle (use -IncludeServer to embed)" -ForegroundColor Gray
     }
 
-    # 4. Generate PNG icon from SVG (or use placeholder)
+    # 4. Verify icon exists (committed PNG, no longer a placeholder)
     $pngIcon = Join-Path $extDir 'images/icon.png'
     if (-not (Test-Path $pngIcon)) {
-        Write-Host "[3.5] Generating icon placeholder..." -ForegroundColor Gray
-        # Create a minimal 128x128 PNG (1x1 blue pixel scaled concept — vsce requires PNG)
-        # For production, replace images/icon.png with a proper 128x128 PNG
-        # Using a PowerShell-generated minimal valid PNG
-        $pngBytes = [System.Convert]::FromBase64String(
-            'iVBORw0KGgoAAAANSUhEUgAAAIAAAACACAYAAADDPmHLAAAABHNCSVQICAgIfAhkiAAAAAlwSFlz' +
-            'AAAOxAAADsQBlSsOGwAAABl0RVh0U29mdHdhcmUAd3d3Lmlua3NjYXBlLm9yZ5vuPBoAAAGASURB' +
-            'VHic7dOxDQAgDASx7L8z0IAEIvnqK6787vt+HGv/DuBfBggzQJgBwgwQZoAwA4QZIMwAYQYIM0CY' +
-            'AcIMEGaAMAOEGSDMAGEGCDNAmAHCDBBmgDADhBkgzABhBggzQJgBwgwQZoAwA4QZIMwAYQYIM0CY' +
-            'AcIMEGaAMAOEGSDMAGEGCDNAmAHCDBBmgDADhBkgzABhBggzQJgBwgwQZoAwA4QZIMwAYQYIM0CY' +
-            'AcIMEGaAMAOEGSDMAGEGCDNAmAHCDBBmgDADhBkgzABhBggzQJgBwgwQZoAwA4QZIMwAYQYIM0CY' +
-            'AcIMEGaAMAOEGSDMAGEGCDNAmAHCDBBmgDADhBkgzABhBggzQJgBwgwQZoAwA4QZIMwAYQYIM0CY' +
-            'AcIMEGaAMAOEGSDMAGEGCDNAmAHCDBBmgDADhBkgzABhBggzQJgBwgwQZoAwA4QZIMwAYQYIM0CY' +
-            'AcIMEGaAMAOEGSDMAGEGCDNAmAHCDBBmgLAPG/oCA2GhJNkAAAAASUVORK5CYII='
-        )
-        [System.IO.File]::WriteAllBytes($pngIcon, $pngBytes)
+        throw "images/icon.png not found. The icon PNG should be committed to source control."
     }
 
     # 5. Package VSIX
