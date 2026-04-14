@@ -6,6 +6,10 @@
   // Helper: safe global references (these live on page scope)
   const globals = window;
 
+  function escapeHtml(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+  }
+
   // Defensive defaults so first render has a valid page context even if loadInstructions
   // has not executed yet (prevents slice(NaN, NaN) -> empty list artifact).
   if (globals.instructionPage == null || Number.isNaN(globals.instructionPage)) globals.instructionPage = 1;
@@ -188,28 +192,29 @@
       const rawSummary = (instr.semanticSummary || '').trim();
       let short = rawSummary.slice(0, 200);
       if (rawSummary.length > 200) short += '…';
-      const safeSummary = globals.escapeHtml ? globals.escapeHtml(short) : (short.replace(/&/g,'&amp;'));
-      const cat = instr.category || (Array.isArray(instr.categories) && instr.categories[0]) || '—';
-      const highlightedName = nameFilter ? highlightMatch(instr.name, nameFilter, isRegex) : instr.name;
+      const safeSummary = escapeHtml(short);
+      const safeCat = escapeHtml(instr.category || (Array.isArray(instr.categories) && instr.categories[0]) || '—');
+      const escapedName = escapeHtml(instr.name);
+      const highlightedName = nameFilter ? highlightMatch(escapedName, nameFilter, isRegex) : escapedName;
       const highlightedSummary = nameFilter ? highlightMatch(safeSummary, nameFilter, isRegex) : safeSummary;
       const usage = usageSnapshot[instr.name] || {};
       const usageCount = usage.usageCount ?? 0;
       const signal = usage.lastSignal || '';
       const comment = usage.lastComment || '';
       const signalHtml = signal ? getSignalBadge(signal) : '<span style="opacity:.4;font-size:10px;">none</span>';
-      const commentTip = comment ? ' title="Last comment: ' + comment.replace(/"/g, '&quot;').slice(0, 200) + '"' : '';
+      const commentTip = comment ? ' title="Last comment: ' + escapeHtml(comment.slice(0, 200)) + '"' : '';
       return `
-        <div class="instruction-item" data-instruction="${instr.name}">
+        <div class="instruction-item" data-instruction="${escapedName}">
           <div class="instruction-item-header">
             <div class="instruction-name">${highlightedName}</div>
             <div class="instruction-actions">
-              <button class="action-btn" onclick="editInstruction('${instr.name}')">✏ Edit</button>
-              <button class="action-btn danger" onclick="deleteInstruction('${instr.name}')">🗑 Delete</button>
+              <button class="action-btn" onclick="editInstruction('${escapedName}')">✏ Edit</button>
+              <button class="action-btn danger" onclick="deleteInstruction('${escapedName}')">🗑 Delete</button>
             </div>
           </div>
           <div class="instruction-meta">
-            <div class="meta-chip" title="Category"><span class="chip-label">CAT</span><span class="chip-value">${cat}</span></div>
-            <div class="meta-chip" title="Size"><span class="chip-label">SIZE</span><span class="chip-value">${instr.size}</span><span class="chip-sub">(${instr.sizeCategory})</span></div>
+            <div class="meta-chip" title="Category"><span class="chip-label">CAT</span><span class="chip-value">${safeCat}</span></div>
+            <div class="meta-chip" title="Size"><span class="chip-label">SIZE</span><span class="chip-value">${instr.size}</span><span class="chip-sub">(${escapeHtml(instr.sizeCategory)})</span></div>
             <div class="meta-chip" title="Last Modified"><span class="chip-label">MTIME</span><span class="chip-value">${new Date(instr.mtime).toLocaleString()}</span></div>
             <div class="meta-chip" title="Usage Count"><span class="chip-label">USES</span><span class="chip-value">${usageCount}</span></div>
             <div class="meta-chip"${commentTip}><span class="chip-label">SIGNAL</span><span class="chip-value">${signalHtml}</span></div>

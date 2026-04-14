@@ -29,6 +29,17 @@ function ensureInstructionsDir(): string {
   return instructionsDir;
 }
 
+/** Sanitize an instruction name and return the resolved file path, preventing path traversal. */
+function safeInstructionPath(instructionsDir: string, name: string): string {
+  const safeName = String(name).replace(/[^a-zA-Z0-9-_]/g, '-');
+  const file = path.join(instructionsDir, safeName + '.json');
+  const resolved = path.resolve(file);
+  if (!resolved.startsWith(path.resolve(instructionsDir) + path.sep) && resolved !== path.resolve(instructionsDir)) {
+    throw new Error('Invalid instruction name');
+  }
+  return file;
+}
+
 export function createInstructionsRoutes(): Router {
   const router = Router();
 
@@ -249,7 +260,7 @@ export function createInstructionsRoutes(): Router {
   router.get('/instructions/:name', (req: Request, res: Response) => {
     try {
       const instructionsDir = ensureInstructionsDir();
-      const file = path.join(instructionsDir, req.params.name + '.json');
+      const file = safeInstructionPath(instructionsDir, req.params.name);
       if (!fs.existsSync(file)) return res.status(404).json({ success: false, error: 'Not found' });
       const content = JSON.parse(fs.readFileSync(file, 'utf8'));
       res.json({ success: true, content, timestamp: Date.now() });
@@ -267,8 +278,8 @@ export function createInstructionsRoutes(): Router {
       const instructionsDir = ensureInstructionsDir();
       const { name, content } = req.body || {};
       if (!name || !content) return res.status(400).json({ success: false, error: 'Missing name or content' });
-      const safeName = String(name).replace(/[^a-zA-Z0-9-_]/g, '-');
-      const file = path.join(instructionsDir, safeName + '.json');
+      const file = safeInstructionPath(instructionsDir, name);
+      const safeName = path.basename(file, '.json');
       if (fs.existsSync(file)) return res.status(409).json({ success: false, error: 'Instruction already exists' });
       fs.writeFileSync(file, JSON.stringify(content, null, 2));
       res.json({ success: true, message: 'Instruction created', name: safeName, timestamp: Date.now() });
@@ -286,7 +297,7 @@ export function createInstructionsRoutes(): Router {
       const { content } = req.body || {};
       const name = req.params.name;
       if (!content) return res.status(400).json({ success: false, error: 'Missing content' });
-      const file = path.join(instructionsDir, name + '.json');
+      const file = safeInstructionPath(instructionsDir, name);
       if (!fs.existsSync(file)) return res.status(404).json({ success: false, error: 'Not found' });
       fs.writeFileSync(file, JSON.stringify(content, null, 2));
       res.json({ success: true, message: 'Instruction updated', timestamp: Date.now() });
@@ -301,7 +312,7 @@ export function createInstructionsRoutes(): Router {
   router.delete('/instructions/:name', (req: Request, res: Response) => {
     try {
       const instructionsDir = ensureInstructionsDir();
-      const file = path.join(instructionsDir, req.params.name + '.json');
+      const file = safeInstructionPath(instructionsDir, req.params.name);
       if (!fs.existsSync(file)) return res.status(404).json({ success: false, error: 'Not found' });
       fs.unlinkSync(file);
       res.json({ success: true, message: 'Instruction deleted', timestamp: Date.now() });
