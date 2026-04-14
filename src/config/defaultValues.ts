@@ -53,7 +53,9 @@ export const DEFAULT_THRESHOLDS = {
 // ── Network ──────────────────────────────────────────────────────────
 export const DEFAULT_PORTS = {
   DASHBOARD: 8787,
+  DASHBOARD_DEV: 4000,
   LEADER: 9090,
+  LEADER_DEV: 4090,
   BOOTSTRAP_TOKEN_TTL_SEC: 900,
 } as const;
 

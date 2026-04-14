@@ -8,6 +8,10 @@ import { CWD, toAbsolute, numberFromEnv, stringFromEnv } from './configUtils';
 import { DIR } from './dirConstants';
 import { DEFAULT_TIMEOUTS_MS, DEFAULT_LIMITS, DEFAULT_PORTS } from './defaultValues';
 
+function isDevMode(): boolean {
+  return process.env.NODE_ENV === 'development' || process.argv.some(a => a === '--watch' || a.includes('--watch'));
+}
+
 interface DashboardTlsConfig {
   enabled: boolean;
   certPath?: string;
@@ -67,7 +71,7 @@ export function parseDashboardConfig(mutationEnabled: boolean, instructionsBaseD
   return {
     http: {
       enable: getBooleanEnv('INDEX_SERVER_DASHBOARD'),
-      port: numberFromEnv('INDEX_SERVER_DASHBOARD_PORT', DEFAULT_PORTS.DASHBOARD),
+      port: numberFromEnv('INDEX_SERVER_DASHBOARD_PORT', isDevMode() ? DEFAULT_PORTS.DASHBOARD_DEV : DEFAULT_PORTS.DASHBOARD),
       host: stringFromEnv('INDEX_SERVER_DASHBOARD_HOST', '127.0.0.1'),
       maxPortTries: Math.max(1, numberFromEnv('INDEX_SERVER_DASHBOARD_TRIES', DEFAULT_LIMITS.MAX_PORT_TRIES)),
       enableHttpMetrics: getBooleanEnv('INDEX_SERVER_HTTP_METRICS', true),

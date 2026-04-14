@@ -17,6 +17,10 @@ import {
 import { DIR } from './dirConstants';
 import { DEFAULT_TIMEOUTS_MS, DEFAULT_THRESHOLDS, DEFAULT_LIMITS, DEFAULT_PORTS } from './defaultValues';
 
+function isDevMode(): boolean {
+  return process.env.NODE_ENV === 'development' || process.argv.some(a => a === '--watch' || a.includes('--watch'));
+}
+
 export type { LogLevel };
 
 interface ServerBootstrapConfig {
@@ -136,7 +140,7 @@ export function parseServerConfig(): ServerConfig {
     },
     multicoreTrace: getBooleanEnv('MULTICLIENT_TRACE'),
     instanceMode,
-    leaderPort: numberFromEnv('INDEX_SERVER_LEADER_PORT', DEFAULT_PORTS.LEADER),
+    leaderPort: numberFromEnv('INDEX_SERVER_LEADER_PORT', isDevMode() ? DEFAULT_PORTS.LEADER_DEV : DEFAULT_PORTS.LEADER),
     heartbeatIntervalMs: numberFromEnv('INDEX_SERVER_HEARTBEAT_MS', DEFAULT_TIMEOUTS_MS.HEARTBEAT),
     staleThresholdMs: numberFromEnv('INDEX_SERVER_STALE_THRESHOLD_MS', DEFAULT_TIMEOUTS_MS.STALE_THRESHOLD),
   };

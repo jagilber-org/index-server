@@ -84,6 +84,7 @@ import { ThinClient } from '../dashboard/server/ThinClient.js';
 import { getMemoryMonitor } from '../utils/memoryMonitor';
 import { startAutoBackup } from '../services/autoBackup';
 import { getBooleanEnv } from '../utils/envUtils';
+import { DEFAULT_PORTS } from '../config/defaultValues';
 import fs from 'fs';
 import path from 'path';
 import { logInfo } from '../services/logger';
@@ -286,6 +287,7 @@ ENVIRONMENT VARIABLES:
   INDEX_SERVER_LOG_DIAG=1           Diagnostic logging
   INDEX_SERVER_MUTATION=1           Enable write operations
   INDEX_SERVER_IDLE_KEEPALIVE_MS    Keepalive interval (default 30000ms)
+  NODE_ENV=development              Use dev ports (dashboard=${DEFAULT_PORTS.DASHBOARD_DEV}, leader=${DEFAULT_PORTS.LEADER_DEV})
 
 GENERAL:
   -h, --help               Show this help and exit
@@ -449,6 +451,24 @@ export async function main(){
   // protocol framing is stable and locked by tests. (2025-08-31)
   const cfg = parseArgs(process.argv);
   const runtime = getRuntimeConfig();
+
+  // ── Dev/prod port-collision guard ─────────────────────────────────
+  // When NODE_ENV=development (or --watch), refuse to start on production
+  // default ports to prevent dev servers from receiving production traffic.
+  const isDev = process.env.NODE_ENV === 'development' || process.argv.some(a => a === '--watch' || a.includes('--watch'));
+  if (isDev) {
+    const prodPorts: number[] = [DEFAULT_PORTS.DASHBOARD, DEFAULT_PORTS.LEADER];
+    if (prodPorts.includes(cfg.dashboardPort)) {
+      process.stderr.write(
+        `[startup] FATAL: Dev server refusing to start on production port ${cfg.dashboardPort}.\n` +
+        `[startup] Production dashboard default is ${DEFAULT_PORTS.DASHBOARD}, dev default is ${DEFAULT_PORTS.DASHBOARD_DEV}.\n` +
+        `[startup] Set INDEX_SERVER_DASHBOARD_PORT=${DEFAULT_PORTS.DASHBOARD_DEV} or remove NODE_ENV=development to use production ports.\n`
+      );
+      process.exit(1);
+    }
+    process.stderr.write(`[startup] Dev mode: dashboard port ${cfg.dashboardPort} (prod=${DEFAULT_PORTS.DASHBOARD})\n`);
+  }
+
   const dash = await startDashboard(cfg);
   if(dash){
     process.stderr.write(`[startup] Dashboard server started successfully\n`);

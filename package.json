@@ -35,7 +35,7 @@
     "start-minimal": "node dist/minimal/index.js",
     "prestart": "npm run build",
     "pretest": "node scripts/pretest-build-or-skip.mjs",
-    "dev": "node --watch dist/server/index-server.js",
+    "dev": "cross-env NODE_ENV=development node --watch dist/server/index-server.js",
     "build:watch": "tsc -w -p tsconfig.json",
     "check:dist": "npm run build && git diff --quiet --exit-code dist || (echo 'Dist out of date. Run npm run build and commit generated files.' && exit 1)",
     "coverage": "vitest run --coverage",
