@@ -1,0 +1,50 @@
+name: Feature Request
+description: Suggest a new feature, workflow, tool, or improvement
+title: "[Feature]: "
+labels:
+
+  - enhancement
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or motivation
+      description: What problem does this solve? Why is it needed?
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: Describe the feature or change you want.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: What other approaches did you consider?
+
+  - type: checkboxes
+    id: surfaces
+    attributes:
+      label: Affected surfaces
+      description: Check all that apply.
+      options:
+        - label: MCP tools or server behavior
+        - label: Hooks (pre-commit or pre-push)
+        - label: CI workflows
+        - label: Constitution or governance
+        - label: Instructions or documentation
+        - label: Scripts or tooling
+        - label: Scanner configuration
+        - label: VS Code extension or VSIX
+        - label: Template adoption or metadata
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional context
+      description: Examples, references, related issues, or rollout considerations.

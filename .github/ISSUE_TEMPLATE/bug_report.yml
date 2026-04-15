@@ -1,0 +1,79 @@
+name: Bug Report
+description: Report a bug in the server, hooks, scripts, workflows, or extension
+title: "[Bug]: "
+labels:
+
+  - bug
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: Describe the bug
+      description: Clear description of what is wrong.
+      placeholder: What failed, and where?
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: List the steps needed to reproduce the problem.
+      placeholder: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What should have happened?
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: What happened instead? Include error output if available.
+    validations:
+      required: true
+
+  - type: input
+    id: package-version
+    attributes:
+      label: Package version
+      placeholder: 1.20.0
+
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      placeholder: Windows 11, Ubuntu 22.04, macOS 14
+
+  - type: input
+    id: node-version
+    attributes:
+      label: Node version
+      placeholder: v22.x
+
+  - type: input
+    id: precommit-version
+    attributes:
+      label: pre-commit version
+      placeholder: pre-commit 4.x
+
+  - type: input
+    id: powershell-version
+    attributes:
+      label: PowerShell version
+      placeholder: 7.x
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional context
+      description: Logs, screenshots, related issues, or anything else that helps.

@@ -19,6 +19,8 @@
 
 If the repo uses `.specify/` templates, they define proposed work and implementation intent.
 
+That complements `squad` and index-server rather than replacing them:
+
 - `.specify/` structures upcoming work
 - `squad` helps execute and coordinate work
 - `.instructions/` captures validated repo-local guidance
