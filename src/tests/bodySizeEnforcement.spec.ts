@@ -184,6 +184,27 @@ describe('body size enforcement', () => {
     expect(fs.existsSync(file)).toBe(false);
   });
 
+  it('accepts stringified JSON arrays in entries', async () => {
+    const entry = {
+      id: 'import-inline-json',
+      title: 'Inline JSON Import',
+      body: 'import via stringified JSON array',
+      priority: 50,
+      audience: 'all',
+      requirement: 'optional',
+      categories: ['test']
+    };
+    const resp = await importHandler({
+      entries: JSON.stringify([entry]),
+      mode: 'overwrite'
+    });
+
+    expect(resp.error).toBeUndefined();
+    expect(resp.total).toBe(1);
+    expect(resp.imported + resp.overwritten).toBe(1);
+    expect(fs.existsSync(path.join(TMP_DIR, 'import-inline-json.json'))).toBe(true);
+  });
+
   // --- Read path: no truncation ---
 
   it('get returns full body without truncation', async () => {

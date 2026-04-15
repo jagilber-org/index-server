@@ -24,20 +24,38 @@ function isPathAllowed(resolved: string): boolean {
   return allowedRoots.some(root => normalizedResolved.startsWith(root + path.sep) || normalizedResolved === root);
 }
 
+function parseInlineEntries(rawEntries: string): { entries?: ImportEntry[]; error?: { error: string; detail?: string } } {
+  const trimmed = rawEntries.trim();
+  if (!(trimmed.startsWith('[') && trimmed.endsWith(']'))) return {};
+  try {
+    const parsed = JSON.parse(trimmed);
+    if (!Array.isArray(parsed)) return { error: { error: 'entries JSON must contain an array' } };
+    return { entries: parsed as ImportEntry[] };
+  } catch (e) {
+    return { error: { error: 'entries JSON parse error', detail: (e as Error).message } };
+  }
+}
+
 registerHandler('index_import', guard('index_import', (p: { entries?: ImportEntry[] | string; source?: string; mode?: 'skip' | 'overwrite' }) => {
   let entries: ImportEntry[];
   const mode = p.mode || 'skip';
   if (Array.isArray(p.entries)) {
     entries = p.entries;
   } else if (typeof p.entries === 'string') {
-    const filePath = path.resolve(p.entries);
-    if (!isPathAllowed(filePath)) return { error: 'entries path is outside allowed directories', path: filePath };
-    if (!fs.existsSync(filePath)) return { error: 'entries file not found', path: filePath };
-    try {
-      const raw = JSON.parse(fs.readFileSync(filePath, 'utf8'));
-      if (!Array.isArray(raw)) return { error: 'entries file must contain a JSON array', path: filePath };
-      entries = raw as ImportEntry[];
-    } catch (e) { return { error: 'entries file parse error', path: filePath, detail: (e as Error).message }; }
+    const inlineEntries = parseInlineEntries(p.entries);
+    if (inlineEntries.error) return inlineEntries.error;
+    if (inlineEntries.entries) {
+      entries = inlineEntries.entries;
+    } else {
+      const filePath = path.resolve(p.entries);
+      if (!isPathAllowed(filePath)) return { error: 'entries path is outside allowed directories', path: filePath };
+      if (!fs.existsSync(filePath)) return { error: 'entries file not found', path: filePath };
+      try {
+        const raw = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+        if (!Array.isArray(raw)) return { error: 'entries file must contain a JSON array', path: filePath };
+        entries = raw as ImportEntry[];
+      } catch (e) { return { error: 'entries file parse error', path: filePath, detail: (e as Error).message }; }
+    }
   } else if (typeof p.source === 'string') {
     const dirPath = path.resolve(p.source);
     if (!isPathAllowed(dirPath)) return { error: 'source path is outside allowed directories', path: dirPath };

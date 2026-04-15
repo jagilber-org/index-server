@@ -75,7 +75,7 @@ const INPUT_SCHEMAS: Record<string, object> = {
     overwrite: { type: 'boolean', description: 'Allow overwriting existing instruction (add action).' },
     lax: { type: 'boolean', description: 'Enable lax mode with default fills for missing optional fields (add action).' },
     // Import action params
-    entries: { description: 'Array of instruction entries for import action, or a file path (string) to a JSON array of entries.', oneOf: [{ type: 'array', items: { type: 'object', additionalProperties: true } }, { type: 'string' }] },
+    entries: { description: 'Array of instruction entries for import action, a stringified JSON array of entries, or a file path (string) to a JSON array of entries.', oneOf: [{ type: 'array', items: { type: 'object', additionalProperties: true } }, { type: 'string' }] },
     source: { type: 'string', description: 'Directory path containing .json instruction files to import (import action).' },
     mode: { description: 'Import conflict resolution mode (import action) or groom mode object (groom action).' },
     // Governance update params
@@ -107,7 +107,7 @@ const INPUT_SCHEMAS: Record<string, object> = {
       { type: 'array', minItems: 1, items: { type: 'object', required: ['id','title','body','priority','audience','requirement'], additionalProperties: true, properties: {
         id: { type: 'string' }, title: { type: 'string' }, body: { type: 'string', maxLength: 1000000, description: 'Instruction body (default limit 20K chars, absolute max 1MB). Split oversized content into cross-linked instructions.' }, rationale: { type: 'string' }, priority: { type: 'number' }, audience: { type: 'string' }, requirement: { type: 'string' }, categories: { type: 'array', items: { type: 'string' } }, mode: { type: 'string' }
       } } },
-      { type: 'string', description: 'File path to a JSON array of instruction entries' }
+      { type: 'string', description: 'Stringified JSON array of instruction entries, or a file path to a JSON array of instruction entries' }
     ] },
     source: { type: 'string', description: 'Directory path containing .json instruction files to import' },
     mode: { enum: ['skip','overwrite'] }
@@ -444,7 +444,7 @@ function describeTool(name: string): string {
   case 'index_governanceHash': return 'Return governance projection & deterministic governance hash.';
   // query & categories now accessed via dispatcher actions.
   // legacy read-only instruction descriptions removed (handled via dispatcher)
-    case 'index_import': return 'Import instruction entries from: inline array (entries), file path to JSON array (entries as string), or directory of .json files (source).';
+    case 'index_import': return 'Import instruction entries from: inline array (entries), stringified JSON array, file path to JSON array (entries as string), or directory of .json files (source).';
   case 'index_add': return 'Add a single instruction (lax mode fills defaults; overwrite optional).';
     case 'index_repair': return 'Repair out-of-sync sourceHash fields (noop if none drifted).';
   case 'index_reload': return 'Force reload of instruction index from disk.';
