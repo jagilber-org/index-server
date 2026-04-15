@@ -16,7 +16,7 @@
 
 'use strict';
 
-const { execSync } = require('child_process');
+const { execFileSync } = require('child_process');
 const crypto = require('crypto');
 
 // Allow publish script to bypass — requires a hash token, not just "1"
@@ -53,6 +53,11 @@ if (!ownerRepo) {
   process.exit(0);
 }
 
+if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(ownerRepo)) {
+  console.log(`WARNING: Could not validate GitHub owner/repo path '${ownerRepo}'. Push allowed (unverified).`);
+  process.exit(0);
+}
+
 const blockedMirrorRepos = new Set([
   'jagilber-org/index-server',
 ]);
@@ -78,7 +83,7 @@ if (isPublicationRemote) {
 // Query GitHub API for repo visibility
 let visibility = '';
 try {
-  visibility = execSync(`gh api "repos/${ownerRepo}" --jq ".visibility"`, {
+  visibility = execFileSync('gh', ['api', `repos/${ownerRepo}`, '--jq', '.visibility'], {
     encoding: 'utf8',
     stdio: ['pipe', 'pipe', 'pipe'],
     timeout: 10000,

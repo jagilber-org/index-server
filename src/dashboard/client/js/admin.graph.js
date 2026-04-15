@@ -20,6 +20,40 @@
     } catch{}
   }
 
+  function renderGraphTextMessage(host, message){
+    if(!host) return;
+    const box = document.createElement('div');
+    box.style.color = '#f2495c';
+    box.style.fontFamily = 'monospace';
+    box.style.whiteSpace = 'pre';
+    box.textContent = message;
+    host.replaceChildren(box);
+  }
+
+  function renderGraphSvg(host, svgMarkup){
+    if(!host) return;
+    const parsed = new DOMParser().parseFromString(String(svgMarkup || ''), 'image/svg+xml');
+    if(parsed.querySelector('parsererror') || parsed.documentElement.tagName.toLowerCase() !== 'svg'){
+      renderGraphTextMessage(host, 'Mermaid render failed:: invalid SVG output');
+      return;
+    }
+    parsed.querySelectorAll('script, foreignObject, iframe, object, embed').forEach(node => node.remove());
+    parsed.querySelectorAll('*').forEach((node) => {
+      Array.from(node.attributes).forEach((attr) => {
+        const name = attr.name.toLowerCase();
+        const value = attr.value || '';
+        if(name.startsWith('on')){
+          node.removeAttribute(attr.name);
+          return;
+        }
+        if((name === 'href' || name === 'xlink:href') && /^\s*javascript:/i.test(value)){
+          node.removeAttribute(attr.name);
+        }
+      });
+    });
+    host.replaceChildren(document.importNode(parsed.documentElement, true));
+  }
+
   async function reloadGraphMermaid(){
     if(__graphReloadInFlight){ setGraphMetaProgress('skip-concurrent'); return; }
     __graphReloadInFlight = true; __graphReloadAttempt++;
@@ -211,13 +245,13 @@
               setGraphMetaProgress('parse-fail','a='+attemptId);
               const hostParse = document.getElementById('graph-mermaid-svg');
               if(hostParse){
-                hostParse.innerHTML = `<div style="color:#f2495c; font-family:monospace; white-space:pre;">Mermaid parse error:: ${(parseErr && parseErr.message) || parseErr}</div>`;
+                renderGraphTextMessage(hostParse, `Mermaid parse error:: ${(parseErr && parseErr.message) || parseErr}`);
               }
               // Abort further render attempt
               throw parseErr;
             }
             let svg; ({ svg } = await window.mermaid.render('graphMermaidSvg', renderSource));
-            const host = document.getElementById('graph-mermaid-svg'); if(host) host.innerHTML = svg;
+            const host = document.getElementById('graph-mermaid-svg'); if(host) renderGraphSvg(host, svg);
             const skel = document.querySelector('.graph-loading-skeleton'); if(skel) skel.style.display = 'none';
             setGraphMetaProgress('render-ok','a='+attemptId);
           } catch(rendErr){
@@ -225,7 +259,7 @@
             const skelFail = document.querySelector('.graph-loading-skeleton'); if(skelFail) skelFail.style.display = 'none';
             const hostErr = document.getElementById('graph-mermaid-svg');
             if(hostErr && !/Mermaid parse error/.test(hostErr.textContent||'')){
-              hostErr.innerHTML = `<div style="color:#f2495c; font-family:monospace; white-space:pre;">Mermaid render failed:: ${(rendErr && rendErr.message) || rendErr}</div>`;
+              renderGraphTextMessage(hostErr, `Mermaid render failed:: ${(rendErr && rendErr.message) || rendErr}`);
             }
             try { console.warn('[mermaid render failed]', rendErr); } catch{}
           }
@@ -269,7 +303,7 @@
       const s = document.createElement('script');
       s.src = '/js/mermaid.min.js';
       s.onload = ()=>{ try { const large = !!window.__MERMAID_LARGE_GRAPH_FLAG; let configuredMaxEdges; if(typeof window.__MERMAID_MAX_EDGES === 'number' && window.__MERMAID_MAX_EDGES>0){ configuredMaxEdges = window.__MERMAID_MAX_EDGES; } else { configuredMaxEdges = large ? 20000 : 3000; } const maxTextSize = large ? 10000000 : 1000000; // Standardize base theme (frontmatter may still override per-graph)
-        window.mermaid.initialize({ startOnLoad:false, theme:'base', maxEdges: configuredMaxEdges, maxTextSize }); window.__MERMAID_ACTIVE_MAX_EDGES = configuredMaxEdges; window.__MERMAID_ACTIVE_MAX_TEXT_SIZE = maxTextSize; resolve(null);} catch(e){ reject(e);} };
+        window.mermaid.initialize({ startOnLoad:false, theme:'base', maxEdges: configuredMaxEdges, maxTextSize, securityLevel:'strict' }); window.__MERMAID_ACTIVE_MAX_EDGES = configuredMaxEdges; window.__MERMAID_ACTIVE_MAX_TEXT_SIZE = maxTextSize; resolve(null);} catch(e){ reject(e);} };
       s.onerror = (e)=>reject(e instanceof Error? e : new Error('mermaid load failed'));
       document.head.appendChild(s);
     });
@@ -333,7 +367,7 @@
       try {
         await ensureMermaid();
         const { svg } = await window.mermaid.render('graphMermaidSvg', code);
-        const legacyHost = document.getElementById('graph-mermaid-svg'); if(legacyHost) legacyHost.innerHTML = svg;
+        const legacyHost = document.getElementById('graph-mermaid-svg'); if(legacyHost) renderGraphSvg(legacyHost, svg);
         setGraphMetaProgress('apply-ok');
       } catch(e){
         setGraphMetaProgress('apply-fail');
@@ -434,7 +468,7 @@
         // Debounced lightweight render (cancel previous if still pending)
         clearTimeout(window.__graphAutoRenderTimer);
         window.__graphAutoRenderTimer = setTimeout(()=>{
-          (async ()=>{ try { await ensureMermaid(); const { svg } = await window.mermaid.render('graphMermaidSvg', code); const legacyHost = document.getElementById('graph-mermaid-svg'); if(legacyHost) legacyHost.innerHTML = svg; } catch{} })();
+          (async ()=>{ try { await ensureMermaid(); const { svg } = await window.mermaid.render('graphMermaidSvg', code); const legacyHost = document.getElementById('graph-mermaid-svg'); if(legacyHost) renderGraphSvg(legacyHost, svg); } catch{} })();
         }, 400);
       }
     });

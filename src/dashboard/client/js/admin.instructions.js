@@ -10,6 +10,30 @@
     return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
   }
 
+  function sanitizeHtmlFragment(html) {
+    const template = document.createElement('template');
+    template.innerHTML = String(html || '');
+    template.content.querySelectorAll('script, iframe, object, embed, link, meta, style, form, input, button, textarea, select').forEach((node) => node.remove());
+    template.content.querySelectorAll('*').forEach((node) => {
+      Array.from(node.attributes).forEach((attr) => {
+        const name = attr.name.toLowerCase();
+        const value = attr.value || '';
+        if (name.startsWith('on')) {
+          node.removeAttribute(attr.name);
+          return;
+        }
+        if ((name === 'href' || name === 'src' || name === 'xlink:href') && /^\s*javascript:/i.test(value)) {
+          node.removeAttribute(attr.name);
+        }
+      });
+    });
+    return template.content;
+  }
+
+  function replaceWithSanitizedHtml(element, html) {
+    element.replaceChildren(sanitizeHtmlFragment(html));
+  }
+
   // Defensive defaults so first render has a valid page context even if loadInstructions
   // has not executed yet (prevents slice(NaN, NaN) -> empty list artifact).
   if (globals.instructionPage == null || Number.isNaN(globals.instructionPage)) globals.instructionPage = 1;
@@ -297,15 +321,22 @@
     const diag = document.getElementById('instruction-diagnostics');
     if(!ta||!diag) return;
     const raw = ta.value;
-    if(!raw.trim()){ diag.innerHTML = '<em>Empty.</em>'; return; }
+    if(!raw.trim()){ diag.textContent = 'Empty.'; return; }
     const parsed = safeParseInstruction(raw);
-    if(!parsed){ diag.innerHTML = '<span style="color:#f2495c;">Invalid JSON</span>'; }
+    if(!parsed){ diag.textContent = 'Invalid JSON'; }
     else {
       const size = raw.length;
       const cats = Array.isArray(parsed.categories)? parsed.categories.length : 0;
       const schemaVer = parsed.schemaVersion || parsed.schema || '?';
       const changed = globals.instructionOriginalContent && raw !== globals.instructionOriginalContent;
-      diag.innerHTML = `Size: ${size} chars • Categories: ${cats} • Schema: ${schemaVer} ${changed?'<span style="color:#ff9830;' + '">(modified)</span>':''}`;
+      diag.textContent = `Size: ${size} chars • Categories: ${cats} • Schema: ${schemaVer}`;
+      if (changed) {
+        const modified = document.createElement('span');
+        modified.style.color = '#ff9830';
+        modified.textContent = '(modified)';
+        diag.append(' ');
+        diag.appendChild(modified);
+      }
     }
     if(globals.instructionDiffVisible) refreshInstructionDiff();
     if(globals.instructionPreviewVisible) refreshInstructionPreview();
@@ -349,12 +380,12 @@
     if(!previewEl || !ta) return;
     const raw = ta.value;
     const parsed = safeParseInstruction(raw);
-    if(!parsed){ previewEl.innerHTML = '<em style="opacity:.5;">Cannot preview: invalid JSON</em>'; return; }
+    if(!parsed){ previewEl.textContent = 'Cannot preview: invalid JSON'; return; }
     const body = parsed.body || '';
-    if(!body.trim()){ previewEl.innerHTML = '<em style="opacity:.5;">No body content to preview</em>'; return; }
+    if(!body.trim()){ previewEl.textContent = 'No body content to preview'; return; }
     try {
       if(typeof marked !== 'undefined' && marked.parse){
-        previewEl.innerHTML = marked.parse(body, { breaks: false, gfm: true });
+        replaceWithSanitizedHtml(previewEl, marked.parse(body, { breaks: false, gfm: true }));
       } else {
         previewEl.textContent = body;
       }
@@ -431,13 +462,13 @@
     if(!outEl) return;
     const trimmed = (query||'').trim();
     const isRegex = document.getElementById('instruction-global-regex-toggle')?.checked || false;
-    if(!trimmed || trimmed.length < 2){ outEl.innerHTML = '<em style="opacity:.6;">Enter 2+ chars for global search.</em>'; return; }
+    if(!trimmed || trimmed.length < 2){ outEl.textContent = 'Enter 2+ chars for global search.'; return; }
     let re = null;
     if (isRegex) {
-      try { re = new RegExp(trimmed, 'i'); } catch (e) { outEl.innerHTML = '<span style="color:#f2495c;">Invalid regex: ' + (e.message||e) + '</span>'; return; }
+      try { re = new RegExp(trimmed, 'i'); } catch (e) { outEl.textContent = 'Invalid regex: ' + (e.message||e); return; }
     }
     const started = performance.now();
-    outEl.innerHTML = '<span style="opacity:.75;">🔍 Searching…</span>';
+    outEl.textContent = 'Searching…';
     try {
       let results;
       if (re) {
@@ -463,7 +494,10 @@
         if(!res.ok || results.success === false){ throw new Error(results.error||'Search failed'); }
       }
       const elapsed = Math.round(performance.now() - started);
-      if(!Array.isArray(results.results) || !results.results.length){ outEl.innerHTML = `<span style="opacity:.6;">No global matches (${isRegex ? 'regex' : 'q'}='${trimmed}', ${elapsed}ms).</span>`; return; }
+      if(!Array.isArray(results.results) || !results.results.length){
+        outEl.textContent = `No global matches (${isRegex ? 'regex' : 'q'}='${trimmed}', ${elapsed}ms).`;
+        return;
+      }
       const rows = results.results.map(r=>{
         let safeName = (r.name||'').replace(/[&<>]/g, c=> ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
         let safeSnippet = (r.snippet||'').replace(/[&<>]/g, c=> ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])).replace(/\*\*(.+?)\*\*/g,'<mark>$1</mark>');
@@ -476,7 +510,7 @@
         </div>`; }).join('');
       outEl.innerHTML = `<div style="margin-bottom:6px; font-weight:600;">Global Search Results (${results.count})${isRegex ? ' <span style="color:#73bf69;">[regex]</span>' : ''} <span style="opacity:.55; font-weight:400;">${elapsed}ms</span></div>` + rows;
       try { outEl.scrollIntoView({ behavior:'smooth', block:'center' }); } catch { /* ignore */ }
-    } catch(e){ outEl.innerHTML = '<span style="color:#f2495c;">Global search error: '+ (e.message||e) +'</span>'; }
+    } catch(e){ outEl.textContent = 'Global search error: ' + (e.message||e); }
   }
 
   function attachGlobalSearchHandlers(){
