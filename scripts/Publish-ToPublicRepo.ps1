@@ -4,9 +4,9 @@
 
 .DESCRIPTION
     Copies the repository to a temporary directory, strips private paths listed in
-    .publish-exclude, removes all dotfiles and dotfolders, verifies no forbidden
-    artifacts remain, runs the PII hook on cleaned content, and then delivers the
-    result via one of three modes:
+    .publish-exclude, removes known-sensitive dotfiles (preserving essential ones like
+    .gitignore and .gitattributes), verifies no forbidden artifacts remain, runs the
+    PII hook on cleaned content, and then delivers the result via one of three modes:
 
     - Default: copies cleaned content to a local directory for manual review.
     - -CreateReviewRepo: creates a private GitHub review repo (requires gh CLI).
@@ -25,17 +25,19 @@
     Skips confirmation prompts.
 
 .PARAMETER DirectPublish
-    Bypass review and force-push directly to the public mirror.
+    Bypass review and force-push directly to the public mirror. Requires -RemoteUrl.
 
 .PARAMETER CreateReviewRepo
-    Create a private review repo on GitHub for inspection (requires gh CLI).
+    Create a private review repo on GitHub for inspection (requires gh CLI and -RemoteUrl).
 
 .PARAMETER LocalPath
-    Local directory to copy cleaned content to. Defaults to a sibling directory
-    named after the repo (e.g., ../repo-name-public).
+    Local directory to copy cleaned content to. When -RemoteUrl is provided, defaults
+    to a sibling directory matching the URL org/repo (e.g., ../org/repo). Otherwise
+    defaults to ../repo-name-public.
 
 .PARAMETER RemoteUrl
-    URL of the public mirror remote.
+    URL of the public mirror remote. Required for -DirectPublish and -CreateReviewRepo.
+    Optional for local-only mode.
 
 .PARAMETER ReviewOrg
     GitHub organization for private review repos. Used with -CreateReviewRepo.
@@ -63,7 +65,6 @@ param(
 
     [string]$LocalPath,
 
-    [Parameter(Mandatory)]
     [string]$RemoteUrl,
 
     [string]$ReviewOrg,
@@ -82,13 +83,20 @@ if (-not $repoRoot -or $LASTEXITCODE -ne 0) {
 $repoRoot = $repoRoot.Trim()
 $repoName = Split-Path $repoRoot -Leaf
 
-# Default local path: sibling directory named <repo>-public
+# Default local path: derive from RemoteUrl org/repo when available
 if (-not $LocalPath) {
-    $LocalPath = Join-Path (Split-Path $repoRoot -Parent) "$repoName-public"
+    if ($RemoteUrl -match 'github\.com[/:]([^/]+)/([^/.]+)') {
+        $urlOrg = $matches[1]
+        $urlRepo = $matches[2]
+        $LocalPath = Join-Path (Split-Path $repoRoot -Parent) $urlOrg $urlRepo
+    }
+    else {
+        $LocalPath = Join-Path (Split-Path $repoRoot -Parent) "$repoName-public"
+    }
 }
 
 # Default review org: extract from RemoteUrl
-if (-not $ReviewOrg -and $RemoteUrl -match 'github\.com[/:]([^/]+)/') {
+if (-not $ReviewOrg -and $RemoteUrl -and $RemoteUrl -match 'github\.com[/:]([^/]+)/') {
     $ReviewOrg = $matches[1]
 }
 
@@ -110,16 +118,35 @@ Write-Host "Exclusion patterns: $($excludePatterns -join ', ')"
 $tempDir = Join-Path ([System.IO.Path]::GetTempPath()) "publish-$repoName-$(Get-Date -Format 'yyyyMMddHHmmss')"
 Write-Host "Copying repo to $tempDir ..."
 
-# Copy repo to temp (exclude .git)
+# Build robocopy exclusion list from .publish-exclude directories and known heavy dirs
+$xdDirs = @('.git')
+foreach ($pattern in $excludePatterns) {
+    $fullPath = Join-Path $repoRoot $pattern
+    if (Test-Path $fullPath -PathType Container) {
+        $xdDirs += $pattern
+    }
+}
+$heavyDirs = @('node_modules', '.next', 'packages')
+foreach ($dir in $heavyDirs) {
+    if ((Test-Path (Join-Path $repoRoot $dir)) -and $dir -notin $xdDirs) {
+        $xdDirs += $dir
+    }
+}
+
+# Copy repo to temp (excluding directories upfront for performance)
 if (Get-Command robocopy -ErrorAction SilentlyContinue) {
-    & robocopy $repoRoot $tempDir /MIR /XD .git /NJH /NJS /NP | Out-Null
+    $robocopyArgs = @($repoRoot, $tempDir, '/MIR', '/NJH', '/NJS', '/NP')
+    foreach ($dir in $xdDirs) { $robocopyArgs += '/XD'; $robocopyArgs += $dir }
+    & robocopy @robocopyArgs | Out-Null
 }
 else {
     # Cross-platform fallback
     Copy-Item -Path $repoRoot -Destination $tempDir -Recurse -Force
-    $gitDir = Join-Path $tempDir '.git'
-    if (Test-Path $gitDir) {
-        Remove-Item $gitDir -Recurse -Force
+    foreach ($dir in $xdDirs) {
+        $dirPath = Join-Path $tempDir $dir
+        if (Test-Path $dirPath) {
+            Remove-Item $dirPath -Recurse -Force
+        }
     }
 }
 
@@ -132,11 +159,25 @@ foreach ($pattern in $excludePatterns) {
     }
 }
 
-# --- Remove ALL dotfiles and dotfolders ---
+# --- Remove blocked dotfiles/dotfolders (preserve essential ones like .gitignore) ---
+$dotfileBlocklist = @(
+    '.env', '.env.example', '.env.local',
+    '.secrets.baseline', '.pre-commit-config.yaml',
+    '.github', '.specify', '.instructions',
+    '.pii-allowlist', '.ggshield.yml', '.gitleaks.toml',
+    '.template-adoption.json', '.publish-exclude',
+    '.private', '.certs'
+)
 $dotItems = Get-ChildItem -Path $tempDir -Force | Where-Object { $_.Name.StartsWith('.') }
 foreach ($item in $dotItems) {
-    Remove-Item $item.FullName -Recurse -Force
-    Write-Host "Removed dotfile/dotfolder: $($item.Name)"
+    $blocked = $dotfileBlocklist | Where-Object { $item.Name -like $_ }
+    if ($blocked) {
+        Remove-Item $item.FullName -Recurse -Force
+        Write-Host "Removed blocked dotfile: $($item.Name)"
+    }
+    else {
+        Write-Host "Preserved dotfile: $($item.Name)"
+    }
 }
 
 # --- Verify no forbidden artifacts remain ---
@@ -160,12 +201,6 @@ foreach ($forbidden in $allForbidden) {
     }
 }
 
-# Also fail if ANY dotfile/dotfolder still exists
-$remainingDots = Get-ChildItem -Path $tempDir -Force | Where-Object { $_.Name.StartsWith('.') }
-if ($remainingDots) {
-    $leaked += $remainingDots.Name
-}
-
 if ($leaked.Count -gt 0) {
     Write-Error "Leaked forbidden artifacts detected: $($leaked -join ', '). Aborting."
     Remove-Item $tempDir -Recurse -Force
@@ -175,9 +210,13 @@ if ($leaked.Count -gt 0) {
 Write-Host 'Verify complete: no leaked artifacts or dotfiles found.'
 
 # --- Run PII scan on cleaned content ---
-$piiScript = Join-Path $repoRoot 'hooks' 'check-pii.ps1'
-if (Test-Path $piiScript) {
-    Write-Host 'Running PII scan on cleaned content...'
+$piiCandidates = @(
+    (Join-Path $repoRoot 'hooks' 'check-pii.ps1'),
+    (Join-Path $repoRoot 'scripts' 'check-pii.ps1')
+)
+$piiScript = $piiCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+if ($piiScript) {
+    Write-Host "Running PII scan on cleaned content ($piiScript)..."
     $stagedFiles = Get-ChildItem -Path $tempDir -Recurse -File | Where-Object {
         $_.Extension -in '.ps1', '.md', '.json', '.yml', '.yaml', '.txt', '.xml', '.csv',
                          '.js', '.ts', '.cs', '.csproj', '.sln', '.bicep', '.tf'
@@ -193,7 +232,7 @@ if (Test-Path $piiScript) {
     }
 }
 else {
-    Write-Warning 'PII scan script not found at hooks/check-pii.ps1 - skipping.'
+    Write-Warning 'PII scan script not found at hooks/check-pii.ps1 or scripts/check-pii.ps1 - skipping.'
 }
 
 # --- Delivery ---
@@ -212,6 +251,11 @@ if ($DryRun) {
 }
 
 if ($DirectPublish -or $CreateReviewRepo) {
+    if (-not $RemoteUrl) {
+        Write-Error '-RemoteUrl is required for -DirectPublish and -CreateReviewRepo modes.'
+        Remove-Item $tempDir -Recurse -Force -ErrorAction SilentlyContinue
+        return
+    }
     Push-Location $tempDir
     try {
         & git init | Out-Null

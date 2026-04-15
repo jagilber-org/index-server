@@ -216,12 +216,22 @@ export function getActiveInstances(): InstanceInfo[] {
 function pingInstance(host: string, port: number, protocol: 'http' | 'https' = 'http', timeoutMs = 3000): Promise<boolean> {
   return new Promise((resolve) => {
     const transport = protocol === 'https' ? https : http;
+    const tlsOpts: Record<string, unknown> = {};
+    if (protocol === 'https') {
+      const caPath = getRuntimeConfig().dashboard.http.tls.caPath;
+      if (caPath && fs.existsSync(caPath)) {
+        tlsOpts.ca = fs.readFileSync(caPath);
+      } else {
+        // Localhost health-check against self-signed certs when no CA configured
+        tlsOpts.rejectUnauthorized = false;
+      }
+    }
     const opts = {
       hostname: host || '127.0.0.1',
       port,
       path: '/api/instances',
       timeout: timeoutMs,
-      ...(protocol === 'https' ? { rejectUnauthorized: false } : {}),
+      ...tlsOpts,
     };
     const req = transport.get(opts, (res) => {
       // Any HTTP response means the server is alive (even 4xx/5xx)
