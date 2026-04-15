@@ -3,8 +3,11 @@
 # List paths (relative to repo root) to strip when publishing to the public mirror.
 # One path per line. Lines starting with # are comments. Blank lines are ignored.
 #
-# The publish script also removes ALL dotfiles/dotfolders automatically, so you
-# do not need to list .env, .github, .instructions, etc. here.
+# The publish script removes known-sensitive dotfiles/dotfolders (e.g., .env,
+# .github, .specify, .instructions, .pre-commit-config.yaml) automatically.
+# Essential dotfiles like .gitignore, .gitattributes, .editorconfig, .nvmrc,
+# and .dockerignore are preserved. You only need to list repo-specific private
+# paths here.
 #
 # Copy this file to .publish-exclude and customize for your repo.
 

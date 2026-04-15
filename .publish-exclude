@@ -121,6 +121,7 @@ sync-constitution.cjs
 
 # TLS certificates (private keys!)
 .certs/
+certs/
 
 # Squad internal state and templates (dev orchestration)
 .squad/
