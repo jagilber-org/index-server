@@ -3,7 +3,8 @@ title = "Index Server Gitleaks Config"
 [extend]
 useDefault = true
 
-[allowlist]
+[[allowlists]]
+description = "Template-standard exclusions"
   paths = [
     # --- Template-standard exclusions (aligned with .ggshield.yml) ---
     # Dependency and virtual-environment directories
@@ -67,6 +68,7 @@ paths = [
 [[allowlists]]
 description = "Local certificate and backup artifacts outside the source review surface"
 paths = [
+  '''^certs/''',
 	'''^\.certs/''',
 	'''^backups/''',
 ]

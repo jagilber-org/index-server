@@ -21,7 +21,7 @@
  *   - .publish-exclude file in repo root
  */
 
-const { execSync } = require('child_process');
+const { execFileSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
@@ -60,14 +60,19 @@ if (!fs.existsSync(excludeFile)) {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-function run(cmd, opts = {}) {
+function runGit(args, opts = {}) {
   const defaults = { cwd: repoRoot, stdio: 'pipe', encoding: 'utf8' };
-  return execSync(cmd, { ...defaults, ...opts }).toString().trim();
+  return execFileSync('git', args, { ...defaults, ...opts }).trim();
 }
 
-function runShow(cmd, opts = {}) {
+function runGitShow(args, opts = {}) {
   const defaults = { cwd: repoRoot, stdio: 'inherit' };
-  execSync(cmd, { ...defaults, ...opts });
+  execFileSync('git', args, { ...defaults, ...opts });
+}
+
+function runGh(args, opts = {}) {
+  const defaults = { cwd: repoRoot, stdio: 'pipe', encoding: 'utf8' };
+  return execFileSync('gh', args, { ...defaults, ...opts }).trim();
 }
 
 function loadExcludeList() {
@@ -221,8 +226,11 @@ function scanDirForEnvLeaks(dir, envLeakMap) {
 }
 
 function listRemoteRefs(remoteName, refKind, cwd) {
+  if (refKind !== 'heads' && refKind !== 'tags') {
+    throw new Error(`Unsupported ref kind: ${refKind}`);
+  }
   try {
-    const output = run(`git ls-remote --refs --${refKind} ${remoteName}`, { cwd });
+    const output = runGit(['ls-remote', '--refs', `--${refKind}`, remoteName], { cwd });
     if (!output) return [];
 
     const prefix = refKind === 'heads' ? 'refs/heads/' : 'refs/tags/';
@@ -251,7 +259,7 @@ console.log();
 // Check for public remote
 if (!verifyOnly) {
   try {
-    const remotes = run('git remote -v');
+    const remotes = runGit(['remote', '-v']);
     if (!remotes.includes('public')) {
       console.error('ERROR: Git remote "public" not configured.');
       console.error('Run: git remote add public https://github.com/jagilber-org/index-server.git');
@@ -266,7 +274,7 @@ if (!verifyOnly) {
 // Check for dirty tree
 if (!force && !verifyOnly) {
   try {
-    const status = run('git status --porcelain');
+    const status = runGit(['status', '--porcelain']);
     if (status) {
       console.error('ERROR: Working tree is dirty. Commit or stash changes first.');
       console.error('Use --force to skip this check.');
@@ -374,24 +382,24 @@ try {
 
   // ── Git Init & Commit ───────────────────────────────────────────────────────
   console.log('\nCreating clean git commit...');
-  run('git init', { cwd: tmpDir });
-  run('git checkout -b main', { cwd: tmpDir });
+  runGit(['init'], { cwd: tmpDir });
+  runGit(['checkout', '-b', 'main'], { cwd: tmpDir });
 
   // Configure signing in temp repo (inherits global gpg.format + signingkey)
   // The commit and tag will be signed if user has SSH/GPG signing configured globally
   try {
-    const sigFormat = run('git config --global gpg.format').trim();
-    const sigKey = run('git config --global user.signingkey').trim();
+    const sigFormat = runGit(['config', '--global', 'gpg.format']).trim();
+    const sigKey = runGit(['config', '--global', 'user.signingkey']).trim();
     if (sigFormat && sigKey && /^[a-zA-Z0-9]+$/.test(sigFormat) && /^[a-zA-Z0-9/_.:~@+-]+$/.test(sigKey)) {
-      run(`git config gpg.format ${sigFormat}`, { cwd: tmpDir });
-      run(`git config user.signingkey "${sigKey}"`, { cwd: tmpDir });
-      run('git config commit.gpgsign true', { cwd: tmpDir });
-      run('git config tag.gpgsign true', { cwd: tmpDir });
+      runGit(['config', 'gpg.format', sigFormat], { cwd: tmpDir });
+      runGit(['config', 'user.signingkey', sigKey], { cwd: tmpDir });
+      runGit(['config', 'commit.gpgsign', 'true'], { cwd: tmpDir });
+      runGit(['config', 'tag.gpgsign', 'true'], { cwd: tmpDir });
       console.log(`Signing enabled: ${sigFormat} (${sigKey.split('/').pop()})`);
     }
   } catch { /* signing not configured — continue unsigned */ }
 
-  run('git add -A', { cwd: tmpDir });
+  runGit(['add', '-A'], { cwd: tmpDir });
 
   const commitMsg = `Publish ${tag} from dev repo
 
@@ -401,12 +409,12 @@ Tag: ${tag}
 Date: ${new Date().toISOString()}
 Files: ${fileCount}`;
 
-  run(`git commit -m "${commitMsg.replace(/"/g, '\\"')}"`, { cwd: tmpDir });
+  runGit(['commit', '-m', commitMsg], { cwd: tmpDir });
 
   // ── Push to Public Remote ───────────────────────────────────────────────────
-  const publicUrl = run('git remote get-url public');
+  const publicUrl = runGit(['remote', 'get-url', 'public']);
   console.log(`Pushing to public remote: ${publicUrl}`);
-  run(`git remote add public "${publicUrl}"`, { cwd: tmpDir });
+  runGit(['remote', 'add', 'public', publicUrl], { cwd: tmpDir });
 
   // Compute hardened bypass token: sha256("publish-<tag>-<YYYY-MM-DD>")
   const today = new Date().toISOString().split('T')[0];
@@ -418,7 +426,7 @@ Files: ${fileCount}`;
     console.log(`Removing ${staleBranches.length} stale remote branch(es)...`);
     for (const branchName of staleBranches) {
       console.log(`  - ${branchName}`);
-      runShow(`git push public --delete "${branchName}"`, { cwd: tmpDir, env: publishEnv });
+      runGitShow(['push', 'public', '--delete', branchName], { cwd: tmpDir, env: publishEnv });
     }
   }
 
@@ -427,12 +435,12 @@ Files: ${fileCount}`;
     console.log(`Removing ${existingTags.length} existing remote tag(s)...`);
     for (const tagName of existingTags) {
       console.log(`  - ${tagName}`);
-      runShow(`git push public ":refs/tags/${tagName}"`, { cwd: tmpDir, env: publishEnv });
+      runGitShow(['push', 'public', `:refs/tags/${tagName}`], { cwd: tmpDir, env: publishEnv });
     }
   }
 
   try {
-    runShow('git push --force public main', { cwd: tmpDir, env: publishEnv });
+    runGitShow(['push', '--force', 'public', 'main'], { cwd: tmpDir, env: publishEnv });
   } finally {
   }
 
@@ -440,13 +448,13 @@ Files: ${fileCount}`;
   console.log(`Tagging ${tag} on public remote...`);
   // Create signed annotated tag (falls back to annotated-only if signing unavailable)
   try {
-    run(`git tag -s -a ${tag} -m "Release ${tag}"`, { cwd: tmpDir });
+    runGit(['tag', '-s', '-a', tag, '-m', `Release ${tag}`], { cwd: tmpDir });
     console.log(`Created signed tag ${tag}`);
   } catch {
-    run(`git tag -a ${tag} -m "Release ${tag}"`, { cwd: tmpDir });
+    runGit(['tag', '-a', tag, '-m', `Release ${tag}`], { cwd: tmpDir });
     console.log(`Created annotated tag ${tag} (unsigned — no signing key configured)`);
   }
-  runShow(`git push public ${tag}`, { cwd: tmpDir, env: publishEnv });
+  runGitShow(['push', 'public', tag], { cwd: tmpDir, env: publishEnv });
 
   console.log('\n✅ Published successfully!');
   console.log(`   Remote: ${publicUrl}`);
@@ -464,7 +472,7 @@ Files: ${fileCount}`;
       const notes = match ? match[0].replace(/^## \[.*?\].*\n/, '').trim() : `Release ${tag}`;
       const notesFile = path.join(os.tmpdir(), 'release-notes.md');
       fs.writeFileSync(notesFile, notes);
-      run(`gh release create ${tag} --repo jagilber-org/index-server --title "${tag}" --notes-file "${notesFile}" --latest`);
+      runGh(['release', 'create', tag, '--repo', 'jagilber-org/index-server', '--title', tag, '--notes-file', notesFile, '--latest']);
       fs.unlinkSync(notesFile);
       console.log(`   ✅ GitHub Release ${tag} created on public repo`);
     } catch (e) {
