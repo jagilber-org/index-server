@@ -84,6 +84,19 @@ export class AdminPanel {
     return getRuntimeConfig().index.baseDir || path.join(process.cwd(), 'instructions');
   }
 
+  /**
+   * Validate and sanitize a user-supplied backupId to prevent path traversal (SH-4).
+   * Returns the sanitized basename or throws if the id is invalid.
+   */
+  private validateBackupId(backupId: string): string {
+    if (!backupId || typeof backupId !== 'string') throw new Error('backupId required');
+    const sanitized = path.basename(backupId);
+    if (!sanitized || sanitized !== backupId || sanitized.includes('..')) {
+      throw new Error('Invalid backupId: path traversal not allowed');
+    }
+    return sanitized;
+  }
+
   // CPU tracking for leak detection
   private cpuHistory: Array<{ timestamp: number; user: number; system: number; percent: number }> = [];
   private lastCpuUsage: NodeJS.CpuUsage | null = null;
@@ -257,13 +270,13 @@ export class AdminPanel {
 
   restoreBackup(backupId: string): { success: boolean; message: string; restored?: number } {
     try {
-      if (!backupId) return { success: false, message: 'backupId required' };
+      const safeId = this.validateBackupId(backupId);
       const backupRoot = this.backupRoot;
-      const zipPath = path.join(backupRoot, `${backupId}.zip`);
-      const backupDir = path.join(backupRoot, backupId);
+      const zipPath = path.join(backupRoot, `${safeId}.zip`);
+      const backupDir = path.join(backupRoot, safeId);
       const isZip = fs.existsSync(zipPath);
       const isDir = fs.existsSync(backupDir) && fs.statSync(backupDir).isDirectory();
-      if (!isZip && !isDir) return { success: false, message: `Backup not found: ${backupId}` };
+      if (!isZip && !isDir) return { success: false, message: `Backup not found: ${safeId}` };
 
       const instructionsDir = this.instructionsRoot;
       if (!fs.existsSync(instructionsDir)) fs.mkdirSync(instructionsDir, { recursive: true });
@@ -276,7 +289,7 @@ export class AdminPanel {
         createZipBackupWithManifest(instructionsDir, safetyZipPath, {
           type: 'pre-restore',
           createdAt: new Date().toISOString(),
-          source: backupId,
+          source: safeId,
           originalCount: existing.length,
         });
         process.stderr.write(`[admin] Pre-restore safety backup created: ${safetyId}.zip\n`);
@@ -297,8 +310,8 @@ export class AdminPanel {
       }
 
       this.indexStatsCache = null;
-      process.stderr.write(`[admin] Restored backup ${backupId} (${restored} instruction files)\n`);
-      return { success: true, message: `Backup ${backupId} restored`, restored };
+      process.stderr.write(`[admin] Restored backup ${safeId} (${restored} instruction files)\n`);
+      return { success: true, message: `Backup ${safeId} restored`, restored };
     } catch (error) {
       return { success: false, message: `Restore failed: ${error instanceof Error ? error.message : String(error)}` };
     }
@@ -307,21 +320,21 @@ export class AdminPanel {
   /** Delete a backup zip or directory (safety checks on name) */
   deleteBackup(backupId: string): { success: boolean; message: string; removed?: boolean } {
     try {
-      if (!backupId) return { success: false, message: 'backupId required' };
+      const safeId = this.validateBackupId(backupId);
       const backupRoot = this.backupRoot;
       // Check for zip first, then legacy directory
-      const zipPath = path.join(backupRoot, `${backupId}.zip`);
-      const dirPath = path.join(backupRoot, backupId);
+      const zipPath = path.join(backupRoot, `${safeId}.zip`);
+      const dirPath = path.join(backupRoot, safeId);
       const hasZip = fs.existsSync(zipPath);
       const hasDir = fs.existsSync(dirPath) && fs.statSync(dirPath).isDirectory();
-      if (!hasZip && !hasDir) return { success: false, message: `Backup not found: ${backupId}` };
-      if (!/^backup_|^instructions-|^pre_restore_|^auto-backup-/.test(backupId)) {
+      if (!hasZip && !hasDir) return { success: false, message: `Backup not found: ${safeId}` };
+      if (!/^backup_|^instructions-|^pre_restore_|^auto-backup-/.test(safeId)) {
         return { success: false, message: 'Refusing to delete unexpected backup name' };
       }
       if (hasZip) fs.unlinkSync(zipPath);
       if (hasDir) fs.rmSync(dirPath, { recursive: true, force: true });
-      process.stderr.write(`[admin] Deleted backup ${backupId}\n`);
-      return { success: true, message: `Backup ${backupId} deleted`, removed: true };
+      process.stderr.write(`[admin] Deleted backup ${safeId}\n`);
+      return { success: true, message: `Backup ${safeId} deleted`, removed: true };
     } catch (error) {
       return { success: false, message: `Delete failed: ${error instanceof Error ? error.message : String(error)}` };
     }
@@ -383,14 +396,14 @@ export class AdminPanel {
   /** Export a backup — returns the zip file path for streaming, or falls back to JSON bundle for legacy dirs */
   exportBackup(backupId: string): { success: boolean; message: string; zipPath?: string; bundle?: { manifest: Record<string, unknown>; files: Record<string, unknown> } } {
     try {
-      if (!backupId) return { success: false, message: 'backupId required' };
-      const zipPath = path.join(this.backupRoot, `${backupId}.zip`);
+      const safeId = this.validateBackupId(backupId);
+      const zipPath = path.join(this.backupRoot, `${safeId}.zip`);
       if (fs.existsSync(zipPath) && fs.statSync(zipPath).isFile()) {
         return { success: true, message: 'Export ready', zipPath };
       }
       // Legacy directory fallback
-      const backupDir = path.join(this.backupRoot, backupId);
-      if (!fs.existsSync(backupDir) || !fs.statSync(backupDir).isDirectory()) return { success: false, message: `Backup not found: ${backupId}` };
+      const backupDir = path.join(this.backupRoot, safeId);
+      if (!fs.existsSync(backupDir) || !fs.statSync(backupDir).isDirectory()) return { success: false, message: `Backup not found: ${safeId}` };
       let manifest: Record<string, unknown> = {};
       const manifestPath = path.join(backupDir, 'manifest.json');
       if (fs.existsSync(manifestPath)) {

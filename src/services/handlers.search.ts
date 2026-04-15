@@ -633,6 +633,10 @@ export async function handleInstructionsSearch(params: SearchParams): Promise<Se
         if (keyword.length > 200) {
           throw new Error('Regex patterns must not exceed 200 characters to prevent ReDoS');
         }
+        // Reject patterns with nested quantifiers that cause catastrophic backtracking
+        if (/(\+|\*|\{)\)?(\+|\*|\{)/.test(keyword)) {
+          throw new Error('Regex pattern rejected: nested quantifiers can cause catastrophic backtracking');
+        }
         try {
           new RegExp(keyword);
         } catch {
