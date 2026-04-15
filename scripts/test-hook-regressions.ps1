@@ -105,7 +105,7 @@ try {
     Write-Host 'PASS: pre-commit allows .env.example files.' -ForegroundColor Green
 
     $piiHitPath = Join-Path $tempRoot 'pii-hit.txt'
-    New-TestFile -Path $piiHitPath -Lines @('DefaultEndpointsProtocol=https;AccountName=demo;AccountKey=abc123')
+    New-TestFile -Path $piiHitPath -Lines @('DefaultEndpointsProtocol=https;AccountName=demo;AccountKey=abc123') # pii-allowlist
     $piiHit = Invoke-PreCommitScript -ScriptPath $preCommitScript -Arguments @($piiHitPath)
     Assert-ExitCode -Name 'pre-commit flags Azure connection strings' -Expected 1 -Result $piiHit
     Assert-OutputContains -Name 'pre-commit flags Azure connection strings' -Needle 'Azure connection string' -Result $piiHit
