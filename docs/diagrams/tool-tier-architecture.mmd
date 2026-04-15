@@ -1,0 +1,106 @@
+---
+config:
+    layout: elk
+---
+graph TD
+    subgraph Core Tier
+        bootstrap["bootstrap"]
+        feedback_dispatch["feedback_dispatch"]
+        health_check["health_check"]
+        help_overview["help_overview"]
+        index_dispatch["index_dispatch"]
+        index_search["index_search"]
+        prompt_review["prompt_review"]
+    end
+
+    subgraph Extended Tier
+        direction TB
+        subgraph Index Operations
+            index_add["index_add"]
+            index_import["index_import"]
+            index_remove["index_remove"]
+            index_reload["index_reload"]
+            index_schema["index_schema"]
+        end
+        subgraph Governance
+            index_governanceHash["index_governanceHash"]
+            index_governanceUpdate["index_governanceUpdate"]
+            gates_evaluate["gates_evaluate"]
+            integrity_verify["integrity_verify"]
+        end
+        subgraph Analytics
+            graph_export["graph_export"]
+            usage_track["usage_track"]
+            usage_hotset["usage_hotset"]
+            metrics_snapshot["metrics_snapshot"]
+            promote_from_repo["promote_from_repo"]
+        end
+        subgraph Messaging
+            messaging_send["messaging_send"]
+            messaging_read["messaging_read"]
+            messaging_list_channels["messaging_list_channels"]
+            messaging_ack["messaging_ack"]
+            messaging_stats["messaging_stats"]
+            messaging_get["messaging_get"]
+            messaging_update["messaging_update"]
+            messaging_purge["messaging_purge"]
+            messaging_reply["messaging_reply"]
+            messaging_thread["messaging_thread"]
+        end
+    end
+
+    subgraph Admin Tier
+        subgraph Feedback
+            feedback_submit["feedback_submit"]
+            feedback_list["feedback_list"]
+            feedback_get["feedback_get"]
+            feedback_update["feedback_update"]
+            feedback_stats["feedback_stats"]
+            feedback_health["feedback_health"]
+        end
+        subgraph Index Management
+            index_health["index_health"]
+            index_diagnostics["index_diagnostics"]
+            index_repair["index_repair"]
+            index_groom["index_groom"]
+            index_enrich["index_enrich"]
+            index_normalize["index_normalize"]
+            index_inspect["index_inspect"]
+            index_debug["index_debug"]
+        end
+        subgraph Meta
+            meta_tools["meta_tools"]
+            meta_activation_guide["meta_activation_guide"]
+            meta_check_activation["meta_check_activation"]
+            feature_status["feature_status"]
+        end
+        subgraph Bootstrap Ops
+            bootstrap_request["bootstrap_request"]
+            bootstrap_confirmFinalize["bootstrap_confirmFinalize"]
+            bootstrap_status["bootstrap_status"]
+        end
+        subgraph Manifest
+            manifest_status["manifest_status"]
+            manifest_refresh["manifest_refresh"]
+            manifest_repair["manifest_repair"]
+        end
+        subgraph Diagnostics
+            diagnostics_block["diagnostics_block"]
+            diagnostics_microtaskFlood["diagnostics_microtaskFlood"]
+            diagnostics_memoryPressure["diagnostics_memoryPressure"]
+        end
+        subgraph Other
+            usage_flush["usage_flush"]
+            integrity_manifest["integrity_manifest"]
+            trace_dump["trace_dump"]
+        end
+    end
+
+    Client["MCP Client"] --> Core
+    Client -.->|"INDEX_SERVER_FLAG_TOOLS_EXTENDED=1"| Extended
+    Client -.->|"INDEX_SERVER_FLAG_TOOLS_ADMIN=1"| Admin
+
+    style Core fill:#238636,stroke:#1a7f37,stroke-width:2px,color:#fff
+    style Extended fill:#1f6feb,stroke:#0550ae,stroke-width:2px,color:#fff
+    style Admin fill:#bf5b00,stroke:#953800,stroke-width:2px,color:#fff
+    style Client fill:#57606a,stroke:#424a53,stroke-width:2px,color:#fff

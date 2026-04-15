@@ -1,0 +1,105 @@
+name: Multi-Instance Validation
+
+on:
+  # Tier 3: manual release-readiness validation only.
+  workflow_dispatch:
+    inputs:
+      skip_standard_tests:
+        description: 'Skip standard test suite (run only multi-instance)'
+        type: boolean
+        default: false
+
+concurrency:
+  group: multi-instance-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  multi-instance-test:
+    name: Leader/Follower Failover
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    strategy:
+      matrix:
+        node-version: [22]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Build
+        run: npm run build
+
+      - name: Run standard test suite
+        if: ${{ !inputs.skip_standard_tests }}
+        run: npm test
+        env:
+          SKIP_PRETEST_BUILD: '1'
+
+      - name: Run multi-instance failover tests
+        run: npx vitest run src/tests/unit/multiInstanceFailover.spec.ts --reporter=verbose
+        env:
+          SKIP_PRETEST_BUILD: '1'
+          NODE_ENV: test
+
+      - name: Run multi-instance integration tests
+        run: npx vitest run src/tests/unit/multiInstanceIntegration.spec.ts src/tests/unit/leaderElection.spec.ts src/tests/unit/followerProxy.spec.ts --reporter=verbose
+        env:
+          SKIP_PRETEST_BUILD: '1'
+          NODE_ENV: test
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: multi-instance-test-results
+          path: |
+            test-results/
+            .test-run-complete.*.marker
+          retention-days: 7
+
+  cross-platform-validation:
+    name: Cross-Platform (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        node-version: [22]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Build
+        run: npm run build
+
+      - name: Run core tests
+        run: npm test
+        env:
+          SKIP_PRETEST_BUILD: '1'
+
+      - name: Run multi-instance failover
+        run: npx vitest run src/tests/unit/multiInstanceFailover.spec.ts --reporter=verbose
+        env:
+          SKIP_PRETEST_BUILD: '1'

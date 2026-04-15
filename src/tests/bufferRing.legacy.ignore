@@ -1,0 +1,5 @@
+// Former bufferRing.spec.ts removed.
+// Intentionally left as marker to prevent reintroduction of brittle monolithic tests.
+// Focused tests live in:
+//  - bufferRingSimple.spec.ts
+//  - bufferRingMetricsIntegration.spec.ts

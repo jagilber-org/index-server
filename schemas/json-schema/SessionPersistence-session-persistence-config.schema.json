@@ -1,0 +1,110 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$ref": "#/definitions/SessionPersistenceConfig",
+  "definitions": {
+    "SessionPersistenceConfig": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "persistenceDir": {
+          "type": "string"
+        },
+        "backupIntegration": {
+          "type": "boolean"
+        },
+        "retention": {
+          "type": "object",
+          "properties": {
+            "maxHistoryEntries": {
+              "type": "number"
+            },
+            "maxHistoryDays": {
+              "type": "number"
+            },
+            "maxConnectionHistoryDays": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "maxHistoryEntries",
+            "maxHistoryDays",
+            "maxConnectionHistoryDays"
+          ],
+          "additionalProperties": false
+        },
+        "deduplication": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "checksumAlgorithm": {
+              "type": "string",
+              "enum": [
+                "sha256",
+                "sha512"
+              ]
+            }
+          },
+          "required": [
+            "enabled",
+            "checksumAlgorithm"
+          ],
+          "additionalProperties": false
+        },
+        "atomicWrites": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "tempSuffix": {
+              "type": "string"
+            },
+            "backupSuffix": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "enabled",
+            "tempSuffix",
+            "backupSuffix"
+          ],
+          "additionalProperties": false
+        },
+        "persistence": {
+          "type": "object",
+          "properties": {
+            "intervalMs": {
+              "type": "number"
+            },
+            "onShutdown": {
+              "type": "boolean"
+            },
+            "onSessionChange": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "intervalMs",
+            "onShutdown",
+            "onSessionChange"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "enabled",
+        "persistenceDir",
+        "backupIntegration",
+        "retention",
+        "deduplication",
+        "atomicWrites",
+        "persistence"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

@@ -1,0 +1,234 @@
+# ===================================================================
+# SQUAD CONFIGURATION — ALWAYS TRACK
+# ===================================================================
+# .squad/ contains agent charters, team config, skills, and casting
+# registry. These are project configuration and MUST be committed.
+# (No exclusion rules — .squad/ is tracked by default.)
+
+# ===================================================================
+# ROOT-LEVEL TEST/BUILD OUTPUT FILES — NEVER COMMIT
+# ===================================================================
+build-output*.txt
+build2.txt
+tsc-output.txt
+test-output*.txt
+test-run*.txt
+test-proxy*.txt
+test-instance*.txt
+test3.txt
+vitest-*.txt
+REVIEW_SUMMARY.txt
+
+# ===================================================================
+# CRITICAL: NEVER COMMIT INSTRUCTION/DEVELOPMENT FILES
+# ===================================================================
+# These directories contain AI agent instructions and development
+# artifacts that MUST NEVER be committed to the repository.
+devinstructions/
+devinstructions_backup*/
+instructions/
+*.instructions.md
+ACTIVE-PLAN.md
+DOCUMENT-AUDIT-REPORT.md
+test-mermaid*.md
+
+# Build output and dependencies
+dist/
+!release/vscode-extension/dist/
+!scripts/dist/
+node_modules/
+
+# Generated schema archives (tracked schemas are in schemas/json-schema/)
+schemas/archive/
+
+# Local TLS certificates (never commit)
+.certs/
+certs/
+
+# VSIX binary artifacts (built by CI)
+release/*.vsix
+release/vscode-extension/*.vsix
+coverage/
+*.log
+logs/
+!logs/.keep
+!logs/trace/.keep
+logs/trace/*.jsonl
+*.tmp
+*.swp
+*.cache
+*.tgz
+.DS_Store
+Thumbs.db
+/.env
+/.env.*
+/.vscode/*.log
+/npm-debug.log*
+/yarn-error.log
+/pnpm-debug.log
+
+# Root-level log and diagnostic files
+ci_run.log
+crud-diag.log
+crudProbe.log.jsonl
+diag-help.log
+diag-startup.log
+stderr.log
+stderr.tmp
+stdout.log
+stdout.tmp
+
+# Pipe and temporary communication files
+*.pipe
+in.pipe
+stdin.pipe
+stdin.tmp
+req.txt
+runs.json
+# IDE and editor files
+/.idea/
+/.vscode/*.log
+.history/
+
+# Build and test artifacts
+/.nyc_output
+/reports/
+/security-audit.json
+/.eslintcache
+/.coverage-cache
+jest-junit.xml
+test-results/
+lcov-report/
+
+# Database files
+*.sqlite
+*.db
+
+# NEVER re-include instruction files — the directories above cover everything
+# Do NOT add !instructions/*.json or any negation pattern here
+backups/
+
+# Build and processing locks
+.build.lock
+
+# Feedback system data (exclude user-generated feedback entries)
+feedback/feedback-entries.json
+feedback/*.json
+
+# ===================================================================
+# RUNTIME ARTIFACTS - NEVER COMMIT
+# ===================================================================
+# These directories contain runtime-generated data, test artifacts,
+# and temporary files that MUST NEVER be committed to the repository.
+
+# Temporary directories and scratch space (ALL test artifacts)
+tmp/
+tmp/**
+tmp/**/*.tmp
+
+# Runtime data and state directories
+data/
+data/**
+!data/.gitkeep
+memory/
+memory/**
+!memory/.gitkeep
+# Keep the checked-in spec constitution while leaving other memory outputs ignored.
+!/.specify/memory/
+/.specify/memory/*
+!/.specify/memory/constitution.md
+metrics/
+metrics/**
+!metrics/.gitkeep
+
+# Test run sentinel / status markers (ALL test markers)
+.test-run-complete.*.marker
+.test-run-complete.*
+.test-run-status.json
+.test-run-complete.latest
+.baseline.sentinel
+
+# MCP and VS Code workspace configurations
+# Ignore local MCP workspace config (contains machine-specific paths)
+.vscode/mcp.json
+
+# Local environment overrides and configurations
+*.local.json
+mcp.local.json
+
+# Platform-specific files
+# Mac metadata
+.AppleDouble
+
+# Security and secrets
+# Prevent accidental commit of potential secrets snapshots
+secrets/
+snapshots/*
+!snapshots/.gitkeep
+
+# Generated documentation artifacts
+docs/**/*.pdf
+docs/**/*.docx
+
+# Test health files and temporary diagnostics
+test-health*.json
+health_response.json
+
+# ===================================================================
+# TEST-GENERATED INSTRUCTION ARTIFACTS - DO NOT COMMIT
+# ===================================================================
+# These patterns match files created by test suites that write to
+# instructions/ directory during test execution. Tests MUST clean up
+# these files in afterAll/afterEach hooks. This .gitignore is a safety
+# net to prevent accidental commits if cleanup fails.
+#
+# Patterns and their source tests:
+# - smoke-*.json: createReadSmoke.spec.ts
+# - mw-disabled-*.json: manifestEdgeCases.spec.ts (write disabled test)
+# - mw-repair-*.json: manifestEdgeCases.spec.ts (repair test)
+# - vis-*.json: addVisibilityInvariant.spec.ts
+# - synthetic-*.json: Dashboard synthetic load tests (ApiRoutes.ts)
+# - unit_p0_materialize_*.json: IndexContext.usage.unit.spec.ts
+# - unit_usageMonotonic_*.json: IndexContext.usage.unit.spec.ts
+#
+# CI enforcement: validate-no-test-artifacts.mjs checks for these
+# patterns and fails the build if any exist, ensuring cleanup works.
+# ===================================================================
+instructions/smoke-*.json
+instructions/mw-disabled-*.json
+instructions/mw-repair-*.json
+instructions/vis-*.json
+instructions/synthetic-*.json
+instructions/unit_p0_materialize_*.json
+instructions/unit_usageMonotonic_*.json
+
+# Backup and archive files
+*.bak
+*.backup
+*.old
+*.orig
+*_backup_*/
+backup-*.zip
+
+# Private development workspace (user-specific files)
+.private/
+
+CLEANUP-RUNTIME-ARTIFACTS.txt
+ACTIVATION_TOOLS_IMPLEMENTATION_SUMMARY.md
+NVIDIA Corporation/
+PLAN.md
+.dist.keep
+
+# Runtime data directories (keep dirs via .gitkeep, ignore contents)
+governance/
+!governance/.gitkeep
+!backups/.gitkeep
+!feedback/.gitkeep
+!tmp/.gitkeep
+!snapshots/.gitkeep
+
+# Local editor / CUI config
+.vscode/copilot-ui.json
+
+# Added by ggshield
+.cache_ggshield

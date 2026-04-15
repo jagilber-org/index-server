@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "$id": "https://example.local/schemas/feedback-entry.schema.json",
+  "title": "FeedbackEntry",
+  "type": "object",
+  "description": "Persistent feedback record stored by feedback tools.",
+  "required": ["id","type","severity","status","description","createdAt"],
+  "additionalProperties": false,
+  "properties": {
+    "id": { "type": "string", "pattern": "^[a-f0-9]{12,64}$" },
+    "title": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "type": { "type": "string", "enum": ["issue","status","security","feature-request","bug-report","performance","usability","other"] },
+    "severity": { "type": "string", "enum": ["low","medium","high","critical"] },
+    "status": { "type": "string", "enum": ["new","acknowledged","in-progress","resolved","closed"] },
+    "description": { "type": "string", "minLength": 1, "maxLength": 10000 },
+    "context": { "type": "object", "additionalProperties": true },
+    "tags": { "type": "array", "items": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-_]{0,30}$" }, "uniqueItems": true, "maxItems": 10 },
+    "metadata": { "type": "object", "additionalProperties": true },
+    "createdAt": { "type": "string", "format": "date-time" },
+    "updatedAt": { "type": "string", "format": "date-time" },
+    "createdBy": { "type": "string" },
+    "updatedBy": { "type": "string" },
+    "resolution": { "type": "string", "maxLength": 4000 },
+    "resolutionAt": { "type": "string", "format": "date-time" },
+    "_internal": { "type": "object", "additionalProperties": true, "description": "Internal system fields (rotation, lineage)." }
+  }
+}

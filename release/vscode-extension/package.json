@@ -1,0 +1,217 @@
+{
+  "name": "index-server",
+  "displayName": "Index",
+  "description": "Index Server providing governed, classified, and auditable instruction indexes with analytics and optional admin dashboard.",
+  "version": "1.19.4",
+  "publisher": "jagilber-org",
+  "license": "MIT",
+  "icon": "images/icon.png",
+  "galleryBanner": {
+    "color": "#1e1e2e",
+    "theme": "dark"
+  },
+  "badges": [
+    {
+      "url": "https://img.shields.io/badge/License-MIT-blue.svg",
+      "href": "https://github.com/jagilber-org/index-server/blob/main/LICENSE",
+      "description": "License: MIT"
+    },
+    {
+      "url": "https://img.shields.io/badge/node-%3E%3D22-brightgreen",
+      "href": "https://github.com/jagilber-org/index-server",
+      "description": "Node.js >= 22"
+    }
+  ],
+  "markdown": "github",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jagilber-org/index-server.git"
+  },
+  "bugs": {
+    "url": "https://github.com/jagilber-org/index-server/issues"
+  },
+  "homepage": "https://github.com/jagilber-org/index-server#readme",
+  "engines": {
+    "vscode": "^1.99.0"
+  },
+  "categories": [
+    "Other",
+    "Machine Learning"
+  ],
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "ai",
+    "instructions",
+    "governance",
+    "index-server"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "mcpServerDefinitionProviders": [
+      {
+        "id": "indexProvider",
+        "label": "Index Server"
+      }
+    ],
+    "walkthroughs": [
+      {
+        "id": "index.gettingStarted",
+        "title": "Get Started with Index Server",
+        "description": "Set up your governed instruction index for AI agents.",
+        "steps": [
+          {
+            "id": "configure",
+            "title": "Choose a Profile & Configure",
+            "description": "Pick a server profile and target format (VS Code mcp.json or Copilot CLI mcp-config.json) to generate your MCP client configuration.\n\n[Configure MCP Client](command:index.configure)\n[Open Settings](command:workbench.action.openSettings?%22index.profile%22)",
+            "media": {
+              "markdown": "walkthroughs/configure.md"
+            }
+          },
+          {
+            "id": "tls-setup",
+            "title": "Set Up TLS Certificates",
+            "description": "Generate a self-signed certificate and enable HTTPS for the dashboard. Required for the Enhanced and Experimental profiles.\n\n[Re-generate Config](command:index.configure)\n[Open Dashboard](command:index.openDashboard)\n[Show Status](command:index.showStatus)",
+            "media": {
+              "markdown": "walkthroughs/tls-setup.md"
+            },
+            "when": "config.index.profile != default"
+          },
+          {
+            "id": "semantic-setup",
+            "title": "Set Up Semantic Search",
+            "description": "Download the embedding model and enable meaning-based instruction search. Included in Enhanced and Experimental profiles.\n\n[Re-generate Config](command:index.configure)\n[Show Status](command:index.showStatus)",
+            "media": {
+              "markdown": "walkthroughs/semantic-setup.md"
+            },
+            "when": "config.index.profile != default"
+          },
+          {
+            "id": "sqlite-setup",
+            "title": "Set Up SQLite Storage",
+            "description": "Switch from JSON to SQLite for FTS5 full-text search and WAL-mode concurrency. Experimental profile only.\n\n[Re-generate Config](command:index.configure)\n[Show Status](command:index.showStatus)\n[Open Settings](command:workbench.action.openSettings?%22index%22)",
+            "media": {
+              "markdown": "walkthroughs/sqlite-setup.md"
+            },
+            "when": "config.index.profile == experimental"
+          },
+          {
+            "id": "search",
+            "title": "Search Instructions",
+            "description": "Use the index search tools in Copilot Chat agent mode.\n\nTry asking: *search index-server for post installation configuration*\n\n[Show Status](command:index.showStatus)\n[Open Dashboard](command:index.openDashboard)",
+            "media": {
+              "markdown": "walkthroughs/search.md"
+            }
+          },
+          {
+            "id": "dashboard",
+            "title": "Open the Dashboard",
+            "description": "Enable the admin dashboard for real-time monitoring.\n\n[Open Dashboard](command:index.openDashboard)\n[Open Settings](command:workbench.action.openSettings?%22index.dashboard%22)",
+            "media": {
+              "markdown": "walkthroughs/dashboard.md"
+            }
+          },
+          {
+            "id": "verify",
+            "title": "Verify Your Setup",
+            "description": "Confirm the server is running and connected. Troubleshoot common issues.\n\n[Show Status](command:index.showStatus)\n[Configure MCP Client](command:index.configure)\n[Open Dashboard](command:index.openDashboard)",
+            "media": {
+              "markdown": "walkthroughs/verify.md"
+            }
+          }
+        ]
+      }
+    ],
+    "commands": [
+      {
+        "command": "index.configure",
+        "title": "Index Server: Configure MCP Client"
+      },
+      {
+        "command": "index.showStatus",
+        "title": "Index Server: Show Status"
+      },
+      {
+        "command": "index.openDashboard",
+        "title": "Index Server: Open Dashboard"
+      },
+      {
+        "command": "index.openWalkthrough",
+        "title": "Index Server: Setup Guide"
+      }
+    ],
+    "configuration": {
+      "title": "Index Server",
+      "properties": {
+        "index.profile": {
+          "type": "string",
+          "default": "default",
+          "enum": [
+            "default",
+            "enhanced",
+            "experimental"
+          ],
+          "enumDescriptions": [
+            "HTTP standalone — minimal config, local JSON storage",
+            "Semantic search + HTTPS — enables TLS, semantic embeddings, file logging, mutation, metrics",
+            "SQLite + debug — all enhanced features plus SQLite storage backend and debug logging"
+          ],
+          "description": "Server profile that controls default features and storage."
+        },
+        "index.serverPath": {
+          "type": "string",
+          "default": "",
+          "description": "Absolute path to the Index Server dist/server/index-server.js. Leave empty to use npx @jagilber-org/index-server."
+        },
+        "index.instructionsDir": {
+          "type": "string",
+          "default": "",
+          "description": "Absolute path to the instructions directory. Leave empty for built-in defaults."
+        },
+        "index.dashboard.enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable the admin dashboard HTTP server."
+        },
+        "index.dashboard.port": {
+          "type": "number",
+          "default": 8787,
+          "description": "Port for the admin dashboard HTTP server."
+        },
+        "index.logLevel": {
+          "type": "string",
+          "default": "info",
+          "enum": [
+            "debug",
+            "info",
+            "warn",
+            "error"
+          ],
+          "description": "Log level for the MCP server."
+        },
+        "index.mutation.enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable mutation operations (add, import, remove, etc.)."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p tsconfig.json",
+    "package": "npx @vscode/vsce package --no-dependencies",
+    "publish:marketplace": "npx @vscode/vsce publish --no-dependencies",
+    "publish:openvsx": "npx ovsx publish --no-dependencies",
+    "vscode:prepublish": "npm run compile"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.99.0",
+    "@types/node": "^20.11.0",
+    "typescript": "^5.5.0",
+    "@vscode/vsce": "^3.0.0",
+    "ovsx": "^0.10.0"
+  }
+}

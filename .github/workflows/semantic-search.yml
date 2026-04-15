@@ -1,0 +1,94 @@
+name: Semantic Search Tests
+
+# Runs semantic search and embedding tests with the actual model loaded.
+# Normally these tests mock the model (SEMANTIC_ENABLED=0). This workflow
+# downloads the HuggingFace model and runs live semantic search to verify
+# end-to-end embedding + cosine similarity + cache generation.
+
+on:
+  schedule:
+    - cron: '0 6 * * 1'  # Weekly Monday 06:00 UTC
+  workflow_dispatch: {}
+
+jobs:
+  semantic-tests:
+    name: Semantic Search (Live Model)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      INDEX_SERVER_SEMANTIC_ENABLED: '1'
+      INDEX_SERVER_SEMANTIC_MODEL: 'Xenova/all-MiniLM-L6-v2'
+      INDEX_SERVER_SEMANTIC_DEVICE: 'cpu'
+      INDEX_SERVER_SEMANTIC_LOCAL_ONLY: '0'
+      INDEX_SERVER_MUTATION: '1'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Ensure instructions directory
+        run: |
+          mkdir -p instructions
+          if [ ! "$(ls instructions/*.json 2>/dev/null)" ]; then
+            echo '{"id":"ci-seed","title":"CI Seed","body":"Seed instruction for CI.","version":"1.0.0","status":"active","tags":["ci"]}' > instructions/ci-seed.json
+          fi
+
+      - name: Run semantic search tests (live model)
+        run: |
+          npx vitest run \
+            src/tests/semantic-search.spec.ts \
+            src/tests/embeddingIncremental.spec.ts \
+            src/tests/embeddings-routes.spec.ts \
+            --reporter=verbose
+        timeout-minutes: 10
+
+      - name: Run concurrent CRUD + semantic search
+        run: |
+          npx vitest run \
+            src/tests/crudIntegration.spec.ts \
+            src/tests/concurrentSemanticCrud.spec.ts \
+            --reporter=verbose
+        env:
+          INDEX_SERVER_SEMANTIC_ENABLED: '1'
+          INDEX_SERVER_MUTATION: '1'
+        timeout-minutes: 5
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: semantic-test-results
+          path: test-results
+          if-no-files-found: warn
+
+      - name: Upload server logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: semantic-server-logs
+          path: |
+            logs/
+            *.log
+          retention-days: 7
+          if-no-files-found: warn
+
+      - name: Upload embedding cache
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: semantic-embedding-cache
+          path: |
+            **/embeddings.json
+            **/embedding-cache*.json
+          retention-days: 7
+          if-no-files-found: warn

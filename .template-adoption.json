@@ -1,0 +1,29 @@
+{
+  "templateName": "layered-hook-security-template",
+  "adoptedTemplateVersion": "1.16.0",
+  "hookStandardInstruction": "repository-hook-security-standard",
+  "hookStandardVersion": "1.3.0",
+  "adoptedAt": "2026-04-14",
+  "notes": [
+    "Adopted from template v1.0.0 -> v1.8.0 in a single parity pass.",
+    "Constitution upgraded to schemaVersion 2 / v2.2.0 with structured rules, rationale, and new articles.",
+    "Template manifest upgraded to v1.8.0 with full version history notes.",
+    "Added observability-logging.md and repository-security-hooks.md shared instructions.",
+    "Added .pii-allowlist with standard placeholder patterns.",
+    "Hook coverage aligned with the template for curated PII, env leak scanning, and ggshield while preserving scripts/ as the implementation surface.",
+    "Added the template's dedicated Gitleaks and Semgrep GitHub Actions workflows for CI-side secret and configuration analysis.",
+    "Added the template's GGShield audit workflow, repo-owned .gitleaks.toml baseline, local pre-push Gitleaks and Semgrep hooks, and CI replay of the security pre-push policy.",
+    "v1.11.0: Added DC-3 license-declaration constitutional rule to documentation article.",
+    "v1.12.0: Added SH-4 through SH-9 application-security constitutional rules (path containment, loopback binding, TLS verification, header credentials, CSP, config-gated diagnostics).",
+    "v1.13.0: Promoted gitleaks to pre-commit hook, ggshield to pre-push hook; added .ggshield.yml with aligned exclusions.",
+    "v1.14.0: Added well-known DNS resolver IPs to .pii-allowlist; merged template generic path exclusions into .gitleaks.toml; added .github/workflows/ to check-yaml exclude.",
+    "v1.15.0: Added Publish-ToPublicRepo.ps1 clean-room publish script and .publish-exclude.example.",
+    "v1.16.0: Updated Publish-ToPublicRepo.ps1 with dotfile allowlist, robocopy pre-exclusion, PII scan auto-detect, optional RemoteUrl for local mode, and .publish-exclude.example comment update."
+  ],
+  "localDeviations": [
+    "Hook implementations remain under scripts/ and are orchestrated by .pre-commit-config.yaml rather than hooks/.",
+    "instructions/ remains the checked-in runtime instruction catalog; .instructions/ is reserved for repo-local guidance.",
+    "The Node entry point sync-constitution.cjs remains the source implementation, with scripts/sync-constitution.ps1 as the template-compatible wrapper.",
+    "The precommit.yml workflow replays the dedicated security pre-push hooks directly; the existing repo-local slow pre-push suite remains enforced by its own workflow surfaces rather than being replayed inside precommit.yml."
+  ]
+}
