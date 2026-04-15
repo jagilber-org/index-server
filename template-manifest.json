@@ -1,18 +1,19 @@
 {
-  "templateVersion": "1.10.0",
+  "templateVersion": "1.15.0",
   "schemaVersion": 1,
   "templateName": "layered-hook-security-template",
   "hookStandardInstruction": "repository-hook-security-standard",
-  "hookStandardVersion": "1.1.0",
+  "hookStandardVersion": "1.3.0",
   "knowledgeModelVersion": "1.0.0",
   "canonicalTemplateInstruction": "canonical-starter-template-repo",
-  "updatedAt": "2026-04-12T00:00:00.000Z",
+  "updatedAt": "2026-04-14T00:00:00.000Z",
   "copilotInstructions": ".github/copilot-instructions.md",
   "promotionMap": ".specify/config/promotion-map.json",
   "adoptionMarker": ".template-adoption.json",
   "managedFiles": [
     { "path": ".pre-commit-config.yaml", "strategy": "MergeReview" },
     { "path": ".gitleaks.toml", "strategy": "MergeReview" },
+    { "path": ".ggshield.yml", "strategy": "MergeReview" },
     { "path": ".github/workflows/ggshield-secret-scans.yml", "strategy": "MergeReview" },
     { "path": ".github/workflows/gitleaks-secret-scans.yml", "strategy": "MergeReview" },
     { "path": ".github/workflows/precommit.yml", "strategy": "MergeReview" },
@@ -26,6 +27,7 @@
     { "path": "scripts/run-semgrep-pre-push.ps1", "strategy": "MergeReview" },
     { "path": "scripts/setup-hooks.ps1", "strategy": "ExactMatch" },
     { "path": "scripts/sync-constitution.ps1", "strategy": "ExactMatch" },
+    { "path": "scripts/Publish-ToPublicRepo.ps1", "strategy": "MergeReview" },
     { "path": ".instructions/README.md", "strategy": "RepoSpecific" },
     { "path": ".instructions/local/project-context.md", "strategy": "RepoSpecific" },
     { "path": ".instructions/shared/index-server-bootstrap.md", "strategy": "MergeReview" },
@@ -51,6 +53,11 @@
     "Template version 1.7.0 adds observability guardrails that standardize structured logging, function tracing, and stack-bearing error diagnostics as global template expectations.",
     "Template version 1.8.0 adds constitutional rules for branch usage, ancestry-preserving merges, branch cleanup, pull-request CI gates, and clean-tree release or deployment discipline.",
     "Template version 1.9.0 adds dedicated gitleaks secret-scanning workflows for PR, manual, and scheduled repo or history scans, plus a Semgrep workflow for supplemental workflow and CI/config analysis.",
-    "Template version 1.10.0 makes gitleaks and Semgrep mandatory local pre-push hooks managed by pre-commit, adds a repo-owned .gitleaks.toml baseline, and updates CI to replay the same pre-push policy."
+    "Template version 1.10.0 makes gitleaks and Semgrep mandatory local pre-push hooks managed by pre-commit, adds a repo-owned .gitleaks.toml baseline, and updates CI to replay the same pre-push policy.",
+    "Template version 1.11.0 adds an explicit MIT LICENSE for template-repo, documents that adopting repos must choose their own license posture, and adds a constitutional rule requiring explicit license or proprietary-status declaration before public distribution.",
+    "Template version 1.12.0 expands the constitution's security article with generic application-security rules for path containment, loopback-by-default admin binding, TLS verification, header-based credential transport, CSP hygiene, and configuration-gated diagnostics.",
+    "Template version 1.13.0 promotes gitleaks to mandatory pre-commit hook, promotes ggshield to mandatory pre-push hook with .ggshield.yml exclusions, and updates the layered hook model numbering.",
+    "Template version 1.14.0 enriches PII hook with Azure/IT-focused false-positive reduction (version-string IPv4, Git SHA thumbprint, GUID credit card, bot emails, vendor/minified skip), adds well-known DNS IPs to .pii-allowlist, aligns .gitleaks.toml path exclusions with .ggshield.yml, and adds centralized scanner exclusion guidance.",
+    "Template version 1.15.0 adds a generalized clean-room publish script (Publish-ToPublicRepo.ps1) for dev-to-public mirror workflows with .publish-exclude stripping, forbidden-artifact verification, PII scanning, and local/review/direct-push delivery modes."
   ]
 }

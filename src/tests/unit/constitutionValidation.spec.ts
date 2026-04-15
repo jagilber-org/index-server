@@ -55,16 +55,16 @@ describe('constitution.json validation', () => {
     });
   });
 
-  describe('testing article (TS-1 to TS-12)', () => {
+  describe('testing article (TS-1 to TS-11)', () => {
     it('has a "testing" article', () => {
       const c = load();
       expect(c.articles.testing).toBeDefined();
     });
 
-    it('contains all 12 testing rules TS-1 through TS-12', () => {
+    it('contains all 11 testing rules TS-1 through TS-11', () => {
       const c = load();
       const ids = getRuleIds(c.articles.testing);
-      for (let i = 1; i <= 12; i++) {
+      for (let i = 1; i <= 11; i++) {
         expect(ids).toContain(`TS-${i}`);
       }
     });
@@ -77,77 +77,67 @@ describe('constitution.json validation', () => {
     });
   });
 
-  describe('code-quality article (CQ-1 to CQ-7)', () => {
-    it('has a "code-quality" article', () => {
+  describe('codeQuality article (CQ-1 to CQ-7)', () => {
+    it('has a "codeQuality" article', () => {
       const c = load();
-      expect(c.articles['code-quality']).toBeDefined();
+      expect(c.articles.codeQuality).toBeDefined();
     });
 
     it('contains all 7 code quality rules CQ-1 through CQ-7', () => {
       const c = load();
-      const ids = getRuleIds(c.articles['code-quality']);
+      const ids = getRuleIds(c.articles.codeQuality);
       for (let i = 1; i <= 7; i++) {
         expect(ids).toContain(`CQ-${i}`);
       }
     });
   });
 
-  describe('build-deploy article (BD-1 to BD-3)', () => {
-    it('has a "build-deploy" article', () => {
+  describe('delivery article (CD + PB rules)', () => {
+    it('has a "delivery" article', () => {
       const c = load();
-      expect(c.articles['build-deploy']).toBeDefined();
+      expect(c.articles.delivery).toBeDefined();
     });
 
-    it('contains all 3 build-deploy rules BD-1 through BD-3', () => {
+    it('contains delivery rules CD-1 through CD-4 and PB-6', () => {
       const c = load();
-      const ids = getRuleIds(c.articles['build-deploy']);
-      for (let i = 1; i <= 3; i++) {
-        expect(ids).toContain(`BD-${i}`);
+      const ids = getRuleIds(c.articles.delivery);
+      for (let i = 1; i <= 4; i++) {
+        expect(ids).toContain(`CD-${i}`);
       }
+      expect(ids).toContain('PB-6');
     });
   });
 
-  describe('data-integrity article (DI-1 to DI-3)', () => {
-    it('has a "data-integrity" article', () => {
+  describe('dataIntegrity article (DI-1 to DI-3)', () => {
+    it('has a "dataIntegrity" article', () => {
       const c = load();
-      expect(c.articles['data-integrity']).toBeDefined();
+      expect(c.articles.dataIntegrity).toBeDefined();
     });
 
     it('contains all 3 data-integrity rules DI-1 through DI-3', () => {
       const c = load();
-      const ids = getRuleIds(c.articles['data-integrity']);
+      const ids = getRuleIds(c.articles.dataIntegrity);
       for (let i = 1; i <= 3; i++) {
         expect(ids).toContain(`DI-${i}`);
       }
     });
   });
 
-  describe('pii-precommit article (PH-1 to PH-3)', () => {
-    it('has a "pii-precommit" article', () => {
+  describe('security article includes SH-1 through SH-9', () => {
+    it('has a "security" article with SH rules', () => {
       const c = load();
-      expect(c.articles['pii-precommit']).toBeDefined();
-    });
-
-    it('contains all 3 PII/pre-commit rules PH-1 through PH-3', () => {
-      const c = load();
-      const ids = getRuleIds(c.articles['pii-precommit']);
-      for (let i = 1; i <= 3; i++) {
-        expect(ids).toContain(`PH-${i}`);
+      expect(c.articles.security).toBeDefined();
+      const ids = getRuleIds(c.articles.security);
+      for (let i = 1; i <= 9; i++) {
+        expect(ids).toContain(`SH-${i}`);
       }
     });
   });
 
-  describe('publishing article includes PB-6', () => {
-    it('has a "publishing" article with PB-6', () => {
-      const c = load();
-      expect(c.articles.publishing).toBeDefined();
-      const ids = getRuleIds(c.articles.publishing);
-      expect(ids).toContain('PB-6');
-    });
-
+  describe('PB-6 in delivery article', () => {
     it('PB-6 covers pre-push hook and public remote blocking', () => {
       const c = load();
-      const pb6 = c.articles.publishing.rules.find(r => r.id === 'PB-6');
+      const pb6 = c.articles.delivery.rules.find(r => r.id === 'PB-6');
       expect(pb6).toBeDefined();
       expect(pb6!.rule.toLowerCase()).toMatch(/pre-push|public/i);
     });
@@ -157,9 +147,9 @@ describe('constitution.json validation', () => {
     it('has all expected article keys', () => {
       const c = load();
       const expected = [
-        'quality', 'security', 'architecture', 'governance',
-        'publishing', 'testing', 'code-quality', 'build-deploy',
-        'data-integrity', 'pii-precommit',
+        'security', 'architecture', 'governance',
+        'testing', 'delivery', 'codeQuality',
+        'dataIntegrity', 'documentation', 'validation',
       ];
       for (const key of expected) {
         expect(c.articles).toHaveProperty(key);

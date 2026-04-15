@@ -3,6 +3,50 @@ title = "Index Server Gitleaks Config"
 [extend]
 useDefault = true
 
+[allowlist]
+  paths = [
+    # --- Template-standard exclusions (aligned with .ggshield.yml) ---
+    # Dependency and virtual-environment directories
+    '''node_modules/''',
+    '''\.venv/''',
+    '''venv/''',
+    '''__pycache__/''',
+    '''vendor/''',
+    '''packages/''',
+    '''\.tox/''',
+    '''bower_components/''',
+    # Build outputs
+    '''dist/''',
+    '''build/''',
+    '''\.next/''',
+    '''\.nuxt/''',
+    '''obj/''',
+    '''bin/''',
+    '''out/''',
+    '''publish/''',
+    # Caches and VCS
+    '''\.git/''',
+    '''\.hg/''',
+    '''\.svn/''',
+    '''\.cache/''',
+    '''\.cache_ggshield/''',
+    '''\.mypy_cache/''',
+    '''\.pytest_cache/''',
+    '''coverage/''',
+    '''\.nyc_output/''',
+    # Infrastructure state
+    '''\.terraform/''',
+    # Lock files
+    '''package-lock\.json$''',
+    '''yarn\.lock$''',
+    '''pnpm-lock\.yaml$''',
+    '''Gemfile\.lock$''',
+    '''poetry\.lock$''',
+    '''Pipfile\.lock$''',
+    '''composer\.lock$''',
+  ]
+
+# --- Repo-specific allowlists ---
 [[allowlists]]
 description = "Detect-secrets baseline hashes"
 paths = [

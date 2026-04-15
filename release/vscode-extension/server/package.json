@@ -95,7 +95,7 @@
     "@playwright/test": "^1.58.2",
     "@types/adm-zip": "^0.5.8",
     "@types/express": "^5.0.6",
-    "@types/node": "^20.19.37",
+    "@types/node": "^20.19.39",
     "@types/ws": "^8.18.1",
     "@typescript-eslint/eslint-plugin": "^7.0.0",
     "@typescript-eslint/parser": "^7.0.0",
@@ -103,7 +103,7 @@
     "cross-env": "^7.0.3",
     "eslint": "^8.57.0",
     "fast-check": "^3.17.0",
-    "prettier": "^3.8.1",
+    "prettier": "^3.8.2",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.3",
     "vitest": "^3.2.4"

@@ -1,10 +1,10 @@
 {
   "schemaVersion": 2,
-  "version": "2.2.0",
+  "version": "2.4.0",
   "name": "Index",
   "ratifiedAt": "2026-02-16",
-  "lastAmendedAt": "2026-04-12",
-  "description": "Index Server — Enterprise instruction indexing platform for AI assistant governance. Aligned to the layered hook security template constitution v2.2.0.",
+  "lastAmendedAt": "2026-04-14",
+  "description": "Index Server — Enterprise instruction indexing platform for AI assistant governance. Aligned to the layered hook security template constitution v2.4.0.",
   "articles": {
     "governance": {
       "title": "Template Governance And Change Control",
@@ -287,6 +287,132 @@
           "enforcedBy": [
             ".github/workflows/ci.yml",
             ".secrets.baseline"
+          ]
+        },
+        {
+          "id": "SH-4",
+          "severity": "error",
+          "rule": "File-system operations influenced by user input MUST validate that resolved paths stay within an intended base directory; unchecked path traversal is prohibited.",
+          "rationale": "User-controlled path handling is a recurring source of read, write, and delete vulnerabilities when containment is assumed instead of verified.",
+          "required": [
+            "Resolve candidate paths against a known base directory and verify normalized containment before file-system reads, writes, or deletes.",
+            "Add focused tests for traversal attempts such as .. segments or equivalent escape paths when user-controlled file-system access exists."
+          ],
+          "prohibited": [
+            "Do not treat path.join(), string concatenation, or relative-segment stripping alone as proof that containment is safe."
+          ],
+          "evidence": [
+            "Path-validation helper or containment checks in handlers or services",
+            "Traversal-focused tests or validation output"
+          ],
+          "enforcedBy": [
+            "repo-local file-system handlers",
+            "security review"
+          ]
+        },
+        {
+          "id": "SH-5",
+          "severity": "error",
+          "rule": "Administrative servers, dashboards, and control-plane endpoints MUST default to loopback-only binding unless broader exposure is an explicit documented opt-in.",
+          "rationale": "Control-plane and admin surfaces become materially riskier when broad network exposure is the default rather than a deliberate deployment choice.",
+          "required": [
+            "Default local admin surfaces to 127.0.0.1, ::1, or an equivalent loopback-only binding when the runtime supports it.",
+            "Document the security implications of any configuration that allows broader binding."
+          ],
+          "prohibited": [
+            "Do not default admin or dashboard surfaces to 0.0.0.0 or other broad external bindings without an explicit opt-in."
+          ],
+          "evidence": [
+            "Runtime config defaults",
+            "Deployment or hosting guidance"
+          ],
+          "enforcedBy": [
+            "server configuration defaults",
+            "deployment review"
+          ]
+        },
+        {
+          "id": "SH-6",
+          "severity": "error",
+          "rule": "Production code MUST keep TLS certificate verification enabled; self-signed or private-CA scenarios MUST use explicit trust configuration rather than disabling verification.",
+          "rationale": "Disabling certificate verification turns transport encryption into an integrity illusion and enables trivial interception on hostile networks.",
+          "required": [
+            "Use trusted CA bundles, platform trust stores, or equivalent runtime configuration for private certificate chains.",
+            "Keep production HTTPS and TLS client verification enabled by default."
+          ],
+          "prohibited": [
+            "Do not set rejectUnauthorized: false or equivalent verification-bypass settings in production paths."
+          ],
+          "evidence": [
+            "HTTP or TLS client configuration",
+            "Documentation for private CA handling when relevant"
+          ],
+          "enforcedBy": [
+            "repo-local network clients",
+            "security review"
+          ]
+        },
+        {
+          "id": "SH-7",
+          "severity": "error",
+          "rule": "API keys, admin tokens, and similar bearer credentials MUST be accepted through Authorization or other non-URL secret-bearing headers; query-parameter authentication is prohibited.",
+          "rationale": "Query-string credentials leak into logs, browser history, caches, and proxies even when application code handles them carefully.",
+          "required": [
+            "Accept bearer or key credentials through headers or another transport that does not expose them in URLs.",
+            "Keep auth examples and API docs aligned with the non-URL credential transport model."
+          ],
+          "prohibited": [
+            "Do not accept API keys or tokens via query parameters in normal application or admin flows."
+          ],
+          "evidence": [
+            "Auth middleware or route-handler parsing logic",
+            "API documentation and examples"
+          ],
+          "enforcedBy": [
+            "auth middleware",
+            "API route handlers"
+          ]
+        },
+        {
+          "id": "SH-8",
+          "severity": "warning",
+          "rule": "Browser-facing applications SHOULD enforce Content-Security-Policy defaults that avoid unsafe-inline and unsafe-eval; any exception should be narrow, documented, and time-bounded.",
+          "rationale": "Unsafe inline and eval allowances meaningfully weaken browser-side injection defenses and often persist far longer than intended once normalized.",
+          "required": [
+            "Prefer nonce-based, hash-based, or equivalent CSP approaches when inline content is unavoidable.",
+            "Document why any CSP relaxation exists and what will remove it."
+          ],
+          "prohibited": [
+            "Do not ship broad unsafe-inline or unsafe-eval defaults without explicit rationale."
+          ],
+          "evidence": [
+            "HTTP security header configuration",
+            "UI deployment or security guidance"
+          ],
+          "enforcedBy": [
+            "browser server configuration",
+            "security review"
+          ]
+        },
+        {
+          "id": "SH-9",
+          "severity": "warning",
+          "rule": "Debug, trace, synthetic, or diagnostic behaviors that expose internal detail or change execution SHOULD be disabled by default in production and gated by configuration or environment rather than request parameters alone.",
+          "rationale": "Request-triggered debug modes are easy to leave reachable accidentally and can expose internal state or enable riskier execution paths in production.",
+          "required": [
+            "Gate production diagnostic behavior behind explicit environment or configuration controls when such behavior exists.",
+            "Document how diagnostic modes are enabled safely for operational use."
+          ],
+          "prohibited": [
+            "Do not allow request query flags alone to enable privileged debug, trace, or synthetic behaviors in production."
+          ],
+          "evidence": [
+            "Diagnostic route or configuration gating",
+            "Operational documentation for debug enablement"
+          ],
+          "enforcedBy": [
+            "diagnostic route handlers",
+            "deployment review"
           ]
         },
         {
@@ -639,6 +765,29 @@
           ],
           "enforcedBy": [
             "review and documentation standards"
+          ]
+        },
+        {
+          "id": "DC-3",
+          "severity": "error",
+          "rule": "Repositories intended for reuse, publication, or external distribution MUST declare an explicit license or explicitly document proprietary or internal-only status.",
+          "rationale": "Templates and adopting repositories create legal ambiguity when consumers cannot tell whether reuse is permitted or intentionally restricted.",
+          "required": [
+            "Commit a root LICENSE file for repositories that are meant to be licensed for reuse, or document proprietary or internal-only status clearly in repo-local guidance before public distribution.",
+            "Document when the template repo's own license does not automatically govern adopting repositories."
+          ],
+          "prohibited": [
+            "Do not leave repository license posture implicit when the repo is meant to be shared, published, or used as a template.",
+            "Do not assume the canonical template repo's license applies to adopters without an explicit local decision."
+          ],
+          "evidence": [
+            "Root LICENSE file or explicit proprietary-status note",
+            "README or adoption guidance describing the repo-specific license decision"
+          ],
+          "enforcedBy": [
+            "LICENSE",
+            "README.md",
+            ".instructions/shared/template-adoption-workflow.md"
           ]
         },
         {
