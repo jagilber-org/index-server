@@ -4,6 +4,24 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog and this project adheres to Semantic Versioning.
 
+## [1.20.0] - 2026-04-15
+
+### Added
+
+- Exported `renderPanelMarkdownHtml` for safe reuse when rendering dashboard panel documentation.
+- `INDEX_SERVER_ALLOW_INSECURE_TLS` to opt into local-only TLS bypass when validating security headers.
+
+### Changed
+
+- Manual security scanning now runs `npm audit` cross-platform and excludes generated runtime/internal artifact surfaces plus generated instruction manifests from the source review surface.
+- Publish, certificate, and CI helper scripts now use argument-based process execution instead of shell-string command invocation.
+
+### Fixed
+
+- Dashboard panel docs now preserve safe `data:image` sources without double-escaping image alt text.
+- Gitleaks allowlist handling now accepts the repo configuration format and generated certificate paths used by this project.
+- Manual security scan phone detection again matches contiguous US phone numbers while retaining the narrower false-positive suppressions added for generated artifacts.
+
 ## [1.19.0] - 2026-04-10
 
 ### Changed

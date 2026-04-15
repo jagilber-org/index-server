@@ -67,7 +67,7 @@ export function renderPanelMarkdownHtml(name: string, markdown: string): string 
     .replace(/`([^`]+)`/g, '<code>$1</code>')
     .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (_m: string, alt: string, url: string) => {
       const safeUrl = sanitizeDocUrl(url, true);
-      const safeAlt = escapeHtml(alt);
+      const safeAlt = alt;
       return `<img src="${safeUrl}" alt="${safeAlt}" style="max-width:100%;border-radius:8px;border:1px solid #1f2a3a;margin:12px 0;">`;
     })
     .replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_m: string, label: string, url: string) => {

@@ -112,7 +112,7 @@ if (audit) {
 // 2. PII pattern scan aligned with pre-commit rules
 const PII_PATTERNS = [
   { regex: /\b[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}\b/gi, label: 'Email address' },
-  { regex: /(?<!\d)(?:\+?1[-.\s]?)?(?:\(?\d{3}\)?[-.\s]?\d{3}[-.\s]\d{4})(?!\d)/g, label: 'US phone number' },
+  { regex: /(?<!\d)(?:\+?1[-.\s])?(?:\(?[2-9]\d{2}\)?[-.\s]?\d{3}[-.\s]?\d{4})(?!\d)/g, label: 'US phone number' },
   { regex: /\b\d{3}-\d{2}-\d{4}\b/g, label: 'SSN' },
   { regex: /(?<!\d)(?:\d{1,3}\.){3}\d{1,3}(?!\d)/g, label: 'Public IPv4 address' },
   { regex: /(?<!\d)(?:\d[ -]?){12,18}\d(?!\d)/g, label: 'Credit card number', requiresLuhn: true },
@@ -121,6 +121,7 @@ const PII_PATTERNS = [
   { regex: /\b[a-fA-F0-9]{40}\b/g, label: 'Certificate thumbprint' },
 ];
 
+// Generated/runtime state lives outside the source review surface for this manual scan.
 const EXCLUDE = ['node_modules', 'tmp', 'test-results', 'coverage', 'dist', '.git', 'data', 'metrics', 'backups', '.private', '.squad', '.squad-templates'];
 const EXTENSIONS = new Set([
   '.ts', '.js', '.mjs', '.cjs',
@@ -136,6 +137,8 @@ const PII_FILE_ALLOWLIST = [
   'security-scan.mjs',
   'test_results.txt',
 ];
+// Generated instruction manifests and materialized test artifacts contain stable IDs that
+// can trip the manual scan's heuristic detectors without representing actionable secrets.
 const PII_PATH_ALLOWLIST = [
   /(?:^|\/)instructions\/_manifest\.json$/,
   /(?:^|\/)instructions\/(?:conc-sem|crud-test)-\d+-.*\.json$/,

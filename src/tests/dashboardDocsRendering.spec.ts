@@ -16,4 +16,15 @@ describe('renderPanelMarkdownHtml', () => {
     expect(html).toContain('href="https://example.com?a=1&amp;b=2"');
     expect(html).toContain('href="#"');
   });
+
+  it('allows data images and avoids double-escaping image alt text', () => {
+    const html = renderPanelMarkdownHtml(
+      'images',
+      '![Tom & Jerry <3](data:image/png;base64,AAAA)'
+    );
+
+    expect(html).toContain('src="data:image/png;base64,AAAA"');
+    expect(html).toContain('alt="Tom &amp; Jerry &lt;3"');
+    expect(html).not.toContain('alt="Tom &amp;amp; Jerry &amp;lt;3"');
+  });
 });
