@@ -27,3 +27,10 @@
 
 ^123-45-6789$
 ^555-867-5309$
+
+## SHA-pinned GitHub Actions commit hashes (public metadata, not secrets)
+
+^de0fac2e4500dabe0009e67214ff5f5447ce83dd$
+^a309ff8b426b58ec0e2a45f0f869d46889d02405$
+^043fb46d1a93c77aae656e7c1c64a875d1fc6a0a$
+^95e58e9a2cdfd71adc6e0353d5c52f41a045d225$

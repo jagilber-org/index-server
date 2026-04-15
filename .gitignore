@@ -169,6 +169,7 @@ snapshots/*
 # Generated documentation artifacts
 docs/**/*.pdf
 docs/**/*.docx
+docs/scan-reconciliation-*.md
 
 # Test health files and temporary diagnostics
 test-health*.json
