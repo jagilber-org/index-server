@@ -10,7 +10,7 @@ repos:
         exclude: '\.(md|txt)$'
       - id: end-of-file-fixer
       - id: check-yaml
-        exclude: '^(.vscode/|config/)'
+        exclude: '^(.vscode/|config/|\.github/workflows/)'
       - id: check-json
         exclude: '^(\.vscode/|tsconfig|\.eslintrc\.json|tests/outputs/\.eslintrc\.json)'
       - id: check-merge-conflict
@@ -29,15 +29,15 @@ repos:
         language: system
         pass_filenames: false
         stages: [pre-commit]
-      - id: gitleaks-pre-push
-        name: Run gitleaks before push
+      - id: gitleaks
+        name: Run gitleaks on commit
         entry: gitleaks dir --config .gitleaks.toml . --redact --no-banner
         language: golang
         additional_dependencies:
           - github.com/zricethezav/gitleaks/v8@v8.30.1
         pass_filenames: false
         always_run: true
-        stages: [pre-push]
+        stages: [pre-commit]
       - id: semgrep-pre-push
         name: Run Semgrep before push
         entry: pwsh -NoProfile -File scripts/run-semgrep-pre-push.ps1
@@ -65,7 +65,7 @@ repos:
     hooks:
       - id: ggshield
         language_version: python3
-        stages: [pre-commit]
+        stages: [pre-push]
   # Credential scanning - Critical for security-focused portfolio project
   - repo: https://github.com/Yelp/detect-secrets
     rev: v1.5.0

@@ -1,0 +1,30 @@
+# .publish-exclude
+#
+# List paths (relative to repo root) to strip when publishing to the public mirror.
+# One path per line. Lines starting with # are comments. Blank lines are ignored.
+#
+# The publish script also removes ALL dotfiles/dotfolders automatically, so you
+# do not need to list .env, .github, .instructions, etc. here.
+#
+# Copy this file to .publish-exclude and customize for your repo.
+
+# --- Private or internal directories ---
+# specs
+# state
+# logs
+# memory
+# hooks
+# test-results
+# coverage
+# .private
+# .certs
+
+# --- Draft or internal documentation ---
+# docs/internal
+# docs/drafts
+
+# --- Build or generated output ---
+# dist
+# build
+# obj
+# bin
