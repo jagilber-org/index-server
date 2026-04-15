@@ -4,12 +4,13 @@
  * Handles both local development and CI environments
  */
 
-import { execSync } from 'child_process';
+import { execFileSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 
 const isCI = process.env.CI === 'true' || process.env.GITHUB_ACTIONS === 'true';
 const verbose = process.env.BUILD_VERBOSE === '1' || process.argv.includes('--verbose');
+const NPX_BIN = process.platform === 'win32' ? 'npx.cmd' : 'npx';
 
 function log(message, level = 'info') {
   const timestamp = new Date().toISOString();
@@ -17,18 +18,18 @@ function log(message, level = 'info') {
   console.log(`${prefix}[${timestamp}] ${message}`);
 }
 
-function exec(command, options = {}) {
-  if (verbose) log(`Executing: ${command}`, 'debug');
+function execNpx(args, options = {}) {
+  if (verbose) log(`Executing: ${NPX_BIN} ${args.join(' ')}`, 'debug');
 
   try {
-    const result = execSync(command, {
+    const result = execFileSync(NPX_BIN, args, {
       stdio: verbose ? 'inherit' : 'pipe',
       encoding: 'utf8',
       ...options
     });
     return result;
   } catch (error) {
-    log(`Command failed: ${command}`, 'error');
+    log(`Command failed: ${NPX_BIN} ${args.join(' ')}`, 'error');
     log(`Error: ${error.message}`, 'error');
     if (error.stdout) log(`Stdout: ${error.stdout}`, 'error');
     if (error.stderr) log(`Stderr: ${error.stderr}`, 'error');
@@ -106,7 +107,7 @@ function main() {
     }
 
     log('Running TypeScript compilation', 'info');
-    exec('npx tsc -p tsconfig.json');
+    execNpx(['tsc', '-p', 'tsconfig.json']);
 
     createDistSentinel();
     verifyBuildArtifacts();

@@ -40,6 +40,52 @@ export interface DashboardRoutesContext {
   getServerInfo: () => { port: number; host: string; url: string } | null;
 }
 
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function sanitizeDocUrl(rawUrl: string, allowDataImage = false): string {
+  const url = rawUrl.trim();
+  if (!url) return '#';
+  if (/^(https?:\/\/|\/|\.\/|\.\.\/|#)/i.test(url)) return url;
+  if (allowDataImage && /^data:image\//i.test(url)) return url;
+  return '#';
+}
+
+export function renderPanelMarkdownHtml(name: string, markdown: string): string {
+  const bodyHtml = escapeHtml(markdown)
+    .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+    .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+    .replace(/^# (.+)$/gm, '<h1>$1</h1>')
+    .replace(/^---$/gm, '<hr>')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (_m: string, alt: string, url: string) => {
+      const safeUrl = sanitizeDocUrl(url, true);
+      const safeAlt = alt;
+      return `<img src="${safeUrl}" alt="${safeAlt}" style="max-width:100%;border-radius:8px;border:1px solid #1f2a3a;margin:12px 0;">`;
+    })
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_m: string, label: string, url: string) => {
+      const safeUrl = sanitizeDocUrl(url);
+      return `<a href="${safeUrl}" target="_blank" rel="noopener">${label}</a>`;
+    })
+    .replace(/^\| (.+) \|$/gm, (_m: string, row: string) => {
+      const cells = row.split('|').map((c: string) => c.trim());
+      return '<tr>' + cells.map((c: string) => `<td>${c}</td>`).join('') + '</tr>';
+    })
+    .replace(/^\|[-| ]+\|$/gm, '')
+    .replace(/((?:<tr>.*<\/tr>\n?)+)/g, '<table>$1</table>')
+    .replace(/^- (.+)$/gm, '<li>$1</li>')
+    .replace(/((?:<li>.*<\/li>\n?)+)/g, '<ul>$1</ul>')
+    .replace(/\n{2,}/g, '\n<br>\n');
+  return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>${escapeHtml(name)} - Panel Docs</title><style>body{background:#0b0f19;color:#e3ebf5;font-family:'Segoe UI',system-ui,sans-serif;padding:24px 32px;max-width:800px;margin:0 auto;line-height:1.6;}h1{color:#667eea;border-bottom:1px solid #1f2a3a;padding-bottom:8px;}h2{color:#9fb5cc;margin-top:24px;}h3{color:#b0c4de;}table{width:100%;border-collapse:collapse;margin:12px 0;}td{padding:6px 10px;border:1px solid #1f2a3a;font-size:13px;}tr:first-child td{background:#101726;font-weight:600;}code{background:#182234;padding:2px 6px;border-radius:4px;font-size:12px;}a{color:#667eea;}hr{border:none;border-top:1px solid #1f2a3a;margin:20px 0;}ul{padding-left:20px;}li{margin:4px 0;}</style></head><body>${bodyHtml}</body></html>`;
+}
+
 /**
  * Registers all top-level dashboard routes on the given Express app.
  * Called once during DashboardServer construction after middleware is set up.
@@ -100,26 +146,7 @@ export function mountDashboardRoutes(app: Express, ctx: DashboardRoutesContext):
     const docPath = path.join(__dirname, '..', '..', '..', '..', 'docs', 'panels', `${name}.md`);
     try {
       const md = await readFile(docPath, 'utf-8');
-      const bodyHtml = md
-        .replace(/^### (.+)$/gm, '<h3>$1</h3>')
-        .replace(/^## (.+)$/gm, '<h2>$1</h2>')
-        .replace(/^# (.+)$/gm, '<h1>$1</h1>')
-        .replace(/^---$/gm, '<hr>')
-        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-        .replace(/`([^`]+)`/g, '<code>$1</code>')
-        .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1" style="max-width:100%;border-radius:8px;border:1px solid #1f2a3a;margin:12px 0;">')
-        .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
-        .replace(/^\| (.+) \|$/gm, (_m: string, row: string) => {
-          const cells = row.split('|').map((c: string) => c.trim());
-          return '<tr>' + cells.map((c: string) => `<td>${c}</td>`).join('') + '</tr>';
-        })
-        .replace(/^\|[-| ]+\|$/gm, '')
-        .replace(/((?:<tr>.*<\/tr>\n?)+)/g, '<table>$1</table>')
-        .replace(/^- (.+)$/gm, '<li>$1</li>')
-        .replace(/((?:<li>.*<\/li>\n?)+)/g, '<ul>$1</ul>')
-        .replace(/\n{2,}/g, '\n<br>\n');
-      const html = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>${name} - Panel Docs</title><style>body{background:#0b0f19;color:#e3ebf5;font-family:'Segoe UI',system-ui,sans-serif;padding:24px 32px;max-width:800px;margin:0 auto;line-height:1.6;}h1{color:#667eea;border-bottom:1px solid #1f2a3a;padding-bottom:8px;}h2{color:#9fb5cc;margin-top:24px;}h3{color:#b0c4de;}table{width:100%;border-collapse:collapse;margin:12px 0;}td{padding:6px 10px;border:1px solid #1f2a3a;font-size:13px;}tr:first-child td{background:#101726;font-weight:600;}code{background:#182234;padding:2px 6px;border-radius:4px;font-size:12px;}a{color:#667eea;}hr{border:none;border-top:1px solid #1f2a3a;margin:20px 0;}ul{padding-left:20px;}li{margin:4px 0;}</style></head><body>${bodyHtml}</body></html>`;
-      res.type('html').send(html);
+      res.type('html').send(renderPanelMarkdownHtml(name, md));
     } catch {
       res.status(404).send('<h1>404</h1><p>Panel documentation not found.</p><p><a href="/admin">Back to Admin</a></p>');
     }

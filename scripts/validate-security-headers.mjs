@@ -9,6 +9,7 @@
  * Usage:
  *   node scripts/validate-security-headers.mjs              # starts ephemeral server
  *   node scripts/validate-security-headers.mjs http://host:port  # checks existing server
+ *   INDEX_SERVER_ALLOW_INSECURE_TLS=1 node scripts/validate-security-headers.mjs https://localhost:8787
  *
  * Can also be imported as a module:
  *   import { validateSecurityHeaders } from './validate-security-headers.mjs';
@@ -54,12 +55,16 @@ const HEADER_CHECKS = [
 /**
  * Make an HTTP(S) GET request and return headers.
  * @param {string} url
+ * @param {boolean} allowInsecureTls
  * @returns {Promise<{status: number, headers: Record<string, string>}>}
  */
-function httpGet(url) {
+function httpGet(url, allowInsecureTls = false) {
   const mod = url.startsWith('https') ? https : http;
   return new Promise((resolve, reject) => {
-    mod.get(url, { rejectUnauthorized: false }, (res) => {
+    const requestOptions = url.startsWith('https') && allowInsecureTls
+      ? { rejectUnauthorized: false }
+      : undefined;
+    mod.get(url, requestOptions, (res) => {
       let body = '';
       res.on('data', (c) => { body += c; });
       res.on('end', () => resolve({ status: res.statusCode ?? 0, headers: res.headers }));
@@ -71,9 +76,11 @@ function httpGet(url) {
 /**
  * Validate security headers against a running server.
  * @param {string} baseUrl - e.g. 'http://127.0.0.1:8989'
+ * @param {{ allowInsecureTls?: boolean }} [options]
  * @returns {Promise<{pass: boolean, failures: string[], checks: number}>}
  */
-export async function validateSecurityHeaders(baseUrl) {
+export async function validateSecurityHeaders(baseUrl, options = {}) {
+  const allowInsecureTls = options.allowInsecureTls === true;
   const failures = [];
   const checkedRoutes = new Set();
 
@@ -84,7 +91,7 @@ export async function validateSecurityHeaders(baseUrl) {
     if (!checkedRoutes.has(check.route)) {
       checkedRoutes.add(check.route);
       try {
-        const res = await httpGet(`${baseUrl}${check.route}`);
+        const res = await httpGet(`${baseUrl}${check.route}`, allowInsecureTls);
         responses.set(check.route, res);
       } catch (e) {
         failures.push(`[${check.severity}] Failed to reach ${check.route}: ${e.message}`);
@@ -138,11 +145,12 @@ export async function validateSecurityHeaders(baseUrl) {
 const isMain = process.argv[1]?.endsWith('validate-security-headers.mjs');
 if (isMain) {
   const targetUrl = process.argv[2];
+  const allowInsecureTls = process.env.INDEX_SERVER_ALLOW_INSECURE_TLS === '1';
 
   if (targetUrl) {
     // Validate against an existing server
     console.log(`Validating security headers against ${targetUrl}...`);
-    const result = await validateSecurityHeaders(targetUrl);
+    const result = await validateSecurityHeaders(targetUrl, { allowInsecureTls });
     console.log(`Checked ${result.checks} headers: ${result.pass ? 'PASS' : 'FAIL'}`);
     if (!result.pass) {
       for (const f of result.failures) console.error(`  ✗ ${f}`);
@@ -166,7 +174,7 @@ if (isMain) {
     const info = await srv.start();
     console.log(`Server started at ${info.url}`);
 
-    const result = await validateSecurityHeaders(info.url);
+    const result = await validateSecurityHeaders(info.url, { allowInsecureTls });
     console.log(`Checked ${result.checks} headers: ${result.pass ? 'PASS' : 'FAIL'}`);
     if (!result.pass) {
       for (const f of result.failures) console.error(`  ✗ ${f}`);

@@ -3,11 +3,12 @@
  * Cross-platform security scan (replaces security-scan.ps1).
  * Runs npm audit + repo-wide curated PII pattern scan on source files.
  */
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
-import { join, extname } from 'node:path';
+import { join, extname, relative } from 'node:path';
 
 const issues = [];
+const NPM_BIN = process.platform === 'win32' ? 'npm.cmd' : 'npm';
 
 function testIsBinaryFile(filePath) {
   try {
@@ -78,37 +79,50 @@ function getRegexMatches(line, pattern) {
   return Array.from(line.matchAll(new RegExp(pattern.source, flags)));
 }
 
+function runNpmAuditJson() {
+  try {
+    return JSON.parse(execFileSync(NPM_BIN, ['audit', '--json'], {
+      encoding: 'utf8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+    }));
+  } catch (error) {
+    const stdout = error && typeof error === 'object' && 'stdout' in error
+      ? String(error.stdout || '')
+      : '';
+    if (stdout.trim()) {
+      try {
+        return JSON.parse(stdout);
+      } catch {
+        // Fall through to warning below.
+      }
+    }
+    console.warn('Warning: npm audit exited with error — check manually if needed');
+    return null;
+  }
+}
+
 // 1. Dependency audit
 console.log('Running security scan...');
-try {
-  const audit = JSON.parse(execSync('npm audit --json 2>/dev/null', { encoding: 'utf8' }));
+const audit = runNpmAuditJson();
+if (audit) {
   const total = audit?.metadata?.vulnerabilities?.total ?? 0;
   if (total > 0) issues.push(`Vulnerabilities found: ${total}`);
-} catch {
-  try {
-    const out = execSync('npm audit --json', { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
-    const audit = JSON.parse(out);
-    const total = audit?.metadata?.vulnerabilities?.total ?? 0;
-    if (total > 0) issues.push(`Vulnerabilities found: ${total}`);
-  } catch (e) {
-    // npm audit may return non-zero even with no actionable vulnerabilities
-    console.warn('Warning: npm audit exited with error — check manually if needed');
-  }
 }
 
 // 2. PII pattern scan aligned with pre-commit rules
 const PII_PATTERNS = [
   { regex: /\b[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}\b/gi, label: 'Email address' },
-  { regex: /\b(?:\+?1[-.\s]?)?(?:\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4})\b/g, label: 'US phone number' },
+  { regex: /(?<!\d)(?:\+?1[-.\s])?(?:\(?[2-9]\d{2}\)?[-.\s]?\d{3}[-.\s]?\d{4})(?!\d)/g, label: 'US phone number' },
   { regex: /\b\d{3}-\d{2}-\d{4}\b/g, label: 'SSN' },
   { regex: /(?<!\d)(?:\d{1,3}\.){3}\d{1,3}(?!\d)/g, label: 'Public IPv4 address' },
-  { regex: /\b(?:\d[ -]?){13,19}\b/g, label: 'Credit card number', requiresLuhn: true },
+  { regex: /(?<!\d)(?:\d[ -]?){12,18}\d(?!\d)/g, label: 'Credit card number', requiresLuhn: true },
   { regex: /DefaultEndpointsProtocol=https?;AccountName=[^;]+;AccountKey=[^;]+/gi, label: 'Azure connection string' },
   { regex: /(?:SharedAccessSignature=[^;\s]+|[?&]sig=[A-Za-z0-9%+/=]+)/g, label: 'SAS token' },
   { regex: /\b[a-fA-F0-9]{40}\b/g, label: 'Certificate thumbprint' },
 ];
 
-const EXCLUDE = ['node_modules', 'tmp', 'test-results', 'coverage', 'dist', '.git'];
+// Generated/runtime state lives outside the source review surface for this manual scan.
+const EXCLUDE = ['node_modules', 'tmp', 'test-results', 'coverage', 'dist', '.git', 'data', 'metrics', 'backups', '.private', '.squad', '.squad-templates'];
 const EXTENSIONS = new Set([
   '.ts', '.js', '.mjs', '.cjs',
   '.md', '.txt', '.json',
@@ -122,6 +136,13 @@ const PII_FILE_ALLOWLIST = [
   'package-lock.json',
   'security-scan.mjs',
   'test_results.txt',
+];
+// Generated instruction manifests and materialized test artifacts contain stable IDs that
+// can trip the manual scan's heuristic detectors without representing actionable secrets.
+const PII_PATH_ALLOWLIST = [
+  /(?:^|\/)instructions\/_manifest\.json$/,
+  /(?:^|\/)instructions\/(?:conc-sem|crud-test)-\d+-.*\.json$/,
+  /(?:^|\/)instructions\/unit_p0_materialize_\d+\.json$/,
 ];
 const piiAllowlist = loadPiiAllowlist();
 
@@ -144,8 +165,9 @@ const files = walk(process.cwd());
 console.log(`Scanning ${files.length} files for PII patterns (excluding dependencies)...`);
 
 for (const f of files) {
+  const relPath = relative(process.cwd(), f).replace(/\\/g, '/');
   const basename = f.split(/[\\/]/).pop();
-  if (PII_FILE_ALLOWLIST.includes(basename) || testIsBinaryFile(f)) continue;
+  if (PII_FILE_ALLOWLIST.includes(basename) || PII_PATH_ALLOWLIST.some(pattern => pattern.test(relPath)) || testIsBinaryFile(f)) continue;
   try {
     const text = readFileSync(f, 'utf8');
     const lines = text.split(/\r?\n/);
@@ -159,7 +181,7 @@ for (const f of files) {
         for (const match of getRegexMatches(line, pattern.regex)) {
           const value = match[0];
 
-          if (pattern.label === 'Email address' && /@(example\.(com|net|org)|contoso\.com|company\.com|localhost)$/i.test(value)) {
+          if (pattern.label === 'Email address' && /^(git@github\.com|.*@(example\.(com|net|org)|example\.local|contoso\.com|company\.com|localhost|users\.noreply\.github\.com))$/i.test(value)) {
             continue;
           }
 
@@ -167,7 +189,19 @@ for (const f of files) {
             continue;
           }
 
+          if (pattern.label === 'Certificate thumbprint' && /^0{40}$/.test(value)) {
+            continue;
+          }
+
           if (pattern.requiresLuhn && !testLuhnNumber(value)) {
+            continue;
+          }
+
+          if (pattern.label === 'Credit card number' && /^0(?:[ -]?0)+$/.test(value)) {
+            continue;
+          }
+
+          if (pattern.label === 'SAS token' && /scripts\/pre-commit\.(mjs|ps1)$/.test(relPath)) {
             continue;
           }
 
