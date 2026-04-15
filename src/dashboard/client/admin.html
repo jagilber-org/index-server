@@ -1366,16 +1366,23 @@
             const diag = document.getElementById('instruction-diagnostics');
             if(!ta||!diag) return;
             const raw = ta.value;
-            if(!raw.trim()){ diag.innerHTML = '<em>Empty.</em>'; return; }
+            if(!raw.trim()){ diag.textContent = 'Empty.'; return; }
             const parsed = safeParseInstruction(raw);
             if(!parsed){
-                diag.innerHTML = '<span class="text-danger">Invalid JSON</span>';
+                diag.textContent = 'Invalid JSON';
             } else {
                 const size = raw.length;
                 const cats = Array.isArray(parsed.categories)? parsed.categories.length : 0;
                 const schemaVer = parsed.schemaVersion || parsed.schema || '?';
                 const changed = instructionOriginalContent && raw !== instructionOriginalContent;
-                diag.innerHTML = `Size: ${size} chars • Categories: ${cats} • Schema: ${schemaVer} ${changed?'<span class="text-warn">(modified)</span>':''}`;
+                diag.textContent = `Size: ${size} chars • Categories: ${cats} • Schema: ${schemaVer}`;
+                if(changed){
+                    const modified = document.createElement('span');
+                    modified.className = 'text-warn';
+                    modified.textContent = '(modified)';
+                    diag.append(' ');
+                    diag.appendChild(modified);
+                }
             }
             if(instructionDiffVisible) refreshInstructionDiff();
         }
@@ -1606,9 +1613,22 @@
                 const j = await r.json();
                 const el = document.getElementById('buildMeta');
                 const ver = j.version || '?.?.?';
-                const commit = j.build ? `<span class=\"build-badge\">${j.build}</span>` : '';
                 const bt = j.buildTime ? new Date(j.buildTime).toLocaleString() : 'unknown';
-                el.innerHTML = `Version <strong>${ver}</strong> ${commit} • Built ${bt}`;
+                if(el){
+                    el.replaceChildren();
+                    el.append('Version ');
+                    const verStrong = document.createElement('strong');
+                    verStrong.textContent = String(ver);
+                    el.appendChild(verStrong);
+                    if(j.build){
+                        el.append(' ');
+                        const buildBadge = document.createElement('span');
+                        buildBadge.className = 'build-badge';
+                        buildBadge.textContent = String(j.build);
+                        el.appendChild(buildBadge);
+                    }
+                    el.append(` • Built ${bt}`);
+                }
             } catch { const el = document.getElementById('buildMeta'); if(el) el.textContent='Build metadata unavailable'; }
         })();
 
