@@ -23,7 +23,7 @@
    - scripts/pre-push.ps1 runs the slow regression suite for code pushes
 4. Manual security scan (scripts/security-scan.mjs):
    - npm audit
-   - repo-wide curated PII scan aligned with the pre-commit rules
+   - repo-wide curated PII scan aligned with the pre-commit rules, excluding generated runtime artifact directories, backups, internal metadata directories, and known generated instruction manifests
 5. CI security workflows:
    - .github/workflows/precommit.yml replays pre-commit policy and the dedicated security pre-push hooks in CI, and uploads a ggshield JSON report artifact
    - .github/workflows/ggshield-secret-scans.yml runs dedicated GGShield PR, manual, and scheduled scans
