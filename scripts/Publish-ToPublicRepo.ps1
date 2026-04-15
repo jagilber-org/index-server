@@ -211,6 +211,7 @@ Write-Host 'Verify complete: no leaked artifacts or dotfiles found.'
 
 # --- Run PII scan on cleaned content ---
 $piiCandidates = @(
+    (Join-Path $repoRoot 'scripts' 'pre-commit.ps1'),
     (Join-Path $repoRoot 'hooks' 'check-pii.ps1'),
     (Join-Path $repoRoot 'scripts' 'check-pii.ps1')
 )
@@ -232,7 +233,7 @@ if ($piiScript) {
     }
 }
 else {
-    Write-Warning 'PII scan script not found at hooks/check-pii.ps1 or scripts/check-pii.ps1 - skipping.'
+    Write-Warning 'PII scan script not found at scripts/pre-commit.ps1, hooks/check-pii.ps1, or scripts/check-pii.ps1 - skipping.'
 }
 
 # --- Delivery ---

@@ -28,6 +28,10 @@
 ^123-45-6789$
 ^555-867-5309$
 
+## Documentation numeric ranges
+
+^1000-1000000$
+
 ## SHA-pinned GitHub Actions commit hashes (public metadata, not secrets)
 
 ^de0fac2e4500dabe0009e67214ff5f5447ce83dd$
