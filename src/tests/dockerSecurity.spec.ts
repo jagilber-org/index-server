@@ -17,7 +17,7 @@
  *               BD-2 (no hardcoded secrets), TS-9 (test real code)
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { execSync, ExecSyncOptions } from 'child_process';
+import { execFileSync, execSync, ExecSyncOptions } from 'child_process';
 import path from 'path';
 
 const IMAGE_NAME = 'index-server:test';
@@ -35,7 +35,7 @@ function dockerAvailable(): boolean {
 }
 
 function containerExec(cmd: string): string {
-  return execSync(`docker exec ${CONTAINER_NAME} ${cmd}`, EXEC_OPTS).toString().trim();
+  return execFileSync('docker', ['exec', CONTAINER_NAME, 'sh', '-lc', cmd], EXEC_OPTS).toString().trim();
 }
 
 describe.skipIf(!dockerAvailable())('Docker Image Security', () => {
