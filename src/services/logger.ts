@@ -5,7 +5,7 @@ import { getRuntimeConfig } from '../config/runtimeConfig';
 
 // ── NDJSON Log Schema ───────────────────────────────────────────
 // Compliant with typescript-schema-viewer log analysis format.
-// See: https://github.com/jagilber-dev/typescript-schema-viewer
+// See the companion schema viewer repository for analysis tooling.
 //
 // Required fields: ts, level (UPPERCASE), msg
 // Optional fields: detail (stack trace), evt, tool, ms, data, pid, port

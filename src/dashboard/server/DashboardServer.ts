@@ -177,7 +177,7 @@ export class DashboardServer {
       res.header('Referrer-Policy', 'strict-origin-when-cross-origin');
       res.header(
         'Content-Security-Policy',
-        `default-src 'self'; script-src 'self' 'nonce-${nonce}' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:; connect-src 'self' ${this.tlsEnabled ? 'wss:' : 'ws:'}; frame-ancestors 'none'; form-action 'self'`,
+        `default-src 'self'; script-src 'self' 'nonce-${nonce}'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:; connect-src 'self' ${this.tlsEnabled ? 'wss:' : 'ws:'}; frame-ancestors 'none'; form-action 'self'`,
       );
       if (this.tlsEnabled) {
         res.header('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');

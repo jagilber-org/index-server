@@ -151,6 +151,8 @@ metrics/**
 # MCP and VS Code workspace configurations
 # Ignore local MCP workspace config (contains machine-specific paths)
 .vscode/mcp.json
+.vscode/mcp-dev.json
+.vscode/mcp.json.generated
 
 # Local environment overrides and configurations
 *.local.json

@@ -5,7 +5,7 @@ import { test, expect, Page } from '@playwright/test';
  * Validates: keyword search, regex search, error handling, result display.
  * Requires a running dashboard server at baseURL (default http://127.0.0.1:8787).
  * Tests skip gracefully if the server is not reachable.
- * Fixes: https://github.com/jagilber-dev/index-server/issues/6
+ * Fixes: https://github.com/jagilber-org/index-server/issues/6
  */
 
 const TEST_ID = `e2e-search-test-${Date.now()}`;

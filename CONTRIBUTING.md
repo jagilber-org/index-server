@@ -2,18 +2,19 @@
 
 Thanks for your interest in contributing.
 
-## Dual-Repo Model
+## Contribution Model
 
-This project follows the **dual-repo publishing** pattern:
+Public contributions should target `main` in the public repository.
 
-- **`index-server-dev`** (private) — All development happens here. Submit PRs to this repo.
-- **`index-server`** (public) — Read-only publication mirror. **Do not push directly.**
+- Fork `jagilber-org/index-server`
+- Create a feature branch for your change
+- Open a pull request against `main`
 
-The public repo is updated exclusively via `scripts/publish.cjs` from the dev repo, aligned to release tags. If you found this project via the public repo, please contact the maintainers for access to the dev repo to submit contributions.
+Maintainers may use additional private development and publishing workflows internally, but public contributors should work from the public repository and its pull request flow.
 
 ## Development Setup
 
-1. Node 20+
+1. Node 22+
 2. `npm install`
 3. `npm test`
 4. `npm run build`

@@ -13,7 +13,7 @@
 
 Please report suspected vulnerabilities privately using one of these methods:
 
-1. **GitHub Security Advisories** (preferred) — create a new advisory on the [dev repository](https://github.com/jagilber-dev/index-server/security/advisories).
+1. **GitHub Security Advisories** (preferred) — create a new advisory on the [public repository](https://github.com/jagilber-org/index-server/security/advisories).
 2. **Email** — contact the maintainer at the email listed in the repository's GitHub profile.
 
 When reporting, include:

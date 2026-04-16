@@ -47,13 +47,11 @@ export NPM_TOKEN="ghp_your_token_here"
 
 ## Azure VM Testing
 
-For cross-OS validation on real VMs, use
-[Deploy-AzTestVmEnvironment](https://github.com/jagilber-dev/scripts) from the
-`scripts` repo:
+For cross-OS validation on real VMs, use the companion Azure test-environment scripts:
 
 ```powershell
 # 1. Deploy VMs (Linux + Windows, Node.js pre-installed)
-cd C:\github\jagilber-dev\scripts
+cd <path-to-your-scripts-repo>
 $pass = Read-Host "Password" -AsSecureString
 .\powershell\azure\Deploy-AzTestVmEnvironment.ps1 -AdminPassword $pass
 

@@ -26,6 +26,8 @@ docker compose logs -f index-server
 docker inspect --format='{{.State.Health.Status}}' index-server
 ```
 
+The default compose file publishes the dashboard to `127.0.0.1` only. To expose it on another host interface intentionally, set `INDEX_SERVER_PORT_BIND_HOST=0.0.0.0` when starting compose.
+
 ### HTTPS Mode
 
 ```bash
@@ -48,13 +50,14 @@ node scripts/setup-wizard.mjs --non-interactive --tls --port 8787 --mutation
 
 ## Configuration
 
-All configuration via environment variables (prefix `INDEX_SERVER_`):
+All application configuration uses environment variables with the `INDEX_SERVER_` prefix.
+The compose file also supports `INDEX_SERVER_PORT_BIND_HOST` and defaults it to `127.0.0.1` so published ports stay local unless you intentionally widen exposure.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `INDEX_SERVER_DASHBOARD` | `1` | Enable admin dashboard |
 | `INDEX_SERVER_DASHBOARD_PORT` | `8787` | Dashboard port |
-| `INDEX_SERVER_DASHBOARD_HOST` | `0.0.0.0` | Bind address |
+| `INDEX_SERVER_DASHBOARD_HOST` | `0.0.0.0` | In-container bind address |
 | `INDEX_SERVER_DASHBOARD_TLS` | `0` | Enable HTTPS |
 | `INDEX_SERVER_DASHBOARD_TLS_CERT` | — | TLS certificate path (PEM) |
 | `INDEX_SERVER_DASHBOARD_TLS_KEY` | — | TLS private key path (PEM) |
@@ -118,7 +121,8 @@ environment:
 
 ### Network Security
 - **Single port exposed** — only dashboard port (8787)
-- **Localhost default** — bound to 127.0.0.1 by default
+- **Localhost publish by default** — docker-compose publishes to `127.0.0.1` unless overridden
+- **Container bind for reachability** — the service binds `0.0.0.0` inside the container so published ports work correctly
 - **Security headers** — CSP, X-Frame-Options, HSTS, X-Content-Type-Options
 - **No version disclosure** — X-Powered-By removed
 
@@ -178,6 +182,9 @@ docker exec -it index-server sh
 
 # View resource usage
 docker stats index-server
+
+# Expose the dashboard beyond localhost intentionally
+INDEX_SERVER_PORT_BIND_HOST=0.0.0.0 docker compose up -d
 ```
 
 ## Troubleshooting

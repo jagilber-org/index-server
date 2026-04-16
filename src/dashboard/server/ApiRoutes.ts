@@ -168,9 +168,10 @@ export function createApiRoutes(options: ApiRoutesOptions = {}): Router {
   // Error handling middleware
   router.use((error: Error, _req: Request, res: Response, _next: () => void) => {
     console.error('[API] Unhandled error:', error);
+    const exposeDetails = getRuntimeConfig().dashboard.http.verboseLogging;
     res.status(500).json({
       error: 'Internal server error',
-      message: error.message,
+      message: exposeDetails ? error.message : 'An unexpected error occurred.',
       timestamp: Date.now(),
     });
   });

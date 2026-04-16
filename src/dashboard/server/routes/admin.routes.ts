@@ -20,32 +20,13 @@ import { getWebSocketManager } from '../WebSocketManager.js';
 import { dumpFlags, updateFlags } from '../../../services/featureFlags.js';
 import { getFlagRegistrySnapshot } from '../../../services/handlers.dashboardConfig.js';
 import { getLocalHandler } from '../../../server/registry.js';
-import { getRuntimeConfig } from '../../../config/runtimeConfig.js';
+import { dashboardAdminAuth } from './adminAuth.js';
 
 export function createAdminRoutes(metricsCollector: MetricsCollector): Router {
   const router = Router();
   const adminPanel = getAdminPanel();
 
-  // Admin authentication middleware (Issue #30 fix)
-  // Dashboard is localhost-only; require API key via INDEX_SERVER_ADMIN_API_KEY env var when set
-  router.use((req: Request, res: Response, next: () => void) => {
-    const adminKey = getRuntimeConfig().dashboard.http.adminApiKey;
-    // If no key configured, allow localhost-only access (backward compatible)
-    if (!adminKey) {
-      const host = req.hostname || req.ip;
-      if (host === 'localhost' || host === '127.0.0.1' || host === '::1') {
-        return next();
-      }
-      res.status(403).json({ error: 'Admin access restricted to localhost' });
-      return;
-    }
-    // Validate API key from Authorization header only (query params leak in logs/history)
-    const provided = req.headers.authorization?.replace(/^Bearer\s+/i, '');
-    if (provided === adminKey) {
-      return next();
-    }
-    res.status(401).json({ error: 'Admin API key required. Set INDEX_SERVER_ADMIN_API_KEY and pass via Authorization: Bearer <key>' });
-  });
+  router.use(dashboardAdminAuth);
 
   /**
    * GET /api/admin/config - Get admin configuration

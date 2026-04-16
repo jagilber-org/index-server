@@ -47,4 +47,4 @@ If you enabled the dashboard (`index.dashboard.enabled: true`):
 
 - Add your own instructions to the `INDEX_SERVER_DIR` folder
 - Enable [mutation](command:index.configure) to add/edit instructions via MCP tools
-- Explore the [full configuration guide](https://github.com/jagilber-dev/index-server/blob/main/docs/mcp_configuration.md)
+- Explore the [full configuration guide](https://github.com/jagilber-org/index-server/blob/main/docs/mcp_configuration.md)
