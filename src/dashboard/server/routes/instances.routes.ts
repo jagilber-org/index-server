@@ -23,9 +23,9 @@ export function createInstancesRoutes(): Router {
         timestamp: Date.now(),
       });
     } catch (error) {
+      console.error('[API] Failed to list instances:', error);
       res.status(500).json({
         error: 'Failed to list instances',
-        message: error instanceof Error ? error.message : String(error),
         timestamp: Date.now(),
       });
     }

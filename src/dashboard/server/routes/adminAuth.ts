@@ -1,7 +1,7 @@
 import type { NextFunction, Request, Response } from 'express';
 import { getRuntimeConfig } from '../../../config/runtimeConfig.js';
 
-function isLoopbackHost(value: string | undefined): boolean {
+export function isLoopbackHost(value: string | undefined): boolean {
   if (!value) return false;
   const normalized = value.toLowerCase();
   return normalized === 'localhost'
@@ -13,7 +13,7 @@ function isLoopbackHost(value: string | undefined): boolean {
 export function dashboardAdminAuth(req: Request, res: Response, next: NextFunction): void {
   const adminKey = getRuntimeConfig().dashboard.http.adminApiKey;
   if (!adminKey) {
-    const host = req.hostname || req.ip || req.socket.remoteAddress;
+    const host = req.ip || req.socket.remoteAddress;
     if (isLoopbackHost(host)) {
       next();
       return;

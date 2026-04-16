@@ -69,10 +69,12 @@ export function createMessagingRoutes(): Router {
           status: 'sent',
         });
       }).catch(err => {
-        res.status(500).json({ success: false, error: err instanceof Error ? err.message : 'Send failed' });
+        console.error('[Messaging] Send failed:', err);
+        res.status(500).json({ success: false, error: 'Send failed' });
       });
     } catch (error) {
-      res.status(500).json({ success: false, error: error instanceof Error ? error.message : 'Unknown error' });
+      console.error('[Messaging] Failed to send message:', error);
+      res.status(500).json({ success: false, error: 'Failed to send message' });
     }
   });
 
@@ -83,7 +85,8 @@ export function createMessagingRoutes(): Router {
       const channels = mailbox.listChannels();
       res.json({ success: true, count: channels.length, channels });
     } catch (error) {
-      res.status(500).json({ success: false, error: error instanceof Error ? error.message : 'Unknown error' });
+      console.error('[Messaging] Failed to list channels:', error);
+      res.status(500).json({ success: false, error: 'Failed to list channels' });
     }
   });
 
@@ -95,7 +98,8 @@ export function createMessagingRoutes(): Router {
       const stats = mailbox.getStats(reader);
       res.json({ success: true, reader, ...stats });
     } catch (error) {
-      res.status(500).json({ success: false, error: error instanceof Error ? error.message : 'Unknown error' });
+      console.error('[Messaging] Failed to get stats:', error);
+      res.status(500).json({ success: false, error: 'Failed to get stats' });
     }
   });
 
@@ -110,7 +114,8 @@ export function createMessagingRoutes(): Router {
       }
       res.json({ success: true, message });
     } catch (error) {
-      res.status(500).json({ success: false, error: error instanceof Error ? error.message : 'Unknown error' });
+      console.error('[Messaging] Failed to get message:', error);
+      res.status(500).json({ success: false, error: 'Failed to get message' });
     }
   });
 
@@ -131,7 +136,8 @@ export function createMessagingRoutes(): Router {
       try { getWebSocketManager().broadcast({ type: 'message_received', timestamp: Date.now(), data: { messageId: req.params.id } }); } catch { /* ws optional */ }
       res.json({ success: true, message: updated });
     } catch (error) {
-      res.status(500).json({ success: false, error: error instanceof Error ? error.message : 'Unknown error' });
+      console.error('[Messaging] Failed to update message:', error);
+      res.status(500).json({ success: false, error: 'Failed to update message' });
     }
   });
 
@@ -147,7 +153,8 @@ export function createMessagingRoutes(): Router {
       }
       res.json({ success: true, parentId, count: thread.length, messages: thread });
     } catch (error) {
-      res.status(500).json({ success: false, error: error instanceof Error ? error.message : 'Unknown error' });
+      console.error('[Messaging] Failed to get thread:', error);
+      res.status(500).json({ success: false, error: 'Failed to get thread' });
     }
   });
 
@@ -166,7 +173,8 @@ export function createMessagingRoutes(): Router {
       const messages = mailbox.read({ channel, reader, unreadOnly, limit, markRead, tags, sender });
       res.json({ success: true, channel, reader, count: messages.length, messages });
     } catch (error) {
-      res.status(500).json({ success: false, error: error instanceof Error ? error.message : 'Unknown error' });
+      console.error('[Messaging] Failed to read messages:', error);
+      res.status(500).json({ success: false, error: 'Failed to read messages' });
     }
   });
 
@@ -190,7 +198,8 @@ export function createMessagingRoutes(): Router {
       const acknowledged = mailbox.ack(messageIds, reader);
       res.json({ success: true, acknowledged, reader });
     } catch (error) {
-      res.status(500).json({ success: false, error: error instanceof Error ? error.message : 'Unknown error' });
+      console.error('[Messaging] Failed to acknowledge messages:', error);
+      res.status(500).json({ success: false, error: 'Failed to acknowledge messages' });
     }
   });
 
@@ -215,7 +224,8 @@ export function createMessagingRoutes(): Router {
       try { getWebSocketManager().broadcast({ type: 'message_purged', timestamp: Date.now(), data: { count: removed } }); } catch { /* ws optional */ }
       res.json({ success: true, action, purged: removed });
     } catch (error) {
-      res.status(500).json({ success: false, error: error instanceof Error ? error.message : 'Unknown error' });
+      console.error('[Messaging] Failed to purge messages:', error);
+      res.status(500).json({ success: false, error: 'Failed to purge messages' });
     }
   });
 
@@ -250,10 +260,12 @@ export function createMessagingRoutes(): Router {
         try { getWebSocketManager().broadcast({ type: 'message_received', timestamp: Date.now(), data: { channel: req.body.channel } }); } catch { /* ws optional */ }
         res.json({ success: true, status: 'received' });
       }).catch(err => {
-        res.status(500).json({ success: false, error: err instanceof Error ? err.message : 'Inbound failed' });
+        console.error('[Messaging] Inbound failed:', err);
+        res.status(500).json({ success: false, error: 'Inbound failed' });
       });
     } catch (error) {
-      res.status(500).json({ success: false, error: error instanceof Error ? error.message : 'Unknown error' });
+      console.error('[Messaging] Failed to process inbound message:', error);
+      res.status(500).json({ success: false, error: 'Failed to process inbound message' });
     }
   });
 
@@ -274,9 +286,10 @@ export function createMessagingRoutes(): Router {
       try { getWebSocketManager().broadcast({ type: 'message_received', timestamp: Date.now(), data: { channel: result.channel } }); } catch { /* ws optional */ }
       res.json({ success: true, message: result });
     } catch (error) {
-      const msg = error instanceof Error ? error.message : 'Unknown error';
-      const status = msg.includes('not found') ? 404 : 500;
-      res.status(status).json({ success: false, error: msg });
+      console.error('[Messaging] Failed to reply to message:', error);
+      const isNotFound = error instanceof Error && error.message.includes('not found');
+      const status = isNotFound ? 404 : 500;
+      res.status(status).json({ success: false, error: isNotFound ? 'Parent message not found' : 'Failed to reply to message' });
     }
   });
 

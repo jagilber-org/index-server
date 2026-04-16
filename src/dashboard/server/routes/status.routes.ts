@@ -68,7 +68,6 @@ export function createStatusRoutes(metricsCollector: MetricsCollector): Router {
       console.error('[API] Status error:', error);
       res.status(500).json({
         error: 'Failed to get server status',
-        message: error instanceof Error ? error.message : 'Unknown error',
       });
     }
   });
@@ -129,7 +128,6 @@ export function createStatusRoutes(metricsCollector: MetricsCollector): Router {
       res.status(500).json({
         status: 'error',
         error: 'Health check failed',
-        message: error instanceof Error ? error.message : 'Unknown error',
         timestamp: Date.now(),
       });
     }
@@ -150,7 +148,6 @@ export function createStatusRoutes(metricsCollector: MetricsCollector): Router {
       console.error('[API] System health error:', error);
       res.status(500).json({
         error: 'Failed to get system health',
-        message: error instanceof Error ? error.message : 'Unknown error',
       });
     }
   });
@@ -175,7 +172,6 @@ export function createStatusRoutes(metricsCollector: MetricsCollector): Router {
       res.status(500).json({
         success: false,
         error: 'Failed to get system resource history',
-        message: error instanceof Error ? error.message : 'Unknown error',
       });
     }
   });

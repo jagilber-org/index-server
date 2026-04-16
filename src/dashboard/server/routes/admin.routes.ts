@@ -52,7 +52,6 @@ export function createAdminRoutes(metricsCollector: MetricsCollector): Router {
       res.status(500).json({
         success: false,
         error: 'Failed to get admin configuration',
-        message: error instanceof Error ? error.message : 'Unknown error',
       });
     }
   });
@@ -66,7 +65,8 @@ export function createAdminRoutes(metricsCollector: MetricsCollector): Router {
       try { allFlags = getFlagRegistrySnapshot(); } catch { /* ignore */ }
       res.json({ success: true, featureFlags, allFlags, total: allFlags.length, timestamp: Date.now() });
     } catch (error) {
-      res.status(500).json({ success: false, error: 'Failed to get flags snapshot', message: error instanceof Error ? error.message : 'Unknown error' });
+      console.error('[Admin] Failed to get flags snapshot:', error);
+      res.status(500).json({ success: false, error: 'Failed to get flags snapshot' });
     }
   });
 
@@ -100,7 +100,6 @@ export function createAdminRoutes(metricsCollector: MetricsCollector): Router {
       res.status(500).json({
         success: false,
         error: 'Failed to update admin configuration',
-        message: error instanceof Error ? error.message : 'Unknown error',
       });
     }
   });
@@ -122,7 +121,6 @@ export function createAdminRoutes(metricsCollector: MetricsCollector): Router {
       res.status(500).json({
         success: false,
         error: 'Failed to get admin sessions',
-        message: error instanceof Error ? error.message : 'Unknown error',
       });
     }
   });
@@ -168,7 +166,6 @@ export function createAdminRoutes(metricsCollector: MetricsCollector): Router {
       res.status(500).json({
         success: false,
         error: 'Failed to create admin session',
-        message: error instanceof Error ? error.message : 'Unknown error',
       });
     }
   });
@@ -199,7 +196,6 @@ export function createAdminRoutes(metricsCollector: MetricsCollector): Router {
       res.status(500).json({
         success: false,
         error: 'Failed to terminate admin session',
-        message: error instanceof Error ? error.message : 'Unknown error',
       });
     }
   });
@@ -220,7 +216,6 @@ export function createAdminRoutes(metricsCollector: MetricsCollector): Router {
       res.status(500).json({
         success: false,
         error: 'Failed to get maintenance information',
-        message: error instanceof Error ? error.message : 'Unknown error',
       });
     }
   });
@@ -251,7 +246,6 @@ export function createAdminRoutes(metricsCollector: MetricsCollector): Router {
       res.status(500).json({
         success: false,
         error: 'Failed to set maintenance mode',
-        message: error instanceof Error ? error.message : 'Unknown error',
       });
     }
   });
@@ -273,7 +267,8 @@ export function createAdminRoutes(metricsCollector: MetricsCollector): Router {
       const durationMs = Date.now() - started;
       res.json({ success: true, durationMs, dryRun: !!dryRun, forceCanonical: !!forceCanonical, summary });
     } catch (err) {
-      res.status(500).json({ success: false, error: 'normalize_failed', message: err instanceof Error ? err.message : String(err) });
+      console.error('[Admin] Normalize failed:', err);
+      res.status(500).json({ success: false, error: 'normalize_failed' });
     }
   });
 
@@ -303,7 +298,6 @@ export function createAdminRoutes(metricsCollector: MetricsCollector): Router {
       res.status(500).json({
         success: false,
         error: 'Failed to perform backup',
-        message: error instanceof Error ? error.message : 'Unknown error',
       });
     }
   });
@@ -317,7 +311,7 @@ export function createAdminRoutes(metricsCollector: MetricsCollector): Router {
       res.json({ success: true, backups, count: backups.length, timestamp: Date.now() });
     } catch (error) {
       console.error('[API] List backups error:', error);
-      res.status(500).json({ success: false, error: 'Failed to list backups', message: error instanceof Error ? error.message : 'Unknown error' });
+      res.status(500).json({ success: false, error: 'Failed to list backups' });
     }
   });
 
@@ -336,7 +330,7 @@ export function createAdminRoutes(metricsCollector: MetricsCollector): Router {
       }
     } catch (error) {
       console.error('[API] Restore backup error:', error);
-      res.status(500).json({ success: false, error: 'Failed to restore backup', message: error instanceof Error ? error.message : 'Unknown error' });
+      res.status(500).json({ success: false, error: 'Failed to restore backup' });
     }
   });
 
@@ -354,7 +348,7 @@ export function createAdminRoutes(metricsCollector: MetricsCollector): Router {
       }
     } catch (error) {
       console.error('[API] Delete backup error:', error);
-      res.status(500).json({ success: false, error: 'Failed to delete backup', message: error instanceof Error ? error.message : 'Unknown error' });
+      res.status(500).json({ success: false, error: 'Failed to delete backup' });
     }
   });
 
@@ -372,7 +366,7 @@ export function createAdminRoutes(metricsCollector: MetricsCollector): Router {
       }
     } catch (error) {
       console.error('[API] Prune backups error:', error);
-      res.status(500).json({ success: false, error: 'Failed to prune backups', message: error instanceof Error ? error.message : 'Unknown error' });
+      res.status(500).json({ success: false, error: 'Failed to prune backups' });
     }
   });
 
@@ -398,7 +392,7 @@ export function createAdminRoutes(metricsCollector: MetricsCollector): Router {
       }
     } catch (error) {
       console.error('[API] Export backup error:', error);
-      res.status(500).json({ success: false, error: 'Failed to export backup', message: error instanceof Error ? error.message : 'Unknown error' });
+      res.status(500).json({ success: false, error: 'Failed to export backup' });
     }
   });
 
@@ -420,7 +414,7 @@ export function createAdminRoutes(metricsCollector: MetricsCollector): Router {
       }
     } catch (error) {
       console.error('[API] Import backup error:', error);
-      res.status(500).json({ success: false, error: 'Failed to import backup', message: error instanceof Error ? error.message : 'Unknown error' });
+      res.status(500).json({ success: false, error: 'Failed to import backup' });
     }
   });
 
@@ -440,7 +434,6 @@ export function createAdminRoutes(metricsCollector: MetricsCollector): Router {
       res.status(500).json({
         success: false,
         error: 'Failed to get admin statistics',
-        message: error instanceof Error ? error.message : 'Unknown error',
       });
     }
   });
@@ -464,7 +457,6 @@ export function createAdminRoutes(metricsCollector: MetricsCollector): Router {
       res.status(500).json({
         success: false,
         error: 'Failed to get session history',
-        message: error instanceof Error ? error.message : 'Unknown error'
       });
     }
   });
@@ -495,7 +487,6 @@ export function createAdminRoutes(metricsCollector: MetricsCollector): Router {
       res.status(500).json({
         success: false,
         error: 'Failed to restart server',
-        message: error instanceof Error ? error.message : 'Unknown error',
       });
     }
   });
@@ -526,7 +517,6 @@ export function createAdminRoutes(metricsCollector: MetricsCollector): Router {
       res.status(500).json({
         success: false,
         error: 'Failed to clear caches',
-        message: error instanceof Error ? error.message : 'Unknown error',
       });
     }
   });
@@ -547,7 +537,6 @@ export function createAdminRoutes(metricsCollector: MetricsCollector): Router {
       console.error('[API] Clear metrics error:', error);
       res.status(500).json({
         error: 'Failed to clear metrics',
-        message: error instanceof Error ? error.message : 'Unknown error',
       });
     }
   });

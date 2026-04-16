@@ -47,6 +47,7 @@ export function extractZipBackup(zipPath: string, targetDir: string): number {
   for (const entry of zip.getEntries()) {
     const name = path.basename(entry.entryName);
     if (!name.toLowerCase().endsWith('.json')) continue;
+    if (name === 'manifest.json') continue;
     if (name.includes('..') || name !== entry.entryName) continue; // path traversal guard
     fs.writeFileSync(path.join(targetDir, name), entry.getData());
     count++;
