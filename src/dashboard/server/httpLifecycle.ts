@@ -6,6 +6,7 @@
 import { Express } from 'express';
 import { Server as HttpServer, createServer } from 'http';
 import { createServer as createHttpsServer } from 'https';
+import { logInfo } from '../../services/logger.js';
 
 export interface TlsOptions {
   cert: string;
@@ -36,8 +37,7 @@ export function bindToPort(server: HttpServer, port: number, host: string): Prom
 export function closeHttpServer(server: HttpServer): Promise<void> {
   return new Promise((resolve) => {
     server.close(() => {
-      // eslint-disable-next-line no-console
-      console.log('[Dashboard] Server stopped');
+      logInfo('[httpLifecycle] Server stopped');
       resolve();
     });
   });

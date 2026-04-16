@@ -11,6 +11,7 @@ import {
   PersistedAdminSession,
   PersistedSessionHistoryEntry
 } from '../../models/SessionPersistence';
+import { logInfo, logError } from '../../services/logger.js';
 
 export interface AdminSession {
   id: string;
@@ -84,10 +85,10 @@ export class AdminPanelState {
           this.sessionHistoryIndex.set(historyEntry.id, historyEntry);
         });
 
-        console.log(`Loaded ${this.activeSessions.size} active sessions and ${this.sessionHistory.length} history entries from persistence`);
+        logInfo('[AdminPanelState] Loaded persisted sessions', { activeSessions: this.activeSessions.size, historyEntries: this.sessionHistory.length });
       }
     } catch (error) {
-      console.error('Failed to initialize session persistence:', error);
+      logError('[AdminPanelState] Failed to initialize session persistence', error);
     }
   }
 
@@ -134,7 +135,7 @@ export class AdminPanelState {
 
       await this.persistenceManager.persistData(persistedData);
     } catch (error) {
-      console.error('Failed to persist session state:', error);
+      logError('[AdminPanelState] Failed to persist session state', error);
     }
   }
 
@@ -170,7 +171,7 @@ export class AdminPanelState {
     }
 
     this.persistSessionState().catch(error => {
-      console.error('Failed to persist session state after creation:', error);
+      logError('[AdminPanelState] Failed to persist session state after creation', error);
     });
 
     return session;
@@ -187,7 +188,7 @@ export class AdminPanelState {
       }
 
       this.persistSessionState().catch(error => {
-        console.error('Failed to persist session state after termination:', error);
+        logError('[AdminPanelState] Failed to persist session state after termination', error);
       });
     }
     return existed;
@@ -212,7 +213,7 @@ export class AdminPanelState {
 
     if (hasChanges) {
       this.persistSessionState().catch(error => {
-        console.error('Failed to persist session state after cleanup:', error);
+        logError('[AdminPanelState] Failed to persist session state after cleanup', error);
       });
     }
   }
@@ -247,7 +248,7 @@ export class AdminPanelState {
     if (session) {
       session.lastActivity = new Date();
       this.persistSessionState().catch(error => {
-        console.error('Failed to persist session activity update:', error);
+        logError('[AdminPanelState] Failed to persist session activity update', error);
       });
       return true;
     }

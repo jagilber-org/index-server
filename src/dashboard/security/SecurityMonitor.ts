@@ -12,6 +12,7 @@
  * (SHA-256 hashed, first 16 hex chars) before storage or logging.
  */
 import crypto from 'crypto';
+import { logInfo, logError } from '../../services/logger.js';
 
 interface SecurityThreat {
   id: string;
@@ -408,7 +409,7 @@ export class SecurityMonitor {
       try {
         callback(threat);
       } catch (error) {
-        console.error('Error in security alert callback:', error);
+        logError('[SecurityMonitor] Error in security alert callback', error);
       }
     });
 
@@ -430,7 +431,7 @@ export class SecurityMonitor {
       actionTaken: threat.actionTaken
     };
 
-    console.log('[SECURITY-AUDIT]', JSON.stringify(logEntry));
+    logInfo('[SecurityMonitor] Security event', logEntry);
   }
 
   /**

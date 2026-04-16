@@ -11,8 +11,8 @@ import { randomUUID } from 'crypto';
 import { MetricsSnapshot, getMetricsCollector } from './MetricsCollector.js';
 import { SessionPersistenceManager } from './SessionPersistenceManager';
 import { PersistedWebSocketConnection } from '../../models/SessionPersistence';
-import { isDebugOrVerbose } from '../../utils/envUtils';
 import { getRuntimeConfig } from '../../config/runtimeConfig.js';
+import { logInfo, logError, logWarn } from '../../services/logger.js';
 import { isLoopbackHost } from './routes/adminAuth.js';
 
 export interface DashboardMessage {
@@ -163,13 +163,13 @@ export class WebSocketManager {
     });
 
     this.wss.on('error', (error: Error) => {
-      console.error('[WebSocket] Server error:', error);
+      logError('[WebSocketManager] Server error', error);
     });
 
     // Start ping/pong heartbeat
     this.startHeartbeat();
 
-    console.log(`[WebSocket] Server initialized on path ${this.options.path}`);
+    logInfo(`[WebSocketManager] Server initialized on path ${this.options.path}`);
   }
 
   /**
@@ -186,7 +186,7 @@ export class WebSocketManager {
         try {
           ws.send(payload);
         } catch (error) {
-          console.error('[WebSocket] Send error:', error);
+          logError('[WebSocketManager] Send error', error);
           deadClients.push(ws);
         }
       } else {
@@ -208,7 +208,7 @@ export class WebSocketManager {
       try {
         client.send(JSON.stringify(message));
       } catch (error) {
-        console.error('[WebSocket] Send to client error:', error);
+        logError('[WebSocketManager] Send to client error', error);
         this.clients.delete(client);
       }
     }
@@ -241,7 +241,7 @@ export class WebSocketManager {
       try {
         ws.close(1000, 'Server shutting down');
       } catch (error) {
-        console.error('[WebSocket] Close error:', error);
+        logError('[WebSocketManager] Close error', error);
       }
     });
 
@@ -252,7 +252,7 @@ export class WebSocketManager {
       this.wss = null;
     }
 
-    console.log('[WebSocket] Server closed');
+    logInfo('[WebSocketManager] Server closed');
   }
 
   private handleConnection(ws: ExtendedWebSocket): void {
@@ -284,12 +284,12 @@ export class WebSocketManager {
     try {
       getMetricsCollector().recordConnection(ws.clientId);
     } catch (err) {
-      console.error('[WebSocket] metrics recordConnection failed:', err);
+      logError('[WebSocketManager] metrics recordConnection failed', err);
     }
 
     // Persist connection state
     this.persistConnectionState().catch((error: unknown) => {
-      console.error('Failed to persist WebSocket connection state:', error);
+      logError('[WebSocketManager] Failed to persist WebSocket connection state', error);
     });
 
     // Broadcast connection event
@@ -308,7 +308,7 @@ export class WebSocketManager {
         const message = JSON.parse(data.toString());
         this.handleClientMessage(ws, message);
       } catch (error) {
-        console.error('[WebSocket] Invalid message format:', error);
+        logError('[WebSocketManager] Invalid message format', error);
         this.sendError(ws, 'Invalid message format');
       }
     });
@@ -317,20 +317,12 @@ export class WebSocketManager {
       this.clients.delete(ws);
       const disconnectTs = Date.now();
       const duration = ws.connectedAt ? disconnectTs - ws.connectedAt : 0;
-      const wantStructured = isDebugOrVerbose();
-      const structuredDisc = { ts: disconnectTs, level: 'info', src: 'websocket', event: 'client_disconnected', code, reason: reason.toString(), id: ws.clientId, durationMs: duration, totalClients: this.clients.size };
-      try {
-        if (wantStructured) {
-          console.log(JSON.stringify(structuredDisc));
-        } else {
-          console.log(`[WebSocket] Client disconnected: code=${code} reason=${reason.toString()} id=${ws.clientId} duration=${duration}ms`);
-        }
-      } catch {/* ignore */}
+      logInfo('[WebSocketManager] Client disconnected', { code, reason: reason.toString(), id: ws.clientId, durationMs: duration, totalClients: this.clients.size });
       if (ws.clientId) {
         try {
           getMetricsCollector().recordDisconnection(ws.clientId);
         } catch (err) {
-          console.error('[WebSocket] metrics recordDisconnection failed:', err);
+          logError('[WebSocketManager] metrics recordDisconnection failed', err);
         }
         this.broadcast({
           type: 'client_disconnect',
@@ -341,7 +333,7 @@ export class WebSocketManager {
 
       // Persist connection state after disconnect
       this.persistConnectionState().catch((error: unknown) => {
-        console.error('Failed to persist WebSocket state after disconnect:', error);
+        logError('[WebSocketManager] Failed to persist WebSocket state after disconnect', error);
       });
 
       // Push fresh metrics snapshot after disconnect
@@ -350,15 +342,7 @@ export class WebSocketManager {
 
     ws.on('error', (error: Error) => {
       this.clients.delete(ws);
-      const wantStructured = isDebugOrVerbose();
-      const structuredErr = { ts: Date.now(), level: 'error', src: 'websocket', event: 'client_error', id: ws.clientId };
-      try {
-        if (wantStructured) {
-          console.log(JSON.stringify(structuredErr));
-        } else {
-          console.error('[WebSocket] Client error:', error);
-        }
-      } catch {/* ignore */}
+      logError('[WebSocketManager] Client error', { id: ws.clientId, error });
     });
 
     ws.on('pong', () => {
@@ -377,15 +361,7 @@ export class WebSocketManager {
       },
     });
 
-    const wantStructured = isDebugOrVerbose();
-    const structuredConn = { ts: Date.now(), level: 'info', src: 'websocket', event: 'client_connected', totalClients: this.clients.size };
-    try {
-      if (wantStructured) {
-        console.log(JSON.stringify(structuredConn));
-      } else {
-        console.log(`[WebSocket] Client connected. Total clients: ${this.clients.size}`);
-      }
-    } catch {/* ignore */}
+    logInfo('[WebSocketManager] Client connected', { totalClients: this.clients.size });
 
   // Send immediate metrics snapshot to the new client
   this.sendCurrentMetrics(ws);
@@ -420,11 +396,11 @@ export class WebSocketManager {
           break;
 
         default:
-          console.warn('[WebSocket] Unknown message type:', message.type);
+          logWarn('[WebSocketManager] Unknown message type', message.type);
           this.sendError(client, `Unknown message type: ${message.type}`);
       }
     } catch (error) {
-      console.error('[WebSocket] Message handling error:', error);
+      logError('[WebSocketManager] Message handling error', error);
       this.sendError(client, 'Message handling error');
     }
   }
@@ -448,7 +424,7 @@ export class WebSocketManager {
           ws.terminate();
           this.clients.delete(ws);
           if (ws.clientId) {
-            try { getMetricsCollector().recordDisconnection(ws.clientId); } catch (err) { console.error('[WebSocket] heartbeat disconnect metrics error:', err); }
+            try { getMetricsCollector().recordDisconnection(ws.clientId); } catch (err) { logError('[WebSocketManager] heartbeat disconnect metrics error', err); }
             this.broadcast({
               type: 'client_disconnect',
               timestamp: Date.now(),
@@ -465,7 +441,7 @@ export class WebSocketManager {
         try {
           ws.ping();
         } catch (error) {
-          console.error('[WebSocket] Ping error:', error);
+          logError('[WebSocketManager] Ping error', error);
           this.clients.delete(ws);
         }
       });
@@ -491,7 +467,7 @@ export class WebSocketManager {
         data: snapshot,
       });
     } catch (err) {
-      console.error('[WebSocket] Failed to send metrics snapshot:', err);
+      logError('[WebSocketManager] Failed to send metrics snapshot', err);
     }
   }
 
@@ -505,7 +481,7 @@ export class WebSocketManager {
         data: snapshot,
       });
     } catch (err) {
-      console.error('[WebSocket] Failed to broadcast metrics snapshot:', err);
+      logError('[WebSocketManager] Failed to broadcast metrics snapshot', err);
     }
   }
 
@@ -562,7 +538,7 @@ export class WebSocketManager {
 
       await this.persistenceManager.persistData(persistedData);
     } catch (error) {
-      console.error('Failed to persist WebSocket connection state:', error);
+      logError('[WebSocketManager] Failed to persist WebSocket connection state', error);
       // Don't throw - continue operation
     }
   }
@@ -576,7 +552,7 @@ export class WebSocketManager {
       client.lastActivity = Date.now();
       // Persist activity update (but don't await to avoid blocking)
       this.persistConnectionState().catch((error: unknown) => {
-        console.error('Failed to persist connection activity update:', error);
+        logError('[WebSocketManager] Failed to persist connection activity update', error);
       });
       return true;
     }

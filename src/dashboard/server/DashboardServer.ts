@@ -18,6 +18,7 @@ import { getWebSocketManager } from './WebSocketManager.js';
 import { buildHttpServer, bindToPort, closeHttpServer, TlsOptions } from './httpLifecycle.js';
 import { initWebSocket, startMetricsBroadcast } from './wsInit.js';
 import { mountDashboardRoutes } from './routes/index.js';
+import { logInfo } from '../../services/logger.js';
 
 export interface DashboardServerOptions {
   host?: string;
@@ -82,13 +83,11 @@ export class DashboardServer {
       try {
         this.server = buildHttpServer(this.app, this.options.tls);
         await bindToPort(this.server, currentPort, this.options.host);
-        // eslint-disable-next-line no-console
-        console.log(`[Dashboard] Server started on ${this.httpProtocol}://${this.options.host}:${currentPort}`);
+        logInfo(`[DashboardServer] Server started on ${this.httpProtocol}://${this.options.host}:${currentPort}`);
 
         if (this.options.enableWebSockets) {
           initWebSocket(this.server, this.webSocketManager);
-          // eslint-disable-next-line no-console
-          console.log(`[Dashboard] WebSocket support enabled on ${this.wsProtocol}://${this.options.host}:${currentPort}/ws`);
+          logInfo(`[DashboardServer] WebSocket support enabled on ${this.wsProtocol}://${this.options.host}:${currentPort}/ws`);
           this.metricsBroadcastTimer = startMetricsBroadcast(
             this.webSocketManager,
             this.metricsCollector,
@@ -103,8 +102,7 @@ export class DashboardServer {
         };
       } catch (error) {
         if ((error as { code?: string })?.code === 'EADDRINUSE') {
-          // eslint-disable-next-line no-console
-          console.log(`[Dashboard] Port ${currentPort} in use, trying ${currentPort + 1}`);
+          logInfo(`[DashboardServer] Port ${currentPort} in use, trying ${currentPort + 1}`);
           continue;
         }
         throw error;

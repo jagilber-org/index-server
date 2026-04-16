@@ -12,6 +12,7 @@ import v8 from 'v8';
 import { getFileMetricsStorage, FileMetricsStorage } from './FileMetricsStorage.js';
 import { BufferRing, OverflowStrategy, BufferRingStats } from '../../utils/BufferRing.js';
 import { getRuntimeConfig } from '../../config/runtimeConfig';
+import { logInfo, logError, logWarn } from '../../services/logger.js';
 
 // Re-export all shared types so existing importers keep working unchanged.
 export type {
@@ -223,11 +224,11 @@ export class MetricsCollector {
                   } catch {/* ignore bad line */}
                 }
               } else {
-                console.warn('tool-call-events.ndjson too large to preload (>25MB); will rely on last snapshot');
+                logWarn('[MetricsCollector] tool-call-events.ndjson too large to preload (>25MB); will rely on last snapshot');
               }
             }
         } catch (err) {
-          console.warn('Failed to preload append log', err);
+          logWarn('[MetricsCollector] Failed to preload append log', err);
         }
       }
     }
@@ -239,9 +240,9 @@ export class MetricsCollector {
         maxFiles: this.options.maxSnapshots,
         retentionMinutes: this.options.retentionMinutes,
       });
-      console.error('📊 MetricsCollector: BufferRing + File storage enabled');
+      logInfo('[MetricsCollector] BufferRing + File storage enabled');
     } else {
-      console.error('📊 MetricsCollector: BufferRing memory-only mode (set INDEX_SERVER_METRICS_FILE_STORAGE=1|true|yes|on for persistence)');
+      logInfo('[MetricsCollector] BufferRing memory-only mode (set INDEX_SERVER_METRICS_FILE_STORAGE=1|true|yes|on for persistence)');
     }
 
     // Start periodic collection
@@ -469,14 +470,14 @@ export class MetricsCollector {
    */
   async getHistoricalSnapshots(count: number = 720): Promise<MetricsSnapshot[]> {
     if (!this.fileStorage) {
-      console.warn('File storage not enabled, returning memory snapshots only');
+      logWarn('[MetricsCollector] File storage not enabled, returning memory snapshots only');
       return this.getSnapshots(count);
     }
 
     try {
       return await this.fileStorage.getRecentSnapshots(count);
     } catch (error) {
-      console.error('Failed to load historical snapshots:', error);
+      logError('[MetricsCollector] Failed to load historical snapshots', error);
       return [];
     }
   }
@@ -486,14 +487,14 @@ export class MetricsCollector {
    */
   async getSnapshotsInRange(startTime: number, endTime: number): Promise<MetricsSnapshot[]> {
     if (!this.fileStorage) {
-      console.warn('File storage not enabled, filtering memory snapshots');
+      logWarn('[MetricsCollector] File storage not enabled, filtering memory snapshots');
       return this.snapshots.filter(s => s.timestamp >= startTime && s.timestamp <= endTime);
     }
 
     try {
       return await this.fileStorage.getSnapshotsInRange(startTime, endTime);
     } catch (error) {
-      console.error('Failed to load snapshots in range:', error);
+      logError('[MetricsCollector] Failed to load snapshots in range', error);
       return [];
     }
   }
@@ -552,7 +553,7 @@ export class MetricsCollector {
       try {
         await this.fileStorage.clearAll();
       } catch (error) {
-        console.error('Failed to clear file storage:', error);
+        logError('[MetricsCollector] Failed to clear file storage', error);
       }
     }
   }
@@ -619,7 +620,7 @@ export class MetricsCollector {
     // Store to file immediately (async, non-blocking) if file storage enabled
     if (this.fileStorage) {
       this.fileStorage.storeSnapshot(snapshot).catch(error => {
-        console.error('Failed to store metrics snapshot to file:', error);
+        logError('[MetricsCollector] Failed to store metrics snapshot to file', error);
       });
     }
 
@@ -837,7 +838,7 @@ export class MetricsCollector {
       if (this.tools.delete(name)) removedCount++;
     }
     if (removedCount > 0) {
-      console.log(`🧹 MetricsCollector: Cleaned up ${removedCount} stale tool metrics (${this.tools.size} remaining)`);
+      logInfo('[MetricsCollector] Cleaned up stale tool metrics', { removedCount, remaining: this.tools.size });
     }
   }
 
@@ -937,7 +938,7 @@ export class MetricsCollector {
     this.historicalSnapshots.clear();
     this.toolCallEvents.clear();
     this.performanceMetrics.clear();
-    console.error('📊 MetricsCollector: Cleared all BufferRing data');
+    logInfo('[MetricsCollector] Cleared all BufferRing data');
   }
 }
 

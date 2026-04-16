@@ -4,6 +4,7 @@
 
 import fs from 'fs';
 import path from 'path';
+import { logInfo } from '../../../services/logger.js';
 
 /**
  * Write data to a CSV file, optionally compressing afterwards.
@@ -39,7 +40,7 @@ export async function exportCSV(
   await fs.promises.writeFile(outputPath, csvRows.join('\n'), 'utf8');
 
   if (compress) {
-    console.log(`Compressing file: ${outputPath}`);
+    logInfo('[csvExporter] Compressing file', { path: outputPath });
   }
 }
 

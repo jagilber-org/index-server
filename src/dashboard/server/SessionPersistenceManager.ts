@@ -18,6 +18,7 @@ import {
   SESSION_PERSISTENCE_FILES,
   DEFAULT_SESSION_PERSISTENCE_CONFIG,
 } from '../../models/SessionPersistence.js';
+import { logInfo, logError, logWarn } from '../../services/logger.js';
 import { getRuntimeConfig } from '../../config/runtimeConfig.js';
 
 export class SessionPersistenceManager {
@@ -60,7 +61,7 @@ export class SessionPersistenceManager {
       this.persistenceTimer = setInterval(() => {
         if (!this.isShuttingDown) {
           this.persistCurrentState().catch(err => {
-            console.error('[SessionPersistence] Periodic persistence failed:', err);
+            logError('[SessionPersistenceManager] Periodic persistence failed', err);
           });
         }
       }, this.config.persistence.intervalMs);
@@ -75,7 +76,7 @@ export class SessionPersistenceManager {
       const gracefulShutdown = async () => {
         if (!this.isShuttingDown) {
           this.isShuttingDown = true;
-          console.log('[SessionPersistence] Graceful shutdown initiated...');
+          logInfo('[SessionPersistenceManager] Graceful shutdown initiated');
 
           // Clear periodic timer
           if (this.persistenceTimer) {
@@ -86,9 +87,9 @@ export class SessionPersistenceManager {
           // Final persistence
           try {
             await this.persistCurrentState();
-            console.log('[SessionPersistence] Final state persisted successfully');
+            logInfo('[SessionPersistenceManager] Final state persisted successfully');
           } catch (err) {
-            console.error('[SessionPersistence] Final persistence failed:', err);
+            logError('[SessionPersistenceManager] Final persistence failed', err);
           }
         }
       };
@@ -272,7 +273,7 @@ export class SessionPersistenceManager {
       if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
         return fallback;
       }
-      console.warn(`[SessionPersistence] Invalid ${label} in ${filePath}; archiving corrupt file and using fallback.`, err);
+      logWarn(`[SessionPersistenceManager] Invalid ${label} in ${filePath}; archiving corrupt file and using fallback.`, err);
       await this.archiveCorruptFile(filePath);
       await this.atomicWrite(filePath, JSON.stringify(fallback, null, 2));
       return fallback;
@@ -431,7 +432,7 @@ export class SessionPersistenceManager {
 
       this.lastPersistedData = filteredData;
     }).catch((err) => {
-      console.error('[SessionPersistence] Failed to persist data:', err);
+      logError('[SessionPersistenceManager] Failed to persist data', err);
       throw err;
     });
   }
@@ -508,7 +509,7 @@ export class SessionPersistenceManager {
         return null;
       }
 
-      console.error('[SessionPersistence] Failed to load data:', err);
+      logError('[SessionPersistenceManager] Failed to load data', err);
       throw err;
     }
   }

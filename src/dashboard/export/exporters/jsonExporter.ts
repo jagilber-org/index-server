@@ -4,6 +4,7 @@
 
 import fs from 'fs';
 import path from 'path';
+import { logInfo } from '../../../services/logger.js';
 
 /**
  * Write data to a JSON file, optionally compressing afterwards.
@@ -19,6 +20,6 @@ export async function exportJSON(
   await fs.promises.writeFile(outputPath, jsonData, 'utf8');
 
   if (compress) {
-    console.log(`Compressing file: ${outputPath}`);
+    logInfo('[jsonExporter] Compressing file', { path: outputPath });
   }
 }

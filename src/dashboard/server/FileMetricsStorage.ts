@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { MetricsSnapshot } from './MetricsCollector';
+import { logInfo, logError, logWarn } from '../../services/logger.js';
 
 /**
  * File-based storage for metrics snapshots to prevent memory accumulation
@@ -38,7 +39,7 @@ export class FileMetricsStorage {
         await this.cleanupOldFiles();
       }
     } catch (error) {
-      console.error('Failed to store metrics snapshot:', error);
+      logError('[FileMetricsStorage] Failed to store metrics snapshot', error);
     }
   }
 
@@ -59,13 +60,13 @@ export class FileMetricsStorage {
           );
           snapshots.push(JSON.parse(content));
         } catch (error) {
-          console.warn(`Failed to read metrics file ${file}:`, error);
+          logWarn(`[FileMetricsStorage] Failed to read metrics file ${file}`, error);
         }
       }
 
       return snapshots.sort((a, b) => a.timestamp - b.timestamp);
     } catch (error) {
-      console.error('Failed to load recent snapshots:', error);
+      logError('[FileMetricsStorage] Failed to load recent snapshots', error);
       return [];
     }
   }
@@ -88,14 +89,14 @@ export class FileMetricsStorage {
             );
             snapshots.push(JSON.parse(content));
           } catch (error) {
-            console.warn(`Failed to read metrics file ${file}:`, error);
+            logWarn(`[FileMetricsStorage] Failed to read metrics file ${file}`, error);
           }
         }
       }
 
       return snapshots.sort((a, b) => a.timestamp - b.timestamp);
     } catch (error) {
-      console.error('Failed to load snapshots in range:', error);
+      logError('[FileMetricsStorage] Failed to load snapshots in range', error);
       return [];
     }
   }
@@ -135,7 +136,7 @@ export class FileMetricsStorage {
         newestTimestamp: timestamps.length > 0 ? Math.max(...timestamps) : undefined,
       };
     } catch (error) {
-      console.error('Failed to get storage stats:', error);
+      logError('[FileMetricsStorage] Failed to get storage stats', error);
       return { fileCount: 0, totalSizeKB: 0 };
     }
   }
@@ -152,7 +153,7 @@ export class FileMetricsStorage {
         )
       );
     } catch (error) {
-      console.error('Failed to clear metrics storage:', error);
+      logError('[FileMetricsStorage] Failed to clear metrics storage', error);
     }
   }
 
@@ -160,7 +161,7 @@ export class FileMetricsStorage {
     try {
       await fs.promises.mkdir(this.storageDir, { recursive: true });
     } catch (error) {
-      console.error('Failed to create metrics storage directory:', error);
+      logError('[FileMetricsStorage] Failed to create metrics storage directory', error);
     }
   }
 
@@ -207,10 +208,10 @@ export class FileMetricsStorage {
           )
         );
 
-        console.log(`Cleaned up ${filesToDelete.length} old metrics files`);
+        logInfo('[FileMetricsStorage] Cleaned up old metrics files', { count: filesToDelete.length });
       }
     } catch (error) {
-      console.error('Failed to cleanup old metrics files:', error);
+      logError('[FileMetricsStorage] Failed to cleanup old metrics files', error);
     }
   }
 }

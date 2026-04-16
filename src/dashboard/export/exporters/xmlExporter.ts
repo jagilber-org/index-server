@@ -6,6 +6,7 @@
 import fs from 'fs';
 import path from 'path';
 import type { ReportTemplate, ReportSection } from './exportTypes.js';
+import { logInfo } from '../../../services/logger.js';
 
 /**
  * Write data to an XML file, optionally compressing afterwards.
@@ -21,7 +22,7 @@ export async function exportXML(
   await fs.promises.writeFile(outputPath, xmlContent, 'utf8');
 
   if (compress) {
-    console.log(`Compressing file: ${outputPath}`);
+    logInfo('[xmlExporter] Compressing file', { path: outputPath });
   }
 }
 
