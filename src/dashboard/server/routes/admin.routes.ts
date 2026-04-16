@@ -13,7 +13,7 @@
  */
 
 import fs from 'fs';
-import { Router, Request, Response } from 'express';
+import { Router, Request, Response, raw } from 'express';
 import { MetricsCollector } from '../MetricsCollector.js';
 import { getAdminPanel } from '../AdminPanel.js';
 import { getWebSocketManager } from '../WebSocketManager.js';
@@ -397,11 +397,20 @@ export function createAdminRoutes(metricsCollector: MetricsCollector): Router {
   });
 
   /**
-   * POST /api/admin/maintenance/backup/import - Import backup from uploaded JSON bundle
-   * body: { manifest?: object, files: { [filename]: content } }
+   * POST /api/admin/maintenance/backup/import - Import backup from uploaded JSON bundle or zip archive
+   * body: { manifest?: object, files: { [filename]: content } } or raw zip bytes
    */
-  router.post('/admin/maintenance/backup/import', (req: Request, res: Response) => {
+  router.post('/admin/maintenance/backup/import', raw({ type: ['application/zip', 'application/octet-stream'], limit: '100mb' }), (req: Request, res: Response) => {
     try {
+      if (Buffer.isBuffer(req.body) && req.body.length > 0) {
+        const sourceName = req.header('x-backup-filename') || req.header('x-file-name') || undefined;
+        const result = adminPanel.importZipBackup(req.body, sourceName);
+        if (result.success) {
+          return res.json({ success: true, message: result.message, backupId: result.backupId, files: result.files, timestamp: Date.now() });
+        }
+        return res.status(400).json({ success: false, error: result.message, timestamp: Date.now() });
+      }
+
       const bundle = req.body;
       if (!bundle || typeof bundle !== 'object' || !bundle.files) {
         return res.status(400).json({ success: false, error: 'Request body must contain a "files" object', timestamp: Date.now() });

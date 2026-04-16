@@ -285,9 +285,9 @@
                         <button id="btn-restart-server" class="action-btn danger" data-op="restart-server" title="Gracefully restart the server">🔄 Restart Server</button>
                     </div>
                     <div class="action-buttons sys-ops flex-row" style="margin-top:8px;">
-                        <button class="action-btn success" onclick="exportBackupToFile()" title="Export the selected backup to a downloadable JSON file">📥 Backup to File</button>
-                        <button class="action-btn primary" onclick="importBackupFromFile()" title="Import a backup from a JSON file">📤 Restore from File</button>
-                        <input type="file" id="backup-file-input" accept=".json" style="display:none" onchange="handleBackupFileSelected(event)" />
+                        <button class="action-btn success" onclick="exportBackupToFile()" title="Export the selected backup to a downloadable backup file">📥 Backup to File</button>
+                        <button class="action-btn primary" onclick="importBackupFromFile()" title="Import a backup from a JSON bundle or zip file">📤 Restore from File</button>
+                        <input type="file" id="backup-file-input" accept=".json,.zip,application/zip" style="display:none" onchange="handleBackupFileSelected(event)" />
                     </div>
                     <div class="mt-lg">
                         <div class="restore-header">Restore Backup <button class="action-btn page-btn font-sm">Refresh</button></div>

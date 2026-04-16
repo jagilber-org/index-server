@@ -14,6 +14,26 @@ import * as path from 'node:path';
 const CLIENT_DIR = path.resolve(__dirname, '..', 'dashboard', 'client');
 
 describe('Dashboard Client Bug Fixes', () => {
+  describe('bug-8: Backup file export/import format mismatch', () => {
+    it('should preserve zip export filenames instead of forcing a .json download', () => {
+      const src = fs.readFileSync(path.join(CLIENT_DIR, 'js', 'admin.maintenance.js'), 'utf8');
+      expect(src).not.toContain("a.download = id + '.json'");
+      expect(src).toContain('content-disposition');
+      expect(src).toContain('getDownloadFilename');
+    });
+
+    it('should allow zip backup imports and detect zip payloads by content', () => {
+      const html = fs.readFileSync(path.join(CLIENT_DIR, 'admin.html'), 'utf8');
+      const src = fs.readFileSync(path.join(CLIENT_DIR, 'js', 'admin.maintenance.js'), 'utf8');
+
+      expect(html).toContain('accept=".json,.zip,application/zip"');
+      expect(src).toContain('application/zip');
+      expect(src).toContain('X-Backup-Filename');
+      expect(src).toContain('looksLikeZip');
+      expect(src).toContain('arrayBuffer()');
+    });
+  });
+
   describe('bug-3: Overview maintenance endpoint', () => {
     it('should use /api/admin/maintenance, not /api/maintenance', () => {
       const src = fs.readFileSync(path.join(CLIENT_DIR, 'js', 'admin.overview.js'), 'utf8');
