@@ -17,7 +17,8 @@ export function createUsageRoutes(): Router {
       const snap = loadUsageSnapshot() as Record<string, Record<string, unknown>>;
       res.json({ success: true, snapshot: snap, count: Object.keys(snap).length, timestamp: Date.now() });
     } catch (error) {
-      res.status(500).json({ success: false, error: 'Failed to load usage snapshot', message: error instanceof Error ? error.message : 'Unknown error' });
+      console.error('[API] Failed to load usage snapshot:', error);
+      res.status(500).json({ success: false, error: 'Failed to load usage snapshot' });
     }
   });
 

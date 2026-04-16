@@ -58,7 +58,6 @@ export function createLogsRoutes(): Router {
       console.error('[API] Logs error:', error);
       res.status(500).json({
         error: 'Failed to read logs',
-        message: error instanceof Error ? error.message : 'Unknown error',
         timestamp: Date.now()
       });
     }
@@ -134,17 +133,19 @@ export function createLogsRoutes(): Router {
             });
 
             stream.on('error', (error) => {
+              console.error('[Logs] Stream read error:', error);
               res.write(`data: ${JSON.stringify({
                 type: 'error',
-                message: error.message,
+                message: 'Failed to read log stream',
                 timestamp: Date.now()
               })}\n\n`);
             });
           }
         } catch (error) {
+          console.error('[Logs] Stream poll error:', error);
           res.write(`data: ${JSON.stringify({
             type: 'error',
-            message: error instanceof Error ? error.message : 'Unknown error',
+            message: 'Failed to poll log file',
             timestamp: Date.now()
           })}\n\n`);
         }
@@ -168,9 +169,10 @@ export function createLogsRoutes(): Router {
       });
 
     } catch (error) {
+      console.error('[Logs] Failed to start log streaming:', error);
       res.write(`data: ${JSON.stringify({
         type: 'error',
-        message: error instanceof Error ? error.message : 'Failed to start log streaming',
+        message: 'Failed to start log streaming',
         timestamp: Date.now()
       })}\n\n`);
     }

@@ -25,7 +25,6 @@ export function createAlertsRoutes(metricsCollector: MetricsCollector): Router {
       console.error('[API] Active alerts error:', error);
       res.status(500).json({
         error: 'Failed to get active alerts',
-        message: error instanceof Error ? error.message : 'Unknown error',
       });
     }
   });
@@ -55,7 +54,6 @@ export function createAlertsRoutes(metricsCollector: MetricsCollector): Router {
       console.error('[API] Resolve alert error:', error);
       res.status(500).json({
         error: 'Failed to resolve alert',
-        message: error instanceof Error ? error.message : 'Unknown error',
       });
     }
   });
@@ -88,7 +86,6 @@ export function createAlertsRoutes(metricsCollector: MetricsCollector): Router {
       console.error('[API] Generate alert error:', error);
       res.status(500).json({
         error: 'Failed to generate alert',
-        message: error instanceof Error ? error.message : 'Unknown error',
       });
     }
   });

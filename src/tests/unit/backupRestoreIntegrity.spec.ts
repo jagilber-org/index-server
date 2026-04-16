@@ -155,6 +155,27 @@ describe('Backup/Restore Integrity', () => {
     expect(recovered.body).toBe('Will be deleted');
   });
 
+  it('restore from zip backup excludes embedded manifest metadata', async () => {
+    writeInstr('br-no-manifest', 'Manifest should not be restored into instructions');
+
+    const backupPath = path.join(BACKUPS_DIR, 'backup-with-manifest.zip');
+    const { createZipBackupWithManifest, extractZipBackup } = await import('../../services/backupZip.js');
+    createZipBackupWithManifest(INSTR_DIR, backupPath, {
+      type: 'admin-backup',
+      createdAt: new Date().toISOString(),
+      instructionCount: 1,
+    });
+
+    fs.rmSync(INSTR_DIR, { recursive: true, force: true });
+    fs.mkdirSync(INSTR_DIR, { recursive: true });
+
+    const restoredCount = extractZipBackup(backupPath, INSTR_DIR);
+
+    expect(restoredCount).toBe(1);
+    expect(fs.existsSync(path.join(INSTR_DIR, 'manifest.json'))).toBe(false);
+    expect(fs.existsSync(path.join(INSTR_DIR, 'br-no-manifest.json'))).toBe(true);
+  });
+
   it('full restore from zip overwrites modified instructions', async () => {
     writeInstr('br-mod', 'Original body');
 

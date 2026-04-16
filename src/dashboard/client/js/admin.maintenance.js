@@ -1,6 +1,17 @@
 /* eslint-disable */
 // Extracted from admin.html: Backup / Restore and maintenance helpers
 (function(){
+    function getDownloadFilename(contentDisposition, fallbackName){
+        if(!contentDisposition) return fallbackName;
+        const match = contentDisposition.match(/filename\*?=(?:UTF-8''|"?)([^";]+)/i);
+        if(!match || !match[1]) return fallbackName;
+        try { return decodeURIComponent(match[1].replace(/"/g, '')); } catch { return match[1].replace(/"/g, ''); }
+    }
+
+    function looksLikeZip(bytes){
+        return !!(bytes && bytes.length >= 4 && bytes[0] === 0x50 && bytes[1] === 0x4b);
+    }
+
     async function loadBackups() {
         try {
             const sel = document.getElementById('backup-select');
@@ -276,9 +287,12 @@
             const res = await fetch('/api/admin/maintenance/backup/' + encodeURIComponent(id) + '/export');
             if(!res.ok){ const d = await res.json().catch(()=>({})); alert('Export failed: '+(d.error||res.statusText)); return; }
             const blob = await res.blob();
+            const contentDisposition = res.headers.get('content-disposition') || '';
+            const contentType = (res.headers.get('content-type') || '').toLowerCase();
+            const fallbackName = contentType.includes('application/zip') ? (id + '.zip') : (id + '.json');
             const a = document.createElement('a');
             a.href = URL.createObjectURL(blob);
-            a.download = id + '.json';
+            a.download = getDownloadFilename(contentDisposition, fallbackName);
             document.body.appendChild(a); a.click(); a.remove();
             URL.revokeObjectURL(a.href);
             if(typeof showSuccess === 'function') showSuccess('Exported ' + id);
@@ -293,9 +307,35 @@
     async function handleBackupFileSelected(ev){
         const file = ev.target && ev.target.files && ev.target.files[0];
         if(!file) return;
-        if(!file.name.toLowerCase().endsWith('.json')){ alert('Please select a .json file'); return; }
         try {
-            const text = await file.text();
+            const lowerName = file.name.toLowerCase();
+            const arrayBuffer = await file.arrayBuffer();
+            const bytes = new Uint8Array(arrayBuffer);
+            const zipBackup = looksLikeZip(bytes) || lowerName.endsWith('.zip');
+
+            if(!zipBackup && !lowerName.endsWith('.json')){ alert('Please select a .json or .zip backup file'); return; }
+
+            if(zipBackup){
+                if(!confirm('Import backup from ' + file.name + '? (zip archive)')) return;
+                const res = await fetch('/api/admin/maintenance/backup/import', {
+                    method:'POST',
+                    headers:{
+                        'Content-Type':'application/zip',
+                        'X-Backup-Filename': file.name,
+                    },
+                    body: arrayBuffer,
+                });
+                const data = await res.json();
+                if(data.success){
+                    if(typeof showSuccess === 'function') showSuccess(data.message || 'Imported');
+                    loadMaintenanceStatus(); loadBackups();
+                } else {
+                    alert('Import failed: '+(data.error||'unknown'));
+                }
+                return;
+            }
+
+            const text = new TextDecoder('utf-8').decode(bytes);
             const bundle = JSON.parse(text);
             if(!bundle.files || typeof bundle.files !== 'object'){ alert('Invalid backup file: must contain a "files" object'); return; }
             if(!confirm('Import backup from ' + file.name + '? (' + Object.keys(bundle.files).length + ' files)')) return;

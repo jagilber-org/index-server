@@ -41,7 +41,6 @@ export function createMetricsRoutes(metricsCollector: MetricsCollector): Router 
       console.error('[API] Tools error:', error);
       res.status(500).json({
         error: 'Failed to get tools list',
-        message: error instanceof Error ? error.message : 'Unknown error',
       });
     }
   });
@@ -57,7 +56,6 @@ export function createMetricsRoutes(metricsCollector: MetricsCollector): Router 
       console.error('[API] Metrics error:', error);
       res.status(500).json({
         error: 'Failed to get metrics',
-        message: error instanceof Error ? error.message : 'Unknown error',
       });
     }
   });
@@ -79,7 +77,6 @@ export function createMetricsRoutes(metricsCollector: MetricsCollector): Router 
       console.error('[API] Metrics history error:', error);
       res.status(500).json({
         error: 'Failed to get metrics history',
-        message: error instanceof Error ? error.message : 'Unknown error',
       });
     }
   });
@@ -108,7 +105,6 @@ export function createMetricsRoutes(metricsCollector: MetricsCollector): Router 
       console.error('[API] Tool metrics error:', error);
       res.status(500).json({
         error: 'Failed to get tool metrics',
-        message: error instanceof Error ? error.message : 'Unknown error',
       });
     }
   });
@@ -134,7 +130,6 @@ export function createMetricsRoutes(metricsCollector: MetricsCollector): Router 
       console.error('[API] Performance error:', error);
       res.status(500).json({
         error: 'Failed to get performance metrics',
-        message: error instanceof Error ? error.message : 'Unknown error',
       });
     }
   });
@@ -154,7 +149,6 @@ export function createMetricsRoutes(metricsCollector: MetricsCollector): Router 
       console.error('[API] Realtime metrics error:', error);
       res.status(500).json({
         error: 'Failed to get realtime metrics',
-        message: error instanceof Error ? error.message : 'Unknown error',
       });
     }
   });
@@ -174,7 +168,6 @@ export function createMetricsRoutes(metricsCollector: MetricsCollector): Router 
       console.error('[API] Streaming data error:', error);
       res.status(500).json({
         error: 'Failed to get streaming data',
-        message: error instanceof Error ? error.message : 'Unknown error',
       });
     }
   });
@@ -198,7 +191,6 @@ export function createMetricsRoutes(metricsCollector: MetricsCollector): Router 
       console.error('[API] Tool usage chart error:', error);
       res.status(500).json({
         error: 'Failed to get tool usage chart data',
-        message: error instanceof Error ? error.message : 'Unknown error',
       });
     }
   });
@@ -222,7 +214,6 @@ export function createMetricsRoutes(metricsCollector: MetricsCollector): Router 
       console.error('[API] Performance chart error:', error);
       res.status(500).json({
         error: 'Failed to get performance chart data',
-        message: error instanceof Error ? error.message : 'Unknown error',
       });
     }
   });
@@ -257,7 +248,6 @@ export function createMetricsRoutes(metricsCollector: MetricsCollector): Router 
       console.error('[API] Time range chart error:', error);
       res.status(500).json({
         error: 'Failed to get time range data',
-        message: error instanceof Error ? error.message : 'Unknown error',
       });
     }
   });
@@ -303,7 +293,6 @@ export function createMetricsRoutes(metricsCollector: MetricsCollector): Router 
       console.error('[API] Chart export error:', error);
       res.status(500).json({
         error: 'Failed to export chart data',
-        message: error instanceof Error ? error.message : 'Unknown error',
       });
     }
   });
@@ -334,7 +323,8 @@ export function createMetricsRoutes(metricsCollector: MetricsCollector): Router 
         timestamp: Date.now()
       });
     } catch (err) {
-      res.status(500).json({ success: false, error: 'Failed to compute performance metrics', message: err instanceof Error ? err.message : String(err) });
+      console.error('[API] Performance detailed error:', err);
+      res.status(500).json({ success: false, error: 'Failed to compute performance metrics' });
     }
   });
 
@@ -354,7 +344,6 @@ export function createMetricsRoutes(metricsCollector: MetricsCollector): Router 
       console.error('[API] Advanced analytics error:', error);
       res.status(500).json({
         error: 'Failed to get advanced analytics',
-        message: error instanceof Error ? error.message : 'Unknown error',
       });
     }
   });

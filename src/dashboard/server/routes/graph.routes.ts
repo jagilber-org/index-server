@@ -147,7 +147,7 @@ export function createGraphRoutes(): Router {
         // eslint-disable-next-line no-console
         console.warn('[graph/mermaid][error]', e.message);
       } catch { /* ignore diag logging errors */ }
-      res.status(500).json({ success: false, error: String(e.message || e) });
+      res.status(500).json({ success: false, error: 'Failed to generate mermaid graph' });
     }
   });
 
@@ -166,7 +166,8 @@ export function createGraphRoutes(): Router {
       const categories = [...map.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([id, count]) => ({ id, count }));
       res.json({ success: true, categories, total: categories.length, timestamp: Date.now() });
     } catch (err) {
-      const e = err as Error; res.status(500).json({ success: false, error: e.message || String(e) });
+      console.error('[graph/categories] Error:', err);
+      res.status(500).json({ success: false, error: 'Failed to get categories' });
     }
   });
 
@@ -190,7 +191,8 @@ export function createGraphRoutes(): Router {
       const flat = instructions.map(i => ({ id: i.id, primaryCategory: i.primaryCategory || i.categories?.[0], categories: i.categories || [] }));
       res.json({ success: true, instructions: flat, count: flat.length, filtered: !!filterCats.length, timestamp: Date.now() });
     } catch (err) {
-      const e = err as Error; res.status(500).json({ success: false, error: e.message || String(e) });
+      console.error('[graph/instructions] Error:', err);
+      res.status(500).json({ success: false, error: 'Failed to get instructions' });
     }
   });
 
@@ -229,7 +231,8 @@ export function createGraphRoutes(): Router {
       const expandedCount = workingSet.size - selectedSet.size;
       res.json({ success: true, nodes: finalNodes, edges, categories, expanded: expand ? expandedCount : 0, timestamp: Date.now() });
     } catch (err) {
-      const e = err as Error; res.status(500).json({ success: false, error: e.message || String(e) });
+      console.error('[graph/relations] Error:', err);
+      res.status(500).json({ success: false, error: 'Failed to get relations' });
     }
   });
 

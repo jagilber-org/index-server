@@ -30,7 +30,6 @@ export function createKnowledgeRoutes(): Router {
       res.status(500).json({
         success: false,
         error: 'Failed to store knowledge entry',
-        message: error instanceof Error ? error.message : 'Unknown error',
       });
     }
   });
@@ -54,8 +53,7 @@ export function createKnowledgeRoutes(): Router {
       });
     } catch (error) {
       console.error('[API] Knowledge search error:', error);
-      res.status(500).json({ success: false, error: 'Failed to search knowledge',
-        message: error instanceof Error ? error.message : 'Unknown error' });
+      res.status(500).json({ success: false, error: 'Failed to search knowledge' });
     }
   });
 
@@ -73,8 +71,7 @@ export function createKnowledgeRoutes(): Router {
       res.json({ success: true, ...entry, timestamp: Date.now() });
     } catch (error) {
       console.error('[API] Knowledge get error:', error);
-      res.status(500).json({ success: false, error: 'Failed to get knowledge entry',
-        message: error instanceof Error ? error.message : 'Unknown error' });
+      res.status(500).json({ success: false, error: 'Failed to get knowledge entry' });
     }
   });
 

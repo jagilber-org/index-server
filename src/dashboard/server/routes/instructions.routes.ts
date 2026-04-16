@@ -171,7 +171,8 @@ export function createInstructionsRoutes(): Router {
 
       res.json({ success: true, instructions: files, count: files.length, timestamp: Date.now() });
     } catch (error) {
-      res.status(500).json({ success: false, error: 'Failed to list instructions', message: error instanceof Error ? error.message : 'Unknown error' });
+      console.error('[API] Failed to list instructions:', error);
+      res.status(500).json({ success: false, error: 'Failed to list instructions' });
     }
   });
 
@@ -221,7 +222,7 @@ export function createInstructionsRoutes(): Router {
       res.json({ success: true, query, count: results.length, results, timestamp: Date.now() });
     } catch (error) {
       console.error('[API] instructions search error:', error);
-      res.status(500).json({ success: false, error: 'search_failed', message: error instanceof Error ? error.message : 'Unknown error' });
+      res.status(500).json({ success: false, error: 'search_failed' });
     }
   });
 
@@ -246,10 +247,10 @@ export function createInstructionsRoutes(): Router {
         timestamp: Date.now()
       });
     } catch (error) {
+      console.error('[API] Failed to get categories:', error);
       res.status(500).json({
         success: false,
         error: 'Failed to get categories',
-        message: error instanceof Error ? error.message : 'Unknown error'
       });
     }
   });
@@ -265,7 +266,8 @@ export function createInstructionsRoutes(): Router {
       const content = JSON.parse(fs.readFileSync(file, 'utf8'));
       res.json({ success: true, content, timestamp: Date.now() });
     } catch (error) {
-      res.status(500).json({ success: false, error: 'Failed to load instruction', message: error instanceof Error ? error.message : 'Unknown error' });
+      console.error('[API] Failed to load instruction:', error);
+      res.status(500).json({ success: false, error: 'Failed to load instruction' });
     }
   });
 
@@ -284,7 +286,8 @@ export function createInstructionsRoutes(): Router {
       fs.writeFileSync(file, JSON.stringify(content, null, 2));
       res.json({ success: true, message: 'Instruction created', name: safeName, timestamp: Date.now() });
     } catch (error) {
-      res.status(500).json({ success: false, error: 'Failed to create instruction', message: error instanceof Error ? error.message : 'Unknown error' });
+      console.error('[API] Failed to create instruction:', error);
+      res.status(500).json({ success: false, error: 'Failed to create instruction' });
     }
   });
 
@@ -302,7 +305,8 @@ export function createInstructionsRoutes(): Router {
       fs.writeFileSync(file, JSON.stringify(content, null, 2));
       res.json({ success: true, message: 'Instruction updated', timestamp: Date.now() });
     } catch (error) {
-      res.status(500).json({ success: false, error: 'Failed to update instruction', message: error instanceof Error ? error.message : 'Unknown error' });
+      console.error('[API] Failed to update instruction:', error);
+      res.status(500).json({ success: false, error: 'Failed to update instruction' });
     }
   });
 
@@ -317,7 +321,8 @@ export function createInstructionsRoutes(): Router {
       fs.unlinkSync(file);
       res.json({ success: true, message: 'Instruction deleted', timestamp: Date.now() });
     } catch (error) {
-      res.status(500).json({ success: false, error: 'Failed to delete instruction', message: error instanceof Error ? error.message : 'Unknown error' });
+      console.error('[API] Failed to delete instruction:', error);
+      res.status(500).json({ success: false, error: 'Failed to delete instruction' });
     }
   });
 

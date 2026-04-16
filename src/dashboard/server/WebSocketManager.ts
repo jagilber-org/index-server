@@ -6,12 +6,14 @@
  */
 
 import { WebSocket, WebSocketServer } from 'ws';
-import { Server as HttpServer } from 'http';
+import { Server as HttpServer, IncomingMessage } from 'http';
 import { randomUUID } from 'crypto';
 import { MetricsSnapshot, getMetricsCollector } from './MetricsCollector.js';
 import { SessionPersistenceManager } from './SessionPersistenceManager';
 import { PersistedWebSocketConnection } from '../../models/SessionPersistence';
 import { isDebugOrVerbose } from '../../utils/envUtils';
+import { getRuntimeConfig } from '../../config/runtimeConfig.js';
+import { isLoopbackHost } from './routes/adminAuth.js';
 
 export interface DashboardMessage {
   type: string;
@@ -141,6 +143,19 @@ export class WebSocketManager {
     this.wss = new WebSocketServer({
       server,
       path: this.options.path,
+      verifyClient: (info: { origin: string; secure: boolean; req: IncomingMessage }, callback: (result: boolean, code?: number, message?: string) => void) => {
+        const adminKey = getRuntimeConfig().dashboard.http.adminApiKey;
+        if (!adminKey) {
+          const addr = info.req.socket.remoteAddress || '';
+          callback(isLoopbackHost(addr), 403, 'WebSocket access restricted to localhost');
+          return;
+        }
+        const url = new URL(info.req.url || '', 'http://localhost');
+        const token = url.searchParams.get('token') || '';
+        const authHeader = info.req.headers['authorization'] || '';
+        const bearerToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
+        callback(token === adminKey || bearerToken === adminKey, 401, 'WebSocket authentication required');
+      },
     });
 
     this.wss.on('connection', (ws: WebSocket) => {
@@ -336,7 +351,7 @@ export class WebSocketManager {
     ws.on('error', (error: Error) => {
       this.clients.delete(ws);
       const wantStructured = isDebugOrVerbose();
-      const structuredErr = { ts: Date.now(), level: 'error', src: 'websocket', event: 'client_error', message: error.message, stack: error.stack, id: ws.clientId };
+      const structuredErr = { ts: Date.now(), level: 'error', src: 'websocket', event: 'client_error', id: ws.clientId };
       try {
         if (wantStructured) {
           console.log(JSON.stringify(structuredErr));

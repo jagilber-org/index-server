@@ -460,6 +460,41 @@ export class AdminPanel {
     }
   }
 
+  /** Import a zip backup uploaded by the client without rewriting its contents. */
+  importZipBackup(zipBuffer: Buffer, sourceName?: string): { success: boolean; message: string; backupId?: string; files?: number } {
+    try {
+      if (!Buffer.isBuffer(zipBuffer) || zipBuffer.length === 0) {
+        return { success: false, message: 'Invalid zip backup: upload was empty' };
+      }
+
+      const zip = new AdmZip(zipBuffer);
+      const instructionFiles = zip.getEntries()
+        .map(entry => path.basename(entry.entryName))
+        .filter(name => name.toLowerCase().endsWith('.json') && name === path.basename(name) && name !== 'manifest.json');
+
+      if (!instructionFiles.length) {
+        return { success: false, message: 'Invalid zip backup: contains no instruction files' };
+      }
+
+      const now = new Date();
+      const baseTs = now.toISOString().replace(/[-:]/g, '').replace(/\..+/, '');
+      const ms = String(now.getMilliseconds()).padStart(3, '0');
+      const backupId = `backup_${baseTs}_${ms}`;
+      const zipPath = path.join(this.backupRoot, `${backupId}.zip`);
+      if (!fs.existsSync(this.backupRoot)) fs.mkdirSync(this.backupRoot, { recursive: true });
+
+      fs.writeFileSync(zipPath, zipBuffer);
+
+      const safeSourceName = sourceName ? path.basename(sourceName) : undefined;
+      process.stderr.write(
+        `[admin] Imported zip backup from file: ${backupId}.zip (${instructionFiles.length} files${safeSourceName ? `, source=${safeSourceName}` : ''})\n`,
+      );
+      return { success: true, message: `Imported ${instructionFiles.length} files as ${backupId}`, backupId, files: instructionFiles.length };
+    } catch (error) {
+      return { success: false, message: `Import failed: ${error instanceof Error ? error.message : String(error)}` };
+    }
+  }
+
   /**
    * Calculate current CPU usage with historical tracking
    */

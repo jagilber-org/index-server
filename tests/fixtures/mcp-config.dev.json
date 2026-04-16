@@ -37,7 +37,7 @@
       "args": [
         "dist/server/index-server.js"
       ],
-      "cwd": "C:/mcp/index-server-dev",
+      "cwd": "./",
       "env": {
         "INDEX_SERVER_MODE": "standalone",
         "INDEX_SERVER_MUTATION": "1",

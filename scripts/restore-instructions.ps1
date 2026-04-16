@@ -120,7 +120,8 @@ if ($isZip) {
   Expand-Archive -Path $selected.FullName -DestinationPath $tempExtract -Force -WhatIf:$false
 
   # Find the JSON files (may be in a subdirectory like 'instructions/')
-  $jsonFiles = Get-ChildItem -Path $tempExtract -Filter '*.json' -Recurse -File
+  $jsonFiles = Get-ChildItem -Path $tempExtract -Filter '*.json' -Recurse -File |
+    Where-Object { $_.Name -ne 'manifest.json' }
   if (-not $jsonFiles) { throw 'Backup zip contains no JSON files.' }
 
   # Use the directory containing the most JSON files
@@ -129,7 +130,8 @@ if ($isZip) {
   $sourceDir = $selected.FullName
 }
 
-$files = Get-ChildItem -Path $sourceDir -Filter '*.json' -File -ErrorAction SilentlyContinue
+$files = Get-ChildItem -Path $sourceDir -Filter '*.json' -File -ErrorAction SilentlyContinue |
+  Where-Object { $_.Name -ne 'manifest.json' }
 if (-not $files) { throw 'Backup contains no JSON files.' }
 
 Write-Host "[restore] Found $($files.Count) JSON files in backup" -ForegroundColor Cyan
