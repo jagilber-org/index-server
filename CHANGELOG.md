@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog and this project adheres to Semantic Versioning.
 
+## [1.20.1] - 2026-04-16
+
+### Changed
+
+- Documented the canonical private/public release workflow around `origin`, `public`, and `scripts/publish.cjs`.
+- Updated release guard and lifecycle references to use the current cross-platform version bump and public publish scripts.
+
+### Removed
+
+- Removed the obsolete legacy dual-repo PowerShell publish script.
+
 ## [1.20.0] - 2026-04-15
 
 ### Added

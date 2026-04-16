@@ -215,6 +215,7 @@ describe('Performance: Index Operations', () => {
 
 describe('Performance: Dashboard HTTP', () => {
   let server: DashboardServer | null = null;
+  let activePerfPort = PERF_PORT;
 
   beforeAll(async () => {
     try {
@@ -222,7 +223,8 @@ describe('Performance: Dashboard HTTP', () => {
         port: PERF_PORT,
         host: PERF_HOST,
       });
-      await server.start();
+      const started = await server.start();
+      activePerfPort = started.port;
     } catch (e) {
       console.warn('Dashboard server failed to start for perf tests:', (e as Error).message);
     }
@@ -237,7 +239,7 @@ describe('Performance: Dashboard HTTP', () => {
   it('status endpoint should respond within 100ms (p95)', async () => {
     if (!server) return;
     const times = await measureAsync(async () => {
-      const resp = await fetch(`http://${PERF_HOST}:${PERF_PORT}/api/status`);
+      const resp = await fetch(`http://${PERF_HOST}:${activePerfPort}/api/status`);
       expect(resp.ok).toBe(true);
     }, 50);
     const stats = computeStats(times);
@@ -248,7 +250,7 @@ describe('Performance: Dashboard HTTP', () => {
     if (!server) return;
     const results = await Promise.allSettled(
       Array.from({ length: 100 }, () =>
-        fetch(`http://${PERF_HOST}:${PERF_PORT}/api/status`).then(r => r.status)
+        fetch(`http://${PERF_HOST}:${activePerfPort}/api/status`).then(r => r.status)
       )
     );
     const successes = results.filter(r => r.status === 'fulfilled');
@@ -263,9 +265,9 @@ describe('Performance: Dashboard HTTP', () => {
   it('large response payloads should complete within 500ms', async () => {
     if (!server) return;
     // Warm up the endpoint first to avoid cold-start skew
-    try { await fetch(`http://${PERF_HOST}:${PERF_PORT}/api/tools`); } catch { /* ok */ }
+    try { await fetch(`http://${PERF_HOST}:${activePerfPort}/api/tools`); } catch { /* ok */ }
     const times = await measureAsync(async () => {
-      const resp = await fetch(`http://${PERF_HOST}:${PERF_PORT}/api/tools`);
+      const resp = await fetch(`http://${PERF_HOST}:${activePerfPort}/api/tools`);
       expect(resp.ok).toBe(true);
       await resp.json();
     }, 10);

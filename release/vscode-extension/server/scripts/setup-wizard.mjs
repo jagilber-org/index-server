@@ -149,6 +149,7 @@ function parseNonInteractiveArgs() {
     root: ROOT,
     port: 8787,
     host: '127.0.0.1',
+    tls: false,
     mutation: false,
     logLevel: 'info',
     generateCerts: false,
@@ -160,6 +161,7 @@ function parseNonInteractiveArgs() {
     else if (args[i] === '--root' && args[i + 1]) config.root = path.resolve(args[++i]);
     else if (args[i] === '--port' && args[i + 1]) config.port = parseInt(args[++i], 10);
     else if (args[i] === '--host' && args[i + 1]) config.host = args[++i];
+    else if (args[i] === '--tls') config.tls = true;
     else if (args[i] === '--mutation') config.mutation = true;
     else if (args[i] === '--log-level' && args[i + 1]) config.logLevel = args[++i];
     else if (args[i] === '--generate-certs') config.generateCerts = true;
@@ -168,6 +170,7 @@ function parseNonInteractiveArgs() {
 
   // Profile overrides
   if (config.profile === 'enhanced' || config.profile === 'experimental') {
+    config.tls = true;
     config.mutation = true;
     config.generateCerts = true;
   }
@@ -257,7 +260,7 @@ function getEnvCatalog(config, paths) {
   const p = config.profile;
   const isEnhanced = p === 'enhanced' || p === 'experimental';
   const isSqlite = p === 'experimental';
-  const tls = isEnhanced;
+  const tls = config.tls;
 
   return [
     // ── Core Paths ─────────────────────────────────────────────────────────
@@ -473,6 +476,7 @@ Non-interactive mode:
     --root <dir>        Base directory for all data paths
     --port <n>          Dashboard port (default: 8787)
     --host <addr>       Dashboard host (default: 127.0.0.1)
+    --tls               Enable TLS dashboard settings in generated config
     --mutation          Enable write operations
     --log-level <lvl>   Log level: error|warn|info|debug|trace
     --generate-certs    Generate self-signed TLS certificates

@@ -17,8 +17,8 @@ describe('Dashboard synthetic activity logging', () => {
   // Centralized runtime configuration (coverage fast mode + synthetic timing overrides)
   const cfg = getRuntimeConfig();
   const FAST_COVERAGE = cfg.coverage.fastMode;
-  const logsDir = path.join(process.cwd(),'logs');
-  const logFile = path.join(logsDir,'mcp-server.log');
+  const logsDir = path.join(process.cwd(),'tmp','synthetic-activity-logging-test');
+  const logFile = path.join(logsDir,'log.log');
   let proc: ReturnType<typeof spawn> | null = null;
   let earlyExit: Error | null = null;
   let baseUrl: string | undefined;
@@ -42,7 +42,7 @@ describe('Dashboard synthetic activity logging', () => {
     proc = spawn(process.execPath, ['dist/server/index-server.js', '--dashboard-port=0', '--dashboard-host=127.0.0.1'], {
       cwd: process.cwd(),
       // INDEX_SERVER_LOG_SYNC forces fsync after each write so log polling becomes deterministic.
-      env: { ...process.env, INDEX_SERVER_LOG_FILE: '1', INDEX_SERVER_DASHBOARD: '1', INDEX_SERVER_LOG_SYNC: '1' },
+      env: { ...process.env, INDEX_SERVER_LOG_FILE: logFile, INDEX_SERVER_DASHBOARD: '1', INDEX_SERVER_LOG_SYNC: '1' },
       stdio: 'pipe'
     });
     let stdoutBuf='';

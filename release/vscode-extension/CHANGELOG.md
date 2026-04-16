@@ -2,6 +2,11 @@
 
 All notable changes to the Index Server VS Code extension.
 
+## [1.20.1] - 2026-04-16
+
+### Changed
+- Version synced with Index Server 1.20.1
+
 ## [1.13.0] - 2026-03-27
 
 ### Added

@@ -23,7 +23,8 @@ import '../services/toolHandlers.js';
 
 const TEST_PORT = 17787;
 const TEST_HOST = '127.0.0.1';
-const BASE_URL = `http://${TEST_HOST}:${TEST_PORT}`;
+let activePort = TEST_PORT;
+let activeBaseUrl = `http://${TEST_HOST}:${TEST_PORT}`;
 const SCRIPTS_DIR = path.join(process.cwd(), 'scripts');
 const PS1_SCRIPT = path.join(SCRIPTS_DIR, 'index-server-client.ps1');
 const SH_SCRIPT = path.join(SCRIPTS_DIR, 'index-server-client.sh');
@@ -106,13 +107,15 @@ describe('Client Scripts E2E', () => {
         port: TEST_PORT,
         host: TEST_HOST,
       });
-      await server.start();
+      const started = await server.start();
+      activePort = started.port;
+      activeBaseUrl = `http://${TEST_HOST}:${activePort}`;
 
       // Warm up: trigger index load and wait for readiness so tool
       // handlers don't fail with transient "index loading" errors.
       for (let i = 0; i < 40; i++) {
         try {
-          const resp = await fetch(`${BASE_URL}/api/tools/health_check`, {
+          const resp = await fetch(`${activeBaseUrl}/api/tools/health_check`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: '{}',
@@ -144,7 +147,7 @@ describe('Client Scripts E2E', () => {
       let resp: Response | undefined;
       for (let attempt = 0; attempt < 2; attempt++) {
         try {
-          resp = await fetch(`${BASE_URL}/api/scripts`);
+          resp = await fetch(`${activeBaseUrl}/api/scripts`);
           break;
         } catch {
           if (attempt === 1) throw new Error('Failed to fetch script list after 2 attempts');
@@ -175,7 +178,7 @@ describe('Client Scripts E2E', () => {
       let resp: Response | undefined;
       for (let attempt = 0; attempt < 2; attempt++) {
         try {
-          resp = await fetch(`${BASE_URL}/api/scripts/index-server-client.ps1`);
+          resp = await fetch(`${activeBaseUrl}/api/scripts/index-server-client.ps1`);
           break;
         } catch {
           if (attempt === 1) throw new Error('Failed to fetch PowerShell script after 2 attempts');
@@ -191,7 +194,7 @@ describe('Client Scripts E2E', () => {
 
     it('should download Bash script with correct headers', async () => {
       if (!server) return;
-      const resp = await fetch(`${BASE_URL}/api/scripts/index-server-client.sh`);
+      const resp = await fetch(`${activeBaseUrl}/api/scripts/index-server-client.sh`);
       expect(resp.ok).toBe(true);
       expect(resp.headers.get('content-disposition')).toContain('index-server-client.sh');
       const body = await resp.text();
@@ -201,7 +204,7 @@ describe('Client Scripts E2E', () => {
 
     it('should return 404 for unknown script name', async () => {
       if (!server) return;
-      const resp = await fetch(`${BASE_URL}/api/scripts/nonexistent.ps1`);
+      const resp = await fetch(`${activeBaseUrl}/api/scripts/nonexistent.ps1`);
       expect(resp.status).toBe(404);
       const data = await resp.json() as { error: string; available: string[] };
       expect(data.error).toContain('not found');
@@ -210,14 +213,14 @@ describe('Client Scripts E2E', () => {
 
     it('should reject path traversal attempts', async () => {
       if (!server) return;
-      const resp = await fetch(`${BASE_URL}/api/scripts/..%2F..%2Fpackage.json`);
+      const resp = await fetch(`${activeBaseUrl}/api/scripts/..%2F..%2Fpackage.json`);
       expect(resp.status).toBe(404);
     });
 
     it('should serve scripts with matching content to disk files', async () => {
       if (!server) return;
       const diskPs1 = fs.readFileSync(PS1_SCRIPT, 'utf-8');
-      const resp = await fetch(`${BASE_URL}/api/scripts/index-server-client.ps1`);
+      const resp = await fetch(`${activeBaseUrl}/api/scripts/index-server-client.ps1`);
       const httpPs1 = await resp.text();
       expect(httpPs1).toBe(diskPs1);
     });
@@ -230,20 +233,20 @@ describe('Client Scripts E2E', () => {
   describe('Script endpoint security', () => {
     it('should set Cache-Control no-store on script list', async () => {
       if (!server) return;
-      const resp = await fetch(`${BASE_URL}/api/scripts`);
+      const resp = await fetch(`${activeBaseUrl}/api/scripts`);
       const cc = resp.headers.get('cache-control');
       expect(cc).toContain('no-store');
     });
 
     it('should set security headers on script download', async () => {
       if (!server) return;
-      const resp = await fetch(`${BASE_URL}/api/scripts/index-server-client.ps1`);
+      const resp = await fetch(`${activeBaseUrl}/api/scripts/index-server-client.ps1`);
       expect(resp.headers.get('x-content-type-options')).toBe('nosniff');
     });
 
     it('should not expose server version in headers', async () => {
       if (!server) return;
-      const resp = await fetch(`${BASE_URL}/api/scripts`);
+      const resp = await fetch(`${activeBaseUrl}/api/scripts`);
       expect(resp.headers.get('x-powered-by')).toBeNull();
     });
   });
@@ -257,7 +260,7 @@ describe('Client Scripts E2E', () => {
     it.skipIf(!hasPwsh)('health action should return success', async () => {
       if (!server) return;
       const output = await runPwshWithRetry(
-        `& '${PS1_SCRIPT}' -BaseUrl '${BASE_URL}' -Action health`
+        `& '${PS1_SCRIPT}' -BaseUrl '${activeBaseUrl}' -Action health`
       );
       const result = JSON.parse(output);
       expect(result.success).toBe(true);
@@ -267,7 +270,7 @@ describe('Client Scripts E2E', () => {
     it.skipIf(!hasPwsh)('search action should return results', async () => {
       if (!server) return;
       const output = await runPwshWithRetry(
-        `& '${PS1_SCRIPT}' -BaseUrl '${BASE_URL}' -Action search -Keywords 'bootstrap'`
+        `& '${PS1_SCRIPT}' -BaseUrl '${activeBaseUrl}' -Action search -Keywords 'bootstrap'`
       );
       const result = JSON.parse(output);
       expect(result.success).toBe(true);
@@ -276,7 +279,7 @@ describe('Client Scripts E2E', () => {
     it.skipIf(!hasPwsh)('list action should return instructions', async () => {
       if (!server) return;
       const output = await runPwshWithRetry(
-        `& '${PS1_SCRIPT}' -BaseUrl '${BASE_URL}' -Action list -Limit 5`
+        `& '${PS1_SCRIPT}' -BaseUrl '${activeBaseUrl}' -Action list -Limit 5`
       );
       const result = JSON.parse(output);
       expect(result.success).toBe(true);
@@ -285,7 +288,7 @@ describe('Client Scripts E2E', () => {
     it.skipIf(!hasPwsh)('get action without id should return error', async () => {
       if (!server) return;
       const output = await runPwsh(
-        `& '${PS1_SCRIPT}' -BaseUrl '${BASE_URL}' -Action get`
+        `& '${PS1_SCRIPT}' -BaseUrl '${activeBaseUrl}' -Action get`
       );
       const result = JSON.parse(output);
       expect(result.success).toBe(false);
@@ -295,7 +298,7 @@ describe('Client Scripts E2E', () => {
     it.skipIf(!hasPwsh)('search without keywords should return error', async () => {
       if (!server) return;
       const output = await runPwsh(
-        `& '${PS1_SCRIPT}' -BaseUrl '${BASE_URL}' -Action search`
+        `& '${PS1_SCRIPT}' -BaseUrl '${activeBaseUrl}' -Action search`
       );
       const result = JSON.parse(output);
       expect(result.success).toBe(false);
@@ -305,7 +308,7 @@ describe('Client Scripts E2E', () => {
     it.skipIf(!hasPwsh)('hotset action should return results', async () => {
       if (!server) return;
       const output = await runPwshWithRetry(
-        `& '${PS1_SCRIPT}' -BaseUrl '${BASE_URL}' -Action hotset -Limit 5`
+        `& '${PS1_SCRIPT}' -BaseUrl '${activeBaseUrl}' -Action hotset -Limit 5`
       );
       const result = JSON.parse(output);
       expect(result.success).toBe(true);
@@ -320,7 +323,7 @@ describe('Client Scripts E2E', () => {
     it.skipIf(!hasBash)('health action should return success', async () => {
       if (!server) return;
       const sp = getBashScriptPath();
-      const output = await runBash(`INDEX_SERVER_URL='${BASE_URL}' bash '${sp}' health`);
+      const output = await runBash(`INDEX_SERVER_URL='${activeBaseUrl}' bash '${sp}' health`);
       const result = JSON.parse(output);
       expect(result.success).toBe(true);
     });
@@ -329,7 +332,7 @@ describe('Client Scripts E2E', () => {
       if (!server) return;
       const sp = getBashScriptPath();
       const output = await runBash(
-        `INDEX_SERVER_URL='${BASE_URL}' bash '${sp}' search 'bootstrap'`
+        `INDEX_SERVER_URL='${activeBaseUrl}' bash '${sp}' search 'bootstrap'`
       );
       const result = JSON.parse(output);
       expect(result.success).toBe(true);
@@ -339,7 +342,7 @@ describe('Client Scripts E2E', () => {
       if (!server) return;
       const sp = getBashScriptPath();
       const output = await runBash(
-        `INDEX_SERVER_URL='${BASE_URL}' bash '${sp}' list 5`
+        `INDEX_SERVER_URL='${activeBaseUrl}' bash '${sp}' list 5`
       );
       const result = JSON.parse(output);
       expect(result.success).toBe(true);
@@ -349,7 +352,7 @@ describe('Client Scripts E2E', () => {
       if (!server) return;
       const sp = getBashScriptPath();
       try {
-        await runBash(`INDEX_SERVER_URL='${BASE_URL}' bash '${sp}' unknownaction`);
+        await runBash(`INDEX_SERVER_URL='${activeBaseUrl}' bash '${sp}' unknownaction`);
       } catch (err) {
         const output = (err as { stdout?: string; stderr?: string }).stdout || '';
         if (output) {
@@ -364,7 +367,7 @@ describe('Client Scripts E2E', () => {
       if (!server) return;
       const sp = getBashScriptPath();
       const output = await runBash(
-        `INDEX_SERVER_URL='${BASE_URL}' bash '${sp}' hotset 5`
+        `INDEX_SERVER_URL='${activeBaseUrl}' bash '${sp}' hotset 5`
       );
       const result = JSON.parse(output);
       expect(result.success).toBe(true);
@@ -379,16 +382,16 @@ describe('Client Scripts E2E', () => {
     it.skipIf(!hasNmap)('port scan should show only expected port open', () => {
       if (!server) return;
       const output = execSync(
-        `nmap -p ${TEST_PORT} --open -T4 -oG - ${TEST_HOST}`,
+        `nmap -p ${activePort} --open -T4 -oG - ${TEST_HOST}`,
         { encoding: 'utf-8', timeout: 60_000, stdio: 'pipe' }
       );
-      expect(output).toContain(`${TEST_PORT}/open`);
+      expect(output).toContain(`${activePort}/open`);
     }, 90_000);
 
     it.skipIf(!hasNmap)('service detection should identify HTTP', () => {
       if (!server) return;
       const output = execSync(
-        `nmap -sV -T4 --version-intensity 2 -p ${TEST_PORT} ${TEST_HOST}`,
+        `nmap -sV -T4 --version-intensity 2 -p ${activePort} ${TEST_HOST}`,
         { encoding: 'utf-8', timeout: 120_000, stdio: 'pipe' }
       );
       expect(output.toLowerCase()).toMatch(/http|node/);
@@ -396,20 +399,20 @@ describe('Client Scripts E2E', () => {
 
     it.skipIf(!hasNmap)('should not expose unnecessary services on adjacent ports', () => {
       if (!server) return;
-      const scanRange = `${TEST_PORT - 5}-${TEST_PORT + 5}`;
+      const scanRange = `${activePort - 5}-${activePort + 5}`;
       const output = execSync(
         `nmap -p ${scanRange} --open -T4 -oG - ${TEST_HOST}`,
         { encoding: 'utf-8', timeout: 60_000, stdio: 'pipe' }
       );
       const openPorts = (output.match(/\d+\/open/g) || []);
       expect(openPorts.length).toBeLessThanOrEqual(2);
-      expect(output).toContain(`${TEST_PORT}/open`);
+      expect(output).toContain(`${activePort}/open`);
     }, 90_000);
 
     it.skipIf(!hasNmap)('SSL/TLS scan should report no TLS on HTTP port', () => {
       if (!server) return;
       const output = execSync(
-        `nmap --script ssl-enum-ciphers -T4 -p ${TEST_PORT} ${TEST_HOST}`,
+        `nmap --script ssl-enum-ciphers -T4 -p ${activePort} ${TEST_HOST}`,
         { encoding: 'utf-8', timeout: 60_000, stdio: 'pipe' }
       );
       expect(output).not.toContain('TLSv1.3');
@@ -418,7 +421,7 @@ describe('Client Scripts E2E', () => {
     it.skipIf(!hasNmap)('HTTP vuln scan should not find critical issues', () => {
       if (!server) return;
       const output = execSync(
-        `nmap --script http-methods -T4 -p ${TEST_PORT} ${TEST_HOST}`,
+        `nmap --script http-methods -T4 -p ${activePort} ${TEST_HOST}`,
         { encoding: 'utf-8', timeout: 60_000, stdio: 'pipe' }
       );
       expect(output.toUpperCase()).not.toContain('TRACE');
@@ -433,7 +436,8 @@ describe('Client Scripts E2E', () => {
 import { execSync as execSyncImport } from 'child_process';
 
 const HTTPS_PORT = 17887;
-const HTTPS_BASE_URL = `https://${TEST_HOST}:${HTTPS_PORT}`;
+let activeHttpsPort = HTTPS_PORT;
+let activeHttpsBaseUrl = `https://${TEST_HOST}:${HTTPS_PORT}`;
 
 const hasOpenssl = (() => { try { execSyncImport('openssl version', { stdio: 'pipe' }); return true; } catch { return false; } })();
 
@@ -471,7 +475,9 @@ describe.skipIf(!hasOpenssl)('HTTPS / TLS Tests', () => {
         host: TEST_HOST,
         tls: { cert: tlsCert.cert, key: tlsCert.key },
       });
-      await httpsServer.start();
+      const started = await httpsServer.start();
+      activeHttpsPort = started.port;
+      activeHttpsBaseUrl = `https://${TEST_HOST}:${activeHttpsPort}`;
     } catch (e) {
       console.warn('HTTPS test server failed to start:', (e as Error).message);
       httpsServer = null;
@@ -492,7 +498,7 @@ describe.skipIf(!hasOpenssl)('HTTPS / TLS Tests', () => {
     const orig = process.env.NODE_TLS_REJECT_UNAUTHORIZED;
     process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
     try {
-      const resp = await fetch(`${HTTPS_BASE_URL}/health`);
+      const resp = await fetch(`${activeHttpsBaseUrl}/health`);
       expect(resp.ok).toBe(true);
       const data = await resp.json() as { status: string };
       expect(data.status).toBe('healthy');
@@ -507,7 +513,7 @@ describe.skipIf(!hasOpenssl)('HTTPS / TLS Tests', () => {
     const orig = process.env.NODE_TLS_REJECT_UNAUTHORIZED;
     process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
     try {
-      const resp = await fetch(`${HTTPS_BASE_URL}/api/scripts`);
+      const resp = await fetch(`${activeHttpsBaseUrl}/api/scripts`);
       expect(resp.ok).toBe(true);
       const data = await resp.json() as { scripts: unknown[] };
       expect(data.scripts.length).toBeGreaterThanOrEqual(2);
@@ -522,7 +528,7 @@ describe.skipIf(!hasOpenssl)('HTTPS / TLS Tests', () => {
     const orig = process.env.NODE_TLS_REJECT_UNAUTHORIZED;
     process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
     try {
-      const resp = await fetch(`${HTTPS_BASE_URL}/api/status`);
+      const resp = await fetch(`${activeHttpsBaseUrl}/api/status`);
       expect(resp.headers.get('x-content-type-options')).toBe('nosniff');
       expect(resp.headers.get('x-frame-options')).toBe('DENY');
       // HSTS should be present on HTTPS
@@ -539,16 +545,16 @@ describe.skipIf(!hasOpenssl)('HTTPS / TLS Tests', () => {
     it.skipIf(!hasNmap)('HTTPS port should be open', () => {
       if (!httpsServer) return;
       const output = execSync(
-        `nmap -p ${HTTPS_PORT} --open -oG - ${TEST_HOST}`,
+        `nmap -p ${activeHttpsPort} --open -oG - ${TEST_HOST}`,
         { encoding: 'utf-8', timeout: 30_000, stdio: 'pipe' }
       );
-      expect(output).toContain(`${HTTPS_PORT}/open`);
+      expect(output).toContain(`${activeHttpsPort}/open`);
     }, 35_000);
 
     it.skipIf(!hasNmap)('should detect TLS/SSL on HTTPS port', () => {
       if (!httpsServer) return;
       const output = execSync(
-        `nmap --script ssl-enum-ciphers -p ${HTTPS_PORT} ${TEST_HOST}`,
+        `nmap --script ssl-enum-ciphers -p ${activeHttpsPort} ${TEST_HOST}`,
         { encoding: 'utf-8', timeout: 30_000, stdio: 'pipe' }
       );
       // Should have TLS ciphers listed
@@ -558,7 +564,7 @@ describe.skipIf(!hasOpenssl)('HTTPS / TLS Tests', () => {
     it.skipIf(!hasNmap)('should identify HTTPS service', () => {
       if (!httpsServer) return;
       const output = execSync(
-        `nmap -sV -p ${HTTPS_PORT} ${TEST_HOST}`,
+        `nmap -sV -p ${activeHttpsPort} ${TEST_HOST}`,
         { encoding: 'utf-8', timeout: 30_000, stdio: 'pipe' }
       );
       expect(output.toLowerCase()).toMatch(/https|ssl|tls|node/);
@@ -567,7 +573,7 @@ describe.skipIf(!hasOpenssl)('HTTPS / TLS Tests', () => {
     it.skipIf(!hasNmap)('should not have weak SSL protocols', () => {
       if (!httpsServer) return;
       const output = execSync(
-        `nmap --script ssl-enum-ciphers -p ${HTTPS_PORT} ${TEST_HOST}`,
+        `nmap --script ssl-enum-ciphers -p ${activeHttpsPort} ${TEST_HOST}`,
         { encoding: 'utf-8', timeout: 30_000, stdio: 'pipe' }
       );
       // SSLv2 and SSLv3 should not be present

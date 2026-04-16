@@ -6,6 +6,9 @@ export const slowTests = [
   'src/tests/instructionsPersistenceDivergence.red.spec.ts',
   'src/tests/instructionsPersistenceIsolated.red.spec.ts',
   'src/tests/importDuplicateAddVisibility.red.spec.ts',
+  'src/tests/nmapSecurity.spec.ts', // external nmap integration; long-running and environment-sensitive
+  'src/tests/performanceBenchmark.spec.ts', // performance/integration suite with repeated live HTTP timings
+  'src/tests/clientScriptsE2e.spec.ts', // live dashboard + pwsh/bash/nmap/https end-to-end coverage
   // Newly classified (runtime consistently > ~30s end-to-end)
   'src/tests/governanceHashIntegrity.spec.ts',
   // Borderline (~9s) multi-operation visibility scenario; move out of fast loop

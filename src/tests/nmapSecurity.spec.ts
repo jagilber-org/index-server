@@ -37,6 +37,7 @@ function runNmap(args: string): string {
 describe('Nmap Security Scanning', () => {
   const hasNmap = nmapAvailable();
   let server: DashboardServer | null = null;
+  let activePort = NMAP_PORT;
 
   beforeAll(async () => {
     if (!hasNmap) return;
@@ -44,11 +45,12 @@ describe('Nmap Security Scanning', () => {
       port: NMAP_PORT,
       host: NMAP_HOST,
     });
-    await server.start();
+    const started = await server.start();
+    activePort = started.port;
     // Wait until server is accepting connections before running nmap
     for (let i = 0; i < 20; i++) {
       try {
-        const resp = await fetch(`http://${NMAP_HOST}:${NMAP_PORT}/api/tools/health_check`, {
+        const resp = await fetch(`http://${NMAP_HOST}:${activePort}/api/tools/health_check`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: '{}',
@@ -78,9 +80,9 @@ describe('Nmap Security Scanning', () => {
   it('should expose only the expected port', () => {
     if (!hasNmap) return;
     // Scan a narrow range around our port instead of all 65535
-    const scanRange = `${NMAP_PORT - 10}-${NMAP_PORT + 10}`;
+    const scanRange = `${activePort - 10}-${activePort + 10}`;
     const output = runNmap(`-p ${scanRange} --open -T4 ${NMAP_HOST}`);
-    expect(output).toContain(`${NMAP_PORT}/tcp`);
+    expect(output).toContain(`${activePort}/tcp`);
     expect(output).toContain('open');
   }, 90_000);
 
@@ -88,7 +90,7 @@ describe('Nmap Security Scanning', () => {
     if (!hasNmap) return;
     // -sV probes are slow on Windows; use aggressive timing + short timeout
     const output = execSync(
-      `nmap -sV -T4 --version-intensity 2 -p ${NMAP_PORT} ${NMAP_HOST}`,
+      `nmap -sV -T4 --version-intensity 2 -p ${activePort} ${NMAP_HOST}`,
       { stdio: 'pipe', timeout: 120_000 }
     ).toString();
     // Should detect HTTP service
@@ -99,7 +101,7 @@ describe('Nmap Security Scanning', () => {
     if (!hasNmap) return;
     // -sV with version-intensity is slow; use aggressive timing + extended timeout
     const output = execSync(
-      `nmap -sV -T4 --version-intensity 5 -p ${NMAP_PORT} ${NMAP_HOST}`,
+      `nmap -sV -T4 --version-intensity 5 -p ${activePort} ${NMAP_HOST}`,
       { stdio: 'pipe', timeout: 120_000 }
     ).toString();
     // Express with helmet-like headers shouldn't expose version
@@ -111,7 +113,7 @@ describe('Nmap Security Scanning', () => {
   it('should not have known vulnerabilities (vuln scan)', () => {
     if (!hasNmap) return;
     try {
-      const output = runNmap(`--script vuln -p ${NMAP_PORT} ${NMAP_HOST}`);
+      const output = runNmap(`--script vuln -p ${activePort} ${NMAP_HOST}`);
       // Check for VULNERABLE keyword
       const vulnLines = output.split('\n').filter(l => l.includes('VULNERABLE'));
       expect(vulnLines).toHaveLength(0);
@@ -124,7 +126,7 @@ describe('Nmap Security Scanning', () => {
   it('should have secure HTTP headers', () => {
     if (!hasNmap) return;
     try {
-      const output = runNmap(`--script http-headers -p ${NMAP_PORT} ${NMAP_HOST}`);
+      const output = runNmap(`--script http-headers -p ${activePort} ${NMAP_HOST}`);
       const lower = output.toLowerCase();
       expect(lower).toContain('x-content-type-options');
       expect(lower).toContain('x-frame-options');
@@ -137,7 +139,7 @@ describe('Nmap Security Scanning', () => {
   it('should not expose directory listing', () => {
     if (!hasNmap) return;
     try {
-      const output = runNmap(`--script http-enum -p ${NMAP_PORT} ${NMAP_HOST}`);
+      const output = runNmap(`--script http-enum -p ${activePort} ${NMAP_HOST}`);
       const lower = output.toLowerCase();
       expect(lower).not.toContain('.env');
       expect(lower).not.toContain('.git');
@@ -150,7 +152,7 @@ describe('Nmap Security Scanning', () => {
   it('should handle SYN flood gracefully (rate limiting)', async () => {
     if (!hasNmap) return;
     try {
-      runNmap(`-sS -T5 --max-retries 1 -p ${NMAP_PORT} ${NMAP_HOST}`);
+      runNmap(`-sS -T5 --max-retries 1 -p ${activePort} ${NMAP_HOST}`);
     } catch {
       // SYN scan may require root/admin — that's acceptable
     }
@@ -160,7 +162,7 @@ describe('Nmap Security Scanning', () => {
     let lastError: Error | null = null;
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
-        const output = runNmap(`-p ${NMAP_PORT} ${NMAP_HOST}`);
+        const output = runNmap(`-p ${activePort} ${NMAP_HOST}`);
         expect(output).toContain('open');
         return;
       } catch (e) {
@@ -176,6 +178,7 @@ describe('Nmap TLS Security', () => {
   const hasNmap = nmapAvailable();
   let server: DashboardServer | null = null;
   const tlsPort = 19788;
+  let activeTlsPort = tlsPort;
   let certDir: string;
 
   beforeAll(async () => {
@@ -204,7 +207,8 @@ describe('Nmap TLS Security', () => {
       host: NMAP_HOST,
       tls: { cert, key },
     });
-    await server.start();
+    const started = await server.start();
+    activeTlsPort = started.port;
   }, 30_000);
 
   afterAll(async () => {
@@ -217,14 +221,14 @@ describe('Nmap TLS Security', () => {
 
   it('should detect HTTPS/TLS on the TLS port', () => {
     if (!hasNmap || !server) return;
-    const output = runNmap(`-sV -p ${tlsPort} ${NMAP_HOST}`);
+    const output = runNmap(`-sV -p ${activeTlsPort} ${NMAP_HOST}`);
     expect(output.toLowerCase()).toMatch(/ssl|https|tls/);
   });
 
   it('should not support SSLv3 or TLS 1.0/1.1 (weak protocols)', () => {
     if (!hasNmap || !server) return;
     try {
-      const output = runNmap(`--script ssl-enum-ciphers -p ${tlsPort} ${NMAP_HOST}`);
+      const output = runNmap(`--script ssl-enum-ciphers -p ${activeTlsPort} ${NMAP_HOST}`);
       const lower = output.toLowerCase();
       // SSLv3, TLSv1.0, TLSv1.1 should not appear or should show as rejected
       expect(lower).not.toMatch(/sslv3.*accepted/);
@@ -238,7 +242,7 @@ describe('Nmap TLS Security', () => {
   it('should not have weak ciphers enabled', () => {
     if (!hasNmap || !server) return;
     try {
-      const output = runNmap(`--script ssl-enum-ciphers -p ${tlsPort} ${NMAP_HOST}`);
+      const output = runNmap(`--script ssl-enum-ciphers -p ${activeTlsPort} ${NMAP_HOST}`);
       const lower = output.toLowerCase();
       // Check for weak ciphers
       expect(lower).not.toContain('rc4');
@@ -252,7 +256,7 @@ describe('Nmap TLS Security', () => {
   it('should have HSTS header when TLS is enabled', () => {
     if (!hasNmap || !server) return;
     try {
-      const output = runNmap(`--script http-headers -p ${tlsPort} ${NMAP_HOST}`);
+      const output = runNmap(`--script http-headers -p ${activeTlsPort} ${NMAP_HOST}`);
       expect(output.toLowerCase()).toContain('strict-transport-security');
     } catch {
       expect(true).toBe(true);

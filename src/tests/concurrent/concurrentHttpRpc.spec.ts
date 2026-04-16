@@ -234,7 +234,8 @@ describe('Concurrent HTTP RPC', { timeout: 120_000 }, () => {
 		const { successes } = await runConcurrent(clients, async (client) => {
 			for (let i = 0; i < 5; i++) {
 				const start = performance.now();
-				await client.callTool('health_check', {});
+				const ok = await client.healthCheck();
+				expect(ok).toBe(true);
 				latencies.push(performance.now() - start);
 			}
 		});

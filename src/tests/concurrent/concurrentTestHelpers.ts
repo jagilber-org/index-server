@@ -263,7 +263,7 @@ export function createHttpRpcClient(dashUrl: string, label: string): HttpRpcClie
 
 	async function healthCheck(): Promise<boolean> {
 		try {
-			const r = await fetch(`${dashUrl}/api/status`, { signal: AbortSignal.timeout(5000) });
+			const r = await fetch(`${dashUrl}/health`, { signal: AbortSignal.timeout(5000) });
 			return r.ok;
 		} catch { return false; }
 	}
