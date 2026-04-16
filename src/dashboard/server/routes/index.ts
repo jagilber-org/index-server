@@ -170,7 +170,7 @@ export function mountDashboardRoutes(app: Express, ctx: DashboardRoutesContext):
   });
 
   // API sub-routes (mounted at /api)
-  app.use('/api', createApiRoutes({ enableCors: ctx.enableCors }));
+  app.use('/api', createApiRoutes({ enableCors: ctx.enableCors, rateLimit: { windowMs: 60_000, max: 100 } }));
 
   // Back-compat: legacy tests expect /tools.json at dashboard root
   app.get('/tools.json', (_req, res) => {

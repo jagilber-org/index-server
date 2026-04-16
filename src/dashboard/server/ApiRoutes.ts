@@ -7,6 +7,7 @@
  */
 
 import express, { Router, Request, Response } from 'express';
+import expressRateLimit from 'express-rate-limit';
 import { getMetricsCollector } from './MetricsCollector.js';
 import { logHttpAudit } from '../../services/auditLog';
 import { getRuntimeConfig } from '../../config/runtimeConfig.js';
@@ -40,8 +41,7 @@ export interface ApiRoutesOptions {
 export function createApiRoutes(options: ApiRoutesOptions = {}): Router {
   const router = Router();
   const metricsCollector = getMetricsCollector();
-  const rateLimit = options.rateLimit ?? { windowMs: 60_000, max: 100 };
-  const requestWindows = new Map<string, number[]>();
+  const rateLimitOpts = options.rateLimit ?? { windowMs: 60_000, max: 100 };
 
   // CORS middleware (if enabled)
   if (options.enableCors) {
@@ -59,38 +59,25 @@ export function createApiRoutes(options: ApiRoutesOptions = {}): Router {
   // JSON middleware
   router.use(express.json());
 
-  if (rateLimit.max > 0 && rateLimit.windowMs > 0) {
-    router.use((req: Request, res: Response, next: () => void) => {
-      if (req.method === 'OPTIONS') {
-        next();
-        return;
-      }
-
-      const now = Date.now();
-      const clientKey = req.ip || req.socket.remoteAddress || 'unknown';
-      const windowStart = now - rateLimit.windowMs;
-      const recentRequests = (requestWindows.get(clientKey) ?? []).filter(timestamp => timestamp > windowStart);
-
-      if (recentRequests.length >= rateLimit.max) {
-        const retryAfterSeconds = Math.max(1, Math.ceil((recentRequests[0] + rateLimit.windowMs - now) / 1000));
-        res.setHeader('Retry-After', String(retryAfterSeconds));
-        res.setHeader('X-RateLimit-Limit', String(rateLimit.max));
-        res.setHeader('X-RateLimit-Remaining', '0');
+  if (rateLimitOpts.max > 0 && rateLimitOpts.windowMs > 0) {
+    router.use(expressRateLimit({
+      windowMs: rateLimitOpts.windowMs,
+      max: rateLimitOpts.max,
+      standardHeaders: true,
+      legacyHeaders: true,
+      validate: { ip: false },
+      skip: (req: Request) => req.method === 'OPTIONS',
+      keyGenerator: (req: Request) => req.ip || req.socket.remoteAddress || 'unknown',
+      handler: (_req: Request, res: Response) => {
+        const retryAfter = Number(res.getHeader('Retry-After') || Math.ceil(rateLimitOpts.windowMs / 1000));
         res.status(429).json({
           error: 'Too Many Requests',
-          message: `Rate limit exceeded. Try again in ${retryAfterSeconds} second(s).`,
-          retryAfterSeconds,
-          timestamp: now,
+          message: `Rate limit exceeded. Try again in ${retryAfter} second(s).`,
+          retryAfterSeconds: retryAfter,
+          timestamp: Date.now(),
         });
-        return;
-      }
-
-      recentRequests.push(now);
-      requestWindows.set(clientKey, recentRequests);
-      res.setHeader('X-RateLimit-Limit', String(rateLimit.max));
-      res.setHeader('X-RateLimit-Remaining', String(Math.max(0, rateLimit.max - recentRequests.length)));
-      next();
-    });
+      },
+    }));
   }
 
   // --- HTTP Metrics Instrumentation ---------------------------------------
