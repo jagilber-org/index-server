@@ -8,25 +8,7 @@ import { describe, it, expect } from 'vitest';
 import { getHandler } from '../server/registry';
 import { STABLE } from '../services/toolRegistry';
 
-// Import ALL handler modules
-import '../services/handlers.instructions';
-import '../services/handlers.search';
-import '../services/instructions.dispatcher';
-import '../services/handlers.integrity';
-import '../services/handlers.usage';
-import '../services/handlers.prompt';
-import '../services/handlers.metrics';
-import '../services/handlers.gates';
-import '../services/handlers.diagnostics';
-import '../services/handlers.feedback';
-import '../services/handlers.help';
-import '../services/handlers.instructionSchema';
-import '../services/handlers.bootstrap';
-import '../services/handlers.manifest';
-import '../services/handlers.instructionsDiagnostics';
-import '../services/handlers.graph';
-import '../services/handlers.activation';
-import '../services/handlers.promote';
+// Import the consolidated handler registration shim used by the server entrypoint.
 import '../services/toolHandlers';
 
 // Minimal valid params for each stable tool that requires them

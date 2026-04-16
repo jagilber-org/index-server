@@ -8,26 +8,7 @@ import { describe, it, expect } from 'vitest';
 import { getToolRegistry, STABLE } from '../services/toolRegistry';
 import { listRegisteredMethods } from '../server/registry';
 
-// Import ALL handler modules (same as server/index-server.ts + toolHandlers.ts)
-import '../services/handlers.instructions';
-import '../services/handlers.search';
-import '../services/instructions.dispatcher';
-import '../services/handlers.integrity';
-import '../services/handlers.usage';
-import '../services/handlers.prompt';
-import '../services/handlers.metrics';
-import '../services/handlers.gates';
-import '../services/handlers.diagnostics';
-import '../services/handlers.feedback';
-import '../services/handlers.help';
-import '../services/handlers.instructionSchema';
-import '../services/handlers.bootstrap';
-import '../services/handlers.manifest';
-import '../services/handlers.instructionsDiagnostics';
-import '../services/handlers.graph';
-import '../services/handlers.activation';
-import '../services/handlers.promote';
-// toolHandlers.ts also registers meta_tools, health_check, feature_status inline
+// Import the consolidated handler registration shim used by the server entrypoint.
 import '../services/toolHandlers';
 
 describe('Tool Registry Conformance', () => {

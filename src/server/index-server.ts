@@ -51,38 +51,15 @@ function __earlyCapture(chunk: Buffer){
 }
 try { if(__bufferEnabled) process.stdin.on('data', __earlyCapture); } catch { /* ignore */ }
 
-import { listRegisteredMethods, installHandlerProxy } from './registry';
 import { startSdkServer } from './sdkServer';
-import '../services/handlers.instructions';
-import '../services/handlers.search';
-// Register unified dispatcher (was missing causing index_dispatch tests to timeout)
-import '../services/instructions.dispatcher';
-import '../services/handlers.integrity';
-import '../services/handlers.usage';
-import '../services/handlers.prompt';
-import '../services/handlers.metrics';
-import '../services/handlers.gates';
-import '../services/handlers.testPrimitive';
-import '../services/handlers.diagnostics';
-import '../services/handlers.feedback';
-import '../services/handlers.help';
-import '../services/handlers.instructionSchema';
-import '../services/handlers.bootstrap';
-import '../services/handlers.manifest';
-import '../services/handlers.instructionsDiagnostics';
-import '../services/handlers.graph';
-import '../services/handlers.activation'; // VSCode activation guide for tool enablement
-import '../services/handlers.promote'; // promote_from_repo: scan repo & upsert into index
-import { getIndexState, diagnoseInstructionsDir, startIndexVersionPoller } from '../services/indexContext';
+import { startMultiInstanceMode } from './multiInstanceStartup';
+import { startOptionalMemoryMonitoring, startDeferredBackgroundServices } from './backgroundServicesStartup';
+import { emitStartupDiagnostics } from './startupDiagnostics';
+import '../services/toolHandlers';
 import { autoSeedBootstrap } from '../services/seedBootstrap';
 import { createDashboardServer } from '../dashboard/server/DashboardServer.js';
 import { getMetricsCollector } from '../dashboard/server/MetricsCollector.js';
 import { cleanStalePortFiles, writePortFile, removePortFile, validateInstances } from '../dashboard/server/InstanceManager.js';
-import { LeaderElection } from '../dashboard/server/LeaderElection.js';
-import { createMcpTransportRoutes } from '../dashboard/server/HttpTransport.js';
-import { ThinClient } from '../dashboard/server/ThinClient.js';
-import { getMemoryMonitor } from '../utils/memoryMonitor';
-import { startAutoBackup } from '../services/autoBackup';
 import { getBooleanEnv } from '../utils/envUtils';
 import { DEFAULT_PORTS } from '../config/defaultValues';
 import fs from 'fs';
@@ -506,170 +483,11 @@ export async function main(){
   // ---------------------------------------------------------------
   // Multi-instance: Leader election + HTTP MCP transport [EXPERIMENTAL]
   // ---------------------------------------------------------------
-  const instanceMode = runtime.server.instanceMode;
-  if (instanceMode === 'leader' || instanceMode === 'auto') {
-    try {
-      const stateDir = runtime.dashboard.admin.stateDir;
-      const leaderPort = runtime.server.leaderPort;
-      const leaderHost = cfg.dashboardHost || '127.0.0.1';
+  await startMultiInstanceMode(cfg.dashboardHost, runtime);
 
-      const election = new LeaderElection({
-        stateDir,
-        port: leaderPort,
-        host: leaderHost,
-        heartbeatIntervalMs: runtime.server.heartbeatIntervalMs,
-        staleThresholdMs: runtime.server.staleThresholdMs,
-      });
+  startOptionalMemoryMonitoring(runtime);
 
-      const role = election.start();
-      process.stderr.write(`[startup] Instance mode=${instanceMode} elected=${role} pid=${process.pid}\n`);
-
-      if (role === 'leader') {
-        // Mount MCP HTTP transport for thin clients
-        const express = (await import('express')).default;
-        const mcpApp = express();
-        mcpApp.use('/mcp', createMcpTransportRoutes());
-
-        const mcpServer = mcpApp.listen(leaderPort, leaderHost, () => {
-          process.stderr.write(`[startup] MCP HTTP transport listening on http://${leaderHost}:${leaderPort}/mcp\n`);
-          process.stderr.write(`[startup] Thin clients can connect via INDEX_SERVER_STATE_DIR=${stateDir}\n`);
-        });
-
-        mcpServer.on('error', (err: NodeJS.ErrnoException) => {
-          process.stderr.write(`[startup] MCP HTTP transport failed: ${err.message}\n`);
-          if (err.code === 'EADDRINUSE') {
-            process.stderr.write(`[startup] Port ${leaderPort} is already in use. Check INDEX_SERVER_LEADER_PORT or other services on this port.\n`);
-            process.stderr.write(`[startup] Releasing leader lock and continuing as standalone.\n`);
-            // Release lock and set role to standalone so no other instance
-            // sees a live leader on a port that isn't actually serving.
-            election.stop();
-          } else {
-            election.stop();
-          }
-        });
-
-        // Clean up on shutdown
-        process.on('exit', () => {
-          election.stop();
-          try { mcpServer.close(); } catch { /* ignore */ }
-        });
-      } else {
-        // Follower: proxy all tool calls to the leader via ThinClient
-        process.stderr.write(`[startup] Running as follower -- leader at pid=${election.leaderInfo?.pid} port=${election.leaderInfo?.port}\n`);
-
-        const thinClient = new ThinClient({ stateDir });
-        const leaderUrl = thinClient.discoverLeader();
-        process.stderr.write(`[startup] Follower proxy target: ${leaderUrl ?? 'pending discovery'}\n`);
-
-        // Install proxy: all handler calls forward to leader via HTTP JSON-RPC
-        installHandlerProxy(async (tool: string, params: unknown) => {
-          const response = await thinClient.sendRpc(tool, params) as { result?: unknown; error?: { code: number; message: string } };
-          if (response.error) {
-            throw new Error(`Leader error [${response.error.code}]: ${response.error.message}`);
-          }
-          return response.result;
-        });
-        process.stderr.write(`[startup] Handler proxy installed -- all tool calls forwarded to leader\n`);
-
-        // Watch for leader failover: if leader dies, attempt promotion
-        election.on('leader-lost', () => {
-          process.stderr.write(`[startup] Leader lost -- attempting promotion\n`);
-        });
-
-        election.on('promoted', () => {
-          process.stderr.write(`[startup] Promoted to leader -- starting HTTP transport before removing proxy\n`);
-
-          // Keep proxy active until HTTP transport is ready to avoid a
-          // gap where neither proxy nor local handlers serve requests.
-          (async () => {
-            try {
-              const express = (await import('express')).default;
-              const mcpApp = express();
-              mcpApp.use('/mcp', createMcpTransportRoutes());
-              const mcpServer = mcpApp.listen(leaderPort, leaderHost, () => {
-                // HTTP transport is listening -- NOW safe to remove proxy
-                installHandlerProxy(null);
-                process.stderr.write(`[startup] MCP HTTP transport listening on http://${leaderHost}:${leaderPort}/mcp\n`);
-                process.stderr.write(`[startup] Handler proxy removed -- serving requests locally\n`);
-              });
-              mcpServer.on('error', (err: NodeJS.ErrnoException) => {
-                process.stderr.write(`[startup] Post-promotion HTTP transport failed: ${err.message}\n`);
-                if (err.code === 'EADDRINUSE') {
-                  process.stderr.write(`[startup] Port ${leaderPort} in use after promotion -- retrying in 2s\n`);
-                  setTimeout(() => {
-                    try {
-                      mcpServer.close();
-                      mcpApp.listen(leaderPort, leaderHost, () => {
-                        installHandlerProxy(null);
-                        process.stderr.write(`[startup] MCP HTTP transport listening on retry\n`);
-                      });
-                    } catch (retryErr) {
-                      process.stderr.write(`[startup] Port retry failed: ${retryErr}\n`);
-                      election.stop();
-                    }
-                  }, 2000);
-                } else {
-                  election.stop();
-                }
-              });
-              process.on('exit', () => {
-                try { mcpServer.close(); } catch { /* ignore */ }
-              });
-            } catch (e) {
-              process.stderr.write(`[startup] Post-promotion HTTP setup failed: ${e}\n`);
-            }
-          })();
-        });
-
-        process.on('exit', () => {
-          election.stop();
-          thinClient.stop();
-        });
-      }
-    } catch (e) {
-      process.stderr.write(`[startup] Leader election failed: ${e}\n`);
-    }
-  } else if (instanceMode !== 'standalone') {
-    process.stderr.write(`[startup] Instance mode=${instanceMode} (follower mode requires thin-client entry point)\n`);
-  }
-
-  // Initialize memory monitoring if debug mode is enabled
-  if (getBooleanEnv('INDEX_SERVER_DEBUG') || getBooleanEnv('INDEX_SERVER_MEMORY_MONITOR')) {
-    try {
-      const memMonitor = getMemoryMonitor();
-      memMonitor.startMonitoring(10000); // Monitor every 10 seconds
-      process.stderr.write(`[startup] Memory monitoring enabled (interval: 10s)\n`);
-      process.stderr.write(`[startup] Memory monitor commands: memStatus(), startMemWatch(), stopMemWatch(), memReport(), forceGC(), checkListeners()\n`);
-    } catch (error) {
-      process.stderr.write(`[startup] Memory monitoring failed: ${error}\n`);
-    }
-  }
-
-  // Extended startup diagnostics (does not emit on stdout)
-  if(runtime.logging.verbose || runtime.logging.diagnostics){
-    try {
-      const methods = listRegisteredMethods();
-      // Force index load to report initial count/hash
-      const idx = getIndexState();
-      const mutation = runtime.mutationEnabled;
-      const dirDiag = diagnoseInstructionsDir();
-      process.stderr.write(`[startup] toolsRegistered=${methods.length} mutationEnabled=${mutation} indexCount=${idx.list.length} indexHash=${idx.hash} instructionsDir="${dirDiag.dir}" exists=${dirDiag.exists} writable=${dirDiag.writable}${dirDiag.error?` dirError=${dirDiag.error.replace(/\s+/g,' ')}`:''}\n`);
-      try {
-        const { summarizeTraceEnv } = await import('../services/tracing.js');
-        const sum = summarizeTraceEnv();
-        process.stderr.write(`[startup] trace level=${sum.level} session=${sum.session} file=${sum.file||'none'} categories=${sum.categories?sum.categories.join(','):'*'} maxFileSize=${sum.maxFileSize||0} rotationIndex=${sum.rotationIndex}\n`);
-      } catch { /* ignore */ }
-    } catch(e){
-      process.stderr.write(`[startup] diagnostics_error ${(e instanceof Error)? e.message: String(e)}\n`);
-    }
-  }
-  if(__bufferEnabled && runtime.logging.diagnostics){
-    try {
-      const totalBytes = __earlyInitChunks.reduce((sum, c) => sum + c.length, 0);
-      const hasContentLength = __earlyInitChunks.some(c => c.toString('utf8').includes('Content-Length'));
-      process.stderr.write(`[handshake-buffer] pre-start buffered=${__earlyInitChunks.length} totalBytes=${totalBytes} hasContentLength=${hasContentLength}\n`);
-    } catch { /* ignore */ }
-  }
+  await emitStartupDiagnostics(runtime, __bufferEnabled, __earlyInitChunks);
   await startSdkServer();
   // Auto-confirm bootstrap (test harness opt-in). Executed after SDK start so index state
   // exists; harmless if already confirmed or non-bootstrap instructions present.
@@ -679,22 +497,7 @@ export async function main(){
       if(ok && runtime.logging.diagnostics){ try { process.stderr.write('[bootstrap] auto-confirm applied (test env)\n'); } catch { /* ignore */ } }
     }
   } catch { /* ignore */ }
-  // Start cross-instance index version poller unless disabled.
-  try {
-    // Poller now opt-in to avoid introducing timing variance into deterministic
-    // visibility & manifest repair tests. Enable with INDEX_SERVER_ENABLE_INDEX_SERVER_POLLER=1.
-    if(runtime.server.indexPolling.enabled){
-      startIndexVersionPoller({
-        proactive: runtime.server.indexPolling.proactive,
-        intervalMs: runtime.server.indexPolling.intervalMs,
-      });
-      if(runtime.logging.diagnostics){ try { process.stderr.write(`[startup] index version poller started proactive=${runtime.server.indexPolling.proactive}\n`); } catch { /* ignore */ } }
-    } else if(runtime.logging.diagnostics) {
-      try { process.stderr.write('[startup] index version poller not enabled (set INDEX_SERVER_ENABLE_INDEX_SERVER_POLLER=1)\n'); } catch { /* ignore */ }
-    }
-  } catch { /* ignore */ }
-  // Start automatic periodic backup of instruction index (deferred to avoid delaying startup).
-  try { setImmediate(() => { try { startAutoBackup(); } catch { /* ignore */ } }); } catch { /* ignore */ }
+  startDeferredBackgroundServices(runtime);
   // Mark SDK ready & replay any buffered stdin chunks exactly once.
   __sdkReady = true;
   if(__bufferEnabled){
