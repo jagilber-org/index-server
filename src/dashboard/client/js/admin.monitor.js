@@ -30,8 +30,11 @@
         }, 1000); // fast poll while running
         let statusTimer = setInterval(updateActiveSyntheticRequests, 1000);
         try {
-            const url = '/api/admin/synthetic/activity?debug=1'+(wantTrace?'&trace=1&stream=1':'');
-            const res = await fetch(url, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ iterations: iter, concurrency: conc }) });
+            const res = await fetch('/api/admin/synthetic/activity', {
+                method:'POST',
+                headers:{'Content-Type':'application/json'},
+                body: JSON.stringify({ iterations: iter, concurrency: conc, debug: wantTrace, trace: wantTrace, stream: wantTrace })
+            });
             const rawText = await res.text();
             let data = null; try { data = JSON.parse(rawText); } catch { /* ignore */ }
             if (!res.ok || !data) {

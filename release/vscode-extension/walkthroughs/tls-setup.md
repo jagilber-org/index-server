@@ -50,4 +50,4 @@ In your generated `mcp.json`, update these values:
 
 [← Back to Configure](command:workbench.action.openWalkthrough?%22jagilber-org.index-server%23index.gettingStarted%22) · [Re-generate Config](command:index.configure)
 
-See [MCP Configuration Guide](https://github.com/jagilber-dev/index-server/blob/main/docs/mcp_configuration.md) for production TLS patterns.
+See [MCP Configuration Guide](https://github.com/jagilber-org/index-server/blob/main/docs/mcp_configuration.md) for production TLS patterns.

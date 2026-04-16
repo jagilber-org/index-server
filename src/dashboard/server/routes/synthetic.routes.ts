@@ -7,9 +7,12 @@ import { Router, Request, Response } from 'express';
 import { MetricsCollector } from '../MetricsCollector.js';
 import { listRegisteredMethods, getLocalHandler } from '../../../server/registry.js';
 import { getWebSocketManager } from '../WebSocketManager.js';
+import { dashboardAdminAuth } from './adminAuth.js';
 
 export function createSyntheticRoutes(_metricsCollector: MetricsCollector): Router {
   const router = Router();
+
+  router.use(dashboardAdminAuth);
 
   // Module-private state
   let syntheticActiveRequests = 0;
@@ -27,8 +30,8 @@ export function createSyntheticRoutes(_metricsCollector: MetricsCollector): Rout
       const concurrency = Math.min(Math.max(parseInt(req.body.concurrency || '2', 10), 1), 25);
       const start = Date.now();
       const runId = `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
-      const wantTrace = req.query.trace === '1' || req.body?.trace === true || req.query.debug === '1' || req.body?.debug === true;
-      const wantStream = wantTrace && (req.query.stream === '1' || req.body?.stream === true);
+      const wantTrace = req.body?.trace === true;
+      const wantStream = wantTrace && req.body?.stream === true;
 
       // Whitelist of safe, read-only or idempotent methods + minimal params
       const PARAM_MAP: Record<string, unknown> = {
@@ -121,7 +124,7 @@ export function createSyntheticRoutes(_metricsCollector: MetricsCollector): Rout
       await Promise.all(inFlight);
 
       const durationMs = Date.now() - start;
-      const debug = req.query.debug === '1' || req.body?.debug === true;
+      const debug = req.body?.debug === true || wantTrace;
       const traceReason = wantTrace && traces.length === 0
         ? (available.length === 0
           ? 'no_safe_tools_registered'

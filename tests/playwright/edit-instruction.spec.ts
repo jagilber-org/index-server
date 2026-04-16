@@ -6,7 +6,7 @@ import { test, expect, Page } from '@playwright/test';
  * Validates: open editor, modify content, save, verify persistence.
  * Requires a running dashboard server at baseURL (default http://127.0.0.1:8787).
  * Tests skip gracefully if the server is not reachable.
- * Fixes: https://github.com/jagilber-dev/index-server/issues/5
+ * Fixes: https://github.com/jagilber-org/index-server/issues/5
  */
 
 const TEST_ID = `e2e-edit-test-${Date.now()}`;
