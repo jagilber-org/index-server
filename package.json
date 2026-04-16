@@ -53,7 +53,7 @@
     "test:stress:focus": "cross-env INDEX_SERVER_STRESS_DIAG=1 vitest run src/tests/handshakeFlakeRepro.spec.ts src/tests/healthMixedReproLoop.spec.ts src/tests/healthHangExploration.spec.ts src/tests/healthMultiProcessStress.spec.ts src/tests/dispatcherStress.spec.ts src/tests/dispatcherFlakeStress.spec.ts src/tests/concurrencyFuzz.spec.ts",
     "test:property": "vitest run src/tests/concurrencyFuzz.spec.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "lint": "eslint . --ext .ts",
+    "lint": "eslint .",
     "lint:instructions": "node scripts/lint-instructions.mjs",
     "format": "prettier --write .",
     "prepare": "node scripts/setup-hooks.cjs",
@@ -92,20 +92,21 @@
     "dash:seed": "node scripts/seed-dashboard-fixtures.mjs"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.4",
     "@playwright/test": "^1.58.2",
     "@types/adm-zip": "^0.5.8",
     "@types/express": "^5.0.6",
     "@types/node": "^20.19.39",
     "@types/ws": "^8.18.1",
-    "@typescript-eslint/eslint-plugin": "^7.0.0",
-    "@typescript-eslint/parser": "^7.0.0",
     "@vitest/coverage-v8": "^3.2.4",
     "cross-env": "^7.0.3",
-    "eslint": "^8.57.0",
+    "eslint": "^9.39.4",
     "fast-check": "^3.17.0",
+    "globals": "^15.15.0",
     "prettier": "^3.8.2",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.3",
+    "typescript-eslint": "^8.58.2",
     "vitest": "^3.2.4"
   },
   "dependencies": {
