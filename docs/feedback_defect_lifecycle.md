@@ -96,7 +96,7 @@ Violation of data fidelity is a policy breach and invalidates the RED→GREEN ch
 - Prepare CHANGELOG entry under next version (recommend: 1.1.0):
   - Added: Unified add failure contract (feedbackHint, reproEntry), creation verification semantics.
   - Fixed: Misinterpretation of search reliability (documented clarification) or actual code fix if applied.
-- Run: `pwsh scripts/bump-version.ps1 minor` (after tree clean & tests green) → commit + tag.
+- Run: `node scripts/bump-version.mjs minor` (after tree clean & tests green) → commit + tag.
 
 ## 12. Post-Fix Feedback Loop
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Cross-platform version bump script (replaces bump-version.ps1).
+ * Cross-platform version bump script.
  * Usage: node scripts/bump-version.mjs <major|minor|patch> [changelog message]
  */
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';

@@ -10,7 +10,7 @@
 //   4. Blocks the push if the repo is public
 //
 // Bypass: PUBLISH_OVERRIDE must be set to the SHA-256 of "publish-<tag>-<iso-date>"
-//         This is set ONLY by Publish-DualRepo.ps1 and publish.cjs during real publishes.
+//         This is set ONLY by publish.cjs and the manual public publish script during real publishes.
 //         Setting PUBLISH_OVERRIDE=1 alone is NOT sufficient.
 // Install: pre-commit framework handles installation via .pre-commit-config.yaml
 
@@ -74,7 +74,7 @@ if (isPublicationRemote) {
   console.log('║                                                            ║');
   console.log('║  This mirror must only be updated by the publish scripts.  ║');
   console.log('║  Use: node scripts/publish.cjs --tag vX.Y.Z               ║');
-  console.log('║  Or:  pwsh scripts/Publish-DualRepo.ps1 -Tag vX.Y.Z       ║');
+  console.log('║  Or:  pwsh scripts/Publish-ToPublicRepo.ps1 -Tag vX.Y.Z   ║');
   console.log('╚══════════════════════════════════════════════════════════════╝');
   console.log('');
   process.exit(1);
