@@ -11,6 +11,10 @@
 
 ---
 
+> **🚀 [Quick Start Guide](docs/quickstart.md)** — Get running in 5 minutes with HTTPS and semantic search
+>
+> **📖 [Use Case Scenarios](docs/use-cases.md)** — Real-world examples for support engineers, dev teams, and knowledge management
+
 ## Overview
 
 Index Server is an implementation of the [Model Context Protocol (MCP)](https://modelcontextprotocol.io) that enables AI agents to access governed instruction catalogs. It provides governance, usage analytics, security controls, and an optional admin dashboard for monitoring and maintenance.
