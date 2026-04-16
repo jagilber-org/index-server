@@ -163,7 +163,7 @@ foreach ($pattern in $excludePatterns) {
 $dotfileBlocklist = @(
     '.env', '.env.example', '.env.local',
     '.secrets.baseline', '.pre-commit-config.yaml',
-    '.github', '.specify', '.instructions',
+    '.specify', '.instructions',
     '.pii-allowlist', '.ggshield.yml', '.gitleaks.toml',
     '.template-adoption.json', '.publish-exclude',
     '.private', '.certs'
@@ -184,7 +184,7 @@ foreach ($item in $dotItems) {
 $builtinForbidden = @(
     '.env', '.env.example', '.env.local',
     '.secrets.baseline', '.pre-commit-config.yaml',
-    '.github', '.specify', '.instructions',
+    '.specify', '.instructions',
     '.pii-allowlist', '.ggshield.yml', '.gitleaks.toml',
     '.template-adoption.json'
 )

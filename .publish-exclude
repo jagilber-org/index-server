@@ -8,7 +8,6 @@ azure-pipelines.yml
 
 .specify/
 specs/
-.github/ISSUE_TEMPLATE/
 .github/copilot-instructions.md
 .github/agents/
 .github/prompts/
