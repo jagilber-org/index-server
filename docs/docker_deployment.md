@@ -126,6 +126,12 @@ environment:
 - **Security headers** — CSP, X-Frame-Options, HSTS, X-Content-Type-Options
 - **No version disclosure** — X-Powered-By removed
 
+### API Authentication Model
+
+Only `/api/admin/*` routes require authentication (`INDEX_SERVER_ADMIN_API_KEY`). All other `/api/*` routes (instructions CRUD, search, messaging, embeddings) are unauthenticated and rely on the localhost bind address for access control.
+
+> **⚠️ If you set `INDEX_SERVER_PORT_BIND_HOST=0.0.0.0`**, all non-admin API routes become accessible from any network host. Place a reverse proxy with authentication in front of the dashboard port, or restrict access via firewall rules.
+
 ### TLS Configuration
 - **HSTS** — Strict-Transport-Security header when TLS enabled
 - **Modern protocols** — Node.js default TLS (TLS 1.2+ only)

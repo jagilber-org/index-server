@@ -376,6 +376,23 @@ Index Server makes **zero telemetry calls** and sends **no data to external serv
 
 Default configuration makes zero outbound network connections. See [Network Privacy Guide](docs/network-privacy.md) for verification and offline deployment.
 
+### Dashboard Security Model
+
+The optional admin dashboard binds to **`127.0.0.1`** (localhost) by default, restricting access to the local machine.
+
+| Route prefix | Auth required | Notes |
+|---|---|---|
+| `/api/admin/*` | ✅ `INDEX_SERVER_ADMIN_API_KEY` | Timing-safe key comparison + loopback IP check |
+| `/api/*` (non-admin) | ❌ | Instructions CRUD, search, messaging, embeddings |
+| `/` (dashboard UI) | ❌ | Static HTML/JS dashboard |
+
+**Non-admin API routes rely on network-level access control** — only the localhost bind address prevents unauthorized access. This is secure for local development and single-machine deployments.
+
+> **⚠️ Warning:** If you change the bind address to `0.0.0.0` or expose the dashboard port externally (e.g., via Docker port mapping to `0.0.0.0`), all non-admin API routes become accessible without authentication. In that scenario:
+> - Use a reverse proxy (nginx, Caddy, Traefik) with TLS and authentication
+> - Restrict access via firewall rules or container networking
+> - Set `INDEX_SERVER_ADMIN_API_KEY` to protect admin operations
+
 ### Reporting Security Issues
 
 See [SECURITY.md](SECURITY.md) for vulnerability reporting and security policy.
