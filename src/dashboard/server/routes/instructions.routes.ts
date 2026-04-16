@@ -191,7 +191,6 @@ export function createInstructionsRoutes(): Router {
       }
       const searchResult = await handleInstructionsSearch({
         keywords: [query],
-        mode: 'keyword',
         limit,
         includeCategories: true,
       });

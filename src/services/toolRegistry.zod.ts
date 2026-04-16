@@ -126,7 +126,7 @@ const zGovernanceUpdate = z.object({
 // ── Search ───────────────────────────────────────────────────────────────────
 const zSearch = z.object({
   keywords: z.array(z.string().min(1).max(100)).min(1).max(10),
-  mode: z.enum(['keyword', 'regex', 'semantic']).default('keyword').optional(),
+  mode: z.enum(['keyword', 'regex', 'semantic']).optional(),
   limit: z.number().int().min(1).max(100).default(50).optional(),
   includeCategories: z.boolean().default(false).optional(),
   caseSensitive: z.boolean().default(false).optional(),

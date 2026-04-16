@@ -214,7 +214,7 @@ const INPUT_SCHEMAS: Record<string, object> = {
       maxItems: 10,
       description: 'Search keywords to match against instruction titles, bodies, and categories'
     },
-    mode: { type: 'string', enum: ['keyword', 'regex', 'semantic'], default: 'keyword', description: 'Search mode: keyword (substring), regex (patterns like "deploy|release"), or semantic (embedding similarity). Default is semantic when INDEX_SERVER_SEMANTIC_ENABLED=1, otherwise keyword.' },
+    mode: { type: 'string', enum: ['keyword', 'regex', 'semantic'], description: 'Search mode: keyword (substring), regex (patterns like "deploy|release"), or semantic (embedding similarity). Default is semantic when INDEX_SERVER_SEMANTIC_ENABLED=1, otherwise keyword. Omit to use the server default.' },
     limit: { type: 'number', minimum: 1, maximum: 100, default: 50, description: 'Maximum number of instruction IDs to return' },
     includeCategories: { type: 'boolean', default: false, description: 'Include categories in search scope' },
     caseSensitive: { type: 'boolean', default: false, description: 'Perform case-sensitive matching' },
@@ -440,7 +440,7 @@ function describeTool(name: string): string {
     case 'health_check': return 'Returns server health status & version.';
   case 'graph_export': return 'Export instruction relationship graph (schema v1 minimal or v2 enriched).';
   case 'index_dispatch': return 'Unified dispatcher for instruction index operations. Required: "action". Key params by action: get/getEnhanced(id), search(q or keywords, includeCategories, caseSensitive, limit, mode), query(text,categoriesAny,limit,offset), list(category), diff(clientHash), export(ids,metaOnly), remove(id or ids). Use action="capabilities" to discover all supported actions.';
-  case 'index_search': return '🔍 PRIMARY: Search instructions by keywords — returns instruction IDs for targeted retrieval. Supports mode: "keyword" (substring match), "regex" (patterns like "deploy|release"), or "semantic" (embedding similarity). Default mode is semantic when INDEX_SERVER_SEMANTIC_ENABLED=1, otherwise keyword. Use this FIRST to discover relevant instructions, then use index_dispatch get for details.';
+  case 'index_search': return '🔍 PRIMARY: Search instructions by keywords — returns instruction IDs for targeted retrieval. Supports mode: "keyword" (substring match), "regex" (patterns like "deploy|release"), or "semantic" (embedding similarity). Default mode is semantic when INDEX_SERVER_SEMANTIC_ENABLED=1, otherwise keyword. Omit the mode parameter to let the server choose the best default. Use this FIRST to discover relevant instructions, then use index_dispatch get for details.';
   case 'index_governanceHash': return 'Return governance projection & deterministic governance hash.';
   // query & categories now accessed via dispatcher actions.
   // legacy read-only instruction descriptions removed (handled via dispatcher)

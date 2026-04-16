@@ -32,7 +32,7 @@ const SEARCH_SCHEMA = {
   required: ['keywords'],
   properties: {
     keywords: { type: 'array', items: { type: 'string', minLength: 1, maxLength: 100 }, minItems: 1, maxItems: 10, description: 'Array of search keywords (each word separately for best results)' },
-    mode: { type: 'string', enum: ['keyword', 'regex', 'semantic'], default: 'keyword', description: 'Search mode: keyword (substring match), regex (treat keywords as regex patterns), or semantic (embedding-based similarity). Default is semantic when INDEX_SERVER_SEMANTIC_ENABLED=1, otherwise keyword.' },
+    mode: { type: 'string', enum: ['keyword', 'regex', 'semantic'], description: 'Search mode: keyword (substring match), regex (treat keywords as regex patterns), or semantic (embedding-based similarity). Default is semantic when INDEX_SERVER_SEMANTIC_ENABLED=1, otherwise keyword.' },
     limit: { type: 'number', minimum: 1, maximum: 100, default: 50 },
     includeCategories: { type: 'boolean', default: false },
     caseSensitive: { type: 'boolean', default: false },
