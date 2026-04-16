@@ -69,7 +69,9 @@ RUN mkdir -p /app/data /app/logs /app/metrics /app/feedback /app/governance /app
 # Volume mount points
 VOLUME ["/app/certs", "/app/data", "/app/instructions"]
 
-# Environment defaults — secure-by-default
+# Environment defaults.
+# The dashboard binds to 0.0.0.0 inside the container so published ports work.
+# Limit host exposure via compose or runtime port binding instead.
 ENV NODE_ENV=production \
     INDEX_SERVER_DIR=/app/instructions \
     INDEX_SERVER_DASHBOARD=1 \

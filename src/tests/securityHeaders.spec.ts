@@ -110,6 +110,16 @@ describe('Security Headers — Pen Test Regression', () => {
     expect(csp).toMatch(/nonce-[A-Za-z0-9+/=]+/);
   });
 
+  it('should not allow unsafe inline scripts in CSP', async () => {
+    await startServer();
+    const res = await httpGet(`${url}/health`);
+    const csp = res.headers['content-security-policy'] as string;
+    const scriptDirective = csp.split(';').map(part => part.trim()).find(part => part.startsWith('script-src '));
+    expect(scriptDirective).toBeDefined();
+    expect(scriptDirective).not.toContain("'unsafe-inline'");
+    expect(scriptDirective).toMatch(/script-src 'self' 'nonce-[A-Za-z0-9+/=]+'/);
+  });
+
   it('should generate different nonces for different requests', async () => {
     await startServer();
     const res1 = await httpGet(`${url}/health`);

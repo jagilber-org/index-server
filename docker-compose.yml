@@ -20,7 +20,7 @@ services:
     container_name: index-server
     restart: unless-stopped
     ports:
-      - "${INDEX_SERVER_DASHBOARD_PORT:-8787}:8787"
+      - "${INDEX_SERVER_PORT_BIND_HOST:-127.0.0.1}:${INDEX_SERVER_DASHBOARD_PORT:-8787}:8787"
     volumes:
       - index-data:/app/data
       - index-instructions:/app/instructions
@@ -65,7 +65,7 @@ services:
     profiles: ["tls"]
     restart: unless-stopped
     ports:
-      - "${INDEX_SERVER_DASHBOARD_PORT:-8787}:8787"
+      - "${INDEX_SERVER_PORT_BIND_HOST:-127.0.0.1}:${INDEX_SERVER_DASHBOARD_PORT:-8787}:8787"
     volumes:
       - index-data:/app/data
       - index-instructions:/app/instructions
