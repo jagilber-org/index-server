@@ -57,6 +57,68 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 - Pre-commit hooks and publish scripts hardened against env-var leaks (SHA-256 token validation)
 - `.gitignore` negation pattern (`!instructions/*.json`) removed to prevent instruction file leakage
 
+## [1.18.5] - 2026-04-15
+
+### Added
+
+- Shared dashboard API rate limiting middleware with per-IP sliding window and `429 Retry-After` responses.
+- Template conformance review backlog documentation.
+- Windows-compatible Docker test harness.
+
+### Changed
+
+- Adopted template v1.16 governance and workflow surfaces.
+- Aligned Semgrep pre-push wrapper with template policy.
+- Bumped VS Code extension package to 1.20.0.
+
+### Fixed
+
+- Hardened dashboard client DOM insertion paths against XSS.
+- Avoided shell interpolation in the public push guard script.
+- Restored publish-time PII scanning.
+- Tightened CSP headers and defaulted Docker publish to localhost.
+- Public-release cleanup and synthetic admin hardening.
+
+## [1.18.4] - 2026-04-15
+
+### Fixed
+
+- Accepted stringified JSON arrays in `index_import` (previously only parsed arrays were handled).
+- Reconciled tree-scan findings from security audit.
+- Narrowed manual security scan false positives for generated artifacts.
+- Addressed PR review feedback on scan remediation changes.
+
+## [1.18.3] - 2026-04-14
+
+### Changed
+
+- Aligned codebase to template-repo v1.15.0 structure and conventions.
+- Adopted template v1.16.0 governance surfaces and addressed scan findings.
+
+### Fixed
+
+- Addressed P1 scan findings — path-injection and regex-injection hardening.
+
+## [1.18.2] - 2026-04-14
+
+### Fixed
+
+- **Path traversal** in instruction routes — validated and sanitized file path parameters.
+- **XSS** in admin dashboard — escaped user-supplied content in DOM insertion paths.
+- Added scan reconciliation report documenting resolved findings.
+
+## [1.18.1] - 2026-04-14
+
+### Added
+
+- Dual MCP config format support and OpenSSL path detection.
+- Replaced default project icon with stacked index cards design.
+
+### Fixed
+
+- Isolated dev server ports from production defaults to prevent port conflicts.
+- Handled legacy `catalogHash` key in embedding cache loader for backward compatibility.
+
 ## [1.18.0] - 2026-04-06
 
 ### Added
