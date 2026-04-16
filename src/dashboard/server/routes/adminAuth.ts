@@ -1,4 +1,5 @@
 import type { NextFunction, Request, Response } from 'express';
+import crypto from 'crypto';
 import { getRuntimeConfig } from '../../../config/runtimeConfig.js';
 
 export function isLoopbackHost(value: string | undefined): boolean {
@@ -23,7 +24,9 @@ export function dashboardAdminAuth(req: Request, res: Response, next: NextFuncti
   }
 
   const provided = req.headers.authorization?.replace(/^Bearer\s+/i, '');
-  if (provided === adminKey) {
+  const providedBuf = Buffer.from(provided || '', 'utf8');
+  const keyBuf = Buffer.from(adminKey, 'utf8');
+  if (providedBuf.length === keyBuf.length && crypto.timingSafeEqual(providedBuf, keyBuf)) {
     next();
     return;
   }
