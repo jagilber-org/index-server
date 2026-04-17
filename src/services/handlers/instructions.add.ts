@@ -72,17 +72,17 @@ registerHandler('index_add', guard('index_add', (p: AddParams) => {
   }
   if (p.overwrite && (!e.body || !e.title)) {
     try {
-      const dirCandidate = getInstructionsDir();
-      const fileCandidate = path.join(dirCandidate, `${e.id}.json`);
-      // Try disk first (JSON backend), fall back to in-memory state (SQLite backend)
+      // Try in-memory state first (covers SQLite and JSON backends), fall back to disk
       let raw: Partial<InstructionEntry> | undefined;
-      if (fs.existsSync(fileCandidate)) {
-        try { raw = JSON.parse(fs.readFileSync(fileCandidate, 'utf8')) as Partial<InstructionEntry>; } catch { /* ignore parse */ }
-      }
+      const stHydrate = ensureLoaded();
+      const memEntry = stHydrate.byId.get(e.id);
+      if (memEntry) { raw = { ...memEntry }; }
       if (!raw) {
-        const stHydrate = ensureLoaded();
-        const memEntry = stHydrate.byId.get(e.id);
-        if (memEntry) raw = { ...memEntry };
+        const dirCandidate = getInstructionsDir();
+        const fileCandidate = path.join(dirCandidate, `${e.id}.json`);
+        if (fs.existsSync(fileCandidate)) {
+          try { raw = JSON.parse(fs.readFileSync(fileCandidate, 'utf8')) as Partial<InstructionEntry>; } catch { /* ignore parse */ }
+        }
       }
       if (raw) {
         const mutableExisting = e as Partial<InstructionEntry> & { id: string };
@@ -98,20 +98,14 @@ registerHandler('index_add', guard('index_add', (p: AddParams) => {
   if (!e.id || !e.title || !e.body) return fail('missing required fields');
   const dir = getInstructionsDir(); if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   const file = path.join(dir, `${e.id}.json`);
-  const existsOnDisk = fs.existsSync(file);
   const existsInStore = ensureLoaded().byId.has(e.id);
-  const exists = existsOnDisk || existsInStore;
+  const existsOnDisk = !existsInStore && fs.existsSync(file);
+  const exists = existsInStore || existsOnDisk;
   const existedBeforeOriginal = exists;
   const overwrite = !!p.overwrite;
   if (exists && !overwrite) {
     let st0 = ensureLoaded(); let visible = st0.byId.has(e.id); let repaired = false; if (!visible) {
       try { invalidate(); st0 = ensureLoaded(); visible = st0.byId.has(e.id); if (visible) repaired = true; } catch { /* ignore reload */ }
-      if (!visible) {
-        const filePath = file; if (fs.existsSync(filePath)) {
-          try { const rawTxt = fs.readFileSync(filePath, 'utf8'); if (rawTxt.trim()) { const rawJson = JSON.parse(rawTxt) as InstructionEntry; const classifier = new ClassificationService(); const issues = classifier.validate(rawJson); if (!issues.length) { const norm = classifier.normalize(rawJson); st0.list.push(norm); st0.byId.set(norm.id, norm); visible = true; repaired = true; incrementCounter('instructions:addSkipLateMaterialize'); } else { incrementCounter('instructions:addSkipLateMaterializeRejected'); } } else { incrementCounter('instructions:addSkipLateMaterializeEmpty'); }
-          } catch { incrementCounter('instructions:addSkipLateMaterializeParseError'); }
-        }
-      }
     }
     logAudit('add', e.id, { skipped: true, late_visible: visible, repaired });
     if (traceVisibility()) { emitTrace('[trace:add:skip]', { id: e.id, visible, repaired }); }
@@ -157,14 +151,15 @@ registerHandler('index_add', guard('index_add', (p: AddParams) => {
   if (exists) {
     try {
       let existing: InstructionEntry;
-      if (existsOnDisk) {
+      // Try store first (covers SQLite), fall back to disk (JSON backend)
+      const stMerge = ensureLoaded();
+      const memEntry = stMerge.byId.get(e.id);
+      if (memEntry) {
+        existing = { ...memEntry };
+      } else if (existsOnDisk) {
         existing = JSON.parse(fs.readFileSync(file, 'utf8')) as InstructionEntry;
       } else {
-        // SQLite-only: use in-memory state
-        const stMerge = ensureLoaded();
-        const memEntry = stMerge.byId.get(e.id);
-        if (!memEntry) throw new Error('entry not found in store');
-        existing = { ...memEntry };
+        throw new Error('entry not found in store or on disk');
       }
       base = { ...existing } as InstructionEntry;
       const prevBody = existing.body;
@@ -318,16 +313,16 @@ registerHandler('index_add', guard('index_add', (p: AddParams) => {
   let strictVerified = false; const verifyIssues: string[] = [];
   try {
     let parsed: InstructionEntry | undefined;
-    // Verify from disk (JSON backend) or from in-memory store (SQLite backend)
-    if (existsOnDisk || fs.existsSync(file)) {
-      let diskRaw: string | undefined;
-      try { diskRaw = fs.readFileSync(file, 'utf8'); } catch (ex) { verifyIssues.push('read-failed:' + (ex as Error).message); }
-      if (diskRaw) {
-        try { parsed = JSON.parse(diskRaw) as InstructionEntry; } catch (ex) { verifyIssues.push('parse-failed:' + (ex as Error).message); }
+    // Verify from in-memory store first (covers SQLite), fall back to disk (JSON backend)
+    parsed = stReloaded.byId.get(e.id) ?? undefined;
+    if (!parsed) {
+      if (fs.existsSync(file)) {
+        let diskRaw: string | undefined;
+        try { diskRaw = fs.readFileSync(file, 'utf8'); } catch (ex) { verifyIssues.push('read-failed:' + (ex as Error).message); }
+        if (diskRaw) {
+          try { parsed = JSON.parse(diskRaw) as InstructionEntry; } catch (ex) { verifyIssues.push('parse-failed:' + (ex as Error).message); }
+        }
       }
-    } else {
-      // SQLite backend: verify from in-memory state
-      parsed = stReloaded.byId.get(e.id) ?? undefined;
     }
     if (parsed) {
       if (parsed.id !== e.id) verifyIssues.push('id-mismatch');

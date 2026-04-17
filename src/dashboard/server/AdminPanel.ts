@@ -13,7 +13,7 @@ import path from 'path';
 import v8 from 'v8';
 import { getRuntimeConfig } from '../../config/runtimeConfig';
 import { getMetricsCollector, ToolMetrics } from './MetricsCollector';
-import { getIndexState } from '../../services/indexContext';
+import { getIndexState, ensureLoaded } from '../../services/indexContext';
 import { AdminPanelConfig } from './AdminPanelConfig';
 import type { AdminConfig } from './AdminPanelConfig';
 import { AdminPanelState } from './AdminPanelState';
@@ -192,8 +192,14 @@ export class AdminPanel {
 
       const instructionsDir = this.instructionsRoot;
       let fileCount = 0;
-      if (fs.existsSync(instructionsDir)) {
-        fileCount = fs.readdirSync(instructionsDir).filter(f => f.toLowerCase().endsWith('.json')).length;
+      try {
+        const st = ensureLoaded();
+        fileCount = st.list.length;
+      } catch {
+        // fallback to disk count if store unavailable
+        if (fs.existsSync(instructionsDir)) {
+          fileCount = fs.readdirSync(instructionsDir).filter(f => f.toLowerCase().endsWith('.json')).length;
+        }
       }
 
       const manifest = {
@@ -634,31 +640,44 @@ export class AdminPanel {
       /* ignore */
     }
 
-    // Count physical *.json files (raw) deterministically from FS (may equal scanned; retained for transparency)
+    // Count instructions from the store (raw count uses store, with disk fallback for transparency)
     const indexDir = this.instructionsRoot;
     let rawFileCount = scanned; // default to scanned
     try {
-      if (fs.existsSync(indexDir)) {
-        rawFileCount = fs.readdirSync(indexDir).filter(f => f.toLowerCase().endsWith('.json')).length;
-      }
-    } catch { /* ignore */ }
+      const st = ensureLoaded();
+      rawFileCount = st.list.length;
+    } catch {
+      try {
+        if (fs.existsSync(indexDir)) {
+          rawFileCount = fs.readdirSync(indexDir).filter(f => f.toLowerCase().endsWith('.json')).length;
+        }
+      } catch { /* ignore */ }
+    }
 
     // Recompute schema version snapshot only when any of these counts change
     const cacheNeedsUpdate = !this.indexStatsCache || this.indexStatsCache.acceptedInstructions !== accepted || this.indexStatsCache.rawFileCount !== rawFileCount || this.indexStatsCache.skippedInstructions !== skipped;
     if (cacheNeedsUpdate) {
       const schemaVersions = new Set<string>();
       try {
-        if (fs.existsSync(indexDir)) {
-          const files = fs.readdirSync(indexDir).filter(f => f.toLowerCase().endsWith('.json')).slice(0, 200); // cap scan
-          for (const f of files) {
-            try {
-              const raw = fs.readFileSync(path.join(indexDir, f), 'utf-8');
-              const json = JSON.parse(raw);
-              if (typeof json.schemaVersion === 'string') schemaVersions.add(json.schemaVersion);
-            } catch { /* ignore parse */ }
-          }
+        const st = ensureLoaded();
+        for (const entry of st.list.slice(0, 200)) {
+          const sv = (entry as unknown as Record<string, unknown>).schemaVersion;
+          if (typeof sv === 'string') schemaVersions.add(sv);
         }
-      } catch { /* ignore */ }
+      } catch {
+        try {
+          if (fs.existsSync(indexDir)) {
+            const files = fs.readdirSync(indexDir).filter(f => f.toLowerCase().endsWith('.json')).slice(0, 200);
+            for (const f of files) {
+              try {
+                const raw = fs.readFileSync(path.join(indexDir, f), 'utf-8');
+                const json = JSON.parse(raw);
+                if (typeof json.schemaVersion === 'string') schemaVersions.add(json.schemaVersion);
+              } catch { /* ignore parse */ }
+            }
+          }
+        } catch { /* ignore */ }
+      }
       const schemaVersion = schemaVersions.size === 0 ? 'unknown' : (schemaVersions.size === 1 ? Array.from(schemaVersions)[0] : `mixed(${Array.from(schemaVersions).join(',')})`);
       this.indexStatsCache = {
         totalInstructions: accepted, // maintain backward compatibility; semantic now accepted
@@ -838,15 +857,21 @@ export class AdminPanel {
   }
 
   private getIndexInstructionCount(): number {
-    const indexDir = this.instructionsRoot;
     try {
-      if (fs.existsSync(indexDir)) {
-        return fs.readdirSync(indexDir).filter(f => f.toLowerCase().endsWith('.json')).length;
-      }
+      const st = ensureLoaded();
+      return st.list.length;
     } catch {
-      // ignore
+      // fallback to disk
+      const indexDir = this.instructionsRoot;
+      try {
+        if (fs.existsSync(indexDir)) {
+          return fs.readdirSync(indexDir).filter(f => f.toLowerCase().endsWith('.json')).length;
+        }
+      } catch {
+        // ignore
+      }
+      return 0;
     }
-    return 0;
   }
 
   /**

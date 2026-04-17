@@ -6,10 +6,8 @@ export default defineConfig({
   setupFiles: ['src/tests/setupDistReady.ts'],
   reporters: ['default', './src/tests/runSentinelReporter.ts', './src/tests/jsonResultsReporter.ts', 'junit'],
   outputFile: { junit: 'test-results/junit.xml' },
-  // Serialize tests in a single worker process to avoid concurrent production deploy races during Phase 4
-  // (multiple workers were triggering overlapping deploy-local.ps1 executions causing file locks)
   pool: 'forks',
-  maxWorkers: 1,
+  maxWorkers: 4,
   include: ['src/tests/**/*.spec.ts'],
   // Adjust default timeouts: higher per-test and explicit hook timeout to accommodate multi-client spawn & coordination.
   testTimeout: 25000,

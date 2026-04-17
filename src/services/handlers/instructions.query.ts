@@ -25,11 +25,8 @@ export const instructionActions = {
     }
     if (p?.expectId) {
       try {
-        const dir = getInstructionsDir();
-        const file = path.join(dir, `${p.expectId}.json`);
-        const hasFile = fs.existsSync(file);
         const inIndex = st.byId.has(p.expectId);
-        if (hasFile && !inIndex) {
+        if (!inIndex) {
           attemptedReload = true;
           invalidate(); st = ensureLoaded(); items = st.list;
           if (p.category) { const c2 = p.category.toLowerCase(); items = items.filter(i => i.categories.includes(c2)); }
@@ -40,7 +37,7 @@ export const instructionActions = {
         }
       } catch { /* ignore repair errors */ }
     }
-    if (traceVisibility()) { try { const dir = getInstructionsDir(); const disk = fs.readdirSync(dir).filter(f => f.endsWith('.json')); const diskIds = new Set(disk.map(f => f.slice(0, -5))); const idsSample = items.slice(0, 5).map(i => i.id); const missingOnIndex = [...diskIds].filter(id => !st.byId.has(id)); const expectId = p?.expectId; const expectOnDisk = expectId ? diskIds.has(expectId) : undefined; const expectinIndex = expectId ? st.byId.has(expectId) : undefined; emitTrace('[trace:list]', { dir, total: st.list.length, filtered: items.length, sample: idsSample, diskCount: disk.length, missingOnIndexCount: missingOnIndex.length, missingOnIndex: missingOnIndex.slice(0, 5), expectId, expectOnDisk, expectinIndex, attemptedReload, attemptedLate, originalHash, finalHash: st.hash }); } catch { /* ignore */ } }
+    if (traceVisibility()) { try { const idsSample = items.slice(0, 5).map(i => i.id); const expectId = p?.expectId; const expectinIndex = expectId ? st.byId.has(expectId) : undefined; emitTrace('[trace:list]', { total: st.list.length, filtered: items.length, sample: idsSample, expectId, expectinIndex, attemptedReload, attemptedLate, originalHash, finalHash: st.hash }); } catch { /* ignore */ } }
     const totalCount = items.length;
     // Apply offset/limit pagination when provided via REST bridge callers
     const offset = typeof p?.offset === 'number' && p.offset > 0 ? p.offset : 0;
@@ -62,18 +59,17 @@ export const instructionActions = {
     return item ? { hash: st.hash, item } : { notFound: true, id: p.id, hint: `No instruction found with id "${p.id}". Use action="search" with q="<keyword>" to find valid ids, or action="list" to see all.`, example: { action: 'get', id: 'valid-instruction-id' } };
   },
   getEnhanced: (p: { id: string }) => {
-    const base = getInstructionsDir(); const file = path.join(base, `${p.id}.json`); let st = ensureLoaded(); let item = st.byId.get(p.id); if (item) return { hash: st.hash, item } as const; if (!fs.existsSync(file)) return { notFound: true } as const; let repaired = false;
+    let st = ensureLoaded(); let item = st.byId.get(p.id); if (item) return { hash: st.hash, item } as const;
+    // Not in current in-memory index — force reload from store (covers SQLite and JSON)
+    let repaired = false;
     try {
       traceInstructionVisibility(p.id, 'getEnhanced-start');
       invalidate(); st = ensureLoaded(); item = st.byId.get(p.id); if (item) { repaired = true; }
       if (!repaired) {
-        const txt = fs.readFileSync(file, 'utf8'); if (txt.trim()) {
-          try { const raw = JSON.parse(txt) as InstructionEntry; const classifier = new ClassificationService(); const issues = classifier.validate(raw); if (!issues.length) { const norm = classifier.normalize(raw); st.list.push(norm); st.byId.set(norm.id, norm); item = norm; repaired = true; incrementCounter('instructions:getLateMaterialize'); } else { incrementCounter('instructions:getLateMaterializeRejected'); }
-          } catch { incrementCounter('instructions:getLateMaterializeParseError'); }
-        } else { incrementCounter('instructions:getLateMaterializeEmptyFile'); }
+        incrementCounter('instructions:getLateMaterializeNotFound');
       }
     } catch { /* swallow */ }
-    if (traceVisibility()) { emitTrace('[trace:get:late-materialize]', { id: p.id, repaired, fileExists: true }); }
+    if (traceVisibility()) { emitTrace('[trace:get:late-materialize]', { id: p.id, repaired }); }
     traceInstructionVisibility(p.id, 'getEnhanced-end', { repaired, finalFound: !!item });
     return item ? { hash: st.hash, item } : { notFound: true };
   },
@@ -195,40 +191,32 @@ export const instructionActions = {
     const st = ensureLoaded(); const counts = new Map<string, number>(); for (const e of st.list) { for (const c of e.categories) { counts.set(c, (counts.get(c) || 0) + 1); } } const categories = [...counts.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([name, count]) => ({ name, count })); return { count: categories.length, categories };
   },
   dir: () => {
-    const dir = getInstructionsDir(); let files: string[] = []; try { files = fs.readdirSync(dir).filter(f => f.endsWith('.json')).sort(); } catch { /* ignore */ } return { dir, filesCount: files.length, files };
+    const dir = getInstructionsDir(); const st = ensureLoaded(); const files = st.list.map(e => `${e.id}.json`).sort(); return { dir, filesCount: files.length, files };
   }
 };
 
-// Deep file-level inspection (diagnostics)
+// Deep inspection (diagnostics) — reads from store, not disk
 registerHandler('index_inspect', (p: { id: string }) => {
   const id = p.id;
   if (!id) return { error: 'missing id' };
-  const dir = getInstructionsDir();
-  const file = path.join(dir, `${id}.json`);
-  let rawText = ''; let raw: unknown = null; let parseError: string | undefined;
-  try { rawText = fs.readFileSync(file, 'utf8'); raw = JSON.parse(rawText); } catch (e) {
-    if ((e as NodeJS.ErrnoException).code === 'ENOENT') return { id, exists: false, fileMissing: true };
-    parseError = e instanceof Error ? e.message : String(e);
-  }
+  const st = ensureLoaded();
+  const entry = st.byId.get(id);
+  if (!entry) return { id, exists: false, fileMissing: true };
   let schemaErrors: string | undefined; let classificationIssues: string[] | undefined; let normalized: InstructionEntry | undefined;
   try {
-    if (!parseError) {
-      try {
-        const rec = raw as Partial<InstructionEntry>;
-        const missing: string[] = [];
-        if (!rec.id) missing.push('missing id');
-        if (!rec.title) missing.push('missing title');
-        if (!rec.body) missing.push('missing body');
-        if (missing.length) schemaErrors = missing.join(', ');
-        const classifier = new ClassificationService();
-        if (!schemaErrors) {
-          classificationIssues = classifier.validate(rec as InstructionEntry);
-          if (!classificationIssues.length) { normalized = classifier.normalize(rec as InstructionEntry); }
-        }
-      } catch (err) { schemaErrors = (err as Error).message; }
+    const rec = entry as Partial<InstructionEntry>;
+    const missing: string[] = [];
+    if (!rec.id) missing.push('missing id');
+    if (!rec.title) missing.push('missing title');
+    if (!rec.body) missing.push('missing body');
+    if (missing.length) schemaErrors = missing.join(', ');
+    const classifier = new ClassificationService();
+    if (!schemaErrors) {
+      classificationIssues = classifier.validate(rec as InstructionEntry);
+      if (!classificationIssues.length) { normalized = classifier.normalize(rec as InstructionEntry); }
     }
-  } catch { /* ignore */ }
-  return { id, exists: true, file, parseError, schemaErrors, classificationIssues, normalized, raw };
+  } catch (err) { schemaErrors = (err as Error).message; }
+  return { id, exists: true, schemaErrors, classificationIssues, normalized, raw: entry };
 });
 
 registerHandler('index_health', () => {
