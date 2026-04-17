@@ -5,6 +5,7 @@
 
 import { Router, Request, Response } from 'express';
 import { getLocalHandler, listRegisteredMethods } from '../../../server/registry.js';
+import { dashboardAdminAuth } from './adminAuth.js';
 
 export function createToolsRoutes(): Router {
   const router = Router();
@@ -21,7 +22,7 @@ export function createToolsRoutes(): Router {
    * Body: JSON params passed directly to the handler
    * Returns: handler result or error
    */
-  router.post('/tools/:name', async (req: Request, res: Response) => {
+  router.post('/tools/:name', dashboardAdminAuth, async (req: Request, res: Response) => {
     const toolName = req.params.name;
     if (!toolName || !/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(toolName)) {
       res.status(400).json({ error: 'Invalid tool name' });

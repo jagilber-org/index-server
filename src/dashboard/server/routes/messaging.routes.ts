@@ -18,6 +18,7 @@ import { AgentMailbox } from '../../../services/messaging/agentMailbox.js';
 import { getRuntimeConfig } from '../../../config/runtimeConfig.js';
 import { SendMessageOptionsSchema } from '../../../services/messaging/messagingTypes.js';
 import { getWebSocketManager } from '../WebSocketManager.js';
+import { dashboardAdminAuth } from './adminAuth.js';
 
 let _mailbox: AgentMailbox | null = null;
 
@@ -45,7 +46,7 @@ export function createMessagingRoutes(): Router {
   const router = Router();
 
   // POST /api/messages — send a message
-  router.post('/messages', (req: Request, res: Response) => {
+  router.post('/messages', dashboardAdminAuth, (req: Request, res: Response) => {
     try {
       const parsed = SendMessageOptionsSchema.safeParse(req.body);
       if (!parsed.success) {
@@ -120,7 +121,7 @@ export function createMessagingRoutes(): Router {
   });
 
   // PUT /api/messages/by-id/:id — update message
-  router.put('/messages/by-id/:id', (req: Request, res: Response) => {
+  router.put('/messages/by-id/:id', dashboardAdminAuth, (req: Request, res: Response) => {
     try {
       const mailbox = getMailbox();
       const updated = mailbox.updateMessage(req.params.id, {
@@ -179,7 +180,7 @@ export function createMessagingRoutes(): Router {
   });
 
   // POST /api/messages/ack — acknowledge messages
-  router.post('/messages/ack', (req: Request, res: Response) => {
+  router.post('/messages/ack', dashboardAdminAuth, (req: Request, res: Response) => {
     try {
       const { messageIds, reader } = req.body;
       if (!Array.isArray(messageIds) || !reader) {
@@ -204,7 +205,7 @@ export function createMessagingRoutes(): Router {
   });
 
   // DELETE /api/messages — purge messages
-  router.delete('/messages', (req: Request, res: Response) => {
+  router.delete('/messages', dashboardAdminAuth, (req: Request, res: Response) => {
     try {
       const mailbox = getMailbox();
       let removed = 0;
@@ -230,7 +231,7 @@ export function createMessagingRoutes(): Router {
   });
 
   // POST /api/messages/inbound — receive message from peer instance
-  router.post('/messages/inbound', (req: Request, res: Response) => {
+  router.post('/messages/inbound', dashboardAdminAuth, (req: Request, res: Response) => {
     try {
       if (!req.body || !req.body.id || !req.body.channel) {
         res.status(400).json({
@@ -270,7 +271,7 @@ export function createMessagingRoutes(): Router {
   });
 
   // POST /api/messages/reply — reply to a message
-  router.post('/messages/reply', async (req: Request, res: Response) => {
+  router.post('/messages/reply', dashboardAdminAuth, async (req: Request, res: Response) => {
     try {
       const { parentId, sender, body, replyAll, recipients, priority, tags, persistent, payload } = req.body || {};
       if (!parentId || !sender || !body) {
