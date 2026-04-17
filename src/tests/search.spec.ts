@@ -15,6 +15,31 @@ import { handleInstructionsSearch } from '../services/handlers.search';
 import { isSemanticError } from '../services/errors';
 import { InstructionEntry } from '../models/instruction';
 
+// Mutable flag for controlling semantic-enabled mock per test
+let mockSemanticEnabled = false;
+
+// Mock runtimeConfig to allow toggling semantic.enabled in tests
+vi.mock('../config/runtimeConfig', async (importOriginal) => {
+  const original = await importOriginal<typeof import('../config/runtimeConfig')>();
+  return {
+    ...original,
+    getRuntimeConfig: () => {
+      const realConfig = original.getRuntimeConfig();
+      if (mockSemanticEnabled) {
+        return { ...realConfig, semantic: { ...realConfig.semantic, enabled: true } };
+      }
+      return realConfig;
+    }
+  };
+});
+
+// Mock embeddingService so semantic search doesn't require a real model
+vi.mock('../services/embeddingService', () => ({
+  embedText: vi.fn().mockResolvedValue([0.1, 0.2, 0.3]),
+  getInstructionEmbeddings: vi.fn().mockResolvedValue({}),
+  cosineSimilarity: vi.fn().mockReturnValue(0),
+}));
+
 // Mock instruction index for testing
 const mockInstructions: InstructionEntry[] = [
   {
@@ -717,6 +742,18 @@ describe('Instructions Search Tool', () => {
         keywords: ['JavaScript']
       });
       expect(result.query.mode).toBe('keyword');
+    });
+
+    it('should default mode to semantic when semantic is enabled', async () => {
+      mockSemanticEnabled = true;
+      try {
+        const result = await handleInstructionsSearch({
+          keywords: ['JavaScript']
+        });
+        expect(result.query.mode).toBe('semantic');
+      } finally {
+        mockSemanticEnabled = false;
+      }
     });
 
     it('should match regex pattern in title when mode=regex', async () => {

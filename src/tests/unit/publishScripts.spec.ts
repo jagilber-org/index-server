@@ -12,8 +12,10 @@ import { execSync } from 'child_process';
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
 const CJS_PATH = path.join(REPO_ROOT, 'scripts', 'publish.cjs');
 const PS1_PATH = path.join(REPO_ROOT, 'scripts', 'Publish-DualRepo.ps1');
+const PUB_PATH = path.join(REPO_ROOT, 'scripts', 'Publish-ToPublicRepo.ps1');
 const HAS_PUBLISH_EXCLUDE = fs.existsSync(path.join(REPO_ROOT, '.publish-exclude'));
 const HAS_PS1_SCRIPT = fs.existsSync(PS1_PATH);
+const HAS_PUB_SCRIPT = fs.existsSync(PUB_PATH);
 
 // ── Helpers to extract forbidden lists from both scripts ──────────────────
 
@@ -33,6 +35,26 @@ function extractPs1ForbiddenList(): string[] {
   // Match the ForbiddenItems default array
   const match = src.match(/\[string\[\]\]\$ForbiddenItems = @\(([\s\S]*?)\)/);
   if (!match) throw new Error('Could not find ForbiddenItems in Publish-DualRepo.ps1');
+  return match[1]
+    .split(',')
+    .map(s => s.trim().replace(/^['"]|['"]$/g, ''))
+    .filter(s => s.length > 0);
+}
+
+function extractPubDotfileBlocklist(): string[] {
+  const src = fs.readFileSync(PUB_PATH, 'utf8');
+  const match = src.match(/\$dotfileBlocklist = @\(([\s\S]*?)\)/);
+  if (!match) throw new Error('Could not find $dotfileBlocklist in Publish-ToPublicRepo.ps1');
+  return match[1]
+    .split(',')
+    .map(s => s.trim().replace(/^['"]|['"]$/g, ''))
+    .filter(s => s.length > 0);
+}
+
+function extractPubBuiltinForbidden(): string[] {
+  const src = fs.readFileSync(PUB_PATH, 'utf8');
+  const match = src.match(/\$builtinForbidden = @\(([\s\S]*?)\)/);
+  if (!match) throw new Error('Could not find $builtinForbidden in Publish-ToPublicRepo.ps1');
   return match[1]
     .split(',')
     .map(s => s.trim().replace(/^['"]|['"]$/g, ''))
@@ -192,6 +214,55 @@ describe('publish script hardening', () => {
     it('prints file count in summary', () => {
       expect(verifyOutput).toMatch(/Files that would be published: \d+/);
       expect(verifyOutput).toMatch(/Total: \d+ files/);
+    });
+  });
+
+  describe.skipIf(!HAS_PUB_SCRIPT)('Publish-ToPublicRepo.ps1 blocklist coverage', () => {
+    let dotfileBlocklist: string[];
+    let builtinForbidden: string[];
+
+    beforeAll(() => {
+      dotfileBlocklist = extractPubDotfileBlocklist();
+      builtinForbidden = extractPubBuiltinForbidden();
+    });
+
+    it('.github is NOT in $dotfileBlocklist', () => {
+      expect(dotfileBlocklist).not.toContain('.github');
+    });
+
+    it('.github is NOT in $builtinForbidden', () => {
+      expect(builtinForbidden).not.toContain('.github');
+    });
+
+    it('.specify is in $dotfileBlocklist', () => {
+      expect(dotfileBlocklist).toContain('.specify');
+    });
+
+    it('.specify is in $builtinForbidden', () => {
+      expect(builtinForbidden).toContain('.specify');
+    });
+
+    it('.env is in both blocklists', () => {
+      expect(dotfileBlocklist).toContain('.env');
+      expect(builtinForbidden).toContain('.env');
+    });
+
+    it('.secrets.baseline is in both blocklists', () => {
+      expect(dotfileBlocklist).toContain('.secrets.baseline');
+      expect(builtinForbidden).toContain('.secrets.baseline');
+    });
+
+    it('.private is in $dotfileBlocklist', () => {
+      expect(dotfileBlocklist).toContain('.private');
+    });
+
+    it('.certs is in $dotfileBlocklist', () => {
+      expect(dotfileBlocklist).toContain('.certs');
+    });
+
+    it('neither blocklist is empty', () => {
+      expect(dotfileBlocklist.length).toBeGreaterThan(5);
+      expect(builtinForbidden.length).toBeGreaterThan(5);
     });
   });
 });

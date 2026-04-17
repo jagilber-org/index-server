@@ -342,7 +342,7 @@ export class WebSocketManager {
 
     ws.on('error', (error: Error) => {
       this.clients.delete(ws);
-      logError('[WebSocketManager] Client error', { id: ws.clientId, error });
+      logError(`[WebSocketManager] Client error (${ws.clientId})`, error);
     });
 
     ws.on('pong', () => {
