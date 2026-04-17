@@ -5,8 +5,8 @@
 
 import { Router, Request, Response } from 'express';
 import { buildGraph, GraphExportParams } from '../../../services/handlers.graph.js';
-import { ensureLoaded } from '../../../services/indexContext.js';
 import { getRuntimeConfig } from '../../../config/runtimeConfig.js';
+import type { IndexLocals } from '../middleware/ensureLoadedMiddleware.js';
 
 export function createGraphRoutes(): Router {
   const router = Router();
@@ -157,7 +157,7 @@ export function createGraphRoutes(): Router {
    */
   router.get('/graph/categories', (_req: Request, res: Response) => {
     try {
-      const st = ensureLoaded();
+      const st = (res.locals as IndexLocals).indexState;
       const map = new Map<string, number>();
       for (const inst of st.list) {
         const cats = Array.isArray(inst.categories) ? inst.categories : [];
@@ -177,7 +177,7 @@ export function createGraphRoutes(): Router {
    */
   router.get('/graph/instructions', (req: Request, res: Response) => {
     try {
-      const st = ensureLoaded();
+      const st = (res.locals as IndexLocals).indexState;
       const catsParam = (req.query.categories as string | undefined) || '';
       const filterCats = catsParam ? catsParam.split(',').filter(Boolean) : [];
       const limitRaw = parseInt((req.query.limit as string) || '0', 10);
