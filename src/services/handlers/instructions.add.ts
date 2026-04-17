@@ -8,7 +8,6 @@ import { incrementCounter } from '../features';
 import { SCHEMA_VERSION } from '../../versioning/schemaVersion';
 import { ClassificationService } from '../classificationService';
 import { resolveOwner } from '../ownershipService';
-import { atomicWriteJson } from '../atomicFs';
 import { logAudit } from '../auditLog';
 import { getToolRegistry } from '../toolRegistry';
 import { getRuntimeConfig } from '../../config/runtimeConfig';
