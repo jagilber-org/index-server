@@ -128,7 +128,7 @@ function registerMcpProviders(context) {
             }
             const config = vscode.workspace.getConfiguration('mcpIndexServer');
             const dashboardEnabled = config.get('dashboard.enabled', false);
-            const dashboardPort = config.get('dashboard.port', 3210);
+            const dashboardPort = config.get('dashboard.port', 8787);
             const logLevel = config.get('logLevel', 'info');
             const mutationEnabled = config.get('mutation.enabled', false);
             const instructionsDir = resolveInstructionsDir(context);
@@ -331,7 +331,7 @@ async function showStatus(context) {
 async function openDashboard() {
     const config = vscode.workspace.getConfiguration('index');
     const dashboardEnabled = config.get('dashboard.enabled', false);
-    const port = config.get('dashboard.port', 3210);
+    const port = config.get('dashboard.port', 8787);
     if (!dashboardEnabled) {
         const action = await vscode.window.showWarningMessage('Dashboard is not enabled. Enable it in settings?', 'Enable', 'Cancel');
         if (action === 'Enable') {

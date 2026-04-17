@@ -68,7 +68,7 @@ Add to your MCP client configuration (e.g., VS Code `mcp.json` or Claude Desktop
       "args": [
         "C:/path/to/index-server/dist/server/index-server.js",
         "--dashboard",
-        "--dashboard-port=3210"
+        "--dashboard-port=8787"
       ],
       "env": {
         "INDEX_SERVER_LOG_LEVEL": "info",

@@ -334,8 +334,8 @@ Recommended Next Step (future enhancement): integrate a lightweight live tool pr
 
 ```bash
 # For administrators only - not for MCP clients
-node dist/server/index-server.js --dashboard --dashboard-port=3210
-# Dashboard accessible at http://localhost:3210
+node dist/server/index-server.js --dashboard --dashboard-port=8787
+# Dashboard accessible at http://localhost:8787
 ```
 
 ### Development

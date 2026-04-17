@@ -253,7 +253,7 @@ INDEX_SERVER_BOOTSTRAP_TOKEN_TTL_SEC=900   # Token expiry
 INDEX_SERVER_AUTH_KEY=<secret>             # AUTH (referenced but missing impl)
 
 INDEX_SERVER_DASHBOARD=1                   # Enable HTTP admin
-INDEX_SERVER_DASHBOARD_PORT=3210           # Bind port
+INDEX_SERVER_DASHBOARD_PORT=8787           # Bind port
 INDEX_SERVER_DASHBOARD_TLS_{CERT,KEY}=/path
 
 INDEX_SERVER_DIR=/path        # Index location
@@ -313,7 +313,7 @@ res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
 **Mitigation:** ✅ Binds to 127.0.0.1 (localhost) by default  
 **Fix:**
 \\\	ypescript
-const origins = ['http://localhost:3210', 'http://127.0.0.1:3210'];
+const origins = ['http://localhost:8787', 'http://127.0.0.1:8787'];
 if (origins.includes(req.origin)) res.header('Access-Control-Allow-Origin', req.origin);
 \\\
 

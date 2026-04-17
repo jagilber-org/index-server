@@ -36,7 +36,7 @@ Add to your VS Code `.vscode/mcp.json`:
       "args": [
         "C:/path/to/index-server/dist/server/index-server.js",
         "--dashboard",
-        "--dashboard-port=3210"
+        "--dashboard-port=8787"
       ],
       "env": {
         "INDEX_SERVER_MUTATION": "1",
@@ -53,7 +53,7 @@ Replace `C:/path/to/index-server` with your actual install path.
 ## 3. Enable HTTPS (Optional)
 
 ```bash
-node scripts/setup-wizard.mjs --non-interactive --tls --port 3210 --mutation
+node scripts/setup-wizard.mjs --non-interactive --tls --port 8787 --mutation
 ```
 
 This generates self-signed certificates in `.certs/` and configures the dashboard for HTTPS.
@@ -108,7 +108,7 @@ On first search, the server downloads a ~90 MB embedding model from Hugging Face
 
 1. Restart VS Code / your MCP client
 2. The server should appear in the MCP server list
-3. Open `http://localhost:3210` (or `https://`) for the dashboard
+3. Open `http://localhost:8787` (or `https://`) for the dashboard
 4. Ask your agent: _"search index-server for getting started"_
 
 ## 6. Add Your First Instruction

@@ -62,7 +62,7 @@ All settings are available under `Index Server.*` in VS Code Settings:
 | `serverPath` | *(auto-detect)* | Path to `dist/server/index-server.js` |
 | `instructionsDir` | *(bundled)* | Path to instruction JSON files |
 | `dashboard.enabled` | `false` | Enable the admin dashboard |
-| `dashboard.port` | `3210` | Dashboard HTTP port |
+| `dashboard.port` | `8787` | Dashboard HTTP port |
 | `logLevel` | `info` | Log level: `debug`, `info`, `warn`, `error` |
 | `mutation.enabled` | `false` | Allow Index Server write operations |
 
@@ -112,7 +112,7 @@ The server provides **50+ tools** organized by category:
 Enable the dashboard for real-time monitoring:
 
 1. Set `index.dashboard.enabled` to `true`
-2. Set your preferred port (default: `3210`)
+2. Set your preferred port (default: `8787`)
 3. Run **"Index Server: Open Dashboard"** from the command palette
 
 The dashboard provides:

@@ -129,7 +129,7 @@ function registerMcpProviders(context: vscode.ExtensionContext): void {
 
                 const config = vscode.workspace.getConfiguration('mcpIndexServer');
                 const dashboardEnabled = config.get<boolean>('dashboard.enabled', false);
-                const dashboardPort = config.get<number>('dashboard.port', 3210);
+                const dashboardPort = config.get<number>('dashboard.port', 8787);
                 const logLevel = config.get<string>('logLevel', 'info');
                 const mutationEnabled = config.get<boolean>('mutation.enabled', false);
                 const instructionsDir = resolveInstructionsDir(context);
@@ -362,7 +362,7 @@ async function showStatus(context: vscode.ExtensionContext): Promise<void> {
 async function openDashboard(): Promise<void> {
     const config = vscode.workspace.getConfiguration('index');
     const dashboardEnabled = config.get<boolean>('dashboard.enabled', false);
-    const port = config.get<number>('dashboard.port', 3210);
+    const port = config.get<number>('dashboard.port', 8787);
 
     if (!dashboardEnabled) {
         const action = await vscode.window.showWarningMessage(

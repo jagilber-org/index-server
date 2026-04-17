@@ -58,7 +58,7 @@ Add to `~/.vscode/mcp.json` or `%APPDATA%/Code/User/mcp.json`:
         "INDEX_SERVER_LOG_LEVEL": "info",
         "INDEX_SERVER_MUTATION": "1",
         "INDEX_SERVER_DASHBOARD": "1",
-        "INDEX_SERVER_DASHBOARD_PORT": "3210"
+        "INDEX_SERVER_DASHBOARD_PORT": "8787"
       }
     }
   }
@@ -120,7 +120,7 @@ The `.vsix` file will be created in the `release/` directory.
 | `index.serverPath` | `""` | Path to `dist/server/index-server.js` |
 | `index.instructionsDir` | `""` | Path to instructions directory |
 | `index.dashboard.enabled` | `false` | Enable admin dashboard |
-| `index.dashboard.port` | `3210` | Dashboard HTTP port |
+| `index.dashboard.port` | `8787` | Dashboard HTTP port |
 | `index.logLevel` | `info` | Server log level |
 | `index.mutation.enabled` | `false` | Enable mutation operations |
 
