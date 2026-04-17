@@ -162,10 +162,10 @@ sequenceDiagram
 INDEX_SERVER_DASHBOARD=1 npm start
 
 # Specific port
-INDEX_SERVER_DASHBOARD=1 INDEX_SERVER_DASHBOARD_PORT=3210 npm start
+INDEX_SERVER_DASHBOARD=1 INDEX_SERVER_DASHBOARD_PORT=8787 npm start
 
 # Direct node invocation (built output)
-node dist/server/index-server.js --dashboard --dashboard-port=3210
+node dist/server/index-server.js --dashboard --dashboard-port=8787
 ```
 
 Access at: `http://localhost:<port>` (default 8787).

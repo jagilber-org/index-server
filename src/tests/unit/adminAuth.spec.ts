@@ -8,7 +8,7 @@ vi.mock('../../config/runtimeConfig.js', () => ({
   getRuntimeConfig: vi.fn(),
 }));
 
-import { isLoopbackHost, dashboardAdminAuth } from '../../dashboard/server/routes/adminAuth.js';
+import { isLoopbackHost, dashboardAdminAuth, constantTimeKeyMatch } from '../../dashboard/server/routes/adminAuth.js';
 import { getRuntimeConfig } from '../../config/runtimeConfig.js';
 
 const mockedGetRuntimeConfig = vi.mocked(getRuntimeConfig);
@@ -61,6 +61,32 @@ describe('isLoopbackHost', () => {
 
   it('returns false for a random IP', () => {
     expect(isLoopbackHost('192.168.1.1')).toBe(false);
+  });
+});
+
+describe('constantTimeKeyMatch', () => {
+  it('returns true for matching strings', () => {
+    expect(constantTimeKeyMatch('my-secret-key', 'my-secret-key')).toBe(true);
+  });
+
+  it('returns false for non-matching strings of same length', () => {
+    expect(constantTimeKeyMatch('aaaa', 'bbbb')).toBe(false);
+  });
+
+  it('returns false for non-matching strings of different length', () => {
+    expect(constantTimeKeyMatch('short', 'a-longer-string')).toBe(false);
+  });
+
+  it('returns false when both provided and expected are empty strings', () => {
+    expect(constantTimeKeyMatch('', '')).toBe(false);
+  });
+
+  it('returns false when provided is empty string', () => {
+    expect(constantTimeKeyMatch('', 'expected')).toBe(false);
+  });
+
+  it('returns false when provided is undefined', () => {
+    expect(constantTimeKeyMatch(undefined, 'expected')).toBe(false);
   });
 });
 

@@ -13,7 +13,7 @@ import { SessionPersistenceManager } from './SessionPersistenceManager';
 import { PersistedWebSocketConnection } from '../../models/SessionPersistence';
 import { getRuntimeConfig } from '../../config/runtimeConfig.js';
 import { logInfo, logError, logWarn } from '../../services/logger.js';
-import { isLoopbackHost } from './routes/adminAuth.js';
+import { isLoopbackHost, constantTimeKeyMatch } from './routes/adminAuth.js';
 
 export interface DashboardMessage {
   type: string;
@@ -153,8 +153,8 @@ export class WebSocketManager {
         const url = new URL(info.req.url || '', 'http://localhost');
         const token = url.searchParams.get('token') || '';
         const authHeader = info.req.headers['authorization'] || '';
-        const bearerToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
-        callback(token === adminKey || bearerToken === adminKey, 401, 'WebSocket authentication required');
+        const bearerToken = authHeader.replace(/^Bearer\s+/i, '');
+        callback(constantTimeKeyMatch(token, adminKey) || constantTimeKeyMatch(bearerToken, adminKey), 401, 'WebSocket authentication required');
       },
     });
 

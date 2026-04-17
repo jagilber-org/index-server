@@ -57,7 +57,7 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 - Pre-commit hooks and publish scripts hardened against env-var leaks (SHA-256 token validation)
 - `.gitignore` negation pattern (`!instructions/*.json`) removed to prevent instruction file leakage
 
-## [1.18.5] - 2026-04-15
+## [1.18.5] - 2026-04-15 (retroactively documented)
 
 ### Added
 
@@ -79,7 +79,7 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 - Tightened CSP headers and defaulted Docker publish to localhost.
 - Public-release cleanup and synthetic admin hardening.
 
-## [1.18.4] - 2026-04-15
+## [1.18.4] - 2026-04-15 (retroactively documented)
 
 ### Fixed
 
@@ -88,7 +88,7 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 - Narrowed manual security scan false positives for generated artifacts.
 - Addressed PR review feedback on scan remediation changes.
 
-## [1.18.3] - 2026-04-14
+## [1.18.3] - 2026-04-14 (retroactively documented)
 
 ### Changed
 
@@ -99,7 +99,7 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 
 - Addressed P1 scan findings — path-injection and regex-injection hardening.
 
-## [1.18.2] - 2026-04-14
+## [1.18.2] - 2026-04-14 (retroactively documented)
 
 ### Fixed
 
@@ -107,7 +107,7 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 - **XSS** in admin dashboard — escaped user-supplied content in DOM insertion paths.
 - Added scan reconciliation report documenting resolved findings.
 
-## [1.18.1] - 2026-04-14
+## [1.18.1] - 2026-04-14 (retroactively documented)
 
 ### Added
 

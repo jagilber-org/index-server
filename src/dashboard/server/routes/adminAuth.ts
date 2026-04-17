@@ -11,6 +11,13 @@ export function isLoopbackHost(value: string | undefined): boolean {
     || normalized === '::ffff:127.0.0.1';
 }
 
+export function constantTimeKeyMatch(provided: string | undefined, expected: string): boolean {
+  if (!provided) return false;
+  const providedBuf = Buffer.from(provided, 'utf8');
+  const expectedBuf = Buffer.from(expected, 'utf8');
+  return providedBuf.length === expectedBuf.length && crypto.timingSafeEqual(providedBuf, expectedBuf);
+}
+
 export function dashboardAdminAuth(req: Request, res: Response, next: NextFunction): void {
   const adminKey = getRuntimeConfig().dashboard.http.adminApiKey;
   if (!adminKey) {
@@ -24,9 +31,7 @@ export function dashboardAdminAuth(req: Request, res: Response, next: NextFuncti
   }
 
   const provided = req.headers.authorization?.replace(/^Bearer\s+/i, '');
-  const providedBuf = Buffer.from(provided || '', 'utf8');
-  const keyBuf = Buffer.from(adminKey, 'utf8');
-  if (providedBuf.length === keyBuf.length && crypto.timingSafeEqual(providedBuf, keyBuf)) {
+  if (constantTimeKeyMatch(provided, adminKey)) {
     next();
     return;
   }
