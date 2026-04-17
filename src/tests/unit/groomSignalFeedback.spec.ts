@@ -40,7 +40,6 @@ describe('index_groom - signal feedback loop', () => {
   beforeAll(async () => {
     process.env.INDEX_SERVER_MUTATION = '1';
     process.env.INDEX_SERVER_DIR = TMP_DIR;
-    process.env.INDEX_SERVER_DISABLE_USAGE_RATE_LIMIT = '1';
     process.env.INDEX_SERVER_USAGE_SNAPSHOT_PATH = SNAP_PATH;
     reloadRuntimeConfig();
 
@@ -69,7 +68,6 @@ describe('index_groom - signal feedback loop', () => {
     if (fs.existsSync(SNAP_PATH)) fs.unlinkSync(SNAP_PATH);
     delete process.env.INDEX_SERVER_USAGE_SNAPSHOT_PATH;
     delete process.env.INDEX_SERVER_DIR;
-    delete process.env.INDEX_SERVER_DISABLE_USAGE_RATE_LIMIT;
   });
 
   it('outdated signal sets requirement to deprecated', async () => {

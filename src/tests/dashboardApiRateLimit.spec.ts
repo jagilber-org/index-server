@@ -26,10 +26,11 @@ function httpGet(url: string): Promise<{ status: number; body: string; headers: 
 describe('Dashboard API rate limiting', () => {
   let server: http.Server;
   let port: number;
-  const origEnv = process.env.INDEX_SERVER_RATE_LIMIT_ENABLED;
+  const origDisable = process.env.INDEX_SERVER_DISABLE_RATE_LIMIT;
 
   beforeAll(async () => {
-    process.env.INDEX_SERVER_RATE_LIMIT_ENABLED = '1';
+    // Rate limiting is enabled by default; ensure it isn't disabled for this test.
+    delete process.env.INDEX_SERVER_DISABLE_RATE_LIMIT;
     const { reloadRuntimeConfig } = await import('../config/runtimeConfig.js');
     reloadRuntimeConfig();
     const app = express();
@@ -44,8 +45,8 @@ describe('Dashboard API rate limiting', () => {
 
   afterAll(() => {
     server?.close();
-    if (origEnv === undefined) delete process.env.INDEX_SERVER_RATE_LIMIT_ENABLED;
-    else process.env.INDEX_SERVER_RATE_LIMIT_ENABLED = origEnv;
+    if (origDisable === undefined) delete process.env.INDEX_SERVER_DISABLE_RATE_LIMIT;
+    else process.env.INDEX_SERVER_DISABLE_RATE_LIMIT = origDisable;
   });
 
   it('returns 429 after the configured per-IP request budget is exhausted', async () => {

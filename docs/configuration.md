@@ -779,9 +779,10 @@ Rationale: a single execution pathway (tools/call) eliminates duplicate validati
 | Flag | Default | Scope | Description |
 |------|---------|-------|-------------|
 | `INDEX_SERVER_AUTO_USAGE_TRACK` | on | runtime | Auto-track usage on get/search responses. |
+| `INDEX_SERVER_DISABLE_RATE_LIMIT` | off | runtime | Disable all rate limiting (dashboard HTTP API and usage tracking). Rate limiting is enabled by default. |
 | `INDEX_SERVER_USAGE_FLUSH_MS` | (none) | runtime | Usage data flush interval (ms). |
 | `INDEX_SERVER_DISABLE_USAGE_CLAMP` | off | runtime | Disable usage rate clamping. |
-| `INDEX_SERVER_DISABLE_USAGE_RATE_LIMIT` | off | runtime | Disable usage rate limiting. |
+| `INDEX_SERVER_DISABLE_USAGE_RATE_LIMIT` | off | runtime | (Deprecated) Legacy override to disable usage rate limit when master flag is on. |
 | `INDEX_SERVER_USAGE_SNAPSHOT_PATH` | (none) | runtime | Override path for usage snapshot file (used by tests for isolation). |
 
 #### Storage Backend
