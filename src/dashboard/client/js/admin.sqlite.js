@@ -10,9 +10,15 @@
   'use strict';
 
   // ── Storage Badge (header indicator) ────────────────────────────────────
-  async function initStorageBadge() {
+  async function initStorageBadge(attempt) {
+    attempt = attempt || 0;
     try {
       const res = await adminAuth.adminFetch('/api/sqlite/info');
+      if (res.status === 429 && attempt < 3) {
+        const delay = (res.headers.get('retry-after') || 2) * 1000;
+        setTimeout(function() { initStorageBadge(attempt + 1); }, delay);
+        return;
+      }
       if (!res.ok) return;
       const data = await res.json();
       const badge = document.getElementById('storage-badge');
