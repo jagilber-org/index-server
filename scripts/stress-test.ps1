@@ -2,8 +2,23 @@
 .SYNOPSIS
   Stress test for Index Server — loops CRUD operations via the client script.
 
+.DESCRIPTION
+  Runs repeated CRUD cycles (add, get, search, update, remove) against a running
+  Index Server instance through index-server-client.ps1. Reports per-operation
+  timing, success/failure counts, and error details.
+
+  Parallel mode uses ForEach-Object -Parallel (requires PowerShell 7+).
+  When -Parallel N is greater than 1, the script fans out N concurrent workers,
+  each executing one CRUD cycle at a time. Sequential mode (default) uses a
+  simple for-loop and works on any PowerShell version.
+
+  Prerequisites:
+    - A running Index Server (default: http://localhost:4600)
+    - scripts/index-server-client.ps1 must exist alongside this script
+    - PowerShell 7+ is required when -Parallel > 1
+
 .PARAMETER BaseUrl
-  Server URL (default: $env:INDEX_SERVER_URL or http://localhost:8787)
+  Server URL (default: $env:INDEX_SERVER_URL or http://localhost:4600)
 
 .PARAMETER Iterations
   Number of CRUD cycles to run (default: 100)
@@ -12,13 +27,17 @@
   ID prefix for test instructions (default: stress-test)
 
 .PARAMETER Parallel
-  Number of concurrent jobs (default: 1, sequential)
+  Number of concurrent workers (default: 1, sequential).
+  Requires PowerShell 7+ when set above 1.
 
 .PARAMETER SkipCertCheck
   Skip TLS cert validation
 
 .PARAMETER CleanupOnly
   Only remove leftover stress-test instructions
+
+.PARAMETER AdminKey
+  Bearer token for authenticated endpoints (default: $env:INDEX_SERVER_ADMIN_API_KEY)
 
 .EXAMPLE
   .\stress-test.ps1 -Iterations 50
@@ -164,32 +183,90 @@ if ($Parallel -le 1) {
     }
 }
 else {
-    # Parallel using jobs
-    $jobs = @()
-    for ($i = 1; $i -le $Iterations; $i++) {
-        while (($jobs | Where-Object { $_.State -eq 'Running' }).Count -ge $Parallel) {
-            Start-Sleep -Milliseconds 100
-            $done = $jobs | Where-Object { $_.State -eq 'Completed' }
-            foreach ($j in $done) {
-                $r = Receive-Job $j
-                $results += $r
-                Remove-Job $j
-                $jobs = $jobs | Where-Object { $_.Id -ne $j.Id }
-            }
-        }
-        $idx = $i
-        $jobs += Start-Job -ScriptBlock {
-            param($scriptDir, $baseUrl, $prefix, $idx, $skipCert, $adminKey)
-            . "$scriptDir\stress-test.ps1" -BaseUrl $baseUrl -Prefix $prefix -Iterations 1 2>$null
-        } -ArgumentList $scriptDir, $BaseUrl, $Prefix, $idx, $SkipCertCheck.IsPresent, $AdminKey
-
-        Write-Host "  Started cycle $i" -ForegroundColor DarkGray
+    # Parallel using ForEach-Object -Parallel (PS 7+ required)
+    if ($PSVersionTable.PSVersion.Major -lt 7) {
+        Write-Error "Parallel mode (-Parallel $Parallel) requires PowerShell 7+. Current version: $($PSVersionTable.PSVersion)"
+        exit 1
     }
-    # Wait for remaining
-    $jobs | Wait-Job | ForEach-Object {
-        $r = Receive-Job $_
-        $results += $r
-        Remove-Job $_
+
+    $results = 1..$Iterations | ForEach-Object -ThrottleLimit $Parallel -Parallel {
+        $i = $_
+        $prefix = $using:Prefix
+        $clientPath = $using:client
+        $cArgs = $using:commonArgs
+        $noDelete = $using:NoDelete
+
+        $id = "$prefix-$i"
+        $title = "Stress instruction $i"
+        $body = "Stress test body for iteration $i. Timestamp: $(Get-Date -Format o)"
+        $errors = @()
+        $timings = @{}
+
+        # Helper: invoke client with merged args
+        $invokeClient = {
+            param([hashtable]$Params)
+            $merged = $cArgs.Clone()
+            foreach ($k in $Params.Keys) { $merged[$k] = $Params[$k] }
+            & $clientPath @merged
+        }
+
+        # CREATE
+        $sw = [System.Diagnostics.Stopwatch]::StartNew()
+        $addResult = & $invokeClient @{ Action = 'add'; Id = $id; Title = $title; Body = $body }
+        $sw.Stop()
+        $timings['add'] = $sw.ElapsedMilliseconds
+        $addJson = $addResult | ConvertFrom-Json -ErrorAction SilentlyContinue
+        if (-not $addJson -or $addJson.isError) { $errors += "ADD failed: $addResult" }
+
+        # READ
+        $sw = [System.Diagnostics.Stopwatch]::StartNew()
+        $getResult = & $invokeClient @{ Action = 'get'; Id = $id }
+        $sw.Stop()
+        $timings['get'] = $sw.ElapsedMilliseconds
+
+        # SEARCH
+        $sw = [System.Diagnostics.Stopwatch]::StartNew()
+        $searchResult = & $invokeClient @{ Action = 'search'; Keywords = @($prefix, "$i") }
+        $sw.Stop()
+        $timings['search'] = $sw.ElapsedMilliseconds
+
+        # UPDATE (overwrite)
+        $sw = [System.Diagnostics.Stopwatch]::StartNew()
+        $updateResult = & $invokeClient @{ Action = 'add'; Id = $id; Title = "$title (updated)"; Body = "$body UPDATED"; Overwrite = $true }
+        $sw.Stop()
+        $timings['update'] = $sw.ElapsedMilliseconds
+        $updateJson = $updateResult | ConvertFrom-Json -ErrorAction SilentlyContinue
+        if (-not $updateJson -or $updateJson.isError) { $errors += "UPDATE failed: $updateResult" }
+
+        # DELETE
+        if (-not $noDelete) {
+            $sw = [System.Diagnostics.Stopwatch]::StartNew()
+            $removeResult = & $invokeClient @{ Action = 'remove'; Id = $id }
+            $sw.Stop()
+            $timings['remove'] = $sw.ElapsedMilliseconds
+
+            # VERIFY DELETED
+            $sw = [System.Diagnostics.Stopwatch]::StartNew()
+            $verifyResult = & $invokeClient @{ Action = 'get'; Id = $id }
+            $sw.Stop()
+            $timings['verify_deleted'] = $sw.ElapsedMilliseconds
+        }
+
+        [PSCustomObject]@{
+            Iteration = $i
+            Id        = $id
+            Timings   = $timings
+            Errors    = $errors
+            TotalMs   = ($timings.Values | Measure-Object -Sum).Sum
+        }
+    }
+
+    # Report parallel results
+    foreach ($r in $results) {
+        $status = if ($r.Errors.Count -eq 0) { 'OK' } else { 'FAIL' }
+        $color = if ($status -eq 'OK') { 'Green' } else { 'Red' }
+        Write-Host ("  [{0,4}/{1}] {2} {3}ms" -f `
+            $r.Iteration, $Iterations, $status, $r.TotalMs) -ForegroundColor $color
     }
 }
 
