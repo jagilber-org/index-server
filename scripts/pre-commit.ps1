@@ -95,7 +95,13 @@ if (Test-Path $allowlistPath) {
     Where-Object { $_ -and -not $_.StartsWith('#') } |
     ForEach-Object { $_.Trim() }
 }
-$piiFileAllowlist = @('package-lock.json', 'security-scan.mjs', 'test_results.txt')
+$piiFileAllowlist = @(
+  'package-lock.json', 'security-scan.mjs', 'test_results.txt',
+  'mermaid.min.js', 'elk.bundled.js',       # vendored dashboard libraries
+  'copilot-ui.json',                         # dashboard UI config
+  'pre-commit.ps1',                          # contains PII regex patterns themselves
+  'test-results.json'                        # vitest output with timestamps flagged as credit cards
+)
 
 # ── 1. Static secret patterns ──────────────────────────────────────────────
 $secretPatterns = @(

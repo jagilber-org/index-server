@@ -235,3 +235,5 @@ governance/
 
 # Added by ggshield
 .cache_ggshield
+test-results.json
+test_results.txt

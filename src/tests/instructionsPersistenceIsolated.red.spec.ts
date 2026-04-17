@@ -59,7 +59,7 @@ function isNotFound(obj: any){ return !!obj?.notFound; }
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function deriveSyntheticHash(listObj: any){
   const ids = (listObj?.items||[]).map((i: any)=> i.id).sort();
-  let h = 2166136261 >>> 0;
+  let h = 2166136261 >>> 0; // pii-allowlist: FNV-1a hash offset basis
   for(const id of ids){
     for(let i=0;i<id.length;i++){
       h ^= id.charCodeAt(i);

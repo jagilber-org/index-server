@@ -49,7 +49,7 @@ if(Test-Path $changelogPath){
 }
 
 git add package.json CHANGELOG.md
-git commit -m "chore(release): v$next" --author='mcp-bot <mcp-bot@example.local>' | Out-Null
+git commit -m "chore(release): v$next" --author='mcp-bot <mcp-bot@example.local>' | Out-Null # pii-allowlist: bot placeholder
 git tag "v$next"
 
 Write-Host "Version bumped to $next and tagged. Push with: git push --follow-tags"

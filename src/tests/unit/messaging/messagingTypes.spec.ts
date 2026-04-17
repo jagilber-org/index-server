@@ -54,7 +54,7 @@ describe('Messaging Types & Constants', () => {
         readBy: ['agent-b'],
         payload: { key: 'value' },
         priority: 'high',
-        parentId: 'msg-0-1711929599000',
+        parentId: 'msg-0-1711929599000', // pii-allowlist: test fixture timestamp
         requiresAck: true,
         ackBySeconds: 300,
         tags: ['urgent', 'review'],
