@@ -3,7 +3,7 @@ import path from 'path';
 import crypto from 'crypto';
 import { InstructionEntry } from '../../models/instruction';
 import { registerHandler } from '../../server/registry';
-import { ensureLoaded, getInstructionsDir, invalidate, touchIndexVersion } from '../indexContext';
+import { ensureLoaded, getInstructionsDir, invalidate, touchIndexVersion, writeEntry } from '../indexContext';
 import { incrementCounter } from '../features';
 import { SCHEMA_VERSION } from '../../versioning/schemaVersion';
 import { ClassificationService } from '../classificationService';
@@ -72,39 +72,40 @@ registerHandler('index_add', guard('index_add', (p: AddParams) => {
   }
   if (p.overwrite && (!e.body || !e.title)) {
     try {
-      const dirCandidate = getInstructionsDir();
-      const fileCandidate = path.join(dirCandidate, `${e.id}.json`);
-      if (fs.existsSync(fileCandidate)) {
-        try {
-          const raw = JSON.parse(fs.readFileSync(fileCandidate, 'utf8')) as Partial<InstructionEntry>;
-          if (raw) {
-            const mutableExisting = e as Partial<InstructionEntry> & { id: string };
-            if (!mutableExisting.body && typeof raw.body === 'string' && raw.body.trim()) {
-              mutableExisting.body = raw.body;
-            }
-            if (!mutableExisting.title && typeof raw.title === 'string' && raw.title.trim()) {
-              mutableExisting.title = raw.title;
-            }
-          }
-        } catch { /* ignore parse */ }
+      // Try in-memory state first (covers SQLite and JSON backends), fall back to disk
+      let raw: Partial<InstructionEntry> | undefined;
+      const stHydrate = ensureLoaded();
+      const memEntry = stHydrate.byId.get(e.id);
+      if (memEntry) { raw = { ...memEntry }; }
+      if (!raw) {
+        const dirCandidate = getInstructionsDir();
+        const fileCandidate = path.join(dirCandidate, `${e.id}.json`);
+        if (fs.existsSync(fileCandidate)) {
+          try { raw = JSON.parse(fs.readFileSync(fileCandidate, 'utf8')) as Partial<InstructionEntry>; } catch { /* ignore parse */ }
+        }
+      }
+      if (raw) {
+        const mutableExisting = e as Partial<InstructionEntry> & { id: string };
+        if (!mutableExisting.body && typeof raw.body === 'string' && raw.body.trim()) {
+          mutableExisting.body = raw.body;
+        }
+        if (!mutableExisting.title && typeof raw.title === 'string' && raw.title.trim()) {
+          mutableExisting.title = raw.title;
+        }
       }
     } catch { /* ignore hydration errors */ }
   }
   if (!e.id || !e.title || !e.body) return fail('missing required fields');
   const dir = getInstructionsDir(); if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   const file = path.join(dir, `${e.id}.json`);
-  const exists = fs.existsSync(file);
+  const existsInStore = ensureLoaded().byId.has(e.id);
+  const existsOnDisk = !existsInStore && fs.existsSync(file);
+  const exists = existsInStore || existsOnDisk;
   const existedBeforeOriginal = exists;
   const overwrite = !!p.overwrite;
   if (exists && !overwrite) {
     let st0 = ensureLoaded(); let visible = st0.byId.has(e.id); let repaired = false; if (!visible) {
       try { invalidate(); st0 = ensureLoaded(); visible = st0.byId.has(e.id); if (visible) repaired = true; } catch { /* ignore reload */ }
-      if (!visible) {
-        const filePath = file; if (fs.existsSync(filePath)) {
-          try { const rawTxt = fs.readFileSync(filePath, 'utf8'); if (rawTxt.trim()) { const rawJson = JSON.parse(rawTxt) as InstructionEntry; const classifier = new ClassificationService(); const issues = classifier.validate(rawJson); if (!issues.length) { const norm = classifier.normalize(rawJson); st0.list.push(norm); st0.byId.set(norm.id, norm); visible = true; repaired = true; incrementCounter('instructions:addSkipLateMaterialize'); } else { incrementCounter('instructions:addSkipLateMaterializeRejected'); } } else { incrementCounter('instructions:addSkipLateMaterializeEmpty'); }
-          } catch { incrementCounter('instructions:addSkipLateMaterializeParseError'); }
-        }
-      }
     }
     logAudit('add', e.id, { skipped: true, late_visible: visible, repaired });
     if (traceVisibility()) { emitTrace('[trace:add:skip]', { id: e.id, visible, repaired }); }
@@ -149,7 +150,17 @@ registerHandler('index_add', guard('index_add', (p: AddParams) => {
   let base: InstructionEntry;
   if (exists) {
     try {
-      const existing = JSON.parse(fs.readFileSync(file, 'utf8')) as InstructionEntry;
+      let existing: InstructionEntry;
+      // Try store first (covers SQLite), fall back to disk (JSON backend)
+      const stMerge = ensureLoaded();
+      const memEntry = stMerge.byId.get(e.id);
+      if (memEntry) {
+        existing = { ...memEntry };
+      } else if (existsOnDisk) {
+        existing = JSON.parse(fs.readFileSync(file, 'utf8')) as InstructionEntry;
+      } else {
+        throw new Error('entry not found in store or on disk');
+      }
       base = { ...existing } as InstructionEntry;
       const prevBody = existing.body;
       const prevVersion = existing.version || '1.0.0';
@@ -279,7 +290,7 @@ registerHandler('index_add', guard('index_add', (p: AddParams) => {
   }
   const record = classifier.normalize(base);
   if (record.owner === 'unowned') { const auto = resolveOwner(record.id); if (auto) { record.owner = auto; record.updatedAt = new Date().toISOString(); } }
-  try { atomicWriteJson(file, record); } catch (err) { return fail((err as Error).message || 'write-failed', { id: e.id }); }
+  try { writeEntry(record); } catch (err) { return fail((err as Error).message || 'write-failed', { id: e.id }); }
   try { touchIndexVersion(); } catch { /* ignore */ }
   let stReloaded;
   const strictMode = instructionsCfg.strictVisibility;
@@ -301,18 +312,25 @@ registerHandler('index_add', guard('index_add', (p: AddParams) => {
   const overwrittenNow = overwrite && existedBeforeOriginal;
   let strictVerified = false; const verifyIssues: string[] = [];
   try {
-    let diskRaw: string | undefined; let parsed: InstructionEntry | undefined;
-    try { diskRaw = fs.readFileSync(file, 'utf8'); } catch (ex) { verifyIssues.push('read-failed:' + (ex as Error).message); }
-    if (diskRaw) {
-      try { parsed = JSON.parse(diskRaw) as InstructionEntry; } catch (ex) { verifyIssues.push('parse-failed:' + (ex as Error).message); }
-      if (parsed) {
-        if (parsed.id !== e.id) verifyIssues.push('id-mismatch');
-        if (!parsed.title) verifyIssues.push('missing-title');
-        if (!parsed.body) verifyIssues.push('missing-body');
-        const wantCats = Array.isArray(e.categories) ? e.categories.filter((c): c is string => typeof c === 'string').map(c => c.toLowerCase()) : [];
-        if (wantCats.length) {
-          for (const c of wantCats) { if (!parsed.categories?.includes(c)) { verifyIssues.push('missing-category:' + c); } }
+    let parsed: InstructionEntry | undefined;
+    // Verify from in-memory store first (covers SQLite), fall back to disk (JSON backend)
+    parsed = stReloaded.byId.get(e.id) ?? undefined;
+    if (!parsed) {
+      if (fs.existsSync(file)) {
+        let diskRaw: string | undefined;
+        try { diskRaw = fs.readFileSync(file, 'utf8'); } catch (ex) { verifyIssues.push('read-failed:' + (ex as Error).message); }
+        if (diskRaw) {
+          try { parsed = JSON.parse(diskRaw) as InstructionEntry; } catch (ex) { verifyIssues.push('parse-failed:' + (ex as Error).message); }
         }
+      }
+    }
+    if (parsed) {
+      if (parsed.id !== e.id) verifyIssues.push('id-mismatch');
+      if (!parsed.title) verifyIssues.push('missing-title');
+      if (!parsed.body) verifyIssues.push('missing-body');
+      const wantCats = Array.isArray(e.categories) ? e.categories.filter((c): c is string => typeof c === 'string').map(c => c.toLowerCase()) : [];
+      if (wantCats.length) {
+        for (const c of wantCats) { if (!parsed.categories?.includes(c)) { verifyIssues.push('missing-category:' + c); } }
       }
     }
     const mem = stReloaded.byId.get(e.id);

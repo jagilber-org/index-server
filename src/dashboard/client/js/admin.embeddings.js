@@ -74,7 +74,7 @@
     var statusEl = document.getElementById('emb-status');
     if (statusEl) statusEl.textContent = 'Loading embeddings\u2026';
     try {
-      var res = await fetch('/api/embeddings/projection');
+      var res = await adminAuth.adminFetch('/api/embeddings/projection');
       if (!res.ok) {
         var err = await res.json().catch(function () { return {}; });
         if (statusEl) statusEl.textContent = 'Error: ' + (err.error || res.statusText);
@@ -387,7 +387,7 @@
     var statusEl = document.getElementById('emb-status');
     if (statusEl) statusEl.textContent = 'Computing embeddings (model download on first run)…';
     try {
-      var res = await fetch('/api/embeddings/compute', { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+      var res = await adminAuth.adminFetch('/api/embeddings/compute', { method: 'POST', headers: { 'Content-Type': 'application/json' } });
       if (!res.ok) {
         var err = await res.json().catch(function () { return {}; });
         if (statusEl) statusEl.textContent = 'Error: ' + (err.error || res.statusText) + (err.hint ? ' — ' + err.hint : '');

@@ -7,7 +7,7 @@
 
   /** Fetch instances from the API and render the widget. */
   function loadInstances(){
-    fetch('/api/instances')
+    adminAuth.adminFetch('/api/instances')
       .then(function(res){ return res.ok ? res.json() : null; })
       .then(function(data){
         if(!data || !data.instances) return;

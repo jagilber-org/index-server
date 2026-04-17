@@ -104,7 +104,7 @@
     let fetchOk = false; let data = null; let lastErr = null;
     try {
       setGraphMetaProgress('fetch','a='+attemptId);
-      const res = await fetch('/api/graph/mermaid?'+params.toString());
+      const res = await adminAuth.adminFetch('/api/graph/mermaid?'+params.toString());
       if(!res.ok) throw new Error('http '+res.status);
       data = await res.json();
       fetchOk = !!(data && data.success && data.mermaid);
@@ -114,7 +114,7 @@
       // Retry once with ultra-minimal params
       try {
         setGraphMetaProgress('retry1');
-        const res2 = await fetch('/api/graph/mermaid?enrich=1');
+        const res2 = await adminAuth.adminFetch('/api/graph/mermaid?enrich=1');
         if(res2.ok){ const d2 = await res2.json(); if(d2?.success && d2.mermaid){ data = d2; fetchOk = true; setGraphMetaProgress('retry-ok'); }}
       } catch{ setGraphMetaProgress('retry-fail'); }
     }
@@ -400,7 +400,7 @@
     const el = document.getElementById('drill-categories');
     if(!el) return;
     try{
-      const res = await fetch('/api/graph/categories');
+      const res = await adminAuth.adminFetch('/api/graph/categories');
       const data = await res.json();
       el.innerHTML = '';
       if(Array.isArray(data?.categories)){
@@ -415,7 +415,7 @@
     const el = document.getElementById('drill-instructions');
     if(!el) return;
     try{
-      const res = await fetch('/api/graph/instructions');
+      const res = await adminAuth.adminFetch('/api/graph/instructions');
       const data = await res.json();
       el.innerHTML = '';
       if(Array.isArray(data?.instructions)){

@@ -18,7 +18,7 @@
             const meta = document.getElementById('backup-list-meta');
             if (!sel) return;
             sel.innerHTML = '<option value="">Loading...</option>';
-            const res = await fetch('/api/admin/maintenance/backups');
+            const res = await adminAuth.adminFetch('/api/admin/maintenance/backups');
             if (!res.ok) throw new Error('list failed');
             const data = await res.json();
             const backups = (data.backups || []).slice(0, 200);
@@ -47,7 +47,7 @@
             const choice = sel.value;
             if (!confirm(`Restore backup ${choice}? Current instructions will be safety-backed up first.`)) return;
             if (statusEl) statusEl.textContent = 'Restoring...';
-            const res = await fetch('/api/admin/maintenance/restore', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ backupId: choice }) });
+            const res = await adminAuth.adminFetch('/api/admin/maintenance/restore', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ backupId: choice }) });
             const data = await res.json();
             if (data.success) {
                 if (statusEl) statusEl.textContent = `Restored ${choice} (${data.restored || 0} files)`;
@@ -65,7 +65,7 @@
 
     async function loadMaintenanceStatus() {
         try {
-            const response = await fetch('/api/admin/maintenance');
+            const response = await adminAuth.adminFetch('/api/admin/maintenance');
             const data = await response.json();
 
             if (data.success) {
@@ -119,7 +119,7 @@
                         dryBtn.disabled = true; applyBtn.disabled = true;
                         if(statusEl) statusEl.textContent = dryRun? 'Running dry run...' : 'Normalizing...';
                         try {
-                            const res = await fetch('/api/admin/maintenance/normalize', { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ dryRun, forceCanonical: !!(forceBox&&forceBox.checked) }) });
+                            const res = await adminAuth.adminFetch('/api/admin/maintenance/normalize', { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ dryRun, forceCanonical: !!(forceBox&&forceBox.checked) }) });
                             const data = await res.json();
                             if(data.success){
                                 const s = data.summary || {};
@@ -142,7 +142,7 @@
             const container = document.getElementById('backup-list-full');
             if(!container) return;
             try {
-                const res = await fetch('/api/admin/maintenance/backups');
+                const res = await adminAuth.adminFetch('/api/admin/maintenance/backups');
                 if(!res.ok) throw new Error('request failed');
                 const data = await res.json();
                 const backups = Array.isArray(data.backups) ? data.backups : [];
@@ -203,7 +203,7 @@
         if(!id){ alert('Select a backup first'); return; }
         if(!confirm(`Delete backup ${id}? This cannot be undone.`)) return;
         try {
-            const res = await fetch(`/api/admin/maintenance/backup/${encodeURIComponent(id)}`, { method:'DELETE' });
+            const res = await adminAuth.adminFetch(`/api/admin/maintenance/backup/${encodeURIComponent(id)}`, { method:'DELETE' });
             const data = await res.json();
             if(data.success){ if (typeof showSuccess === 'function') showSuccess(`Deleted ${id}`); loadMaintenanceStatus(); loadBackups(); }
             else { if (typeof showError === 'function') showError(data.error || 'Delete failed'); }
@@ -220,7 +220,7 @@
 
     async function pruneBackups(retain){
         try {
-            const res = await fetch('/api/admin/maintenance/backups/prune', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ retain })});
+            const res = await adminAuth.adminFetch('/api/admin/maintenance/backups/prune', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ retain })});
             const data = await res.json();
             if(data.success){ if (typeof showSuccess === 'function') showSuccess(data.message || 'Pruned'); loadMaintenanceStatus(); loadBackups(); }
             else { if (typeof showError === 'function') showError(data.error || 'Prune failed'); }
@@ -257,7 +257,7 @@
 
     async function toggleMaintenanceMode(enable) {
         try {
-            const response = await fetch('/api/admin/maintenance/mode', {
+            const response = await adminAuth.adminFetch('/api/admin/maintenance/mode', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -284,7 +284,7 @@
         const id = (sel && sel.value) || window.__lastSelectedBackupId;
         if(!id){ alert('Select a backup first'); return; }
         try {
-            const res = await fetch('/api/admin/maintenance/backup/' + encodeURIComponent(id) + '/export');
+            const res = await adminAuth.adminFetch('/api/admin/maintenance/backup/' + encodeURIComponent(id) + '/export');
             if(!res.ok){ const d = await res.json().catch(()=>({})); alert('Export failed: '+(d.error||res.statusText)); return; }
             const blob = await res.blob();
             const contentDisposition = res.headers.get('content-disposition') || '';
@@ -317,7 +317,7 @@
 
             if(zipBackup){
                 if(!confirm('Import backup from ' + file.name + '? (zip archive)')) return;
-                const res = await fetch('/api/admin/maintenance/backup/import', {
+                const res = await adminAuth.adminFetch('/api/admin/maintenance/backup/import', {
                     method:'POST',
                     headers:{
                         'Content-Type':'application/zip',
@@ -339,7 +339,7 @@
             const bundle = JSON.parse(text);
             if(!bundle.files || typeof bundle.files !== 'object'){ alert('Invalid backup file: must contain a "files" object'); return; }
             if(!confirm('Import backup from ' + file.name + '? (' + Object.keys(bundle.files).length + ' files)')) return;
-            const res = await fetch('/api/admin/maintenance/backup/import', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(bundle) });
+            const res = await adminAuth.adminFetch('/api/admin/maintenance/backup/import', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(bundle) });
             const data = await res.json();
             if(data.success){
                 if(typeof showSuccess === 'function') showSuccess(data.message || 'Imported');
@@ -355,7 +355,7 @@
         const statusEl = document.getElementById('signal-groom-status');
         if (statusEl) statusEl.innerHTML = '<span style="opacity:.7;">Running groom' + (dryRun ? ' (dry run)' : '') + '...</span>';
         try {
-            const res = await fetch('/api/tools/index_groom', {
+            const res = await adminAuth.adminFetch('/api/tools/index_groom', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ mode: { dryRun: !!dryRun } })

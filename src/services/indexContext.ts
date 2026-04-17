@@ -11,6 +11,7 @@ import { getBooleanEnv } from '../utils/envUtils';
 import { getRuntimeConfig } from '../config/runtimeConfig';
 import { createStore } from './storage/factory';
 import type { IInstructionStore } from './storage/types';
+import { migrateJsonToSqlite } from './storage/migrationEngine';
 
 // Extended IndexState to retain loader diagnostics so we can expose precise rejection reasons
 // via a forthcoming index_diagnostics tool. Keeping optional properties so older code paths
@@ -120,7 +121,9 @@ function restoreLastUsedInvariant(e: InstructionEntry){
 const USAGE_RATE_LIMIT_PER_SECOND = 10; // max increments per id per second
 const usageRateLimiter = new Map<string, { count: number; windowStart: number }>();
 function checkUsageRateLimit(id: string): boolean {
-  // Test/diagnostic override: allow disabling rate limiting entirely for deterministic tests.
+  // Rate limiting is enabled by default. Set INDEX_SERVER_DISABLE_RATE_LIMIT=1 to disable all rate limiting.
+  if(getBooleanEnv('INDEX_SERVER_DISABLE_RATE_LIMIT')) return true;
+  // Legacy per-subsystem override (backward compat / deterministic tests).
   if(getBooleanEnv('INDEX_SERVER_DISABLE_USAGE_RATE_LIMIT')) return true;
   const now = Date.now();
   const windowStart = Math.floor(now / 1000) * 1000; // 1-second windows
@@ -315,7 +318,21 @@ export function ensureLoaded(): IndexState {
   // Use store for sqlite backend; IndexLoader for json (has normalization/salvaging logic)
   const backend = getRuntimeConfig().storage?.backend ?? 'json';
   const store = backend === 'sqlite' ? getStoreForDir(baseDir) : null;
-  const result = store ? store.load() : new IndexLoader(baseDir).load();
+  let result = store ? store.load() : new IndexLoader(baseDir).load();
+  // Auto-migrate JSON → SQLite when the DB is empty but JSON files exist on disk
+  if (store && result.entries.length === 0 && getRuntimeConfig().storage?.sqliteMigrateOnStart) {
+    const jsonFiles = fs.existsSync(baseDir) ? fs.readdirSync(baseDir).filter(f => f.endsWith('.json')) : [];
+    if (jsonFiles.length > 0) {
+      try {
+        const dbPath = getRuntimeConfig().storage?.sqlitePath ?? path.join(process.cwd(), 'data', 'index.db');
+        const mr = migrateJsonToSqlite(baseDir, dbPath);
+        if (mr.migrated > 0) {
+          console.log(`[storage] Auto-migrated ${mr.migrated} instruction(s) from JSON → SQLite`);
+          result = store.load();
+        }
+      } catch (err) { console.warn('[storage] Auto-migration failed:', err); }
+    }
+  }
   const byId = new Map<string, InstructionEntry>(); result.entries.forEach(e=>byId.set(e.id,e));
   // Deduplicate list using byId so two on-disk files with the same id field never produce duplicate
   // search results. byId already uses last-write-wins semantics; list must be consistent with it.

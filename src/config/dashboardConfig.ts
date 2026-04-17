@@ -30,6 +30,7 @@ interface DashboardHttpConfig {
   verboseLogging: boolean;
   mutationEnabled: boolean;
   adminApiKey?: string;
+  rateLimitEnabled: boolean;
   tls: DashboardTlsConfig;
 }
 
@@ -80,6 +81,7 @@ export function parseDashboardConfig(mutationEnabled: boolean, instructionsBaseD
       verboseLogging: getBooleanEnv('INDEX_SERVER_VERBOSE_LOGGING'),
       mutationEnabled,
       adminApiKey: process.env.INDEX_SERVER_ADMIN_API_KEY || undefined,
+      rateLimitEnabled: !getBooleanEnv('INDEX_SERVER_DISABLE_RATE_LIMIT'),
       tls: {
         enabled: getBooleanEnv('INDEX_SERVER_DASHBOARD_TLS'),
         certPath: process.env.INDEX_SERVER_DASHBOARD_TLS_CERT || undefined,

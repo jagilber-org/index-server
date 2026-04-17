@@ -85,7 +85,7 @@
         try {
             let sessionsCount = 0;
             let connectionsCount = 0;
-            const response = await fetch('/api/admin/sessions');
+            const response = await adminAuth.adminFetch('/api/admin/sessions');
             const data = await response.json();
             if (data.success) {
                 displaySessions(data.sessions);
@@ -94,7 +94,7 @@
                     try {
                         const created = await maybeEnsureAdminSession(true);
                         if (created) {
-                            const r2 = await fetch('/api/admin/sessions');
+                            const r2 = await adminAuth.adminFetch('/api/admin/sessions');
                             const d2 = await r2.json();
                             if (d2.success) { displaySessions(d2.sessions); sessionsCount = d2.sessions.length; }
                         }
@@ -105,7 +105,7 @@
             }
 
             try {
-                const connRes = await fetch('/api/admin/connections');
+                const connRes = await adminAuth.adminFetch('/api/admin/connections');
                 const connData = await connRes.json();
                 const connEl = document.getElementById('connections-list');
                 if (connData.success && connEl) {
@@ -179,7 +179,7 @@
             if (typeof sessionStorage === 'undefined') return false;
             const existing = sessionStorage.getItem('mcp_admin_session_id');
             if (existing && !onlyIfRequested) return false;
-            const res = await fetch('/api/admin/sessions', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ userId: 'dashboard_auto' }) });
+            const res = await adminAuth.adminFetch('/api/admin/sessions', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ userId: 'dashboard_auto' }) });
             const data = await res.json().catch(()=>({}));
             if (data.success && data.session && data.session.id) {
                 sessionStorage.setItem('mcp_admin_session_id', data.session.id);
@@ -191,7 +191,7 @@
 
     async function loadSessionHistory(limit = 50) {
         try {
-            const res = await fetch('/api/admin/sessions/history?limit=' + limit);
+            const res = await adminAuth.adminFetch('/api/admin/sessions/history?limit=' + limit);
             const data = await res.json();
             if (!data.success) throw new Error();
             renderSessionHistory(data.history || []);
@@ -240,7 +240,7 @@
 
     async function createTestSession() {
         try {
-            const response = await fetch('/api/admin/sessions', {
+            const response = await adminAuth.adminFetch('/api/admin/sessions', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ userId: 'test_admin_' + Date.now() })
@@ -261,7 +261,7 @@
 
     async function terminateSession(sessionId) {
         try {
-            const response = await fetch(`/api/admin/sessions/${sessionId}`, {
+            const response = await adminAuth.adminFetch(`/api/admin/sessions/${sessionId}`, {
                 method: 'DELETE'
             });
 

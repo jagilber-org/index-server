@@ -1,8 +1,6 @@
 // Shared utilities used across instruction handler submodules.
-import fs from 'fs';
-import path from 'path';
 import { InstructionEntry } from '../../models/instruction';
-import { ensureLoaded, getInstructionsDir } from '../indexContext';
+import { ensureLoaded } from '../indexContext';
 import { getRuntimeConfig } from '../../config/runtimeConfig';
 import { emitTrace, traceEnabled } from '../tracing';
 
@@ -59,29 +57,12 @@ export function traceVisibility() { return traceEnabled(1); }
 export function traceInstructionVisibility(id: string, phase: string, extra?: Record<string, unknown>) {
   if (!traceVisibility()) return;
   try {
-    const dir = getInstructionsDir();
-    const file = path.join(dir, `${id}.json`);
     const st = ensureLoaded();
     const indexItem = st.byId.get(id) as Partial<InstructionEntry> | undefined;
-    let fileExists = false; let fileSize: number | undefined; let mtime: string | undefined; let diskHash: string | undefined;
-    if (fs.existsSync(file)) {
-      fileExists = true;
-      const stat = fs.statSync(file);
-      fileSize = stat.size; mtime = stat.mtime.toISOString();
-      try {
-        const rawTxt = fs.readFileSync(file, 'utf8');
-        try { const rawJson = JSON.parse(rawTxt) as { sourceHash?: string }; if (typeof rawJson.sourceHash === 'string') diskHash = rawJson.sourceHash; } catch { /* ignore parse */ }
-      } catch { /* ignore read */ }
-    }
     emitTrace('[trace:visibility]', {
       phase,
       id,
-      dir,
       now: new Date().toISOString(),
-      fileExists,
-      fileSize,
-      mtime,
-      diskHash,
       indexHas: !!indexItem,
       indexSourceHash: indexItem?.sourceHash,
       indexUpdatedAt: indexItem?.updatedAt,

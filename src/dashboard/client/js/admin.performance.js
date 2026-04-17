@@ -4,7 +4,7 @@
     (function initResourceTrendMerge(){
         async function fetchResourceTrends(){
             try {
-                const res = await fetch('/api/system/resources?limit=300');
+                const res = await adminAuth.adminFetch('/api/system/resources?limit=300');
                 if(!res.ok) throw new Error('http '+res.status);
                 const json = await res.json();
                 const samples = json?.data?.samples || [];

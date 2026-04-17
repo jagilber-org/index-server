@@ -4,6 +4,30 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog and this project adheres to Semantic Versioning.
 
+## [1.21.0] - 2026-04-17
+
+### Added
+
+- Dashboard authentication via `INDEX_SERVER_ADMIN_API_KEY` with Bearer token, login modal, and sessionStorage-based session management.
+- CRUD stress test scripts (`scripts/stress-test.ps1`) for load testing instruction operations.
+- `dashboardAdminAuth` middleware now protects dashboard mutation routes (POST/PUT/DELETE instructions).
+
+### Changed
+
+- Rate limiting is now enabled by default. Use `INDEX_SERVER_DISABLE_RATE_LIMIT=1` to opt out.
+- All instruction handlers now use `IInstructionStore` interface instead of direct disk I/O, enabling pluggable storage backends.
+- Auto-migration from JSON to SQLite on startup when `INDEX_SERVER_STORAGE_BACKEND=sqlite`.
+- Dashboard CRUD routes now properly invalidate cache after mutations, matching MCP handler patterns.
+
+### Deprecated
+
+- `INDEX_SERVER_DISABLE_USAGE_RATE_LIMIT` — replaced by `INDEX_SERVER_DISABLE_RATE_LIMIT` which covers all rate limiting.
+
+### Fixed
+
+- `Retry-After` header in dashboard SQLite tab now parsed safely with `parseInt` to avoid `NaN` from date-string values.
+- Rate limiting no longer causes intermittent test failures in groom signal feedback tests.
+
 ## [1.20.1] - 2026-04-16
 
 ### Changed

@@ -10,9 +10,15 @@
   'use strict';
 
   // ── Storage Badge (header indicator) ────────────────────────────────────
-  async function initStorageBadge() {
+  async function initStorageBadge(attempt) {
+    attempt = attempt || 0;
     try {
-      const res = await fetch('/api/sqlite/info');
+      const res = await adminAuth.adminFetch('/api/sqlite/info');
+      if (res.status === 429 && attempt < 3) {
+        const delay = (parseInt(res.headers.get('retry-after'), 10) || 2) * 1000;
+        setTimeout(function() { initStorageBadge(attempt + 1); }, delay);
+        return;
+      }
       if (!res.ok) return;
       const data = await res.json();
       const badge = document.getElementById('storage-badge');
@@ -54,7 +60,7 @@
     if (!infoEl) return;
 
     try {
-      const res = await fetch('/api/sqlite/info');
+      const res = await adminAuth.adminFetch('/api/sqlite/info');
       if (!res.ok) throw new Error('Failed to fetch');
       const data = await res.json();
 
@@ -96,7 +102,7 @@
     if (resultEl) resultEl.innerHTML = '<span style="color:var(--admin-text-dim)">Running…</span>';
 
     try {
-      const res = await fetch('/api/sqlite/' + action, { method: 'POST' });
+      const res = await adminAuth.adminFetch('/api/sqlite/' + action, { method: 'POST' });
       const data = await res.json();
       if (data.success) {
         let msg = data.message || 'Done';
@@ -122,7 +128,7 @@
     const resultEl = document.getElementById('sqlite-backup-result');
     if (resultEl) resultEl.innerHTML = '<span style="color:var(--admin-text-dim)">Creating backup…</span>';
     try {
-      const res = await fetch('/api/sqlite/backup', { method: 'POST' });
+      const res = await adminAuth.adminFetch('/api/sqlite/backup', { method: 'POST' });
       const data = await res.json();
       if (data.success) {
         resultEl.innerHTML = '<span style="color:#22c55e">✅ ' + esc(data.message) + ' (' + fmtBytes(data.backupSize) + ')</span>';
@@ -139,7 +145,7 @@
     const listEl = document.getElementById('sqlite-backups-list');
     if (!listEl) return;
     try {
-      const res = await fetch('/api/sqlite/backups');
+      const res = await adminAuth.adminFetch('/api/sqlite/backups');
       const data = await res.json();
       if (!data.success || !data.backups || data.backups.length === 0) {
         listEl.innerHTML = '<div style="color:var(--admin-text-dim)">No backups found</div>';
@@ -166,7 +172,7 @@
     const resultEl = document.getElementById('sqlite-backup-result');
     if (resultEl) resultEl.innerHTML = '<span style="color:var(--admin-text-dim)">Restoring…</span>';
     try {
-      const res = await fetch('/api/sqlite/restore', {
+      const res = await adminAuth.adminFetch('/api/sqlite/restore', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ backupName }),
@@ -189,7 +195,7 @@
     const resultEl = document.getElementById('sqlite-backup-result');
     if (resultEl) resultEl.innerHTML = '<span style="color:var(--admin-text-dim)">Running WAL checkpoint…</span>';
     try {
-      const res = await fetch('/api/sqlite/wal-checkpoint', { method: 'POST' });
+      const res = await adminAuth.adminFetch('/api/sqlite/wal-checkpoint', { method: 'POST' });
       const data = await res.json();
       if (data.success) {
         resultEl.innerHTML = '<span style="color:#22c55e">✅ ' + esc(data.message) + ' — WAL: ' + fmtBytes(data.walSizeAfter) + '</span>';
@@ -207,7 +213,7 @@
     const resultEl = document.getElementById('sqlite-migration-result');
     if (resultEl) resultEl.innerHTML = '<span style="color:var(--admin-text-dim)">Running…</span>';
     try {
-      const res = await fetch('/api/sqlite/' + action, { method: 'POST' });
+      const res = await adminAuth.adminFetch('/api/sqlite/' + action, { method: 'POST' });
       const data = await res.json();
       if (data.success) {
         let msg = '✅ ' + esc(data.message);
@@ -246,7 +252,7 @@
 
     try {
       const start = performance.now();
-      const res = await fetch('/api/sqlite/query', {
+      const res = await adminAuth.adminFetch('/api/sqlite/query', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sql }),

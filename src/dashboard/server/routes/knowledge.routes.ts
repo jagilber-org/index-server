@@ -5,6 +5,7 @@
 
 import { Router, Request, Response } from 'express';
 import { getKnowledgeStore } from '../KnowledgeStore.js';
+import { dashboardAdminAuth } from './adminAuth.js';
 
 export function createKnowledgeRoutes(): Router {
   const router = Router();
@@ -13,7 +14,7 @@ export function createKnowledgeRoutes(): Router {
    * POST /api/knowledge - Store or update a knowledge entry
    * Body: { key: string, content: string, metadata?: Record<string, unknown> }
    */
-  router.post('/knowledge', (req: Request, res: Response) => {
+  router.post('/knowledge', dashboardAdminAuth, (req: Request, res: Response) => {
     try {
       const { key, content, metadata } = req.body;
       if (!key || typeof key !== 'string') {

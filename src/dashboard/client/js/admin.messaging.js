@@ -144,7 +144,7 @@
 
   async function loadChannels() {
     try {
-      const res = await fetch('/api/messages/channels');
+      const res = await adminAuth.adminFetch('/api/messages/channels');
       const data = await res.json();
       _channels = data.channels || [];
     } catch (e) {
@@ -157,7 +157,7 @@
     _allMessages = [];
     try {
       const fetches = _channels.map(ch =>
-        fetch(`/api/messages/${encodeURIComponent(ch.channel)}?reader=*&limit=500`)
+        adminAuth.adminFetch(`/api/messages/${encodeURIComponent(ch.channel)}?reader=*&limit=500`)
           .then(r => r.json())
           .then(d => d.messages || [])
           .catch(() => [])
@@ -468,7 +468,7 @@
     const recipients = recipientsRaw ? recipientsRaw.split(',').map(r => r.trim()).filter(Boolean) : undefined;
 
     try {
-      const res = await fetch(`/api/messages/by-id/${encodeURIComponent(id)}`, {
+      const res = await adminAuth.adminFetch(`/api/messages/by-id/${encodeURIComponent(id)}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ body, recipients }),
@@ -494,7 +494,7 @@
     const label = ids.length > 1 ? `Delete ${ids.length} messages?` : 'Delete this message?';
     if (!confirm(label)) return;
     try {
-      await fetch('/api/messages', {
+      await adminAuth.adminFetch('/api/messages', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ messageIds: ids }),
@@ -522,7 +522,7 @@
     try {
       const payload = { channel, sender, recipients, body, priority };
       if (tags?.length) payload.tags = tags;
-      const res = await fetch('/api/messages', {
+      const res = await adminAuth.adminFetch('/api/messages', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),

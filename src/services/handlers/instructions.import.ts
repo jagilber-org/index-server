@@ -3,7 +3,7 @@ import path from 'path';
 import crypto from 'crypto';
 import { InstructionEntry } from '../../models/instruction';
 import { registerHandler } from '../../server/registry';
-import { ensureLoaded, getInstructionsDir, invalidate, touchIndexVersion } from '../indexContext';
+import { ensureLoaded, getInstructionsDir, invalidate, touchIndexVersion, writeEntry } from '../indexContext';
 import { incrementCounter } from '../features';
 import { SCHEMA_VERSION } from '../../versioning/schemaVersion';
 import { ClassificationService } from '../classificationService';
@@ -87,7 +87,10 @@ registerHandler('index_import', guard('index_import', (p: { entries?: ImportEntr
       errors.push({ id: e.id, error: `body_too_large: ${bodyTrimmed.length} chars exceeds ${importBodyMax} limit. Split into cross-linked instructions.` });
       continue;
     }
-    const file = path.join(dir, `${e.id}.json`); const fileExists = fs.existsSync(file);
+    const file = path.join(dir, `${e.id}.json`);
+    const stImport = ensureLoaded();
+    const storeHas = stImport.byId.has(e.id);
+    const fileExists = storeHas || fs.existsSync(file);
     const now = new Date().toISOString();
     let categories = Array.from(new Set((Array.isArray(e.categories) ? e.categories : []).filter((c): c is string => typeof c === 'string' && c.trim().length > 0).map(c => c.toLowerCase()))).sort();
     const primaryCategoryRaw = (e as unknown as Record<string, unknown>).primaryCategory as string | undefined;
@@ -98,7 +101,13 @@ registerHandler('index_import', guard('index_import', (p: { entries?: ImportEntr
     }
     const effectivePrimary = (primaryCategoryRaw && categories.includes(primaryCategoryRaw.toLowerCase())) ? primaryCategoryRaw.toLowerCase() : categories[0];
     const newBodyHash = crypto.createHash('sha256').update(bodyTrimmed, 'utf8').digest('hex');
-    let existing: InstructionEntry | null = null; if (fileExists) { try { existing = JSON.parse(fs.readFileSync(file, 'utf8')); } catch { existing = null; } }
+    let existing: InstructionEntry | null = null;
+    if (fileExists) {
+      // Try store first (covers SQLite), fall back to disk
+      const memEntry = stImport.byId.get(e.id);
+      if (memEntry) { existing = { ...memEntry }; }
+      else { try { existing = JSON.parse(fs.readFileSync(file, 'utf8')); } catch { existing = null; } }
+    }
     if (e.priorityTier === 'P1' && (!categories.length || !e.owner)) { errors.push({ id: e.id, error: 'P1 requires category & owner' }); continue; }
     if ((e.requirement === 'mandatory' || e.requirement === 'critical') && !e.owner) { errors.push({ id: e.id, error: 'mandatory/critical require owner' }); continue; }
     if (fileExists && mode === 'skip') { skipped++; continue; }
@@ -109,7 +118,7 @@ registerHandler('index_import', guard('index_import', (p: { entries?: ImportEntr
     base.sourceHash = newBodyHash;
     const record = classifier.normalize(base);
     if (record.owner === 'unowned') { const auto = resolveOwner(record.id); if (auto) { record.owner = auto; record.updatedAt = new Date().toISOString(); } }
-    try { atomicWriteJson(file, record); } catch { errors.push({ id: e.id, error: 'write-failed' }); }
+    try { writeEntry(record); } catch { errors.push({ id: e.id, error: 'write-failed' }); }
   }
   touchIndexVersion(); invalidate(); const st = ensureLoaded();
   const summary = { hash: st.hash, imported, skipped, overwritten, total: entries.length, errors };

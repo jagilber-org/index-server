@@ -6,38 +6,15 @@
  */
 
 import { Router, Request, Response } from 'express';
-import fs from 'fs';
-import path from 'path';
-import { getRuntimeConfig } from '../../../config/runtimeConfig.js';
 import { getLocalHandler } from '../../../server/registry.js';
-import { ensureLoaded } from '../../../services/indexContext.js';
+import { ensureLoaded, invalidate, touchIndexVersion, writeEntry, removeEntry } from '../../../services/indexContext.js';
+import { dashboardAdminAuth } from './adminAuth.js';
 import { handleInstructionsSearch } from '../../../services/handlers.search.js';
+import { InstructionEntry } from '../../../models/instruction.js';
 
-function resolveInstructionsDir(): string {
-  const config = getRuntimeConfig();
-  const configured = config.dashboard.admin.instructionsDir || config.index.baseDir;
-  return configured && configured.trim().length ? configured : path.join(process.cwd(), 'instructions');
-}
-
-function ensureInstructionsDir(): string {
-  const instructionsDir = resolveInstructionsDir();
-  try {
-    if (!fs.existsSync(instructionsDir)) fs.mkdirSync(instructionsDir, { recursive: true });
-  } catch {
-    // ignore
-  }
-  return instructionsDir;
-}
-
-/** Sanitize an instruction name and return the resolved file path, preventing path traversal. */
-function safeInstructionPath(instructionsDir: string, name: string): string {
-  const safeName = String(name).replace(/[^a-zA-Z0-9-_]/g, '-');
-  const file = path.join(instructionsDir, safeName + '.json');
-  const resolved = path.resolve(file);
-  if (!resolved.startsWith(path.resolve(instructionsDir) + path.sep) && resolved !== path.resolve(instructionsDir)) {
-    throw new Error('Invalid instruction name');
-  }
-  return file;
+/** Sanitize an instruction name. */
+function safeName(name: string): string {
+  return String(name).replace(/[^a-zA-Z0-9-_]/g, '-');
 }
 
 export function createInstructionsRoutes(): Router {
@@ -61,115 +38,37 @@ export function createInstructionsRoutes(): Router {
   };
 
   /**
-   * GET /api/instructions - list instruction JSON files
+   * GET /api/instructions - list all instructions from the store
    */
   router.get('/instructions', (_req: Request, res: Response) => {
     try {
-      const instructionsDir = ensureInstructionsDir();
-      const classify = (basename: string): { category: string; sizeCategory: string } => {
-        const lower = basename.toLowerCase();
-        let category = 'general';
-        if (lower.startsWith('alpha')) category = 'alpha';
-        else if (lower.startsWith('beta')) category = 'beta';
-        else if (lower.includes('seed')) category = 'seed';
-        else if (lower.includes('enterprise')) category = 'enterprise';
-        else if (lower.includes('dispatcher')) category = 'dispatcher';
-        return { category, sizeCategory: 'small' };
-      };
-
-      const files = fs.readdirSync(instructionsDir)
-        .filter(f => f.toLowerCase().endsWith('.json'))
-        .map(f => {
-          const abs = path.join(instructionsDir, f);
-          const stat = fs.statSync(abs);
-          const base = f.replace(/\.json$/i, '');
-          const meta = classify(base);
-          const sizeCategory = stat.size < 1024 ? 'small' : (stat.size < 5 * 1024 ? 'medium' : 'large');
-
-          let primaryCategory = meta.category;
-          let categories: string[] = [];
-          let semanticSummary: string | undefined;
-          try {
-            const raw = fs.readFileSync(abs, 'utf8');
-            if (raw.length < 1_000_000) {
-              const json = JSON.parse(raw) as unknown;
-              const getProp = (obj: unknown, key: string): unknown => {
-                if (obj && typeof obj === 'object' && key in (obj as Record<string, unknown>)) {
-                  return (obj as Record<string, unknown>)[key];
-                }
-                return undefined;
-              };
-              const rawCats = getProp(json, 'categories');
-              if (Array.isArray(rawCats)) {
-                categories = rawCats
-                  .filter((c: unknown): c is string => typeof c === 'string')
-                  .map(c => c.trim())
-                  .filter(c => !!c);
-              }
-              const rawPrimary = getProp(json, 'category');
-              if (typeof rawPrimary === 'string') {
-                const c = rawPrimary.trim();
-                if (c) primaryCategory = c;
-                if (c && !categories.includes(c)) categories.push(c);
-              }
-              const fileMeta = getProp(json, 'meta');
-              if (fileMeta && typeof fileMeta === 'object') {
-                const metaPrimary = getProp(fileMeta, 'category');
-                if (typeof metaPrimary === 'string') {
-                  const c = metaPrimary.trim();
-                  if (c) primaryCategory = c;
-                  if (c && !categories.includes(c)) categories.push(c);
-                }
-                const metaCats = getProp(fileMeta, 'categories');
-                if (Array.isArray(metaCats)) {
-                  for (const c of metaCats) {
-                    if (typeof c === 'string') {
-                      const norm = c.trim();
-                      if (norm && !categories.includes(norm)) categories.push(norm);
-                    }
-                  }
-                }
-                const metaSummary = getProp(fileMeta, 'semanticSummary');
-                if (typeof metaSummary === 'string' && metaSummary.trim()) semanticSummary = metaSummary.trim();
-              }
-              if (!semanticSummary) {
-                const topSummary = getProp(json, 'semanticSummary');
-                if (typeof topSummary === 'string' && topSummary.trim()) semanticSummary = topSummary.trim();
-              }
-              if (!semanticSummary) {
-                const desc = getProp(json, 'description');
-                if (typeof desc === 'string' && desc.trim()) semanticSummary = desc.trim();
-              }
-              if (!semanticSummary) {
-                const body = getProp(json, 'body');
-                if (typeof body === 'string' && body.trim()) {
-                  const firstLine = body.split(/\r?\n/).map(l => l.trim()).filter(Boolean)[0];
-                  if (firstLine) semanticSummary = firstLine;
-                }
-              }
-              if (semanticSummary) {
-                if (semanticSummary.length > 400) semanticSummary = semanticSummary.slice(0, 400) + '…';
-              }
-            }
-          } catch {
-            // ignore parse errors; fall back to heuristic classification only
-          }
-
-          if (!categories.length && primaryCategory) categories = [primaryCategory];
-          categories = Array.from(new Set(categories));
-
-          return {
-            name: base,
-            size: stat.size,
-            mtime: stat.mtimeMs,
-            category: primaryCategory,
-            categories,
-            sizeCategory,
-            semanticSummary,
-          };
-        });
-
-      res.json({ success: true, instructions: files, count: files.length, timestamp: Date.now() });
+      const st = ensureLoaded();
+      const instructions = st.list.map((entry: InstructionEntry) => {
+        const bodyStr = typeof entry.body === 'string' ? entry.body : '';
+        const bodySize = Buffer.byteLength(bodyStr, 'utf8');
+        const sizeCategory = bodySize < 1024 ? 'small' : (bodySize < 5 * 1024 ? 'medium' : 'large');
+        const cats = Array.isArray(entry.categories) ? entry.categories : [];
+        const primaryCategory = cats.length > 0 ? cats[0] : 'general';
+        let semanticSummary: string | undefined;
+        const desc = (entry as unknown as Record<string, unknown>).description;
+        if (typeof desc === 'string' && desc.trim()) {
+          semanticSummary = desc.trim();
+        } else if (bodyStr.trim()) {
+          const firstLine = bodyStr.split(/\r?\n/).map((l: string) => l.trim()).filter(Boolean)[0];
+          if (firstLine) semanticSummary = firstLine;
+        }
+        if (semanticSummary && semanticSummary.length > 400) semanticSummary = semanticSummary.slice(0, 400) + '…';
+        return {
+          name: entry.id,
+          size: bodySize,
+          mtime: entry.updatedAt ? new Date(entry.updatedAt).getTime() : Date.now(),
+          category: primaryCategory,
+          categories: cats.length ? cats : [primaryCategory],
+          sizeCategory,
+          semanticSummary,
+        };
+      });
+      res.json({ success: true, instructions, count: instructions.length, timestamp: Date.now() });
     } catch (error) {
       console.error('[API] Failed to list instructions:', error);
       res.status(500).json({ success: false, error: 'Failed to list instructions' });
@@ -181,7 +80,6 @@ export function createInstructionsRoutes(): Router {
    */
   router.get('/instructions_search', async (req: Request, res: Response) => {
     try {
-      const instructionsDir = ensureInstructionsDir();
       const qRaw = String(req.query.q || '').trim();
       const query = qRaw.slice(0, 256);
       const limitRaw = parseInt(String(req.query.limit || '20'), 10);
@@ -200,8 +98,7 @@ export function createInstructionsRoutes(): Router {
         try {
           const entry = state.byId.get(match.instructionId);
           if (!entry) continue;
-          const abs = path.join(instructionsDir, `${entry.id}.json`);
-          const stat = fs.existsSync(abs) ? fs.statSync(abs) : undefined;
+          const bodyStr = typeof entry.body === 'string' ? entry.body : '';
           const snippet = buildSnippet([
             entry.id,
             entry.title,
@@ -212,8 +109,8 @@ export function createInstructionsRoutes(): Router {
           results.push({
             name: entry.id,
             categories: entry.categories.slice(0, 10),
-            size: stat?.size ?? Buffer.byteLength(JSON.stringify(entry), 'utf8'),
-            mtime: stat?.mtimeMs ?? Date.now(),
+            size: Buffer.byteLength(bodyStr, 'utf8'),
+            mtime: entry.updatedAt ? new Date(entry.updatedAt).getTime() : Date.now(),
             snippet,
           });
         } catch { /* skip file on error */ }
@@ -259,11 +156,11 @@ export function createInstructionsRoutes(): Router {
    */
   router.get('/instructions/:name', (req: Request, res: Response) => {
     try {
-      const instructionsDir = ensureInstructionsDir();
-      const file = safeInstructionPath(instructionsDir, req.params.name);
-      if (!fs.existsSync(file)) return res.status(404).json({ success: false, error: 'Not found' });
-      const content = JSON.parse(fs.readFileSync(file, 'utf8'));
-      res.json({ success: true, content, timestamp: Date.now() });
+      const id = safeName(req.params.name);
+      const st = ensureLoaded();
+      const entry = st.byId.get(id);
+      if (!entry) return res.status(404).json({ success: false, error: 'Not found' });
+      res.json({ success: true, content: entry, timestamp: Date.now() });
     } catch (error) {
       console.error('[API] Failed to load instruction:', error);
       res.status(500).json({ success: false, error: 'Failed to load instruction' });
@@ -274,16 +171,26 @@ export function createInstructionsRoutes(): Router {
    * POST /api/instructions - create new instruction
    * body: { name, content }
    */
-  router.post('/instructions', (req: Request, res: Response) => {
+  router.post('/instructions', dashboardAdminAuth, (req: Request, res: Response) => {
     try {
-      const instructionsDir = ensureInstructionsDir();
       const { name, content } = req.body || {};
       if (!name || !content) return res.status(400).json({ success: false, error: 'Missing name or content' });
-      const file = safeInstructionPath(instructionsDir, name);
-      const safeName = path.basename(file, '.json');
-      if (fs.existsSync(file)) return res.status(409).json({ success: false, error: 'Instruction already exists' });
-      fs.writeFileSync(file, JSON.stringify(content, null, 2));
-      res.json({ success: true, message: 'Instruction created', name: safeName, timestamp: Date.now() });
+      const id = safeName(name);
+      const st = ensureLoaded();
+      if (st.byId.has(id)) return res.status(409).json({ success: false, error: 'Instruction already exists' });
+      const entry: InstructionEntry = {
+        ...(typeof content === 'object' && content !== null ? content : {}),
+        id,
+        title: (content && typeof content === 'object' ? content.title : undefined) || id,
+        body: (content && typeof content === 'object' ? content.body : undefined) || (typeof content === 'string' ? content : ''),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      writeEntry(entry);
+      touchIndexVersion();
+      invalidate();
+      ensureLoaded();
+      res.json({ success: true, message: 'Instruction created', name: id, timestamp: Date.now() });
     } catch (error) {
       console.error('[API] Failed to create instruction:', error);
       res.status(500).json({ success: false, error: 'Failed to create instruction' });
@@ -293,15 +200,24 @@ export function createInstructionsRoutes(): Router {
   /**
    * PUT /api/instructions/:name - update existing instruction
    */
-  router.put('/instructions/:name', (req: Request, res: Response) => {
+  router.put('/instructions/:name', dashboardAdminAuth, (req: Request, res: Response) => {
     try {
-      const instructionsDir = ensureInstructionsDir();
       const { content } = req.body || {};
-      const name = req.params.name;
+      const id = safeName(req.params.name);
       if (!content) return res.status(400).json({ success: false, error: 'Missing content' });
-      const file = safeInstructionPath(instructionsDir, name);
-      if (!fs.existsSync(file)) return res.status(404).json({ success: false, error: 'Not found' });
-      fs.writeFileSync(file, JSON.stringify(content, null, 2));
+      const st = ensureLoaded();
+      const existing = st.byId.get(id);
+      if (!existing) return res.status(404).json({ success: false, error: 'Not found' });
+      const updated: InstructionEntry = {
+        ...existing,
+        ...(typeof content === 'object' && content !== null ? content : {}),
+        id, // preserve id
+        updatedAt: new Date().toISOString(),
+      };
+      writeEntry(updated);
+      touchIndexVersion();
+      invalidate();
+      ensureLoaded();
       res.json({ success: true, message: 'Instruction updated', timestamp: Date.now() });
     } catch (error) {
       console.error('[API] Failed to update instruction:', error);
@@ -312,12 +228,15 @@ export function createInstructionsRoutes(): Router {
   /**
    * DELETE /api/instructions/:name - delete instruction
    */
-  router.delete('/instructions/:name', (req: Request, res: Response) => {
+  router.delete('/instructions/:name', dashboardAdminAuth, (req: Request, res: Response) => {
     try {
-      const instructionsDir = ensureInstructionsDir();
-      const file = safeInstructionPath(instructionsDir, req.params.name);
-      if (!fs.existsSync(file)) return res.status(404).json({ success: false, error: 'Not found' });
-      fs.unlinkSync(file);
+      const id = safeName(req.params.name);
+      const st = ensureLoaded();
+      if (!st.byId.has(id)) return res.status(404).json({ success: false, error: 'Not found' });
+      removeEntry(id);
+      touchIndexVersion();
+      invalidate();
+      ensureLoaded();
       res.json({ success: true, message: 'Instruction deleted', timestamp: Date.now() });
     } catch (error) {
       console.error('[API] Failed to delete instruction:', error);

@@ -24,6 +24,7 @@ export interface FlagRuntime extends FlagMeta { value?:string; enabled?:boolean;
 // Curated registry. Order is intentional for grouping high-value operational flags first.
 export const FLAG_REGISTRY: FlagMeta[] = [
   // Core operation & dashboard
+  { name:'INDEX_SERVER_DIR', category:'core', description:'Instructions catalog directory. Defaults to ./instructions relative to CWD.', stability:'stable', default:'./instructions', type:'string', since:'1.0.0' },
   { name:'INDEX_SERVER_MUTATION', category:'core', description:'Enable mutation tools (add/import/remove/enrich/governance updates).', stability:'stable', default:'off', type:'boolean', since:'1.0.0' },
   { name:'INDEX_SERVER_VERBOSE_LOGGING', category:'core', description:'Verbose logging (handshake, dispatch timings).', stability:'stable', default:'off', type:'boolean', since:'1.0.0' },
   { name:'INDEX_SERVER_LOG_DIAG', category:'diagnostics', description:'Diagnostic logging (lower-level/internal).', stability:'diagnostic', default:'off', type:'boolean', since:'1.0.0' },
@@ -66,7 +67,8 @@ export const FLAG_REGISTRY: FlagMeta[] = [
   { name:'INDEX_SERVER_FILE_TRACE', category:'tracing', description:'Promote index file events to trace level (files).', stability:'diagnostic', default:'off', type:'boolean', since:'1.1.1' },
 
   // Usage & metrics
-  { name:'INDEX_SERVER_DISABLE_USAGE_RATE_LIMIT', category:'usage', description:'Disable internal usage sampling rate limit.', stability:'diagnostic', default:'off', type:'boolean', since:'1.1.1' },
+  { name:'INDEX_SERVER_DISABLE_RATE_LIMIT', category:'usage', description:'Disable all rate limiting (dashboard HTTP API and usage tracking). Rate limiting is enabled by default.', stability:'stable', default:'off', type:'boolean', since:'1.1.3' },
+  { name:'INDEX_SERVER_DISABLE_USAGE_RATE_LIMIT', category:'usage', description:'(Deprecated) Legacy per-subsystem override to disable usage rate limit.', stability:'diagnostic', default:'off', type:'boolean', since:'1.1.1' },
   { name:'INDEX_SERVER_DISABLE_USAGE_CLAMP', category:'usage', description:'Disable initial usage count clamp logic.', stability:'diagnostic', default:'off', type:'boolean', since:'1.1.1' },
   { name:'INDEX_SERVER_USAGE_FLUSH_MS', category:'usage', description:'Override usage flush debounce interval.', stability:'diagnostic', default:'75', type:'number', since:'1.1.1' },
 

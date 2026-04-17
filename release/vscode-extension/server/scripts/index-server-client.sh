@@ -15,14 +15,19 @@
 #   ./index-server-client.sh groom [--dry-run]
 #
 # Env: INDEX_SERVER_URL (default: http://localhost:8787)
+#      INDEX_SERVER_ADMIN_API_KEY to authenticate with Bearer token
 #      INDEX_SERVER_SKIP_CERT=1 to skip TLS cert validation (self-signed)
 
 set -euo pipefail
 
 BASE_URL="${INDEX_SERVER_URL:-http://localhost:8787}"
 BASE_URL="${BASE_URL%/}"
+ADMIN_KEY="${INDEX_SERVER_ADMIN_API_KEY:-}"
 
 CURL_OPTS=(-s -S --fail-with-body -H "Content-Type: application/json")
+if [ -n "$ADMIN_KEY" ]; then
+    CURL_OPTS+=(-H "Authorization: Bearer ${ADMIN_KEY}")
+fi
 if [ "${INDEX_SERVER_SKIP_CERT:-}" = "1" ]; then
     CURL_OPTS+=(-k)
 fi
@@ -89,7 +94,7 @@ case "$ACTION" in
         # Escape body for JSON (newlines, quotes, backslashes)
         esc_body=$(printf '%s' "$body" | python3 -c 'import json,sys;print(json.dumps(sys.stdin.read()))' 2>/dev/null || printf '%s' "$body" | sed 's/\\/\\\\/g;s/"/\\"/g' | tr '\n' ' ')
         esc_title=$(printf '%s' "$title" | sed 's/\\/\\\\/g;s/"/\\"/g')
-        call_tool "index_add" "{\"id\":\"${id}\",\"title\":\"${esc_title}\",\"body\":${esc_body},\"priority\":${priority},\"audience\":\"all\",\"requirement\":\"optional\",\"categories\":[\"general\"],\"contentType\":\"instruction\",\"overwrite\":${overwrite}}"
+        call_tool "index_add" "{\"entry\":{\"id\":\"${id}\",\"title\":\"${esc_title}\",\"body\":${esc_body},\"priority\":${priority},\"audience\":\"all\",\"requirement\":\"optional\",\"categories\":[\"general\"],\"contentType\":\"instruction\"},\"lax\":true,\"overwrite\":${overwrite}}"
         ;;
     remove)
         id="${1:-}"

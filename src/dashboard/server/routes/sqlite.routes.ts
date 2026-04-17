@@ -7,6 +7,7 @@
  */
 
 import { Router } from 'express';
+import { dashboardAdminAuth } from './adminAuth.js';
 import { getRuntimeConfig } from '../../../config/runtimeConfig.js';
 import { DatabaseSync } from 'node:sqlite';
 import { migrateJsonToSqlite, migrateSqliteToJson } from '../../../services/storage/migrationEngine.js';
@@ -118,7 +119,7 @@ export function createSqliteRoutes(): Router {
   });
 
   /** POST /sqlite/query — Execute read-only SQL query */
-  router.post('/sqlite/query', (req, res) => {
+  router.post('/sqlite/query', dashboardAdminAuth, (req, res) => {
     try {
       assertSqliteActive();
 
@@ -165,7 +166,7 @@ export function createSqliteRoutes(): Router {
   });
 
   /** POST /sqlite/vacuum — Run VACUUM to reclaim space */
-  router.post('/sqlite/vacuum', (_req, res) => {
+  router.post('/sqlite/vacuum', dashboardAdminAuth, (_req, res) => {
     try {
       assertSqliteActive();
       const sqlitePath = getSqlitePath();
@@ -184,7 +185,7 @@ export function createSqliteRoutes(): Router {
   });
 
   /** POST /sqlite/optimize — Run FTS5 optimize */
-  router.post('/sqlite/optimize', (_req, res) => {
+  router.post('/sqlite/optimize', dashboardAdminAuth, (_req, res) => {
     try {
       assertSqliteActive();
       const sqlitePath = getSqlitePath();
@@ -202,7 +203,7 @@ export function createSqliteRoutes(): Router {
   });
 
   /** POST /sqlite/integrity-check — Run SQLite integrity check */
-  router.post('/sqlite/integrity-check', (_req, res) => {
+  router.post('/sqlite/integrity-check', dashboardAdminAuth, (_req, res) => {
     try {
       assertSqliteActive();
       const sqlitePath = getSqlitePath();
@@ -223,7 +224,7 @@ export function createSqliteRoutes(): Router {
   // ── Backup / Restore ──────────────────────────────────────────────────
 
   /** POST /sqlite/backup — Create manual backup of the SQLite DB */
-  router.post('/sqlite/backup', (_req, res) => {
+  router.post('/sqlite/backup', dashboardAdminAuth, (_req, res) => {
     try {
       assertSqliteActive();
       const sqlitePath = getSqlitePath();
@@ -284,7 +285,7 @@ export function createSqliteRoutes(): Router {
   });
 
   /** POST /sqlite/restore — Restore from a named backup */
-  router.post('/sqlite/restore', (req, res) => {
+  router.post('/sqlite/restore', dashboardAdminAuth, (req, res) => {
     try {
       assertSqliteActive();
       const { backupName } = req.body as { backupName?: string };
@@ -343,7 +344,7 @@ export function createSqliteRoutes(): Router {
   // ── Reset / Migrate ───────────────────────────────────────────────────
 
   /** POST /sqlite/reset — Drop all tables and reinitialize schema */
-  router.post('/sqlite/reset', (_req, res) => {
+  router.post('/sqlite/reset', dashboardAdminAuth, (_req, res) => {
     try {
       assertSqliteActive();
       const sqlitePath = getSqlitePath();
@@ -380,7 +381,7 @@ export function createSqliteRoutes(): Router {
   });
 
   /** POST /sqlite/migrate — Migrate instructions from JSON files to SQLite */
-  router.post('/sqlite/migrate', async (_req, res) => {
+  router.post('/sqlite/migrate', dashboardAdminAuth, async (_req, res) => {
     try {
       assertSqliteActive();
       const instrDir = getRuntimeConfig().index.baseDir;
@@ -399,7 +400,7 @@ export function createSqliteRoutes(): Router {
   });
 
   /** POST /sqlite/export — Export SQLite instructions back to JSON files */
-  router.post('/sqlite/export', async (_req, res) => {
+  router.post('/sqlite/export', dashboardAdminAuth, async (_req, res) => {
     try {
       assertSqliteActive();
       const instrDir = getRuntimeConfig().index.baseDir;
@@ -420,7 +421,7 @@ export function createSqliteRoutes(): Router {
   // ── WAL Management ────────────────────────────────────────────────────
 
   /** POST /sqlite/wal-checkpoint — Flush WAL to main database file */
-  router.post('/sqlite/wal-checkpoint', (_req, res) => {
+  router.post('/sqlite/wal-checkpoint', dashboardAdminAuth, (_req, res) => {
     try {
       assertSqliteActive();
       const sqlitePath = getSqlitePath();
@@ -444,7 +445,7 @@ export function createSqliteRoutes(): Router {
   });
 
   /** POST /sqlite/analyze — Update query planner statistics */
-  router.post('/sqlite/analyze', (_req, res) => {
+  router.post('/sqlite/analyze', dashboardAdminAuth, (_req, res) => {
     try {
       assertSqliteActive();
       const sqlitePath = getSqlitePath();
@@ -462,7 +463,7 @@ export function createSqliteRoutes(): Router {
   });
 
   /** POST /sqlite/reindex — Rebuild all indexes */
-  router.post('/sqlite/reindex', (_req, res) => {
+  router.post('/sqlite/reindex', dashboardAdminAuth, (_req, res) => {
     try {
       assertSqliteActive();
       const sqlitePath = getSqlitePath();
@@ -482,7 +483,7 @@ export function createSqliteRoutes(): Router {
   // ── Grooming ──────────────────────────────────────────────────────────
 
   /** POST /sqlite/groom — Clean up orphans, stale data, run optimizations */
-  router.post('/sqlite/groom', (_req, res) => {
+  router.post('/sqlite/groom', dashboardAdminAuth, (_req, res) => {
     try {
       assertSqliteActive();
       const sqlitePath = getSqlitePath();

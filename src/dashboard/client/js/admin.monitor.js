@@ -30,7 +30,7 @@
         }, 1000); // fast poll while running
         let statusTimer = setInterval(updateActiveSyntheticRequests, 1000);
         try {
-            const res = await fetch('/api/admin/synthetic/activity', {
+            const res = await adminAuth.adminFetch('/api/admin/synthetic/activity', {
                 method:'POST',
                 headers:{'Content-Type':'application/json'},
                 body: JSON.stringify({ iterations: iter, concurrency: conc, debug: wantTrace, trace: wantTrace, stream: wantTrace })
@@ -93,7 +93,7 @@
     // Fetch active synthetic request count and inject into monitoring panel if present
     async function updateActiveSyntheticRequests(){
         try {
-            const res = await fetch('/api/admin/synthetic/status');
+            const res = await adminAuth.adminFetch('/api/admin/synthetic/status');
             const data = await res.json();
             if (!data.success) return;
             const active = data.activeRequests || 0;
@@ -120,9 +120,9 @@
     async function loadMonitoringData() {
         try {
             const [perfRes, sysRes, alertsRes] = await Promise.all([
-                fetch('/api/performance/detailed').catch(e=>e),
-                fetch('/api/system/health').catch(e=>e),
-                fetch('/api/alerts/active').catch(e=>e)
+                adminAuth.adminFetch('/api/performance/detailed').catch(e=>e),
+                adminAuth.adminFetch('/api/system/health').catch(e=>e),
+                adminAuth.adminFetch('/api/alerts/active').catch(e=>e)
             ]);
             const [perfData, sysData, alertsData] = await Promise.all([
                 perfRes?.json ? perfRes.json().catch(()=>({})) : {},

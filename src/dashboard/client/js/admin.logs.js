@@ -9,7 +9,7 @@
             const lines = document.getElementById('log-lines').value || 100;
             let logsArray = [];
             let rawMode = false;
-            let response = await fetch(`/api/logs?lines=${lines}`);
+            let response = await adminAuth.adminFetch(`/api/logs?lines=${lines}`);
             if (response.ok) {
                 const ct = response.headers.get('content-type') || '';
                 if (ct.includes('application/json')) {
@@ -28,7 +28,7 @@
                 }
             }
             if (rawMode) {
-                response = await fetch(`/api/logs?lines=${lines}&raw=1`);
+                response = await adminAuth.adminFetch(`/api/logs?lines=${lines}&raw=1`);
                 const txt = await response.text();
                 logsArray = txt.split(/\r?\n/);
             }

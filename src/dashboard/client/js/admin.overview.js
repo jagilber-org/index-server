@@ -7,9 +7,9 @@
     async function loadOverviewData(){
         try {
             const [statsRes, maintenanceRes, healthRes] = await Promise.allSettled([
-                fetch('/api/admin/stats'),
-                fetch('/api/admin/maintenance'),
-                fetch('/api/system/health')
+                adminAuth.adminFetch('/api/admin/stats'),
+                adminAuth.adminFetch('/api/admin/maintenance'),
+                adminAuth.adminFetch('/api/system/health')
             ]);
             const statsData = statsRes.status==='fulfilled' ? await statsRes.value.json().catch(()=> ({})) : {};
             const maintenanceData = maintenanceRes.status==='fulfilled' ? await maintenanceRes.value.json().catch(()=> ({})) : {};
@@ -165,7 +165,7 @@
         const panel = document.getElementById('usage-signals-panel');
         if (!panel) return;
         try {
-            const res = await fetch('/api/usage/snapshot');
+            const res = await adminAuth.adminFetch('/api/usage/snapshot');
             if (!res.ok) throw new Error('http ' + res.status);
             const data = await res.json();
             const snap = data.snapshot || {};

@@ -384,9 +384,19 @@ git commit -m "test: refresh playwright baseline after <reason>"
 
 ## Security Considerations
 
-- Do not expose dashboard publicly; no auth layer is shipped by default.
+- Do not expose dashboard publicly. When `INDEX_SERVER_ADMIN_API_KEY` is set, the dashboard requires authentication via Bearer token with a login modal and sessionStorage-based session management. Without this variable, localhost access is allowed without auth; remote access is blocked with 403.
+- All mutation endpoints (POST/PUT/DELETE) across instructions, tools, SQLite, knowledge, and messaging routes require admin auth when `INDEX_SERVER_ADMIN_API_KEY` is set. GET (read-only) routes remain open.
 - Disable when not actively used (`INDEX_SERVER_DASHBOARD` unset) to reduce surface.
 - Snapshot artifacts may include metadata; treat CI artifacts as internal.
+
+### Authentication Behavior Matrix
+
+| `INDEX_SERVER_ADMIN_API_KEY` | Client Location | Mutation Routes | Read-Only Routes |
+|------------------------------|----------------|-----------------|------------------|
+| Not set | Localhost | ✅ Allowed | ✅ Allowed |
+| Not set | Remote | ❌ 403 Forbidden | ✅ Allowed |
+| Set | Any (valid Bearer token) | ✅ Allowed | ✅ Allowed |
+| Set | Any (missing/wrong token) | ❌ 401 Unauthorized | ✅ Allowed |
 
 ---
 
