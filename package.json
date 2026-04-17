@@ -57,6 +57,8 @@
     "lint:instructions": "node scripts/lint-instructions.mjs",
     "format": "prettier --write .",
     "prepare": "node scripts/setup-hooks.cjs",
+    "audit": "npm audit --omit=dev --audit-level=high",
+    "prepack": "npm run audit",
     "prepublishOnly": "npm run build && npm run typecheck",
     "scan:security": "node scripts/security-scan.mjs",
     "release:patch": "node scripts/bump-version.mjs patch",

@@ -79,6 +79,11 @@ if($Rebuild){
     if($LASTEXITCODE -ne 0){ throw "npm ci failed with exit code $LASTEXITCODE" }
     npm run build
     if($LASTEXITCODE -ne 0){ throw "npm run build failed with exit code $LASTEXITCODE" }
+    Write-Host '[deploy] Running npm audit (high/critical vulnerabilities only)...'
+    npm run audit
+    if($LASTEXITCODE -ne 0){
+      Write-Host '[deploy] npm audit found high/critical vulnerabilities. Review with: npm audit --omit=dev' -ForegroundColor Yellow
+    }
     # Verify a core build artifact exists (dist/server/index-server.js) AND that dashboard assets copied
     if(-not (Test-Path 'dist/server/index-server.js')){ throw 'dist/server/index-server.js missing after build (compile step likely failed silently).' }
     if(-not (Test-Path 'dist/dashboard/client/admin.html')){ throw 'dist/dashboard/client/admin.html missing (asset copy step skipped – did tsc fail so copy script never ran?).' }
