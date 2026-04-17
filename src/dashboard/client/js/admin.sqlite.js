@@ -15,7 +15,7 @@
     try {
       const res = await adminAuth.adminFetch('/api/sqlite/info');
       if (res.status === 429 && attempt < 3) {
-        const delay = (res.headers.get('retry-after') || 2) * 1000;
+        const delay = (parseInt(res.headers.get('retry-after'), 10) || 2) * 1000;
         setTimeout(function() { initStorageBadge(attempt + 1); }, delay);
         return;
       }

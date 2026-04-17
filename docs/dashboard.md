@@ -384,7 +384,7 @@ git commit -m "test: refresh playwright baseline after <reason>"
 
 ## Security Considerations
 
-- Do not expose dashboard publicly; no auth layer is shipped by default.
+- Do not expose dashboard publicly. When `INDEX_SERVER_ADMIN_API_KEY` is set, the dashboard requires authentication via Bearer token with a login modal and sessionStorage-based session management. Without this variable, no auth layer is active.
 - Disable when not actively used (`INDEX_SERVER_DASHBOARD` unset) to reduce surface.
 - Snapshot artifacts may include metadata; treat CI artifacts as internal.
 

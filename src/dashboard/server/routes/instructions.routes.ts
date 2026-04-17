@@ -7,7 +7,8 @@
 
 import { Router, Request, Response } from 'express';
 import { getLocalHandler } from '../../../server/registry.js';
-import { ensureLoaded, writeEntry, removeEntry } from '../../../services/indexContext.js';
+import { ensureLoaded, invalidate, touchIndexVersion, writeEntry, removeEntry } from '../../../services/indexContext.js';
+import { dashboardAdminAuth } from './adminAuth.js';
 import { handleInstructionsSearch } from '../../../services/handlers.search.js';
 import { InstructionEntry } from '../../../models/instruction.js';
 
@@ -170,7 +171,7 @@ export function createInstructionsRoutes(): Router {
    * POST /api/instructions - create new instruction
    * body: { name, content }
    */
-  router.post('/instructions', (req: Request, res: Response) => {
+  router.post('/instructions', dashboardAdminAuth, (req: Request, res: Response) => {
     try {
       const { name, content } = req.body || {};
       if (!name || !content) return res.status(400).json({ success: false, error: 'Missing name or content' });
@@ -186,6 +187,9 @@ export function createInstructionsRoutes(): Router {
         updatedAt: new Date().toISOString(),
       };
       writeEntry(entry);
+      touchIndexVersion();
+      invalidate();
+      ensureLoaded();
       res.json({ success: true, message: 'Instruction created', name: id, timestamp: Date.now() });
     } catch (error) {
       console.error('[API] Failed to create instruction:', error);
@@ -196,7 +200,7 @@ export function createInstructionsRoutes(): Router {
   /**
    * PUT /api/instructions/:name - update existing instruction
    */
-  router.put('/instructions/:name', (req: Request, res: Response) => {
+  router.put('/instructions/:name', dashboardAdminAuth, (req: Request, res: Response) => {
     try {
       const { content } = req.body || {};
       const id = safeName(req.params.name);
@@ -211,6 +215,9 @@ export function createInstructionsRoutes(): Router {
         updatedAt: new Date().toISOString(),
       };
       writeEntry(updated);
+      touchIndexVersion();
+      invalidate();
+      ensureLoaded();
       res.json({ success: true, message: 'Instruction updated', timestamp: Date.now() });
     } catch (error) {
       console.error('[API] Failed to update instruction:', error);
@@ -221,12 +228,15 @@ export function createInstructionsRoutes(): Router {
   /**
    * DELETE /api/instructions/:name - delete instruction
    */
-  router.delete('/instructions/:name', (req: Request, res: Response) => {
+  router.delete('/instructions/:name', dashboardAdminAuth, (req: Request, res: Response) => {
     try {
       const id = safeName(req.params.name);
       const st = ensureLoaded();
       if (!st.byId.has(id)) return res.status(404).json({ success: false, error: 'Not found' });
       removeEntry(id);
+      touchIndexVersion();
+      invalidate();
+      ensureLoaded();
       res.json({ success: true, message: 'Instruction deleted', timestamp: Date.now() });
     } catch (error) {
       console.error('[API] Failed to delete instruction:', error);
