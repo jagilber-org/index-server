@@ -6,6 +6,7 @@
     <title>Index Server Admin</title>
     <link rel="stylesheet" href="css/admin.css">
     <script defer src="js/admin.utils.js"></script>
+    <script defer src="js/admin.auth.js"></script>
     <script defer src="js/admin.overview.js"></script>
     <script defer src="js/admin.sessions.js"></script>
     <script defer src="js/admin.monitor.js"></script>
@@ -26,6 +27,7 @@
     <div class="admin-container admin-root">
         <div class="admin-header">
             <h1>Index Server</h1>
+            <span id="auth-indicator" class="auth-indicator"></span>
             <span id="storage-badge" class="storage-badge" style="display:none;margin-left:8px;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;letter-spacing:0.5px"></span>
             <div id="instances-widget" class="instances-widget" style="display:none;">
                 <button id="instances-badge" class="instances-badge" title="Running instances">
@@ -978,7 +980,7 @@
         async function performBackup() {
             try {
                 showSuccess('Backup started...');
-                const response = await fetch('/api/admin/maintenance/backup', {
+                const response = await adminAuth.adminFetch('/api/admin/maintenance/backup', {
                     method: 'POST'
                 });
 
@@ -997,7 +999,7 @@
 
         async function clearCaches() {
             try {
-                const response = await fetch('/api/admin/cache/clear', {
+                const response = await adminAuth.adminFetch('/api/admin/cache/clear', {
                     method: 'POST'
                 });
 
@@ -1020,7 +1022,7 @@
 
             try {
                 showSuccess('Server restart initiated...');
-                const response = await fetch('/api/admin/restart', {
+                const response = await adminAuth.adminFetch('/api/admin/restart', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ component: 'all' })
@@ -1043,7 +1045,7 @@
                     // This inline fallback only fires if the external script failed to load.
                     if (window.__configExternalLoaded) return;
                     try {
-                        var res = await fetch('/api/admin/config');
+                        var res = await adminAuth.adminFetch('/api/admin/config');
                         var data = await res.json();
                         if (!data.success) throw new Error('Failed to load config');
                         var cfg = data.config;
@@ -1090,7 +1092,7 @@
                 featureFlags: featureFlags
             };
                         try {
-                                var res = await fetch('/api/admin/config', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(updates)});
+                                var res = await adminAuth.adminFetch('/api/admin/config', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(updates)});
                                 var data = await res.json();
                                 if (data.success) { showSuccess('Configuration updated'); loadConfiguration(); } else { showError(data.error || 'Update failed'); }
                         } catch (e) { showError('Update failed'); }
@@ -1193,7 +1195,7 @@
 
         async function loadInstructionCategories() {
             try {
-                const res = await fetch('/api/instructions/categories');
+                const res = await adminAuth.adminFetch('/api/instructions/categories');
                 if(!res.ok) throw new Error('http '+res.status);
                 const data = await res.json();
                 // Accept shapes: {success:true,categories:[{name,count}]}, {success:true,data:{categories:[...]}}
@@ -1298,7 +1300,7 @@
                     if (contentEl && attempts === 1) {
                         contentEl.value = '// Loading ' + name + '...';
                     }
-                    const res = await fetch('/api/instructions/' + encodeURIComponent(name));
+                    const res = await adminAuth.adminFetch('/api/instructions/' + encodeURIComponent(name));
                     if (!res.ok) throw new Error('http ' + res.status);
                     const data = await res.json();
                     if (data.success === false && !data.content && !data.data?.content) throw new Error('server reported failure');
@@ -1446,7 +1448,7 @@
                 if(!body.name){ showError('Provide file name'); return; }
             }
             try {
-                const res = await fetch(url, { method, headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+                const res = await adminAuth.adminFetch(url, { method, headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
                 const data = await res.json();
                 if(!res.ok || !data.success){ throw new Error(data.error || data.message || 'Save failed'); }
                 showSuccess(instructionEditing? 'Instruction updated':'Instruction created');
@@ -1464,7 +1466,7 @@
             try {
                 // Load categories first to populate the dropdown (ignore errors; we'll derive later if needed)
                 const catNames = await loadInstructionCategories();
-                const res = await fetch('/api/instructions');
+                const res = await adminAuth.adminFetch('/api/instructions');
                 if(!res.ok) throw new Error('http '+res.status);
                 const data = await res.json();
                 // Accept shapes: {success:true,instructions:[...]}, {data:{instructions:[...]}}, or legacy {instructions:[...]}
@@ -1532,7 +1534,7 @@
         (function initResourceTrendMerge(){
             async function fetchResourceTrends(){
                 try {
-                    const res = await fetch('/api/system/resources?limit=300');
+                    const res = await adminAuth.adminFetch('/api/system/resources?limit=300');
                     if(!res.ok) throw new Error('http '+res.status);
                     const json = await res.json();
                     const samples = json?.data?.samples || [];
@@ -1609,7 +1611,7 @@
     (async function fetchBuildMeta(){
             try {
         // Cache bust query param to avoid any intermediary caching of status response
-        const r = await fetch('/api/status?t=' + Date.now());
+        const r = await adminAuth.adminFetch('/api/status?t=' + Date.now());
                 const j = await r.json();
                 const el = document.getElementById('buildMeta');
                 const ver = j.version || '?.?.?';
@@ -1708,7 +1710,7 @@
             const sel = document.getElementById('drill-categories');
             if(status) status.textContent='loading categories...';
             try {
-                const r = await fetch('/api/graph/categories');
+                const r = await adminAuth.adminFetch('/api/graph/categories');
                 const j = await r.json();
                 if(!j.success) throw new Error(j.error||'failed');
                 if(sel){
@@ -1730,7 +1732,7 @@
             const cats = [...catSel.selectedOptions].map(o=> o.value).join(',');
             if(status) status.textContent='loading instructions...';
             try {
-                const r = await fetch('/api/graph/instructions?categories=' + encodeURIComponent(cats));
+                const r = await adminAuth.adminFetch('/api/graph/instructions?categories=' + encodeURIComponent(cats));
                 const j = await r.json();
                 if(!j.success) throw new Error(j.error||'failed');
                 instSel.innerHTML='';
@@ -1778,7 +1780,7 @@
             const membershipEnabled = !!document.getElementById('drill-show-membership') && document.getElementById('drill-show-membership').checked;
             if(status) status.textContent='fetching relations...';
             try {
-                const r = await fetch('/api/graph/relations?instructions=' + encodeURIComponent(ids.join(',')) + (expandEnabled? '&expand=1':'') );
+                const r = await adminAuth.adminFetch('/api/graph/relations?instructions=' + encodeURIComponent(ids.join(',')) + (expandEnabled? '&expand=1':'') );
                 const j = await r.json();
                 if(!j.success) throw new Error(j.error||'failed');
                 const instructions = j.nodes.filter(n=> n.nodeType==='instruction');

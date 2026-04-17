@@ -1463,4 +1463,125 @@ a.mermaid-link { color: var(--admin-accent); }
     .msg-card-body-wrap, .msg-card-footer { padding-left: 0; }
 }
 
+/* --- Auth overlay --- */
+
+.auth-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0,0,0,0.65);
+    backdrop-filter: blur(3px);
+}
+
+.auth-modal {
+    background: var(--admin-surface);
+    border: 1px solid var(--admin-border);
+    border-radius: 8px;
+    padding: 28px 32px 24px;
+    width: 380px;
+    max-width: 90vw;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+}
+
+.auth-modal h3 {
+    margin: 0 0 8px;
+    color: var(--admin-heading-dark);
+    font-size: 17px;
+}
+
+.auth-hint {
+    color: var(--admin-text-dim);
+    font-size: 13px;
+    margin: 0 0 16px;
+    line-height: 1.5;
+}
+
+.auth-hint code {
+    font-family: var(--mcp-font-mono);
+    font-size: 11px;
+    background: var(--admin-surface-alt);
+    padding: 1px 5px;
+    border-radius: 3px;
+}
+
+.auth-key-input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 8px 10px;
+    font-size: 14px;
+    font-family: var(--mcp-font-mono);
+    background: var(--admin-surface-alt);
+    border: 1px solid var(--admin-border);
+    border-radius: 4px;
+    color: var(--admin-input-text);
+}
+
+.auth-key-input:focus {
+    outline: none;
+    border-color: var(--admin-accent);
+    box-shadow: 0 0 0 2px rgba(59,130,246,0.25);
+}
+
+.auth-error {
+    color: var(--admin-danger);
+    font-size: 12px;
+    min-height: 18px;
+    margin: 6px 0;
+}
+
+.auth-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.auth-actions .btn {
+    flex: 1;
+    padding: 7px 14px;
+    font-size: 13px;
+    border-radius: 4px;
+    border: 1px solid transparent;
+    cursor: pointer;
+    font-weight: 500;
+}
+
+.auth-submit-btn {
+    background: var(--admin-accent);
+    color: var(--admin-white);
+}
+
+.auth-submit-btn:hover {
+    background: var(--admin-accent-alt);
+}
+
+.btn-secondary {
+    background: transparent;
+    color: var(--admin-text-dim);
+    border-color: var(--admin-border) !important;
+}
+
+.btn-secondary:hover {
+    background: var(--admin-surface-alt);
+    color: var(--admin-text);
+}
+
+/* --- Auth indicator in header --- */
+
+.auth-indicator {
+    font-size: 11px;
+    margin-left: 8px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    letter-spacing: 0.3px;
+}
+
+.auth-indicator.auth-ok {
+    background: rgba(115,191,105,0.15);
+    color: var(--admin-success);
+    border: 1px solid var(--admin-success-border);
+}
+
 /* .admin-root marker (used by tests, no visual styling) */

@@ -62,7 +62,7 @@
 
     async function loadConfiguration() {
         try {
-            var res = await fetch('/api/admin/config');
+            var res = await adminAuth.adminFetch('/api/admin/config');
             var data = await res.json();
             if (!data.success) throw new Error('Failed to load config');
             var cfg = data.config;
@@ -70,7 +70,7 @@
             var allFlags = Array.isArray(data.allFlags) ? data.allFlags : [];
             if (!allFlags.length) {
                 try {
-                    var fres = await fetch('/api/admin/flags');
+                    var fres = await adminAuth.adminFetch('/api/admin/flags');
                     var fdata = await fres.json();
                     if (fdata.success && Array.isArray(fdata.allFlags)) allFlags = fdata.allFlags;
                 } catch(e) { /* ignore */ }
@@ -180,7 +180,7 @@
             featureFlags: featureFlags
         };
         try {
-            var res = await fetch('/api/admin/config', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(updates)});
+            var res = await adminAuth.adminFetch('/api/admin/config', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(updates)});
             var data = await res.json();
             if (data.success) { if (typeof showSuccess === 'function') showSuccess('Configuration updated'); loadConfiguration(); }
             else { if (typeof showError === 'function') showError(data.error || 'Update failed'); }

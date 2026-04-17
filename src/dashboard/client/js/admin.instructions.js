@@ -43,7 +43,7 @@
   let usageSnapshot = {};
   async function fetchUsageSnapshot() {
     try {
-      const res = await fetch('/api/usage/snapshot');
+      const res = await adminAuth.adminFetch('/api/usage/snapshot');
       if (!res.ok) return {};
       const data = await res.json();
       return data.snapshot || {};
@@ -59,7 +59,7 @@
 
   async function loadInstructionCategories() {
     try {
-      const res = await fetch('/api/instructions_categories');
+      const res = await adminAuth.adminFetch('/api/instructions_categories');
       if(!res.ok) throw new Error('http '+res.status);
       const data = await res.json();
       let cats = data.categories || data.data?.categories || [];
@@ -277,7 +277,7 @@
       try{
         attempts++;
         if(contentEl && attempts===1) contentEl.value = '// Loading ' + name + '...';
-        const res = await fetch('/api/instructions/' + encodeURIComponent(name));
+        const res = await adminAuth.adminFetch('/api/instructions/' + encodeURIComponent(name));
         if(!res.ok) throw new Error('http '+res.status);
         const data = await res.json();
         if(data.success === false && !data.content && !data.data?.content) throw new Error('server reported failure');
@@ -407,7 +407,7 @@
     if(globals.instructionEditing){ url += '/' + encodeURIComponent(globals.instructionEditing); method = 'PUT'; }
     else { body.name = nameEl.value.trim(); if(!body.name){ globals.showError && globals.showError('Provide file name'); return; } }
     try{
-      const res = await fetch(url, { method, headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+      const res = await adminAuth.adminFetch(url, { method, headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
       const data = await res.json();
       if(!res.ok || !data.success){ throw new Error(data.error || data.message || 'Save failed'); }
       globals.showSuccess && globals.showSuccess(globals.instructionEditing? 'Instruction updated':'Instruction created');
@@ -430,7 +430,7 @@
       try { console.debug('[admin.instructions] loadInstructions: start'); } catch(e){}
       const [catNames, snapData] = await Promise.all([loadInstructionCategories(), fetchUsageSnapshot()]);
       usageSnapshot = snapData;
-      const res = await fetch('/api/instructions'); if(!res.ok) throw new Error('http '+res.status);
+      const res = await adminAuth.adminFetch('/api/instructions'); if(!res.ok) throw new Error('http '+res.status);
       const data = await res.json();
       if (!('success' in data) && !('data' in data) && !('instructions' in data)) throw new Error('unrecognized instructions payload');
       const rawList = data.instructions || data.data?.instructions || [];
@@ -451,7 +451,7 @@
   async function deleteInstruction(name) {
     if (!confirm('Delete instruction ' + name + '?')) return;
     try {
-      const res = await fetch('/api/instructions/' + encodeURIComponent(name), { method:'DELETE' });
+      const res = await adminAuth.adminFetch('/api/instructions/' + encodeURIComponent(name), { method:'DELETE' });
       const data = await res.json();
       if (data.success) { globals.showSuccess && globals.showSuccess('Deleted'); loadInstructions(); } else { globals.showError && globals.showError(data.error || 'Delete failed'); }
     } catch { globals.showError && globals.showError('Delete failed'); }
@@ -473,7 +473,7 @@
       let results;
       if (re) {
         // Regex mode: fetch all instructions and filter client-side
-        const res = await fetch('/api/instructions');
+        const res = await adminAuth.adminFetch('/api/instructions');
         const data = await res.json();
         if(!res.ok) throw new Error('http ' + res.status);
         const allInstrs = data.instructions || data.data?.instructions || [];
@@ -489,7 +489,7 @@
         }
         results = { results: matched, count: matched.length };
       } else {
-        const res = await fetch('/api/instructions_search?q=' + encodeURIComponent(trimmed));
+        const res = await adminAuth.adminFetch('/api/instructions_search?q=' + encodeURIComponent(trimmed));
         results = await res.json();
         if(!res.ok || results.success === false){ throw new Error(results.error||'Search failed'); }
       }
