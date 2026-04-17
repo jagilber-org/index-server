@@ -14,7 +14,7 @@ import path from 'path';
 import { execSync } from 'child_process';
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
-const CJS_PATH = path.join(REPO_ROOT, 'scripts', 'publish.cjs');
+const CJS_PATH = path.join(REPO_ROOT, 'scripts', 'publish-direct-to-remote.cjs');
 const HAS_PUBLISH_EXCLUDE = fs.existsSync(path.join(REPO_ROOT, '.publish-exclude'));
 
 describe('publish --verify-only scenarios', () => {
@@ -89,16 +89,16 @@ describe('publish --verify-only scenarios', () => {
   });
 
   describe('script file integrity', () => {
-    it('publish.cjs exists', () => {
+    it('publish-direct-to-remote.cjs exists', () => {
       expect(fs.existsSync(CJS_PATH)).toBe(true);
     });
 
-    it('publish.cjs is not empty', () => {
+    it('publish-direct-to-remote.cjs is not empty', () => {
       const stat = fs.statSync(CJS_PATH);
       expect(stat.size).toBeGreaterThan(1000);
     });
 
-    it('publish.cjs contains --verify-only flag handler', () => {
+    it('publish-direct-to-remote.cjs contains --verify-only flag handler', () => {
       const src = fs.readFileSync(CJS_PATH, 'utf8');
       expect(src).toContain('--verify-only');
       expect(src).toContain('verifyNoLeakedArtifacts');

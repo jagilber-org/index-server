@@ -53,7 +53,7 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 
 ### Changed
 
-- Documented the canonical private/public release workflow around `origin`, `public`, and `scripts/publish.cjs`.
+- Documented the canonical private/public release workflow around `origin`, `public`, and `scripts/publish-direct-to-remote.cjs`.
 - Updated release guard and lifecycle references to use the current cross-platform version bump and public publish scripts.
 
 ### Removed

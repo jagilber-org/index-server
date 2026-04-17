@@ -10,7 +10,7 @@ import path from 'path';
 import { execSync } from 'child_process';
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
-const CJS_PATH = path.join(REPO_ROOT, 'scripts', 'publish.cjs');
+const CJS_PATH = path.join(REPO_ROOT, 'scripts', 'publish-direct-to-remote.cjs');
 const PS1_PATH = path.join(REPO_ROOT, 'scripts', 'Publish-DualRepo.ps1');
 const PUB_PATH = path.join(REPO_ROOT, 'scripts', 'Publish-ToPublicRepo.ps1');
 const HAS_PUBLISH_EXCLUDE = fs.existsSync(path.join(REPO_ROOT, '.publish-exclude'));
@@ -23,7 +23,7 @@ function extractCjsForbiddenList(): string[] {
   const src = fs.readFileSync(CJS_PATH, 'utf8');
   // Match the forbidden array inside verifyNoLeakedArtifacts
   const match = src.match(/function verifyNoLeakedArtifacts[\s\S]*?const forbidden = \[([\s\S]*?)\];/);
-  if (!match) throw new Error('Could not find forbidden list in publish.cjs');
+  if (!match) throw new Error('Could not find forbidden list in publish-direct-to-remote.cjs');
   return match[1]
     .split(',')
     .map(s => s.trim().replace(/^['"]|['"]$/g, ''))
@@ -156,7 +156,7 @@ describe('publish script hardening', () => {
       outputDir = path.join(STAGING_DIR, 'output');
       fs.mkdirSync(outputDir, { recursive: true });
 
-      // Use the local copy function that mirrors publish.cjs algorithm
+      // Use the local copy function that mirrors publish-direct-to-remote.cjs algorithm
       copyRecursiveLocal(fakeRoot, outputDir, fakeRoot, []);
     });
 
@@ -267,7 +267,7 @@ describe('publish script hardening', () => {
   });
 });
 
-// ── Local copy function mirroring publish.cjs logic ──────────────────────
+// ── Local copy function mirroring publish-direct-to-remote.cjs logic ──────────────────────
 // Duplicated here to test the algorithm without module-level side effects
 
 const PRIVATE_DOTFILES = new Set([

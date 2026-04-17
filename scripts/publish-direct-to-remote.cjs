@@ -11,9 +11,9 @@
  * Scans ALL staged files for env-var value leaks before pushing.
  *
  * Usage:
- *   node scripts/publish.cjs --tag v1.7.0          # publish with tag
- *   node scripts/publish.cjs --dry-run              # preview only
- *   node scripts/publish.cjs --tag v1.7.0 --force   # skip dirty-tree check
+ *   node scripts/publish-direct-to-remote.cjs --tag v1.7.0          # publish with tag
+ *   node scripts/publish-direct-to-remote.cjs --dry-run              # preview only
+ *   node scripts/publish-direct-to-remote.cjs --tag v1.7.0 --force   # skip dirty-tree check
  *
  * Prerequisites:
  *   - Git remote "public" configured:
@@ -39,8 +39,8 @@ const tag = tagIdx !== -1 ? args[tagIdx + 1] : null;
 
 if (!dryRun && !verifyOnly && !tag) {
   console.error('ERROR: --tag <version> is required (or use --dry-run / --verify-only).');
-  console.error('Usage: node scripts/publish.cjs --tag v1.7.0 [--create-release]');
-  console.error('       node scripts/publish.cjs --verify-only   # CI validation only');
+  console.error('Usage: node scripts/publish-direct-to-remote.cjs --tag v1.7.0 [--create-release]');
+  console.error('       node scripts/publish-direct-to-remote.cjs --verify-only   # CI validation only');
   process.exit(1);
 }
 
@@ -403,7 +403,7 @@ try {
 
   const commitMsg = `Publish ${tag} from dev repo
 
-Published by scripts/publish.cjs
+Published by scripts/publish-direct-to-remote.cjs
 Source: index-server-dev
 Tag: ${tag}
 Date: ${new Date().toISOString()}
