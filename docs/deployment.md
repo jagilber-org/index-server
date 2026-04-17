@@ -162,6 +162,20 @@ Flags:
 - Production dependencies are always installed using `npm ci --production` (lock file ensures deterministic versions)
 
  
+### Semantic Search
+
+To enable embedding-based semantic search, set the environment variable before starting:
+
+```bash
+export INDEX_SERVER_SEMANTIC_ENABLED=1
+```
+
+```powershell
+$env:INDEX_SERVER_SEMANTIC_ENABLED = '1'
+```
+
+The first search request downloads a ~90MB embedding model (one-time). Subsequent requests use the cached model.
+
 ### 5.3 First Start (Prod)
 
  

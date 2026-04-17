@@ -26,6 +26,7 @@ This index distinguishes between **active** project documentation and **archived
 | Planning | `../ACTIVE-PLAN.md` | Current sprint priorities, feedback-driven tasks & compliance reviews |
 | Testing | `TESTING-STRATEGY.md` | Test tiers, quarantine & drift policies |
 | Testing | `TESTING.md` | Test artifact management guide |
+| Testing | [Stress Testing](stress-testing.md) | Stress test scripts, parallel mode, CI integration, troubleshooting |
 | Runtime Diagnostics | `RUNTIME-DIAGNOSTICS.md` | Error & signal instrumentation |
 | Versioning | `VERSIONING.md` | Release semantics & governance |
 | Migration | `MIGRATION.md` | Upgrade & breaking change handling |

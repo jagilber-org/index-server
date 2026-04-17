@@ -109,6 +109,11 @@ This strategy keeps RED artifacts present (preventing knowledge drift) while eli
 
 <!-- Historical parked property-based backlog removed as part of plan reset (see new Implementation Plan). -->
 
+### Authentication & Authorization Tests
+
+- `src/tests/integration/dashboardAuth.spec.ts` — 33 vitest integration tests covering Bearer token validation, localhost bypass, 401/403 responses across all protected mutation routes
+- `tests/playwright/dashboard-auth.spec.ts` — 10 Playwright E2E tests covering login modal flow, session persistence, logout, invalid key handling, keyboard shortcuts
+
 ## Pending Enhancements
 
 - Add `loadErrors` tool and tests: assert no silent skips.  

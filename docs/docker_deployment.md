@@ -67,6 +67,9 @@ The compose file also supports `INDEX_SERVER_PORT_BIND_HOST` and defaults it to 
 | `INDEX_SERVER_DIR` | `/app/instructions` | Instruction index directory |
 | `INDEX_SERVER_METRICS_DIR` | `/app/metrics` | Metrics storage |
 | `INDEX_SERVER_FEEDBACK_DIR` | `/app/feedback` | Feedback storage |
+| `INDEX_SERVER_SEMANTIC_ENABLED` | `0` | `1` to enable semantic/embedding search (requires ~90MB model download on first use) |
+| `INDEX_SERVER_STORAGE_BACKEND` | `json` | `sqlite` for SQLite storage, `json` (default) for JSON files |
+| `INDEX_SERVER_DISABLE_RATE_LIMIT` | `0` | `1` to disable all rate limiting |
 
 ## Volumes
 
