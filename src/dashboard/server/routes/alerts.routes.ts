@@ -5,6 +5,7 @@
 
 import { Router, Request, Response } from 'express';
 import { MetricsCollector } from '../MetricsCollector.js';
+import { dashboardAdminAuth } from './adminAuth.js';
 
 export function createAlertsRoutes(metricsCollector: MetricsCollector): Router {
   const router = Router();
@@ -32,7 +33,7 @@ export function createAlertsRoutes(metricsCollector: MetricsCollector): Router {
   /**
    * POST /api/alerts/:id/resolve - Resolve an alert
    */
-  router.post('/alerts/:id/resolve', (req: Request, res: Response) => {
+  router.post('/alerts/:id/resolve', dashboardAdminAuth, (req: Request, res: Response) => {
     try {
       const alertId = req.params.id;
       const resolved = metricsCollector.resolveAlert(alertId);
@@ -61,7 +62,7 @@ export function createAlertsRoutes(metricsCollector: MetricsCollector): Router {
   /**
    * POST /api/alerts/generate - Generate test alert for Phase 4 testing
    */
-  router.post('/alerts/generate', (req: Request, res: Response) => {
+  router.post('/alerts/generate', dashboardAdminAuth, (req: Request, res: Response) => {
     try {
       const { type, severity, message, value, threshold } = req.body;
 
