@@ -7,7 +7,8 @@ import { Router, Request, Response } from 'express';
 import fs from 'node:fs';
 import { getRuntimeConfig } from '../../../config/runtimeConfig.js';
 import { getInstructionEmbeddings } from '../../../services/embeddingService.js';
-import { ensureLoaded } from '../../../services/indexContext.js';
+import type { IndexLocals } from '../middleware/ensureLoadedMiddleware.js';
+import { dashboardAdminAuth } from './adminAuth.js';
 
 interface EmbeddingsFile {
   indexHash: string;
@@ -244,7 +245,7 @@ export function createEmbeddingsRoutes(embeddingPathOverride?: string): Router {
   });
 
   // POST /embeddings/compute — trigger embedding computation for all instructions
-  router.post('/embeddings/compute', async (_req: Request, res: Response) => {
+  router.post('/embeddings/compute', dashboardAdminAuth, async (_req: Request, res: Response) => {
     try {
       const config = getRuntimeConfig();
       const sem = config.semantic;
@@ -257,7 +258,7 @@ export function createEmbeddingsRoutes(embeddingPathOverride?: string): Router {
         });
       }
 
-      const state = ensureLoaded();
+      const state = (res.locals as IndexLocals).indexState;
       if (!state || !state.list || state.list.length === 0) {
         return res.status(400).json({
           success: false,

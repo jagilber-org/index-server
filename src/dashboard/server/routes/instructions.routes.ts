@@ -5,16 +5,26 @@
  *         DELETE /instructions/:name
  */
 
+import path from 'node:path';
 import { Router, Request, Response } from 'express';
 import { getLocalHandler } from '../../../server/registry.js';
-import { ensureLoaded, invalidate, touchIndexVersion, writeEntry, removeEntry } from '../../../services/indexContext.js';
+import { ensureLoaded, invalidate, touchIndexVersion, writeEntry, removeEntry, getInstructionsDir } from '../../../services/indexContext.js';
 import { dashboardAdminAuth } from './adminAuth.js';
 import { handleInstructionsSearch } from '../../../services/handlers.search.js';
 import { InstructionEntry } from '../../../models/instruction.js';
+import type { IndexLocals } from '../middleware/ensureLoadedMiddleware.js';
 
-/** Sanitize an instruction name. */
+/** Sanitize an instruction name with defense-in-depth path-traversal guard. */
 function safeName(name: string): string {
-  return String(name).replace(/[^a-zA-Z0-9-_]/g, '-');
+  const sanitized = String(name).replace(/[^a-zA-Z0-9-_]/g, '-');
+  // Defense-in-depth: verify the resolved path stays inside the instructions directory
+  const base = getInstructionsDir();
+  const resolved = path.resolve(base, `${sanitized}.json`);
+  const normalized = path.normalize(resolved);
+  if (!normalized.startsWith(path.normalize(base) + path.sep) && normalized !== path.normalize(base)) {
+    throw new Error('Path traversal detected');
+  }
+  return sanitized;
 }
 
 export function createInstructionsRoutes(): Router {
@@ -42,7 +52,7 @@ export function createInstructionsRoutes(): Router {
    */
   router.get('/instructions', (_req: Request, res: Response) => {
     try {
-      const st = ensureLoaded();
+      const st = (res.locals as IndexLocals).indexState;
       const instructions = st.list.map((entry: InstructionEntry) => {
         const bodyStr = typeof entry.body === 'string' ? entry.body : '';
         const bodySize = Buffer.byteLength(bodyStr, 'utf8');
@@ -92,7 +102,7 @@ export function createInstructionsRoutes(): Router {
         limit,
         includeCategories: true,
       });
-      const state = ensureLoaded();
+      const state = (res.locals as IndexLocals).indexState;
       const results: Array<{ name: string; categories: string[]; size: number; mtime: number; snippet: string }> = [];
       for (const match of searchResult.results) {
         try {
@@ -157,7 +167,7 @@ export function createInstructionsRoutes(): Router {
   router.get('/instructions/:name', (req: Request, res: Response) => {
     try {
       const id = safeName(req.params.name);
-      const st = ensureLoaded();
+      const st = (res.locals as IndexLocals).indexState;
       const entry = st.byId.get(id);
       if (!entry) return res.status(404).json({ success: false, error: 'Not found' });
       res.json({ success: true, content: entry, timestamp: Date.now() });
@@ -176,7 +186,7 @@ export function createInstructionsRoutes(): Router {
       const { name, content } = req.body || {};
       if (!name || !content) return res.status(400).json({ success: false, error: 'Missing name or content' });
       const id = safeName(name);
-      const st = ensureLoaded();
+      const st = (res.locals as IndexLocals).indexState;
       if (st.byId.has(id)) return res.status(409).json({ success: false, error: 'Instruction already exists' });
       const entry: InstructionEntry = {
         ...(typeof content === 'object' && content !== null ? content : {}),
@@ -205,7 +215,7 @@ export function createInstructionsRoutes(): Router {
       const { content } = req.body || {};
       const id = safeName(req.params.name);
       if (!content) return res.status(400).json({ success: false, error: 'Missing content' });
-      const st = ensureLoaded();
+      const st = (res.locals as IndexLocals).indexState;
       const existing = st.byId.get(id);
       if (!existing) return res.status(404).json({ success: false, error: 'Not found' });
       const updated: InstructionEntry = {
@@ -231,7 +241,7 @@ export function createInstructionsRoutes(): Router {
   router.delete('/instructions/:name', dashboardAdminAuth, (req: Request, res: Response) => {
     try {
       const id = safeName(req.params.name);
-      const st = ensureLoaded();
+      const st = (res.locals as IndexLocals).indexState;
       if (!st.byId.has(id)) return res.status(404).json({ success: false, error: 'Not found' });
       removeEntry(id);
       touchIndexVersion();
