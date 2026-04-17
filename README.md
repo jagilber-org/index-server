@@ -108,6 +108,18 @@ See [MCP Configuration Guide](docs/mcp_configuration.md) for advanced patterns, 
 - Run `tools/list` to see 40+ available tools
 - Dashboard (if enabled) at `http://localhost:8787`
 
+### Enable Semantic Search (optional)
+
+Add one env variable to any MCP config above to get embedding-based similarity search:
+
+```jsonc
+"env": {
+  "INDEX_SERVER_SEMANTIC_ENABLED": "1"
+}
+```
+
+First search downloads a ~90MB model (one-time). After that, all searches automatically use semantic mode — no code changes needed. See [Quick Start Guide](docs/quickstart.md#4-enable-semantic-search-optional) for GPU acceleration and offline options.
+
 ---
 
 ## Teach Your Agents
