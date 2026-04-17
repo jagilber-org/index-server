@@ -75,7 +75,8 @@ param(
     [switch]$Overwrite,
     [switch]$DryRun,
     [int]$Limit = 50,
-    [switch]$SkipCertCheck
+    [switch]$SkipCertCheck,
+    [string]$AdminKey = $env:INDEX_SERVER_ADMIN_API_KEY
 )
 
 $ErrorActionPreference = 'Stop'
@@ -93,6 +94,9 @@ function Invoke-Tool {
         Method      = 'POST'
         ContentType = 'application/json'
         Body        = $jsonBody
+    }
+    if ($AdminKey) {
+        $splat.Headers = @{ Authorization = "Bearer $AdminKey" }
     }
     if ($SkipCertCheck) {
         if ($PSVersionTable.PSVersion.Major -ge 7) {
@@ -155,7 +159,7 @@ $output = switch ($Action) {
         if (-not $Id) { @{ success = $false; error = 'Id required for add' } }
         elseif (-not $Body) { @{ success = $false; error = 'Body required for add' } }
         else {
-            $params = @{
+            $entry = @{
                 id          = $Id
                 title       = if ($Title) { $Title } else { $Id }
                 body        = $Body
@@ -165,6 +169,7 @@ $output = switch ($Action) {
                 categories  = @('general')
                 contentType = 'instruction'
             }
+            $params = @{ entry = $entry; lax = $true }
             if ($Overwrite) { $params.overwrite = $true }
             Invoke-Tool 'index_add' $params
         }

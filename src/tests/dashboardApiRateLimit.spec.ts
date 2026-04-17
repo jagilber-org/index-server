@@ -26,8 +26,12 @@ function httpGet(url: string): Promise<{ status: number; body: string; headers: 
 describe('Dashboard API rate limiting', () => {
   let server: http.Server;
   let port: number;
+  const origEnv = process.env.INDEX_SERVER_RATE_LIMIT_ENABLED;
 
   beforeAll(async () => {
+    process.env.INDEX_SERVER_RATE_LIMIT_ENABLED = '1';
+    const { reloadRuntimeConfig } = await import('../config/runtimeConfig.js');
+    reloadRuntimeConfig();
     const app = express();
     app.use('/api', createApiRoutes({ enableCors: false, rateLimit: { windowMs: 60_000, max: 2 } }));
     await new Promise<void>((resolve) => {
@@ -40,6 +44,8 @@ describe('Dashboard API rate limiting', () => {
 
   afterAll(() => {
     server?.close();
+    if (origEnv === undefined) delete process.env.INDEX_SERVER_RATE_LIMIT_ENABLED;
+    else process.env.INDEX_SERVER_RATE_LIMIT_ENABLED = origEnv;
   });
 
   it('returns 429 after the configured per-IP request budget is exhausted', async () => {

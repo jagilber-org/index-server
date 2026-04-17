@@ -100,8 +100,11 @@ async function runBash(args: string, timeoutMs = 20_000): Promise<string> {
 
 describe('Client Scripts E2E', () => {
   let server: DashboardServer | null = null;
+  let originalMutation: string | undefined;
 
   beforeAll(async () => {
+    originalMutation = process.env.INDEX_SERVER_MUTATION;
+    process.env.INDEX_SERVER_MUTATION = '1';
     try {
       server = createDashboardServer({
         port: TEST_PORT,
@@ -134,6 +137,7 @@ describe('Client Scripts E2E', () => {
     if (server) {
       try { await server.stop(); } catch { /* ok */ }
     }
+    process.env.INDEX_SERVER_MUTATION = originalMutation;
   });
 
   // ═══════════════════════════════════════════════════════════════════════
@@ -313,6 +317,75 @@ describe('Client Scripts E2E', () => {
       const result = JSON.parse(output);
       expect(result.success).toBe(true);
     }, 30_000);
+
+    // ── CRUD lifecycle tests (add → get → track → remove) ──────────────
+    it.skipIf(!hasPwsh)('add action should create instruction with entry wrapper', async () => {
+      if (!server) return;
+      const output = await runPwshWithRetry(
+        `& '${PS1_SCRIPT}' -BaseUrl '${activeBaseUrl}' -Action add -Id 'e2e-ps1-test-1' -Title 'PS1 E2E Test' -Body 'Created by clientScriptsE2e test' -Priority 42`
+      );
+      const result = JSON.parse(output);
+      expect(result.success).toBe(true);
+      expect(result.result).toBeDefined();
+      expect(result.result.created).toBe(true);
+      expect(result.result.id).toBe('e2e-ps1-test-1');
+    }, 30_000);
+
+    it.skipIf(!hasPwsh)('get should retrieve instruction created by add', async () => {
+      if (!server) return;
+      // Create first
+      await runPwshWithRetry(
+        `& '${PS1_SCRIPT}' -BaseUrl '${activeBaseUrl}' -Action add -Id 'e2e-ps1-roundtrip' -Title 'Roundtrip Test' -Body 'Roundtrip body content'`
+      );
+      // Then retrieve
+      const output = await runPwshWithRetry(
+        `& '${PS1_SCRIPT}' -BaseUrl '${activeBaseUrl}' -Action get -Id 'e2e-ps1-roundtrip'`
+      );
+      const result = JSON.parse(output);
+      expect(result.success).toBe(true);
+      expect(result.result).toBeDefined();
+      expect(result.result.id).toBe('e2e-ps1-roundtrip');
+      expect(result.result.title).toBe('Roundtrip Test');
+    }, 30_000);
+
+    it.skipIf(!hasPwsh)('track action should record usage signal', async () => {
+      if (!server) return;
+      const output = await runPwshWithRetry(
+        `& '${PS1_SCRIPT}' -BaseUrl '${activeBaseUrl}' -Action track -Id 'e2e-ps1-roundtrip' -Signal helpful`
+      );
+      const result = JSON.parse(output);
+      expect(result.success).toBe(true);
+    }, 30_000);
+
+    it.skipIf(!hasPwsh)('remove action should delete instruction', async () => {
+      if (!server) return;
+      const output = await runPwshWithRetry(
+        `& '${PS1_SCRIPT}' -BaseUrl '${activeBaseUrl}' -Action remove -Id 'e2e-ps1-roundtrip'`
+      );
+      const result = JSON.parse(output);
+      expect(result.success).toBe(true);
+      expect(result.result).toBeDefined();
+      expect(result.result.removed).toBe(1);
+    }, 30_000);
+
+    it.skipIf(!hasPwsh)('add with overwrite should update existing instruction', async () => {
+      if (!server) return;
+      // Create
+      await runPwshWithRetry(
+        `& '${PS1_SCRIPT}' -BaseUrl '${activeBaseUrl}' -Action add -Id 'e2e-ps1-overwrite' -Title 'Original' -Body 'Original body'`
+      );
+      // Overwrite
+      const output = await runPwshWithRetry(
+        `& '${PS1_SCRIPT}' -BaseUrl '${activeBaseUrl}' -Action add -Id 'e2e-ps1-overwrite' -Title 'Updated' -Body 'Updated body' -Overwrite`
+      );
+      const result = JSON.parse(output);
+      expect(result.success).toBe(true);
+      expect(result.result.overwritten).toBe(true);
+      // Cleanup
+      await runPwshWithRetry(
+        `& '${PS1_SCRIPT}' -BaseUrl '${activeBaseUrl}' -Action remove -Id 'e2e-ps1-overwrite'`
+      );
+    }, 30_000);
   });
 
   // ═══════════════════════════════════════════════════════════════════════
@@ -372,6 +445,73 @@ describe('Client Scripts E2E', () => {
       const result = JSON.parse(output);
       expect(result.success).toBe(true);
     });
+
+    // ── CRUD lifecycle tests (add → get → track → remove) ──────────────
+    it.skipIf(!hasBash)('add action should create instruction with entry wrapper', async () => {
+      if (!server) return;
+      const sp = getBashScriptPath();
+      const output = await runBash(
+        `INDEX_SERVER_URL='${activeBaseUrl}' bash '${sp}' add 'e2e-sh-test-1' 'SH E2E Test' 'Created by clientScriptsE2e test' 42`
+      );
+      const result = JSON.parse(output);
+      expect(result.success).toBe(true);
+      expect(result.result).toBeDefined();
+      expect(result.result.created).toBe(true);
+    }, 30_000);
+
+    it.skipIf(!hasBash)('get should retrieve instruction created by add', async () => {
+      if (!server) return;
+      const sp = getBashScriptPath();
+      await runBash(
+        `INDEX_SERVER_URL='${activeBaseUrl}' bash '${sp}' add 'e2e-sh-roundtrip' 'SH Roundtrip' 'Roundtrip body content'`
+      );
+      const output = await runBash(
+        `INDEX_SERVER_URL='${activeBaseUrl}' bash '${sp}' get 'e2e-sh-roundtrip'`
+      );
+      const result = JSON.parse(output);
+      expect(result.success).toBe(true);
+      expect(result.result).toBeDefined();
+      expect(result.result.id).toBe('e2e-sh-roundtrip');
+    }, 30_000);
+
+    it.skipIf(!hasBash)('track action should record usage signal', async () => {
+      if (!server) return;
+      const sp = getBashScriptPath();
+      const output = await runBash(
+        `INDEX_SERVER_URL='${activeBaseUrl}' bash '${sp}' track 'e2e-sh-roundtrip' helpful`
+      );
+      const result = JSON.parse(output);
+      expect(result.success).toBe(true);
+    }, 30_000);
+
+    it.skipIf(!hasBash)('remove action should delete instruction', async () => {
+      if (!server) return;
+      const sp = getBashScriptPath();
+      const output = await runBash(
+        `INDEX_SERVER_URL='${activeBaseUrl}' bash '${sp}' remove 'e2e-sh-roundtrip'`
+      );
+      const result = JSON.parse(output);
+      expect(result.success).toBe(true);
+      expect(result.result).toBeDefined();
+      expect(result.result.removed).toBe(1);
+    }, 30_000);
+
+    it.skipIf(!hasBash)('add with overwrite should update existing', async () => {
+      if (!server) return;
+      const sp = getBashScriptPath();
+      await runBash(
+        `INDEX_SERVER_URL='${activeBaseUrl}' bash '${sp}' add 'e2e-sh-overwrite' 'Original' 'Original body'`
+      );
+      const output = await runBash(
+        `INDEX_SERVER_URL='${activeBaseUrl}' bash '${sp}' add 'e2e-sh-overwrite' 'Updated' 'Updated body' 50 --overwrite`
+      );
+      const result = JSON.parse(output);
+      expect(result.success).toBe(true);
+      expect(result.result.overwritten).toBe(true);
+      await runBash(
+        `INDEX_SERVER_URL='${activeBaseUrl}' bash '${sp}' remove 'e2e-sh-overwrite'`
+      );
+    }, 30_000);
   });
 
   // ═══════════════════════════════════════════════════════════════════════

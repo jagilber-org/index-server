@@ -59,7 +59,8 @@ export function createApiRoutes(options: ApiRoutesOptions = {}): Router {
   // JSON middleware
   router.use(express.json());
 
-  if (rateLimitOpts.max > 0 && rateLimitOpts.windowMs > 0) {
+  const rateLimitEnabled = getRuntimeConfig().dashboard.http.rateLimitEnabled;
+  if (rateLimitEnabled && rateLimitOpts.max > 0 && rateLimitOpts.windowMs > 0) {
     router.use(expressRateLimit({
       windowMs: rateLimitOpts.windowMs,
       max: rateLimitOpts.max,
