@@ -118,57 +118,6 @@ function registerMcpProviders(context: vscode.ExtensionContext): void {
         })
     );
 
-    // Legacy provider: keeps backwards compat with 'mcpIndexServer' config namespace
-    // (primary provider above uses the 'index' namespace)
-    const legacyDidChangeEmitter = new vscode.EventEmitter<void>();
-    context.subscriptions.push(
-        vscode.lm.registerMcpServerDefinitionProvider('mcpIndexServerProvider', {
-            onDidChangeMcpServerDefinitions: legacyDidChangeEmitter.event,
-            provideMcpServerDefinitions: async () => {
-                const serverPath = resolveServerPath(context);
-                if (!serverPath) { return []; }
-
-                const config = vscode.workspace.getConfiguration('mcpIndexServer');
-                const dashboardEnabled = config.get<boolean>('dashboard.enabled', false);
-                const dashboardPort = config.get<number>('dashboard.port', 8787);
-                const logLevel = config.get<string>('logLevel', 'info');
-                const mutationEnabled = config.get<boolean>('mutation.enabled', false);
-                const instructionsDir = resolveInstructionsDir(context);
-
-                const env: Record<string, string> = {
-                    MCP_LOG_LEVEL: logLevel ?? 'info',
-                };
-                if (mutationEnabled) { env.MCP_MUTATION = '1'; }
-                if (dashboardEnabled) {
-                    env.MCP_DASHBOARD = '1';
-                    env.MCP_DASHBOARD_PORT = String(dashboardPort);
-                }
-                if (instructionsDir) { env.MCP_INSTRUCTIONS_DIR = instructionsDir; }
-
-                return [
-                    new vscode.McpStdioServerDefinition(
-                        'MCP Index Server',
-                        'node',
-                        [serverPath],
-                        env
-                    )
-                ];
-            },
-            resolveMcpServerDefinition: async (definition) => {
-                return definition;
-            }
-        }),
-        legacyDidChangeEmitter
-    );
-
-    // Watch for config changes to refresh the MCP server definition
-    context.subscriptions.push(
-        vscode.workspace.onDidChangeConfiguration(e => {
-            if (e.affectsConfiguration('mcpIndexServer')) {
-                legacyDidChangeEmitter.fire();
-            }
-        })
-    );
 }
 
 export function deactivate(): void {
