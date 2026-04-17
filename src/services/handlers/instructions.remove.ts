@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { registerHandler } from '../../server/registry';
-import { getInstructionsDir, invalidate, touchIndexVersion, ensureLoaded } from '../indexContext';
+import { getInstructionsDir, invalidate, touchIndexVersion, ensureLoaded, removeEntry } from '../indexContext';
 import { logAudit } from '../auditLog';
 import { getRuntimeConfig } from '../../config/runtimeConfig';
 import { attemptManifestUpdate } from '../manifestManager';
@@ -33,9 +33,10 @@ registerHandler('index_remove', guard('index_remove', (p: { ids: string[]; missi
 
   if (p.dryRun) {
     const wouldRemove: string[] = []; const wouldMiss: string[] = [];
+    const stDry = ensureLoaded();
     for (const id of ids) {
       const file = path.join(base, `${id}.json`);
-      if (fs.existsSync(file)) wouldRemove.push(id); else wouldMiss.push(id);
+      if (fs.existsSync(file) || stDry.byId.has(id)) { wouldRemove.push(id); } else { wouldMiss.push(id); }
     }
     return { dryRun: true, wouldRemove: wouldRemove.length, wouldRemoveIds: wouldRemove, wouldMiss, removed: 0 };
   }
@@ -58,11 +59,12 @@ registerHandler('index_remove', guard('index_remove', (p: { ids: string[]; missi
   }
 
   const missing: string[] = []; const removed: string[] = []; const errors: { id: string; error: string }[] = [];
+  const stPre = ensureLoaded();
   for (const id of ids) {
     const file = path.join(base, `${id}.json`);
     try {
-      if (!fs.existsSync(file)) { missing.push(id); continue; }
-      fs.unlinkSync(file);
+      if (!fs.existsSync(file) && !stPre.byId.has(id)) { missing.push(id); continue; }
+      removeEntry(id);
       removed.push(id);
     } catch (e) { errors.push({ id, error: e instanceof Error ? e.message : 'delete-failed' }); }
   }

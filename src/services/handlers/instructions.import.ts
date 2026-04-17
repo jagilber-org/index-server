@@ -3,7 +3,7 @@ import path from 'path';
 import crypto from 'crypto';
 import { InstructionEntry } from '../../models/instruction';
 import { registerHandler } from '../../server/registry';
-import { ensureLoaded, getInstructionsDir, invalidate, touchIndexVersion } from '../indexContext';
+import { ensureLoaded, getInstructionsDir, invalidate, touchIndexVersion, writeEntry } from '../indexContext';
 import { incrementCounter } from '../features';
 import { SCHEMA_VERSION } from '../../versioning/schemaVersion';
 import { ClassificationService } from '../classificationService';
@@ -109,7 +109,7 @@ registerHandler('index_import', guard('index_import', (p: { entries?: ImportEntr
     base.sourceHash = newBodyHash;
     const record = classifier.normalize(base);
     if (record.owner === 'unowned') { const auto = resolveOwner(record.id); if (auto) { record.owner = auto; record.updatedAt = new Date().toISOString(); } }
-    try { atomicWriteJson(file, record); } catch { errors.push({ id: e.id, error: 'write-failed' }); }
+    try { writeEntry(record); } catch { errors.push({ id: e.id, error: 'write-failed' }); }
   }
   touchIndexVersion(); invalidate(); const st = ensureLoaded();
   const summary = { hash: st.hash, imported, skipped, overwritten, total: entries.length, errors };

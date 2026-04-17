@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { InstructionEntry } from '../../models/instruction';
 import { registerHandler } from '../../server/registry';
-import { computeGovernanceHash, ensureLoaded, getInstructionsDir, invalidate, projectGovernance, touchIndexVersion } from '../indexContext';
+import { computeGovernanceHash, ensureLoaded, getInstructionsDir, invalidate, projectGovernance, touchIndexVersion, writeEntry } from '../indexContext';
 import { logAudit } from '../auditLog';
 import { attemptManifestUpdate } from '../manifestManager';
 import { incrementCounter } from '../features';
@@ -23,6 +23,10 @@ registerHandler('index_governanceHash', () => {
             invalidate();
             st = ensureLoaded();
           }
+        } else {
+          // SQLite-only: trust in-memory state, force reload if stale
+          invalidate();
+          st = ensureLoaded();
         }
       }
     } catch { /* ignore verification errors */ }
@@ -30,25 +34,36 @@ registerHandler('index_governanceHash', () => {
   let projections = st.list.slice().sort((a, b) => a.id.localeCompare(b.id)).map(projectGovernance);
   try {
     const dir = getInstructionsDir();
-    const files = fs.readdirSync(dir).filter(f => f.endsWith('.json'));
-    if (files.length && (projections.length === 0 || projections.length < Math.floor(files.length * 0.9))) {
-      const missingIds = new Set(files.map(f => f.replace(/\.json$/, '')));
-      for (const p of projections) { missingIds.delete(p.id); }
-      let hydrated = false;
-      let loadCount = 0;
-      for (const mid of missingIds) {
-        if (loadCount >= 5) break; loadCount++;
-        const file = path.join(dir, mid + '.json');
-        try {
-          const raw = JSON.parse(fs.readFileSync(file, 'utf8')) as InstructionEntry;
-          if (raw && raw.id === mid) {
-            st.list.push(raw); st.byId.set(raw.id, raw); hydrated = true;
-          }
-        } catch { /* ignore individual load errors */ }
-      }
-      if (hydrated) {
-        projections = st.list.slice().sort((a, b) => a.id.localeCompare(b.id)).map(projectGovernance);
-        try { incrementCounter('governance:lateMaterialize'); } catch { /* ignore */ }
+    let diskFileCount = 0;
+    try { diskFileCount = fs.readdirSync(dir).filter(f => f.endsWith('.json')).length; } catch { /* ignore */ }
+    const storeCount = st.list.length;
+    const expectedCount = Math.max(diskFileCount, storeCount);
+    if (expectedCount && (projections.length === 0 || projections.length < Math.floor(expectedCount * 0.9))) {
+      // Late materialization: reload from store to pick up any missing entries
+      invalidate();
+      st = ensureLoaded();
+      projections = st.list.slice().sort((a, b) => a.id.localeCompare(b.id)).map(projectGovernance);
+      // Also hydrate from disk files not yet in-memory (JSON backend)
+      if (diskFileCount > 0) {
+        const files = fs.readdirSync(dir).filter(f => f.endsWith('.json'));
+        const missingIds = new Set(files.map(f => f.replace(/\.json$/, '')));
+        for (const p of projections) { missingIds.delete(p.id); }
+        let hydrated = false;
+        let loadCount = 0;
+        for (const mid of missingIds) {
+          if (loadCount >= 5) break; loadCount++;
+          const file = path.join(dir, mid + '.json');
+          try {
+            const raw = JSON.parse(fs.readFileSync(file, 'utf8')) as InstructionEntry;
+            if (raw && raw.id === mid) {
+              st.list.push(raw); st.byId.set(raw.id, raw); hydrated = true;
+            }
+          } catch { /* ignore individual load errors */ }
+        }
+        if (hydrated) {
+          projections = st.list.slice().sort((a, b) => a.id.localeCompare(b.id)).map(projectGovernance);
+          try { incrementCounter('governance:lateMaterialize'); } catch { /* ignore */ }
+        }
       }
     }
   } catch { /* ignore defensive reload errors */ }
@@ -70,9 +85,12 @@ registerHandler('index_governanceUpdate', guard('index_governanceUpdate', (p: { 
   const existing = st.byId.get(id);
   if (!existing) return { id, notFound: true };
   const file = path.join(getInstructionsDir(), `${id}.json`);
-  if (!fs.existsSync(file)) return { id, notFound: true };
   let record: InstructionEntry;
-  try { record = JSON.parse(fs.readFileSync(file, 'utf8')) as InstructionEntry; } catch { return { id, error: 'read-failed' }; }
+  if (fs.existsSync(file)) {
+    try { record = JSON.parse(fs.readFileSync(file, 'utf8')) as InstructionEntry; } catch { record = { ...existing }; }
+  } else {
+    record = { ...existing };
+  }
   let changed = false; const now = new Date().toISOString();
   const bump = p.bump || 'none';
   if (p.owner && p.owner !== record.owner) { record.owner = p.owner; changed = true; }
@@ -96,7 +114,7 @@ registerHandler('index_governanceUpdate', guard('index_governanceUpdate', (p: { 
   }
   if (!changed) return { id, changed: false };
   record.updatedAt = now;
-  try { fs.writeFileSync(file, JSON.stringify(record, null, 2)); } catch { return { id, error: 'write-failed' }; }
+  try { writeEntry(record); } catch { return { id, error: 'write-failed' }; }
   touchIndexVersion(); invalidate(); ensureLoaded();
   const resp = { id, changed: true, version: record.version, owner: record.owner, status: record.status, lastReviewedAt: record.lastReviewedAt, nextReviewDue: record.nextReviewDue };
   logAudit('governanceUpdate', id, { changed: true, version: record.version });

@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import { registerHandler } from '../../server/registry';
-import { ensureLoaded, getInstructionsDir, invalidate, loadUsageSnapshot, touchIndexVersion } from '../indexContext';
+import { ensureLoaded, getInstructionsDir, invalidate, loadUsageSnapshot, touchIndexVersion, writeEntry, removeEntry } from '../indexContext';
 import { logAudit } from '../auditLog';
 import { getRuntimeConfig } from '../../config/runtimeConfig';
 import { attemptManifestUpdate } from '../manifestManager';
@@ -18,9 +18,14 @@ registerHandler('index_enrich', guard('index_enrich', () => {
   let rewritten = 0; const updated: string[] = []; const skipped: string[] = [];
   for (const e of st.list) {
     const file = path.join(baseDir, `${e.id}.json`);
-    if (!fs.existsSync(file)) continue;
+    let raw: Record<string, unknown>;
+    if (fs.existsSync(file)) {
+      try { raw = JSON.parse(fs.readFileSync(file, 'utf8')) as Record<string, unknown>; } catch { continue; }
+    } else {
+      // SQLite-only entry: use in-memory state as the raw record
+      raw = { ...e } as unknown as Record<string, unknown>;
+    }
     try {
-      const raw = JSON.parse(fs.readFileSync(file, 'utf8')) as Record<string, unknown>;
       let needs = false;
       const nowIso = new Date().toISOString();
       if (!(typeof raw.sourceHash === 'string' && raw.sourceHash.length > 0)) { raw.sourceHash = e.sourceHash || crypto.createHash('sha256').update(String(e.body || ''), 'utf8').digest('hex'); needs = true; }
@@ -55,7 +60,7 @@ registerHandler('index_enrich', guard('index_enrich', () => {
         }
       };
       apply('sourceHash'); apply('owner'); apply('createdAt'); apply('updatedAt'); apply('priorityTier'); apply('semanticSummary'); apply('contentType');
-      if (needs) { fs.writeFileSync(file, JSON.stringify(raw, null, 2)); rewritten++; updated.push(e.id); } else { skipped.push(e.id); }
+      if (needs) { writeEntry(raw as unknown as InstructionEntry); rewritten++; updated.push(e.id); } else { skipped.push(e.id); }
     } catch { /* ignore */ }
   }
   if (rewritten) { touchIndexVersion(); invalidate(); ensureLoaded(); }
@@ -74,7 +79,7 @@ registerHandler('index_repair', guard('index_repair', (_p: unknown) => {
   const repaired: string[] = [];
   for (const { entry, actual } of toFix) {
     const file = path.join(getInstructionsDir(), `${entry.id}.json`);
-    try { const updated = { ...entry, sourceHash: actual, updatedAt: new Date().toISOString() }; fs.writeFileSync(file, JSON.stringify(updated, null, 2)); repaired.push(entry.id); } catch { /* ignore */ }
+    try { const updated = { ...entry, sourceHash: actual, updatedAt: new Date().toISOString() }; writeEntry(updated as InstructionEntry); repaired.push(entry.id); } catch { /* ignore */ }
   }
   if (repaired.length) { touchIndexVersion(); invalidate(); ensureLoaded(); }
   const resp = { repaired: repaired.length, updated: repaired };
@@ -118,10 +123,10 @@ registerHandler('index_groom', guard('index_groom', (p: { mode?: { dryRun?: bool
   const duplicateBodies = new Set<string>();
   if (mergeDuplicates) { const groups = new Map<string, InstructionEntry[]>(); for (const e of byId.values()) { const key = e.sourceHash || crypto.createHash('sha256').update(e.body, 'utf8').digest('hex'); const arr = groups.get(key) || []; arr.push(e); groups.set(key, arr); } for (const group of groups.values()) { if (group.length <= 1) continue; let primary = group[0]; for (const candidate of group) { if (candidate.createdAt && primary.createdAt) { if (candidate.createdAt < primary.createdAt) primary = candidate; } else if (!primary.createdAt && candidate.createdAt) { primary = candidate; } else if (candidate.id < primary.id) { primary = candidate; } } for (const dup of group) { if (dup.id === primary.id) continue; if (dup.priority < primary.priority) { primary.priority = dup.priority; updated.add(primary.id); } if (typeof dup.riskScore === 'number') { if (typeof primary.riskScore !== 'number' || dup.riskScore > primary.riskScore) { primary.riskScore = dup.riskScore; updated.add(primary.id); } } const mergedCats = Array.from(new Set([...(primary.categories || []), ...(dup.categories || [])])).sort(); if (JSON.stringify(mergedCats) !== JSON.stringify(primary.categories)) { primary.categories = mergedCats; updated.add(primary.id); } if (removeDeprecated) { duplicateBodies.add(dup.id); } else { if (dup.deprecatedBy !== primary.id) { dup.deprecatedBy = primary.id; dup.requirement = 'deprecated'; dup.updatedAt = new Date().toISOString(); updated.add(dup.id); } } duplicatesMerged++; } } }
   const toRemove: string[] = []; if (removeDeprecated) { for (const e of byId.values()) { if (e.deprecatedBy && byId.has(e.deprecatedBy)) toRemove.push(e.id); } for (const id of duplicateBodies) { if (!toRemove.includes(id)) toRemove.push(id); } }
-  if (purgeLegacyScopes) { const baseDir = getInstructionsDir(); for (const e of byId.values()) { const filePath = path.join(baseDir, `${e.id}.json`); try { if (fs.existsSync(filePath)) { const raw = JSON.parse(fs.readFileSync(filePath, 'utf8')) as { categories?: unknown[] }; if (Array.isArray(raw.categories)) { const legacyTokens = raw.categories.filter(c => typeof c === 'string' && /^scope:(workspace|user|team):/.test(c)); if (legacyTokens.length) { purgedScopes += legacyTokens.length; updated.add(e.id); } } } } catch { /* ignore */ } } if (dryRun && purgedScopes) notes.push(`would-purge:${purgedScopes}`); }
+  if (purgeLegacyScopes) { const baseDir = getInstructionsDir(); for (const e of byId.values()) { const filePath = path.join(baseDir, `${e.id}.json`); try { let cats: unknown[] | undefined; if (fs.existsSync(filePath)) { const raw = JSON.parse(fs.readFileSync(filePath, 'utf8')) as { categories?: unknown[] }; cats = raw.categories; } else { cats = e.categories; } if (Array.isArray(cats)) { const legacyTokens = cats.filter(c => typeof c === 'string' && /^scope:(workspace|user|team):/.test(c)); if (legacyTokens.length) { purgedScopes += legacyTokens.length; updated.add(e.id); } } } catch { /* ignore */ } } if (dryRun && purgedScopes) notes.push(`would-purge:${purgedScopes}`); }
   if (remapCategories) { for (const e of byId.values()) { if (e.primaryCategory && e.primaryCategory !== 'uncategorized') continue; const derived = deriveCategory(e.id); if (derived === 'Other') continue; e.primaryCategory = derived.toLowerCase(); const lc = derived.toLowerCase(); if (!e.categories.includes(lc)) { e.categories = [...e.categories, lc].sort(); } e.updatedAt = new Date().toISOString(); remappedCategories++; updated.add(e.id); } }
-  { const baseDir = getInstructionsDir(); for (const e of byId.values()) { const filePath = path.join(baseDir, `${e.id}.json`); let storedHash = e.sourceHash || ''; try { if (fs.existsSync(filePath)) { const raw = JSON.parse(fs.readFileSync(filePath, 'utf8')) as { sourceHash?: string }; if (typeof raw.sourceHash === 'string') storedHash = raw.sourceHash; } } catch (_err) { /* ignore read error */ } const actualHash = crypto.createHash('sha256').update(e.body, 'utf8').digest('hex'); if (storedHash !== actualHash) { e.sourceHash = actualHash; repairedHashes++; e.updatedAt = new Date().toISOString(); updated.add(e.id); } } }
-  deprecatedRemoved = toRemove.length; if (!dryRun) { const baseDir = getInstructionsDir(); for (const id of toRemove) { byId.delete(id); } for (const id of updated) { if (!byId.has(id)) continue; const e = byId.get(id)!; try { fs.writeFileSync(path.join(baseDir, `${id}.json`), JSON.stringify(e, null, 2)); filesRewritten++; } catch (err) { notes.push(`write-failed:${id}:${(err as Error).message}`); } } for (const id of toRemove) { try { fs.unlinkSync(path.join(baseDir, `${id}.json`)); } catch (err) { notes.push(`delete-failed:${id}:${(err as Error).message}`); } } if (updated.size || toRemove.length) { touchIndexVersion(); invalidate(); ensureLoaded(); } } else { if (updated.size) notes.push(`would-rewrite:${updated.size}`); if (toRemove.length) notes.push(`would-remove:${toRemove.length}`); }
+  { for (const e of byId.values()) { const filePath = path.join(getInstructionsDir(), `${e.id}.json`); let storedHash = e.sourceHash || ''; try { if (fs.existsSync(filePath)) { const raw = JSON.parse(fs.readFileSync(filePath, 'utf8')) as { sourceHash?: string }; if (typeof raw.sourceHash === 'string') storedHash = raw.sourceHash; } } catch (_err) { /* ignore read error */ } const actualHash = crypto.createHash('sha256').update(e.body, 'utf8').digest('hex'); if (storedHash !== actualHash) { e.sourceHash = actualHash; repairedHashes++; e.updatedAt = new Date().toISOString(); updated.add(e.id); } } }
+  deprecatedRemoved = toRemove.length; if (!dryRun) { const baseDir = getInstructionsDir(); for (const id of toRemove) { byId.delete(id); } for (const id of updated) { if (!byId.has(id)) continue; const e = byId.get(id)!; try { writeEntry(e); filesRewritten++; } catch (err) { notes.push(`write-failed:${id}:${(err as Error).message}`); } } for (const id of toRemove) { try { removeEntry(id); } catch (err) { notes.push(`delete-failed:${id}:${(err as Error).message}`); } } if (updated.size || toRemove.length) { touchIndexVersion(); invalidate(); ensureLoaded(); } } else { if (updated.size) notes.push(`would-rewrite:${updated.size}`); if (toRemove.length) notes.push(`would-remove:${toRemove.length}`); }
   const stAfter = ensureLoaded(); const resp = { previousHash, hash: stAfter.hash, scanned, repairedHashes, normalizedCategories, deprecatedRemoved, duplicatesMerged, signalApplied, filesRewritten, purgedScopes, migrated, remappedCategories, dryRun, notes }; if (!dryRun && (repairedHashes || normalizedCategories || deprecatedRemoved || duplicatesMerged || signalApplied || filesRewritten || purgedScopes || migrated || remappedCategories)) { logAudit('groom', undefined, { repairedHashes, normalizedCategories, deprecatedRemoved, duplicatesMerged, signalApplied, filesRewritten, purgedScopes, migrated, remappedCategories }); attemptManifestUpdate(); } return resp;
 }));
 
@@ -132,6 +137,7 @@ registerHandler('index_normalize', guard('index_normalize', (p: { dryRun?: boole
   const base = getInstructionsDir();
   const dirs = [base, path.join(process.cwd(), 'devinstructions')].filter(d => fs.existsSync(d));
   let scanned = 0, changed = 0, fixedHash = 0, fixedVersion = 0, fixedTier = 0, addedTimestamps = 0, addedContentType = 0; const updatedIds: string[] = [];
+  const scannedIds = new Set<string>();
   const SEMVER = /^\d+\.\d+\.\d+(?:[-+].*)?$/;
   for (const dir of dirs) {
     let files: string[] = [];
@@ -144,6 +150,7 @@ registerHandler('index_normalize', guard('index_normalize', (p: { dryRun?: boole
       if (!data || typeof data !== 'object') continue;
       let modified = false;
       const rec = data as Record<string, unknown>;
+      if (typeof rec.id === 'string') scannedIds.add(rec.id);
       const body = typeof rec.body === 'string' ? rec.body : '';
       if (body) {
         const useCanonical = forceCanonical || !instructionsCfg.canonicalDisable;
@@ -160,8 +167,37 @@ registerHandler('index_normalize', guard('index_normalize', (p: { dryRun?: boole
       if (!rec.createdAt) { rec.createdAt = nowIso; modified = true; addedTimestamps++; }
       if (!rec.updatedAt) { rec.updatedAt = nowIso; modified = true; addedTimestamps++; }
       if (modified) {
-        if (!dryRun) { try { fs.writeFileSync(full, JSON.stringify(rec, null, 2) + '\n', 'utf8'); } catch { continue; } }
+        if (!dryRun) { try { writeEntry(rec as unknown as InstructionEntry); } catch { continue; } }
         changed++; updatedIds.push(path.basename(full, '.json'));
+      }
+    }
+  }
+  // Store fallback: process entries from in-memory store not already scanned from disk
+  {
+    const stNorm = ensureLoaded();
+    for (const entry of stNorm.list) {
+      if (scannedIds.has(entry.id)) continue;
+      scanned++;
+      let modified = false;
+      const rec = { ...entry } as Record<string, unknown>;
+      const body = typeof rec.body === 'string' ? rec.body : '';
+      if (body) {
+        const useCanonical = forceCanonical || !instructionsCfg.canonicalDisable;
+        const actual = useCanonical ? canonicalHashBody(body) : crypto.createHash('sha256').update(body, 'utf8').digest('hex');
+        if (rec.sourceHash !== actual) { rec.sourceHash = actual; modified = true; fixedHash++; }
+      }
+      if (!rec.contentType || typeof rec.contentType !== 'string' || (rec.contentType as string).length === 0) { rec.contentType = 'instruction'; modified = true; addedContentType++; }
+      if (!rec.version || typeof rec.version !== 'string' || !SEMVER.test(rec.version as string)) { rec.version = '1.0.0'; modified = true; fixedVersion++; }
+      if (rec.priorityTier) {
+        const upper = String(rec.priorityTier).toUpperCase();
+        if (['P1', 'P2', 'P3', 'P4'].includes(upper) && upper !== rec.priorityTier) { rec.priorityTier = upper; modified = true; fixedTier++; }
+      }
+      const nowIso = new Date().toISOString();
+      if (!rec.createdAt) { rec.createdAt = nowIso; modified = true; addedTimestamps++; }
+      if (!rec.updatedAt) { rec.updatedAt = nowIso; modified = true; addedTimestamps++; }
+      if (modified) {
+        if (!dryRun) { try { writeEntry(rec as unknown as InstructionEntry); } catch { continue; } }
+        changed++; updatedIds.push(entry.id);
       }
     }
   }

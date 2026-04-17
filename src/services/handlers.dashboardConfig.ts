@@ -24,6 +24,7 @@ export interface FlagRuntime extends FlagMeta { value?:string; enabled?:boolean;
 // Curated registry. Order is intentional for grouping high-value operational flags first.
 export const FLAG_REGISTRY: FlagMeta[] = [
   // Core operation & dashboard
+  { name:'INDEX_SERVER_DIR', category:'core', description:'Instructions catalog directory. Defaults to ./instructions relative to CWD.', stability:'stable', default:'./instructions', type:'string', since:'1.0.0' },
   { name:'INDEX_SERVER_MUTATION', category:'core', description:'Enable mutation tools (add/import/remove/enrich/governance updates).', stability:'stable', default:'off', type:'boolean', since:'1.0.0' },
   { name:'INDEX_SERVER_VERBOSE_LOGGING', category:'core', description:'Verbose logging (handshake, dispatch timings).', stability:'stable', default:'off', type:'boolean', since:'1.0.0' },
   { name:'INDEX_SERVER_LOG_DIAG', category:'diagnostics', description:'Diagnostic logging (lower-level/internal).', stability:'diagnostic', default:'off', type:'boolean', since:'1.0.0' },
