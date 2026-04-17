@@ -31,8 +31,10 @@
 - `instructions/` remains the repo's checked-in instruction catalog and bootstrap seed surface.
 
 ## Index Server
+- **Search before creating**: Before using `index_add`, `index_import`, or `promote_from_repo`, search for existing or near-duplicate entries with `index_search`. Only add new guidance if no adequate match exists.
+- Search when the task involves patterns, standards, prior approaches, governance, shared guidance, or cross-repo learnings.
 - Use index-server for validated local or cross-repo knowledge, not for reading current file contents.
-- Start with `help_overview`, then use `index_search` and `index_dispatch` to fetch only the instructions needed for the current task.
+- Use `help_overview` when first encountering index-server or when capability is unclear. For routine tasks, go directly to `index_search` and `index_dispatch`.
 - Prefer the local-first flow: repo files -> `.instructions/` -> index-server -> external docs.
 - Start new learnings in `.instructions/` first, then promote stable patterns with `promote_from_repo` and `.specify/config/promotion-map.json`.
 - Treat index entries as promoted snapshots, not as proof that matching files must exist in the current workspace.
@@ -128,7 +130,7 @@ Use promote_from_repo to scan a local repo and promote its knowledge into the in
 - **Write (mutation)**: `index_add`, `index_import`, `index_remove`, `promote_from_repo`
 - **Governance**: `index_health`, `index_repair`, `index_normalize`
 - **Usage**: `usage_track`, `usage_hotset`
-- **Feedback**: `feedback/submit`, `feedback/list`, `feedback/stats`
+- **Feedback**: `feedback_dispatch` (unified: submit/list/get/update/stats/health/rate), `feedback_submit`, `feedback_list`, `feedback_stats`
 
 ## Anti-Patterns
 - Do NOT bypass `IndexContext` to write instruction files directly
@@ -136,4 +138,4 @@ Use promote_from_repo to scan a local repo and promote its knowledge into the in
 - Do NOT skip `logAudit()` for mutation operations
 - Do NOT add tools without updating `toolRegistry.ts` (INPUT_SCHEMAS + sets + describeTool)
 - Do NOT push without user approval
-- Do NOT duplicate MCP index instructions locally — reference by ID from the index
+- Do NOT mirror index content wholesale — keep emerging guidance local in `.instructions/` until validated, then promote
