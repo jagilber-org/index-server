@@ -11,6 +11,13 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 - Dashboard authentication via `INDEX_SERVER_ADMIN_API_KEY` with Bearer token, login modal, and sessionStorage-based session management.
 - CRUD stress test scripts (`scripts/stress-test.ps1`) for load testing instruction operations.
 - `dashboardAdminAuth` middleware now protects dashboard mutation routes (POST/PUT/DELETE instructions).
+- Integration tests for dashboard auth middleware (`dashboardAuth.spec.ts` — 33 tests).
+- Playwright E2E tests for dashboard auth flow (`dashboard-auth.spec.ts` — 10 tests).
+- `npm audit` step in build pipeline and `prepack` script.
+- `ensureLoadedMiddleware` to reduce redundant `ensureLoaded()` calls in dashboard routes.
+- Comprehensive stress testing documentation (`docs/stress-testing.md`).
+- Integration templates for global and per-repo copilot instructions.
+- Semantic search section in README with minimal configuration example.
 
 ### Changed
 
@@ -18,10 +25,24 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 - All instruction handlers now use `IInstructionStore` interface instead of direct disk I/O, enabling pluggable storage backends.
 - Auto-migration from JSON to SQLite on startup when `INDEX_SERVER_STORAGE_BACKEND=sqlite`.
 - Dashboard CRUD routes now properly invalidate cache after mutations, matching MCP handler patterns.
+- README replaced with streamlined v2 (216 lines vs 449 original) focused on install → quickstart → copilot integration.
+- Bootstrapper instruction (000-bootstrapper) rewritten to v3 with search-first workflow and copilot instructions setup.
+- Stress test parallel mode refactored from `Start-Job` to `ForEach-Object -Parallel` (PS 7+).
+- `.github/copilot-instructions.md` updated with search-before-add gate and fixed stale tool names.
+
+### Security
+
+- `dashboardAdminAuth` middleware added to alerts and embeddings POST routes.
+- Defense-in-depth path-traversal guard added to `safeName` in dashboard routes.
+- All 21 dashboard mutation endpoints now require authentication.
 
 ### Deprecated
 
 - `INDEX_SERVER_DISABLE_USAGE_RATE_LIMIT` — replaced by `INDEX_SERVER_DISABLE_RATE_LIMIT` which covers all rate limiting.
+
+### Removed
+
+- Dead imports and unused variables cleaned up after `IInstructionStore` migration.
 
 ### Fixed
 

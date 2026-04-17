@@ -180,6 +180,20 @@ Results summarize counts, highest severity enabling fast gating flows.
 - Prompt review regexes curated to avoid catastrophic patterns; lengths capped.
 - Integrity verification & diff support tamper detection.
 
+### Path Traversal Defense
+
+Dashboard HTTP endpoints sanitize instruction identifiers via the `safeName()` utility in `instructions.routes.ts`:
+
+1. Regex strips non-alphanumeric characters (except hyphens and underscores)
+2. `path.normalize()` collapses any `../` sequences
+3. `path.resolve()` comparison verifies the resolved path stays within the instructions directory
+
+This defense-in-depth approach prevents directory traversal even if the regex is bypassed.
+
+### ensureLoaded Middleware
+
+The `ensureLoadedMiddleware` (mounted in `ApiRoutes.ts`) calls `ensureLoaded()` once per HTTP request and stores the result in `res.locals.indexState`. This eliminates redundant per-handler filesystem checks (N × `fs.existsSync`/`statSync`/`readFileSync` reduced to 1 per request).
+
 ## Observability
 
 - `metrics_snapshot` returns per-method counts, feature counters, env feature list.
