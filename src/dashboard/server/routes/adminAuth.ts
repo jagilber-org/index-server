@@ -12,7 +12,8 @@ export function isLoopbackHost(value: string | undefined): boolean {
 }
 
 export function constantTimeKeyMatch(provided: string | undefined, expected: string): boolean {
-  const providedBuf = Buffer.from(provided || '', 'utf8');
+  if (!provided) return false;
+  const providedBuf = Buffer.from(provided, 'utf8');
   const expectedBuf = Buffer.from(expected, 'utf8');
   return providedBuf.length === expectedBuf.length && crypto.timingSafeEqual(providedBuf, expectedBuf);
 }

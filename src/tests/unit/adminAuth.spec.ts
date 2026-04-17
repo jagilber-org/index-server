@@ -77,6 +77,10 @@ describe('constantTimeKeyMatch', () => {
     expect(constantTimeKeyMatch('short', 'a-longer-string')).toBe(false);
   });
 
+  it('returns false when both provided and expected are empty strings', () => {
+    expect(constantTimeKeyMatch('', '')).toBe(false);
+  });
+
   it('returns false when provided is empty string', () => {
     expect(constantTimeKeyMatch('', 'expected')).toBe(false);
   });

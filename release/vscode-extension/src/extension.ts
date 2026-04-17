@@ -118,7 +118,8 @@ function registerMcpProviders(context: vscode.ExtensionContext): void {
         })
     );
 
-    // Register MCP server definition provider
+    // Legacy provider: keeps backwards compat with 'mcpIndexServer' config namespace
+    // (primary provider above uses the 'index' namespace)
     const legacyDidChangeEmitter = new vscode.EventEmitter<void>();
     context.subscriptions.push(
         vscode.lm.registerMcpServerDefinitionProvider('mcpIndexServerProvider', {
