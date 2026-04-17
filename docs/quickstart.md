@@ -79,13 +79,30 @@ Add to your MCP env config:
 }
 ```
 
-On first search, the server downloads a ~90 MB embedding model from Hugging Face (one-time). After that, all searches default to semantic mode — no `mode` parameter needed.
+Only `INDEX_SERVER_SEMANTIC_ENABLED` is required — everything else has sensible defaults:
 
-For offline environments:
+| Variable | Default | Description |
+|---|---|---|
+| `INDEX_SERVER_SEMANTIC_ENABLED` | `0` | Enable semantic (embedding-based) search |
+| `INDEX_SERVER_SEMANTIC_MODEL` | `Xenova/all-MiniLM-L6-v2` | Hugging Face model for embeddings |
+| `INDEX_SERVER_SEMANTIC_DEVICE` | `cpu` | Inference device: `cpu`, `dml` (DirectML/GPU on Windows), `cuda` |
+| `INDEX_SERVER_SEMANTIC_CACHE_DIR` | `data/models/` | Directory for downloaded model files |
+| `INDEX_SERVER_EMBEDDING_PATH` | `data/embeddings.json` | Persisted embedding cache |
+| `INDEX_SERVER_SEMANTIC_LOCAL_ONLY` | `0` | Skip model download, use pre-cached model only |
 
-```bash
-INDEX_SERVER_SEMANTIC_LOCAL_ONLY=1   # Skip download, use pre-cached model
+**Example with GPU acceleration (Windows DirectML):**
+
+```jsonc
+{
+  "env": {
+    "INDEX_SERVER_SEMANTIC_ENABLED": "1",
+    "INDEX_SERVER_SEMANTIC_DEVICE": "dml",
+    "INDEX_SERVER_SEMANTIC_CACHE_DIR": "C:/path/to/shared/model-cache"
+  }
+}
 ```
+
+On first search, the server downloads a ~90 MB embedding model from Hugging Face (one-time). After that, all searches default to semantic mode — no `mode` parameter needed. Set `INDEX_SERVER_SEMANTIC_LOCAL_ONLY=1` for air-gapped/offline environments (requires pre-cached model).
 
 ## 5. Verify
 
