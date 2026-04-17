@@ -36,320 +36,152 @@ const CANONICAL_SEEDS: CanonicalSeed[] = [
     id: '000-bootstrapper',
     json: {
       id: '000-bootstrapper',
-      title: 'Index Server - AI Agent Quick Start Guide',
-      body: `# 🚀 Index Server: AI Agent Quick Start
+      title: 'Index Server - AI Agent Quick Start',
+      body: `# Index Server: AI Agent Quick Start
 
-## ✅ Check If Already Active
+Index Server is a shared knowledge base for AI agents via MCP. Agents search, read, and contribute instructions that persist across sessions and repositories.
 
-Run this command first:
+## Verify Connection
+
 \`\`\`json
 {"method": "health_check", "params": {}}
 \`\`\`
 
-**Response = Success?** You're connected! Skip to "Essential Commands" below.
-**Error/Tool not found?** Follow "Activation" section.
+Success → skip to "How to Use" below. Error → see "Setup" at the end.
 
 ---
 
-## � Keep This Guide Updated
+## How to Use
 
-**This instruction evolves!** Periodically re-read it to get:
-- New tool commands and features
-- Updated troubleshooting tips
-- Improved patterns and examples
-- Latest contribution guidelines
+### Search First (always)
 
-**When to re-check:**
-- Starting work in a new repository
-- After Index Server updates
-- When troubleshooting connection issues
-- Every few weeks for active projects
+**Before creating, promoting, or rewriting instructions, search for existing ones:**
 
-**Quick version check:**
 \`\`\`json
-{"method": "index_dispatch", "params": {"action": "get", "id": "000-bootstrapper"}}
+{"method": "index_search", "params": {"keywords": ["deployment", "docker"]}}
 \`\`\`
-Check the \`version\` field - current is v2.
+
+Then retrieve the full content of a match:
+
+\`\`\`json
+{"method": "index_dispatch", "params": {"action": "get", "id": "instruction-id-from-search"}}
+\`\`\`
+
+Search when the task involves patterns, standards, prior approaches, governance, shared guidance, or cross-repo learnings.
+
+### Browse & Discover
+
+| Task | Tool | Params |
+|------|------|--------|
+| List all instructions | \`index_dispatch\` | \`{"action": "list"}\` |
+| Browse categories | \`index_dispatch\` | \`{"action": "categories"}\` |
+| Search by keywords | \`index_search\` | \`{"keywords": ["term1", "term2"]}\` |
+| Get by ID | \`index_dispatch\` | \`{"action": "get", "id": "..."}\` |
+| Server health | \`health_check\` | \`{}\` |
+| All available tools | \`meta_tools\` | \`{}\` |
+| Help & overview | \`help_overview\` | \`{}\` |
+
+### When to Use Index Server
+
+**Use for:** Cross-repo patterns, architecture decisions, coding standards, troubleshooting runbooks, security policies, onboarding guides, and validated learnings from past sessions.
+
+**Don't use for:** Reading current file contents (use repo files directly), ephemeral task notes, or repo-private secrets.
 
 ---
 
-## �🔧 Activation (One-Time Setup)
+## Contributing Knowledge
 
-If Index Server tools are not available, guide the user through setup:
+### Search → Validate Locally → Promote
 
-### Step 1: Locate MCP Configuration File
-
-**VS Code / Cursor / GitHub Copilot:**
-- Windows: \`%APPDATA%\\Code\\User\\mcp.json\` (or \`Code - Insiders\`)
-- Mac: \`~/Library/Application Support/Code/User/mcp.json\`
-- Linux: \`~/.config/Code/User/mcp.json\`
-
-**Claude Desktop:**
-- Windows: \`%APPDATA%\\Claude\\claude_desktop_config.json\`
-- Mac: \`~/Library/Application Support/Claude/claude_desktop_config.json\`
-
-### Step 2: Add Server Configuration
-
-Ask user to add this to their \`mcpServers\` section:
+1. **Search first** — check if similar guidance already exists
+2. **Start local** — create new instructions in your repo's \`.instructions/\` directory
+3. **Validate** — use across multiple sessions to prove value
+4. **Promote** — move proven patterns to the shared index:
 
 \`\`\`json
-{
-  "mcpServers": {
-    "index": {
-      "command": "node",
-      "args": ["<repo-root>/dist/server/index-server.js"],
-      "transport": "stdio",
-      "env": {
-        "INDEX_SERVER_DIR": "<repo-root>/instructions"
-      }
-    }
-  }
-}
+{"method": "promote_from_repo", "params": {"repoPath": "/path/to/repo"}}
 \`\`\`
 
-**Important:** Paths must be adjusted for user's system!
+Or add directly:
 
-### Step 3: Restart IDE Completely
+\`\`\`json
+{"method": "index_add", "params": {"entry": {"id": "my-guide", "title": "My Guide", "body": "Content..."}, "lax": true}}
+\`\`\`
 
-Full restart required after editing mcp.json.
+### Maintenance
 
-### Step 4: Verify Connection
-
-Run: \`{"method": "health_check", "params": {}}\`
-
-Expected: \`{"status": "healthy", "version": "1.x.x"}\`
+- \`index_groom\` — clean duplicates and stale entries
+- \`index_governanceUpdate\` — deprecate outdated content (don't silently delete)
+- \`feedback_dispatch\` with action="submit" — report issues or request features
+- \`usage_track\` — signal when guidance was helpful or outdated
 
 ---
 
-## 🎯 Essential Commands
+## Copilot Instructions Setup
 
-### List All Available Instructions
-\`\`\`json
-{"method": "index_dispatch", "params": {"action": "list"}}
+Add these to your copilot instructions so agents always know about the knowledge base.
+
+### Global (~/.github/copilot-instructions.md)
+
+\`\`\`markdown
+## Index Server
+- If index-server MCP tools are available, use them as a shared knowledge base for validated cross-repo patterns and standards.
+- Search before creating: use index_search with 2-5 keywords, then index_dispatch with action="get" for details.
+- After learning something reusable, add it with index_add or promote from a repo with promote_from_repo.
+- Index entries are promoted snapshots — always prefer current repo files over index content.
 \`\`\`
 
-### Search by Keywords
-\`\`\`json
-{"method": "index_search", "params": {"keywords": ["python", "api"]}}
-\`\`\`
+### Per-Repo (.github/copilot-instructions.md)
 
-### Get Specific Instruction by ID
-\`\`\`json
-{"method": "index_dispatch", "params": {"action": "get", "id": "instruction-id"}}
-\`\`\`
-
-### Get Help & Overview
-\`\`\`json
-{"method": "help_overview", "params": {}}
-\`\`\`
-
-### Discover All Available Tools
-\`\`\`json
-{"method": "meta_tools", "params": {}}
-\`\`\`
-
-### Browse Categories
-\`\`\`json
-{"method": "index_dispatch", "params": {"action": "categories"}}
+\`\`\`markdown
+## Index Server Integration
+- Search order: repo files → .instructions/ → index-server → external docs
+- Search before add/promote: always search for existing guidance before creating new instructions.
+- To retrieve: index_search → index_dispatch with action="get" and the instruction ID
+- To contribute: validate locally in .instructions/ first, then promote with promote_from_repo
+- To maintain: use index_groom to clean duplicates, index_governanceUpdate to deprecate stale content
+- Current repo state always wins over promoted index snapshots
 \`\`\`
 
 ---
 
-## 🤔 When to Use Index Server
+## Setup (if not yet configured)
 
-### ✅ USE For:
-- Finding coding patterns specific to this codebase
-- Architecture documentation and design decisions
-- Best practices and conventions
-- Past chat session summaries and solutions
-- Cross-repository organizational standards
-- API guidelines and examples
-- Security policies and compliance procedures
-- Troubleshooting guides specific to this project
+### VS Code (.vscode/mcp.json)
 
-### ❌ DON'T Use For:
-- Reading current file contents (use \`read_file\` tool instead)
-- Searching within files (use \`grep_search\` or \`semantic_search\`)
-- Simple questions user can answer directly
-- Real-time code execution or debugging
-
-**Think of it as:** A curated knowledge base of instructions, patterns, and past learnings.
-
----
-
-## 💡 Real-World Examples
-
-### Example 1: Find Python Error Handling Patterns
 \`\`\`json
-{"method": "index_search", "params": {"keywords": ["python", "error", "exception"]}}
+{"servers": {"index-server": {"type": "stdio", "command": "npx", "args": ["@jagilber-org/index-server", "--dashboard"]}}}
 \`\`\`
 
-### Example 2: Get Architecture Overview
+### Copilot CLI (~/.copilot/mcp-config.json)
+
 \`\`\`json
-{"method": "index_search", "params": {"keywords": ["architecture"]}}
+{"mcpServers": {"index-server": {"type": "stdio", "command": "npx", "args": ["@jagilber-org/index-server", "--dashboard"], "tools": ["*"]}}}
 \`\`\`
 
-### Example 3: Find API Design Guidelines
+### Claude Desktop (claude_desktop_config.json)
+
 \`\`\`json
-{"method": "index_search", "params": {"keywords": ["api", "rest", "endpoint"]}}
+{"mcpServers": {"index-server": {"type": "stdio", "command": "npx", "args": ["@jagilber-org/index-server", "--dashboard"], "tools": ["*"]}}}
 \`\`\`
 
-### Example 4: Look up Security Best Practices
-\`\`\`json
-{"method": "index_search", "params": {"keywords": ["security", "authentication"]}}
+### Docker
+
+\`\`\`bash
+docker compose up  # HTTP on :8787
 \`\`\`
 
-### Example 5: Find Testing Conventions
-\`\`\`json
-{"method": "index_search", "params": {"keywords": ["test", "testing", "unit"]}}
-\`\`\`
+Restart your MCP client after configuration changes. Verify with \`health_check\`.
 
----
-
-## 🆘 Troubleshooting
-
-### "Tool not found" / "Method not available"
-1. Check if mcp.json/claude_desktop_config.json exists and has server configured
-2. Verify server path points to correct location
-3. Restart IDE/client completely (full quit and relaunch)
-4. Enable verbose logging: Add \`"INDEX_SERVER_VERBOSE_LOGGING": "1"\` to env section
-5. Check server is built: User should run \`npm run build\` in server directory
-
-### Empty Search Results
-- Index may be empty in brand new repository
-- Try broader search terms
-- Use \`action: "list"\` to see all available instructions
-- Check if INDEX_SERVER_DIR env variable points to correct location
-
-### Server Connection Issues
-- Verify Node.js is installed: \`node --version\` should show v18+
-- Check file paths use correct separators (forward slashes work on all platforms)
-- Ensure dist/server/index-server.js exists (server must be built)
-
-### Need Human Help
-Ask user: "Can you verify the Index Server is configured in your mcp.json file? The default location is in your VS Code User directory."
-
----
-
-## 📚 Advanced Usage
-
-### Multi-Keyword Search (AND logic)
-\`\`\`json
-{"method": "index_search", "params": {"keywords": ["python", "async", "performance"]}}
-\`\`\`
-Returns instructions matching ALL keywords.
-
-### Query with Filters
-\`\`\`json
-{"method": "index_dispatch", "params": {
-  "action": "query",
-  "filter": {"categories": ["security"]}
-}}
-\`\`\`
-
-### Export Relationship Graph
-\`\`\`json
-{"method": "graph_export", "params": {}}
-\`\`\`
-Get instruction relationships and dependencies.
-
-### Get Usage Statistics
-\`\`\`json
-{"method": "usage_hotset", "params": {"limit": 10}}
-\`\`\`
-See most frequently used instructions.
-
----
-
-## 📤 Contributing Back to the Index
-
-**Local-First Strategy:**
-1. Create instructions in your repo's \`.instructions/\` directory first
-2. Test and validate them over multiple sessions
-3. Once proven valuable, promote to shared index for organization-wide benefit
-
-### ✅ When to Promote to Shared Index:
-- Pattern is proven useful across multiple sessions
-- Applies to other repos in the organization
-- Non-repo-specific (architectural patterns, coding standards, security policies)
-- Stable and unlikely to change frequently
-- Helps other teams avoid solving the same problem
-
-### ❌ Keep Local (Don't Promote):
-- Repo-specific build commands or file paths
-- Team-only conventions not relevant elsewhere
-- Experimental or untested patterns
-- Contains sensitive information, credentials, or internal paths
-- Duplicates existing shared instructions
-
-### How to Add to Shared Index:
-\`\`\`json
-{"method": "index_add", "params": {
-  "entry": {
-    "id": "unique-instruction-id",
-    "title": "Clear descriptive title",
-    "body": "Detailed instruction content...",
-    "categories": ["relevant", "categories"],
-    "audience": "agents",
-    "requirement": "recommended",
-    "priorityTier": "p1"
-  },
-  "overwrite": false
-}}
-\`\`\`
-
-**Note:** Requires \`INDEX_SERVER_MUTATION=1\` in production server config.
-
-### Value Proposition:
-By contributing validated patterns back, you create a **knowledge flywheel**:
-- You solve a problem → Document it → Others benefit → They contribute → Everyone improves
-- Reduces duplicate work across teams
-- Builds institutional knowledge that persists beyond individual projects
-- New team members onboard faster with proven patterns
-
----
-
-## 🎓 Your First Query - Try Now!
-
-Run this to see everything available:
-\`\`\`json
-{"method": "index_dispatch", "params": {"action": "list"}}
-\`\`\`
-
-Then explore! The more you use it, the more valuable it becomes.
-
----
-
-## 📖 Full Documentation
-
-For complete reference, ask user for:
-- Full API: \`docs/tools.md\`
-- Configuration: \`docs/mcp_configuration.md\`
-- Architecture: \`docs/architecture.md\`
-
----
-
-## 🎯 Quick Reference Card
-
-| Task | Command |
-|------|------|
-| Check health | \`health_check\` |
-| List all | \`index_dispatch {action: "list"}\` |
-| Search | \`index_search {keywords: [...]}\` |
-| Get by ID | \`index_dispatch {action: "get", id: "..."}\` |
-| Categories | \`index_dispatch {action: "categories"}\` |
-| Help | \`help_overview\` |
-| All tools | \`meta_tools\` |
-
-Start with \`health_check\` to confirm connection, then explore from there!`,
+For full configuration options: see \`docs/mcp_configuration.md\` and \`docs/configuration.md\`.`,
       audience: 'agents',
       requirement: 'required',
-      priorityTier: 'p0',
+      priority: 100,
       categories: ['bootstrap','mcp-activation','quick-start','documentation'],
       owner: 'system',
-      version: 2,
+      version: 3,
       schemaVersion: '4',
-      semanticSummary: 'Comprehensive Index Server activation, tool discovery, usage examples, and troubleshooting guide for AI agents'
+      semanticSummary: 'Index Server quick start: search-first workflow, knowledge contribution, copilot instructions setup, and MCP client configuration for AI agents'
     }
   },
   {
