@@ -29,6 +29,7 @@ import {
   createMessagingRoutes,
   createSqliteRoutes,
 } from './routes/index.js';
+import { ensureLoadedMiddleware } from './middleware/ensureLoadedMiddleware.js';
 
 export interface ApiRoutesOptions {
   enableCors?: boolean;
@@ -134,6 +135,11 @@ export function createApiRoutes(options: ApiRoutesOptions = {}): Router {
     next();
   });
   // -------------------------------------------------------------------------
+
+  // Pre-load instruction index once per request so route handlers can use
+  // res.locals.indexState instead of calling ensureLoaded() repeatedly.
+  // See: https://github.com/jagilber-dev/index-server/issues/45
+  router.use(ensureLoadedMiddleware);
 
   // Mount route modules
   router.use(createStatusRoutes(metricsCollector));
