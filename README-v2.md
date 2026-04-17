@@ -33,7 +33,16 @@ npx @jagilber-org/index-server --dashboard
 
 Install **Index Server** from the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=jagilber-org.index-server) or [Open VSX](https://open-vsx.org/extension/jagilber-org/index-server).
 
-### Path C: From source
+### Path C: Docker
+
+```bash
+docker compose up        # HTTP on :8787
+docker compose up tls    # HTTPS on :8787 with self-signed certs
+```
+
+See [Docker Deployment Guide](docs/docker_deployment.md) for volumes, environment variables, and production configuration.
+
+### Path D: From source
 
 ```bash
 git clone https://github.com/jagilber-org/index-server.git
