@@ -29,6 +29,7 @@ This index distinguishes between **active** project documentation and **archived
 | Testing | [Stress Testing](stress-testing.md) | Stress test scripts, parallel mode, CI integration, troubleshooting |
 | Runtime Diagnostics | `RUNTIME-DIAGNOSTICS.md` | Error & signal instrumentation |
 | Versioning | `VERSIONING.md` | Release semantics & governance |
+| Publishing | [Publishing](publishing.md) | Dual-repo publish workflow, script reference, safety guarantees |
 | Migration | `MIGRATION.md` | Upgrade & breaking change handling |
 | Index | `Index-NORMALIZATION.md` | Ingestion normalization spec |
 | Index | `Index-QUALITY-GATES.md` | Enforced quality gates |

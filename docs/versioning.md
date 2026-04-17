@@ -61,7 +61,7 @@ The canonical release flow is:
 5. Push the private release to `origin`.
    - `git push origin main --follow-tags`
 6. Publish the public mirror from the private repo source.
-   - `node scripts/publish.cjs --tag vX.Y.Z --create-release`
+   - `node scripts/publish-direct-to-remote.cjs --tag vX.Y.Z --create-release`
    - This stages a clean-room copy using `.publish-exclude`, verifies no forbidden artifacts leaked, scans for environment-value leaks, force-pushes `public/main`, pushes the public tag, and creates a GitHub release on `jagilber-org/index-server`.
 7. Verify both sides.
    - Confirm `origin` and `public` both contain `vX.Y.Z`.
@@ -78,7 +78,7 @@ npm run typecheck
 npm run build
 npm run test:fast
 git push origin main --follow-tags
-node scripts/publish.cjs --tag vX.Y.Z --create-release
+node scripts/publish-direct-to-remote.cjs --tag vX.Y.Z --create-release
 ```
 
 Replace `X.Y.Z` with the version created by the bump step.
@@ -92,7 +92,7 @@ Replace `X.Y.Z` with the version created by the bump step.
 - `-CreateReviewRepo` for a temporary private GitHub review repo
 - `-DirectPublish` for direct mirror publication
 
-Use this PowerShell path when you explicitly need a manual review or review-repo workflow. For the standard release path, prefer `scripts/publish.cjs`.
+Use this PowerShell path when you explicitly need a manual review or review-repo workflow. For the standard release path, prefer `scripts/publish-direct-to-remote.cjs`.
 
 ### Removed Legacy Path
 

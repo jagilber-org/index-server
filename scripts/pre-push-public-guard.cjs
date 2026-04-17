@@ -10,7 +10,7 @@
 //   4. Blocks the push if the repo is public
 //
 // Bypass: PUBLISH_OVERRIDE must be set to the SHA-256 of "publish-<tag>-<iso-date>"
-//         This is set ONLY by publish.cjs and the manual public publish script during real publishes.
+//         This is set ONLY by publish-direct-to-remote.cjs and the manual public publish script during real publishes.
 //         Setting PUBLISH_OVERRIDE=1 alone is NOT sufficient.
 // Install: pre-commit framework handles installation via .pre-commit-config.yaml
 
@@ -41,7 +41,7 @@ const remote = process.argv[2] || '';
 const url = process.argv[3] || '';
 
 // Extract owner/repo from GitHub URL
-// Handles: https://github.com/owner/repo.git, git@github.com:owner/repo.git
+// Handles: https://github.com/owner/repo.git, git@github.com:owner/repo.git # pii-allowlist
 let ownerRepo = '';
 if (url.includes('github.com')) {
   const match = url.match(/github\.com[/:]([^/]+\/[^/.]+?)(?:\.git)?$/);
@@ -73,7 +73,7 @@ if (isPublicationRemote) {
   console.log(`║  Repo:    ${ownerRepo}`);
   console.log('║                                                            ║');
   console.log('║  This mirror must only be updated by the publish scripts.  ║');
-  console.log('║  Use: node scripts/publish.cjs --tag vX.Y.Z               ║');
+  console.log('║  Use: node scripts/publish-direct-to-remote.cjs --tag vX.Y.Z ║');
   console.log('║  Or:  pwsh scripts/Publish-ToPublicRepo.ps1 -Tag vX.Y.Z   ║');
   console.log('╚══════════════════════════════════════════════════════════════╝');
   console.log('');
@@ -111,7 +111,7 @@ if (visibility === 'public') {
   console.log(`║  Repo:    ${ownerRepo} (visibility: public)`);
   console.log('║                                                            ║');
   console.log('║  Dev repos must not push directly to public repos.         ║');
-  console.log('║  Use: node scripts/publish.cjs --tag vX.Y.Z               ║');
+  console.log('║  Use: node scripts/publish-direct-to-remote.cjs --tag vX.Y.Z ║');
   console.log('║  See: constitution.json rule PB-2, PB-6                    ║');
   console.log('╚══════════════════════════════════════════════════════════════╝');
   console.log('');

@@ -1006,7 +1006,7 @@
         {
           "id": "PB-2",
           "severity": "error",
-          "rule": "Public publication repos MUST NOT receive direct pushes; all updates MUST flow through the publish script (scripts/publish.cjs) from the dev repo.",
+          "rule": "Public publication repos MUST NOT receive direct pushes; all updates MUST flow through the publish script (scripts/publish-direct-to-remote.cjs) from the dev repo.",
           "rationale": "Centralized publish prevents ad-hoc content leaks."
         },
         {

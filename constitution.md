@@ -120,7 +120,7 @@
 | CD-3 | Deployments SHOULD emit machine-readable manifests or retained artifacts and SHOULD run post-deploy smoke, integrity, or readiness checks before they are treated as successful. | warning |
 | CD-4 | Repositories MAY use specialized scheduled or domain-specific workflows for security, governance, performance, or UI drift, but those workflows do not replace required pull request gates. | warning |
 | PB-1 | All active repos MUST follow the dual-repo pattern: private dev repo for all development, public pub repo as read-only mirror. | error |
-| PB-2 | Public publication repos MUST NOT receive direct pushes; all updates MUST flow through the publish script (scripts/publish.cjs) from the dev repo. | error |
+| PB-2 | Public publication repos MUST NOT receive direct pushes; all updates MUST flow through the publish script (scripts/publish-direct-to-remote.cjs) from the dev repo. | error |
 | PB-3 | Internal artifacts (.specify/, specs/, issue templates, state/, logs/) MUST be excluded from publication via .publish-exclude. | error |
 | PB-6 | Dev repos MUST have a pre-push hook that queries GitHub API for repo visibility and blocks pushes to public remotes; bypass requires a SHA-256 token computed by the publish scripts (PUBLISH_OVERRIDE=1 is NOT sufficient). | error |
 
