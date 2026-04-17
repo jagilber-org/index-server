@@ -35,6 +35,8 @@ services:
       - INDEX_SERVER_DASHBOARD_HOST=0.0.0.0
       - INDEX_SERVER_LOG_LEVEL=${INDEX_SERVER_LOG_LEVEL:-info}
       - INDEX_SERVER_MUTATION=${INDEX_SERVER_MUTATION:-0}
+      # Uncomment to require Bearer token auth for dashboard mutation endpoints:
+      # - INDEX_SERVER_ADMIN_API_KEY=your-secret-key-here
       - INDEX_SERVER_STORAGE_BACKEND=${INDEX_SERVER_STORAGE_BACKEND:-json}
       - INDEX_SERVER_SQLITE_PATH=${INDEX_SERVER_SQLITE_PATH:-/app/data/index.db}
       - INDEX_SERVER_SQLITE_WAL=${INDEX_SERVER_SQLITE_WAL:-1}
@@ -88,6 +90,8 @@ services:
       - INDEX_SERVER_DASHBOARD_TLS_KEY=/app/certs/server.key
       - INDEX_SERVER_LOG_LEVEL=${INDEX_SERVER_LOG_LEVEL:-info}
       - INDEX_SERVER_MUTATION=${INDEX_SERVER_MUTATION:-0}
+      # Uncomment to require Bearer token auth for dashboard mutation endpoints:
+      # - INDEX_SERVER_ADMIN_API_KEY=your-secret-key-here
       - INDEX_SERVER_STORAGE_BACKEND=${INDEX_SERVER_STORAGE_BACKEND:-json}
       - INDEX_SERVER_SQLITE_PATH=${INDEX_SERVER_SQLITE_PATH:-/app/data/index.db}
       - INDEX_SERVER_SQLITE_WAL=${INDEX_SERVER_SQLITE_WAL:-1}
