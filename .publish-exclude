@@ -30,6 +30,8 @@ metrics/
 snapshots/
 tmp/
 test-results/
+test-results.json
+test_results.txt
 coverage/
 data/
 agents/
