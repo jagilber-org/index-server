@@ -61,7 +61,37 @@ Add to VS Code (`.vscode/mcp.json`):
 }
 ```
 
-See [MCP Configuration Guide](docs/mcp_configuration.md) for Claude Desktop, advanced patterns, and environment variables.
+Copilot CLI (`~/.copilot/mcp-config.json`):
+
+```json
+{
+  "mcpServers": {
+    "index-server": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["@jagilber-org/index-server", "--dashboard"],
+      "tools": ["*"]
+    }
+  }
+}
+```
+
+Claude Desktop (`claude_desktop_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "index-server": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["@jagilber-org/index-server", "--dashboard"],
+      "tools": ["*"]
+    }
+  }
+}
+```
+
+See [MCP Configuration Guide](docs/mcp_configuration.md) for advanced patterns, environment variables, and TLS setup.
 
 ### Verify
 
