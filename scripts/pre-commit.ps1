@@ -216,7 +216,7 @@ foreach($file in $targets) {
   foreach($line in $lines) {
     $lineNumber++
 
-    if ($basename -notin $piiFileAllowlist -and $line -notmatch '#\s*pii-allowlist') {
+    if ($basename -notin $piiFileAllowlist -and $line -notmatch '(#|//)\s*pii-allowlist') {
       foreach($pattern in $piiPatterns) {
         $matches = [regex]::Matches($line, $pattern.Regex)
         foreach($match in $matches) {
