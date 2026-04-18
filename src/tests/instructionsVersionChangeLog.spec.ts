@@ -45,10 +45,14 @@ describe('instructions governance: version & changeLog CRUD', () => {
     expect(Array.isArray(item1.changeLog)).toBe(true);
     expect(item1.changeLog.length).toBe(1);
     const initialVersion = item1.version;
+    // Capture length and snapshot changeLog before mutation — the list result may
+    // share a reference with the in-process index, so later writes can mutate item1.
+    const initialChangeLogLength = item1.changeLog.length;
+    const initialChangeLog = [...item1.changeLog];
 
     // Overwrite with explicit version bump & appended changeLog entry
     const newVersion = '1.1.0';
-  const updateResp: any = await add({ entry: { id, body: 'updated body', version: newVersion, changeLog: [...item1.changeLog, { version: newVersion, changedAt: new Date().toISOString(), summary: 'body update' }] }, overwrite: true });
+  const updateResp: any = await add({ entry: { id, body: 'updated body', version: newVersion, changeLog: [...initialChangeLog, { version: newVersion, changedAt: new Date().toISOString(), summary: 'body update' }] }, overwrite: true });
   // Overwrite semantics post-governance-hardening: 'overwritten' may be false if underlying
   // persistence layer determines no structural hash change beyond version/changeLog normalization.
   // Assert only id presence & absence of error; version bump verified via subsequent list.
@@ -58,7 +62,7 @@ describe('instructions governance: version & changeLog CRUD', () => {
     const list2: any = await dispatch('list', { expectId: id });
     const item2 = list2.items.find((i: any) => i.id === id);
     expect(item2.version).toBe(newVersion);
-    expect(item2.changeLog.length).toBe(item1.changeLog.length + 1);
+    expect(item2.changeLog.length).toBe(initialChangeLogLength + 1);
     // Ensure prior version retained as first element
     expect(item2.changeLog[0].version).toBe(initialVersion);
     expect(item2.changeLog[item2.changeLog.length - 1].version).toBe(newVersion);
