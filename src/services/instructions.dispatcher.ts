@@ -81,10 +81,10 @@ registerHandler('index_dispatch', async (params: DispatchParams) => {
     if(action === 'get'){
       const id = (params as { id?: unknown }).id;
       if(typeof id === 'string' && id.trim()){
-        const base = fn({ id });
+        const base = await Promise.resolve(fn({ id }));
         if((base as { notFound?: boolean }).notFound){
           try {
-            const enhanced = (instructionActions as unknown as { getEnhanced?: (p:{id:string})=>unknown }).getEnhanced?.({ id });
+            const enhanced = await Promise.resolve((instructionActions as unknown as { getEnhanced?: (p:{id:string})=>unknown }).getEnhanced?.({ id }));
             if(enhanced && !(enhanced as { notFound?: boolean }).notFound){
               if(autoTrack) { try { incrementUsage(id, { action: 'get' }); } catch { /* fire-and-forget */ } }
               return { ...(enhanced as Record<string,unknown>), _meta: buildAfterRetrievalMeta() }; // lateMaterialized success
