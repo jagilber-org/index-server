@@ -123,7 +123,7 @@ describe('Failover Under Load', { timeout: 120_000 }, () => {
 			INDEX_SERVER_DIR: ctx.instructionsDir,
 			INDEX_SERVER_MEMOIZE: '0',
 			INDEX_SERVER_MANIFEST_WRITE: '0',
-			INDEX_SERVER_LOG_LEVEL: 'warn',
+			INDEX_SERVER_LOG_LEVEL: 'info',  // must be info — tests poll for the INFO-level "Server started on" message
 			NODE_ENV: 'test',
 		});
 
@@ -138,7 +138,7 @@ describe('Failover Under Load', { timeout: 120_000 }, () => {
 
 		// Wait for new leader's URL
 		let newDashUrl = '';
-		const pat = /Server started on (http:\/\/[^\s]+)/;
+		const pat = /Server started on (https?:\/\/[^\s"]+)/;
 		newProc.stdout!.setEncoding('utf8');
 		newProc.stderr!.setEncoding('utf8');
 		const capture = (data: string) => {

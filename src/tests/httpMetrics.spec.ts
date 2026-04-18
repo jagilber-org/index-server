@@ -15,7 +15,7 @@ describe('HTTP Metrics Instrumentation (dashboard)', () => {
     });
 
     let url: string | undefined;
-    const pattern = /Server started on (http:\/\/[^\s]+)/;
+    const pattern = /Server started on (https?:\/\/[^\s"]+)/;
     const capture = (d: string) => {
       const m = pattern.exec(d);
       if (m) url = m[1];
