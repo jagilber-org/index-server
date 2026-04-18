@@ -30,7 +30,6 @@ function tryParse(line) {
 function log(msg){ process.stderr.write(`[health-check] ${msg}\n`); }
 
 async function main(){
-  const startTs = Date.now();
   log('Starting server process for health check');
   const child = spawn(process.execPath, ['dist/server/index-server.js'], { stdio: ['pipe','pipe','pipe'] });
   let initDone = false;

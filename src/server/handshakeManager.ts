@@ -98,7 +98,7 @@ export function emitReadyGlobal(server: any, reason: string){
     }
     if(!dispatched){
       // Final fallback direct stdout (rare path)
-      try { process.stdout.write(JSON.stringify(msg)+'\n'); dispatched = true; } catch { /* ignore */ }
+      try { process.stdout.write(JSON.stringify(msg)+'\n'); } catch { /* ignore */ }
     }
     // Always follow with tools/list_changed AFTER ready to guarantee ordering.
     try { if(typeof (server as any).sendToolListChanged === 'function'){ (server as any).sendToolListChanged(); record('list_changed_after_ready'); } } catch { /* ignore */ }

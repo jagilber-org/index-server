@@ -16,8 +16,7 @@ if(!fs.existsSync(reportPath)){
   process.exit(0);
 }
 const data = JSON.parse(fs.readFileSync(reportPath,'utf8'));
-let total = { lines:{ covered:0, pct:0, total:0 } };
-// Istanbul JSON: each file has statementMap, s (counts), branchMap, b (counts) etc.
+// IstanbulJSON: each file has statementMap, s (counts), branchMap, b (counts) etc.
 // We'll compute lines from statement counts as approximation (already used by report).
 let covered=0, totalLines=0;
 for(const file of Object.keys(data)){

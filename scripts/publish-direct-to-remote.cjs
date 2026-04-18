@@ -468,7 +468,9 @@ Files: ${fileCount}`;
       // Extract release notes from CHANGELOG.md
       const changelog = fs.readFileSync(path.join(repoRoot, 'CHANGELOG.md'), 'utf8');
       const version = tag.replace(/^v/, '');
-      const match = changelog.match(new RegExp(`## \\[${version.replace(/\./g, '\\.')}\\][\\s\\S]*?(?=## \\[|$)`));
+      // Security: escape all regex metacharacters in version string before building RegExp
+      const escapedVersion = version.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const match = changelog.match(new RegExp(`## \\[${escapedVersion}\\][\\s\\S]*?(?=## \\[|$)`));
       const notes = match ? match[0].replace(/^## \[.*?\].*\n/, '').trim() : `Release ${tag}`;
       const notesFile = path.join(os.tmpdir(), 'release-notes.md');
       fs.writeFileSync(notesFile, notes);

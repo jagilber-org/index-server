@@ -92,7 +92,6 @@
     if(selectedIds.length) params.set('selectedIds', selectedIds.join(','));
     const target = document.getElementById('graph-mermaid');
     const metaEl = document.getElementById('graph-meta');
-    const metaEl2 = document.getElementById('graph-meta2');
     if(target) target.textContent = '(loading graph...)';
     const skeleton = document.querySelector('.graph-loading-skeleton');
     if(skeleton) skeleton.style.display = '';
@@ -245,7 +244,7 @@
               setGraphMetaProgress('parse-fail','a='+attemptId);
               const hostParse = document.getElementById('graph-mermaid-svg');
               if(hostParse){
-                renderGraphTextMessage(hostParse, `Mermaid parse error:: ${(parseErr && parseErr.message) || parseErr}`);
+                renderGraphTextMessage(hostParse, `Mermaid parse error:: ${String((parseErr && parseErr.message) || parseErr || '').slice(0, 200)}`);
               }
               // Abort further render attempt
               throw parseErr;
@@ -259,7 +258,7 @@
             const skelFail = document.querySelector('.graph-loading-skeleton'); if(skelFail) skelFail.style.display = 'none';
             const hostErr = document.getElementById('graph-mermaid-svg');
             if(hostErr && !/Mermaid parse error/.test(hostErr.textContent||'')){
-              renderGraphTextMessage(hostErr, `Mermaid render failed:: ${(rendErr && rendErr.message) || rendErr}`);
+              renderGraphTextMessage(hostErr, `Mermaid render failed:: ${String((rendErr && rendErr.message) || rendErr || '').slice(0, 200)}`);
             }
             try { console.warn('[mermaid render failed]', rendErr); } catch{}
           }
@@ -287,7 +286,6 @@
   // Mermaid loader state (copied behavior)
   let mermaidLoading = null;
   let mermaidElkLoading = null;
-  const MERMAID_VERSION_TARGET = '11.11.0';
   function mermaidNeedsReload(force){ if(force) return true; if(!window.mermaid) return true; const ver = window.mermaid.version || window.mermaid.mermaidAPI?.getConfig?.()?.version || ''; if(ver.startsWith('10.')) return true; return false; }
   async function ensureMermaid(force){
     if(mermaidNeedsReload(force)){
@@ -371,7 +369,7 @@
         setGraphMetaProgress('apply-ok');
       } catch(e){
         setGraphMetaProgress('apply-fail');
-        try { alert('Render failed: '+ (e && e.message || e)); } catch{}
+        try { alert('Render failed: '+ ((e && e.message) || e)); } catch{}
       }
     })();
     cancelGraphEdit(true); // keep edited content visible

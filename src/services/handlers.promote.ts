@@ -246,13 +246,16 @@ function scanInstructionFiles(
 // ---------------------------------------------------------------------------
 
 registerHandler('promote_from_repo', (params: PromoteParams) => {
-  const { repoPath, scope = 'all', force = false, dryRun = false } = params;
-  const repoId = params.repoId || path.basename(repoPath);
+  const { scope = 'all', force = false, dryRun = false } = params;
 
   // Validate repoPath
-  if (!repoPath || typeof repoPath !== 'string') {
+  if (!params.repoPath || typeof params.repoPath !== 'string') {
     return { error: 'repoPath is required and must be a string' };
   }
+  // Security: resolve to absolute path to prevent path injection via relative segments
+  const repoPath = path.resolve(params.repoPath);
+  const repoId = params.repoId || path.basename(repoPath);
+
   if (!fs.existsSync(repoPath) || !fs.statSync(repoPath).isDirectory()) {
     return { error: `repoPath does not exist or is not a directory: ${repoPath}` };
   }

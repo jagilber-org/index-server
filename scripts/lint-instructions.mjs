@@ -2,7 +2,6 @@
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
-import { fileURLToPath } from 'url';
 import Ajv from 'ajv';
 import addFormats from 'ajv-formats';
 // Load schema and prepare validator (warn-only for new constraints)

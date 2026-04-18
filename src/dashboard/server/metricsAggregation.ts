@@ -285,7 +285,10 @@ export function calculateTrend(values: number[]): number {
 
 /** Parse time-range strings like "1h", "30m", "2d" into whole hours. */
 export function parseTimeRange(timeRange: string): number {
-  const match = timeRange.match(/(\d+)([hmd])/);
+  // Defense-in-depth: reject excessively long input before regex matching
+  if (typeof timeRange !== 'string' || timeRange.length > 20) return 1;
+  // Anchored regex with bounded quantifier to avoid backtracking on untrusted input
+  const match = timeRange.match(/^(\d{1,6})([hmd])$/);
   if (!match) return 1;
   const value = parseInt(match[1]);
   switch (match[2]) {
