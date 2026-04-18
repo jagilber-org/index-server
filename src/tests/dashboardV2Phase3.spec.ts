@@ -181,7 +181,7 @@ describe('Dashboard V2 Phase 3 — CSS/UX modernization', () => {
     for (const { name, expectedValue } of spacingVars) {
       expect(rootBlock, `Missing spacing token ${name}`).toContain(name);
       // Check value: "<name>: <value>" pattern
-      const valueRe = new RegExp(`${name.replace(/[-/]/g, '\\$&')}\\s*:\\s*${expectedValue.replace(/[()]/g, '\\$&')}`);
+      const valueRe = new RegExp(`${name.replace(/[-/]/g, '\\$&')}\\s*:\\s*${expectedValue.replace(/[()]/g, '\\$&')}`); // lgtm[js/incomplete-sanitization] — regex special char escaping in test
       expect(rootBlock).toMatch(valueRe);
     }
   });

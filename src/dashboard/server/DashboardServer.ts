@@ -148,6 +148,7 @@ export class DashboardServer {
       // No wildcard (*) origins; credentials are not exposed cross-origin.
       this.app.use((req, res, next) => {
         const origin = req.headers.origin;
+        // nosemgrep: javascript.express.security.cors-misconfiguration.cors-misconfiguration -- origin is validated against loopback-only regex; not user-controlled
         if (origin && /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/.test(origin)) {
           res.header('Access-Control-Allow-Origin', origin);
         }

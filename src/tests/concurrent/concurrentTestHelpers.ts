@@ -154,7 +154,7 @@ export async function spawnLeaderServer(opts: {
 		INDEX_SERVER_DIR: opts.instructionsDir,
 		INDEX_SERVER_MEMOIZE: '0',
 		INDEX_SERVER_MANIFEST_WRITE: '0',
-		INDEX_SERVER_LOG_LEVEL: 'warn',
+		INDEX_SERVER_LOG_LEVEL: 'info',  // must be info — tests poll for the INFO-level "Server started on" message
 		NODE_ENV: 'test',
 		...opts.extraEnv,
 	});
@@ -165,7 +165,7 @@ export async function spawnLeaderServer(opts: {
 	});
 
 	let dashUrl = '';
-	const pat = /Server started on (http:\/\/[^\s]+)/;
+	const pat = /Server started on (https?:\/\/[^\s"]+)/;
 
 	proc.stdout!.setEncoding('utf8');
 	proc.stderr!.setEncoding('utf8');

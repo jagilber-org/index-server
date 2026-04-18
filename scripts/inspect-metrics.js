@@ -3,7 +3,7 @@
 
 function inspectMetricsCollector() {
     console.log('\n🔍 METRICS COLLECTOR MEMORY ANALYSIS');
-    console.log('=' * 60);
+    console.log('='.repeat(60));
 
     let collector;
     try {
@@ -30,10 +30,11 @@ function inspectMetricsCollector() {
     console.log(`  Max snapshots config: ${collector.options?.maxSnapshots || 'unknown'}`);
     console.log(`  Collection interval: ${collector.options?.collectInterval || 'unknown'}ms`);
 
+    let ageMinutes = 0;
     if (snapshots.length > 0) {
         const oldest = snapshots[0];
         const newest = snapshots[snapshots.length - 1];
-        const ageMinutes = (newest.timestamp - oldest.timestamp) / 1000 / 60;
+        ageMinutes = (newest.timestamp - oldest.timestamp) / 1000 / 60;
         console.log(`  Data age span: ${ageMinutes.toFixed(1)} minutes`);
 
         // Estimate memory usage

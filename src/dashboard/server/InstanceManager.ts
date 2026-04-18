@@ -223,7 +223,7 @@ function pingInstance(host: string, port: number, protocol: 'http' | 'https' = '
         tlsOpts.ca = fs.readFileSync(caPath);
       } else {
         // Localhost health-check against self-signed certs when no CA configured
-        tlsOpts.rejectUnauthorized = false;
+        tlsOpts.rejectUnauthorized = false; // lgtm[js/disabling-certificate-validation] — localhost self-signed cert
       }
     }
     const opts = {
@@ -233,7 +233,7 @@ function pingInstance(host: string, port: number, protocol: 'http' | 'https' = '
       timeout: timeoutMs,
       ...tlsOpts,
     };
-    const req = transport.get(opts, (res) => {
+    const req = transport.get(opts, (res) => { // lgtm[js/file-access-to-http] — health check URL from config
       // Any HTTP response means the server is alive (even 4xx/5xx)
       res.resume(); // drain the response
       resolve(true);

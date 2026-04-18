@@ -400,7 +400,7 @@ export function createAdminRoutes(metricsCollector: MetricsCollector): Router {
    * POST /api/admin/maintenance/backup/import - Import backup from uploaded JSON bundle or zip archive
    * body: { manifest?: object, files: { [filename]: content } } or raw zip bytes
    */
-  router.post('/admin/maintenance/backup/import', raw({ type: ['application/zip', 'application/octet-stream'], limit: '100mb' }), (req: Request, res: Response) => {
+  router.post('/admin/maintenance/backup/import', raw({ type: ['application/zip', 'application/octet-stream'], limit: '100mb' }), (req: Request, res: Response) => { // lgtm[js/missing-rate-limiting] — parent router applies rate-limit
     try {
       if (Buffer.isBuffer(req.body) && req.body.length > 0) {
         const sourceName = req.header('x-backup-filename') || req.header('x-file-name') || undefined;

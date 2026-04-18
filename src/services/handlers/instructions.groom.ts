@@ -127,7 +127,7 @@ registerHandler('index_normalize', guard('index_normalize', (p: { dryRun?: boole
   const forceCanonical = !!p?.forceCanonical;
   const instructionsCfg = getRuntimeConfig().instructions;
   const base = getInstructionsDir();
-  const dirs = [base, path.join(process.cwd(), 'devinstructions')].filter(d => fs.existsSync(d));
+  const dirs = [base, path.join(process.cwd(), 'devinstructions')].filter(d => { try { fs.accessSync(d); return true; } catch { return false; } });
   let scanned = 0, changed = 0, fixedHash = 0, fixedVersion = 0, fixedTier = 0, addedTimestamps = 0, addedContentType = 0; const updatedIds: string[] = [];
   const scannedIds = new Set<string>();
   const SEMVER = /^\d+\.\d+\.\d+(?:[-+].*)?$/;

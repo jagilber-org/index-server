@@ -50,15 +50,15 @@ writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + '\n', 'utf8');
 
 // Update CHANGELOG.md
 const changelogPath = join(root, 'CHANGELOG.md');
-if (existsSync(changelogPath)) {
+try {
+  const existing = readFileSync(changelogPath, 'utf8');
   const date = new Date().toISOString().slice(0, 10);
   let entry = `\n## [${next}] - ${date}\n`;
   if (changelogMessage) {
     entry += `\n### Added\n\n- ${changelogMessage}\n`;
   }
-  const existing = readFileSync(changelogPath, 'utf8');
   writeFileSync(changelogPath, existing + entry, 'utf8');
-}
+} catch (e) { if (e.code !== 'ENOENT') throw e; }
 
 // Commit and tag
 execSync('git add package.json CHANGELOG.md', { stdio: 'inherit' });

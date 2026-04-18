@@ -4,7 +4,7 @@
  * Checks env flags, optionally runs build, and creates legacy dist shim.
  */
 import { execSync } from 'node:child_process';
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { accessSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const force = process.env.INDEX_SERVER_FORCE_REBUILD === '1';
@@ -27,8 +27,13 @@ const legacyDir = join(process.cwd(), 'dist', 'server');
 const legacyEntry = join(legacyDir, 'index-server.js');
 const modernEntry = join(process.cwd(), 'dist', 'src', 'server', 'index-server.js');
 
-if (existsSync(modernEntry)) {
-  if (!existsSync(legacyEntry)) {
+let modernExists = false;
+try { accessSync(modernEntry); modernExists = true; } catch { /* missing */ }
+
+if (modernExists) {
+  let legacyExists = false;
+  try { accessSync(legacyEntry); legacyExists = true; } catch { /* missing */ }
+  if (!legacyExists) {
     console.log('[pretest] Creating legacy dist/server/index-server.js shim -> src/server/index-server.js');
     mkdirSync(legacyDir, { recursive: true });
     writeFileSync(legacyEntry, "// auto-generated shim for backward compatibility\nmodule.exports = require('../src/server/index-server.js');\n", 'utf8');

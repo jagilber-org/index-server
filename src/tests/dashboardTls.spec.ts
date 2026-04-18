@@ -185,7 +185,7 @@ describe('DashboardServer – TLS support', () => {
     const body = await new Promise<string>((resolve, reject) => {
       const req = https.get(
         `${result.url}admin`,
-        { rejectUnauthorized: false },
+        { rejectUnauthorized: false }, // lgtm[js/disabling-certificate-validation] — TLS test self-signed cert
         (res) => {
           let data = '';
           res.on('data', (chunk: Buffer) => { data += chunk.toString(); });
@@ -231,7 +231,7 @@ describe('DashboardServer – TLS support', () => {
     const fetchWsInfo = () => new Promise<string>((resolve, reject) => {
       const req = https.get(
         `${result.url}ws-info`,
-        { rejectUnauthorized: false },
+        { rejectUnauthorized: false }, // lgtm[js/disabling-certificate-validation] — TLS test self-signed cert
         (res) => {
           let data = '';
           res.on('data', (chunk: Buffer) => { data += chunk.toString(); });

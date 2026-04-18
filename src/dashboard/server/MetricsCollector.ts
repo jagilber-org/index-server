@@ -212,19 +212,23 @@ export class MetricsCollector {
         this.appendCompactMs = Math.max(1, metricsConfig.toolcall.compactMs || this.appendCompactMs);
         try {
           // Load any un-compacted append log tail (best-effort)
-            if (this.appendLogPath && fs.existsSync(this.appendLogPath)) {
-              const stat = fs.statSync(this.appendLogPath);
-              if (stat.size < 25 * 1024 * 1024) { // safety cap 25MB
-                const raw = fs.readFileSync(this.appendLogPath, 'utf8');
-                const lines = raw.split(/\r?\n/).filter(l => l.trim().length > 0);
-                for (const line of lines) {
-                  try {
-                    const evt = JSON.parse(line) as ToolCallEvent;
-                    this.toolCallEvents.add(evt);
-                  } catch {/* ignore bad line */}
+            if (this.appendLogPath) {
+              try {
+                const stat = fs.statSync(this.appendLogPath);
+                if (stat.size < 25 * 1024 * 1024) { // safety cap 25MB
+                  const raw = fs.readFileSync(this.appendLogPath, 'utf8');
+                  const lines = raw.split(/\r?\n/).filter(l => l.trim().length > 0);
+                  for (const line of lines) {
+                    try {
+                      const evt = JSON.parse(line) as ToolCallEvent;
+                      this.toolCallEvents.add(evt);
+                    } catch {/* ignore bad line */}
+                  }
+                } else {
+                  logWarn('[MetricsCollector] tool-call-events.ndjson too large to preload (>25MB); will rely on last snapshot');
                 }
-              } else {
-                logWarn('[MetricsCollector] tool-call-events.ndjson too large to preload (>25MB); will rely on last snapshot');
+              } catch (statErr: unknown) {
+                if ((statErr as NodeJS.ErrnoException).code !== 'ENOENT') throw statErr;
               }
             }
         } catch (err) {

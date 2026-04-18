@@ -200,7 +200,7 @@ export async function waitForFile(filePath: string, timeoutMs = 4000, predicate:
     await new Promise(r=> setTimeout(r, 40));
   }
   if(fs.existsSync(filePath)){
-    fs.readFileSync(filePath,'utf8');
+    try { content = fs.readFileSync(filePath,'utf8'); } catch { /* ignore read race */ }
   }
   throw new Error(`waitForFile timeout (${timeoutMs}ms) path=${filePath}`);
 }
@@ -249,8 +249,8 @@ export async function waitForFile(filePath: string, timeoutMs = 4000, predicate:
         lastErrors = errors.map(e=> e.error);
         const found = entries.find(e=> e.id === id);
         if(found) return { entry: found, errors: lastErrors, attempts };
-      } catch {
-        // error captured in final diagnostics below
+      } catch (loadErr) {
+        lastErrors = [(loadErr as Error).message];
       }
       await new Promise(r=> setTimeout(r, intervalMs));
     }

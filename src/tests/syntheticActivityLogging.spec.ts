@@ -47,9 +47,9 @@ describe('Dashboard synthetic activity logging', () => {
     });
     let stdoutBuf='';
     proc.stdout?.setEncoding('utf8');
-    proc.stdout?.on('data', d=> { stdoutBuf += d.toString(); const m = /Server started on (http:\/\/[^\s]+)/.exec(stdoutBuf); if(m) baseUrl = m[1]; });
+    proc.stdout?.on('data', d=> { stdoutBuf += d.toString(); const m = /Server started on (https?:\/\/[^\s"]+)/.exec(stdoutBuf); if(m) baseUrl = m[1]; });
     proc.stderr?.setEncoding('utf8');
-    proc.stderr?.on('data', d=> { const s = d.toString(); const m = /Server started on (http:\/\/[^\s]+)/.exec(s); if(m) baseUrl = m[1]; });
+    proc.stderr?.on('data', d=> { const s = d.toString(); const m = /Server started on (https?:\/\/[^\s"]+)/.exec(s); if(m) baseUrl = m[1]; });
     proc.once('exit', (code, signal) => { if(!earlyExit) earlyExit = new Error(`server exited early code=${code} signal=${signal}`); });
     proc.once('error', err => { if(!earlyExit) earlyExit = err; });
     // Wait for server URL discovery (stdout indicates readiness)

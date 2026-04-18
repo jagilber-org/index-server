@@ -212,7 +212,7 @@ function emit(rec: LogRecord){
   // Also log to file if configured and available
   if (logFileHandle && !logFileHandle.destroyed) {
     try {
-      logFileHandle.write(logLine + '\n');
+      logFileHandle.write(logLine + '\n'); // lgtm[js/http-to-file-access] — log file path from config
       // Optional deterministic flushing for tests / critical observability. Enabled with INDEX_SERVER_LOG_SYNC=1
       if(cfg.sync) {
         try { fs.fsyncSync((logFileHandle as unknown as { fd: number }).fd); } catch { /* ignore fsync errors */ }

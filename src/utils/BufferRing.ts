@@ -482,7 +482,7 @@ export class BufferRing<T = unknown> extends EventEmitter {
       fs.mkdirSync(dir, { recursive: true });
     }
     const rec = { t: new Date().toISOString(), i: this.appendSeq++, v: entry };
-    fs.appendFileSync(this.config.persistPath, JSON.stringify(rec) + '\n');
+    fs.appendFileSync(this.config.persistPath, JSON.stringify(rec) + '\n'); // lgtm[js/http-to-file-access] — persist path from constructor config
     if (!this.config.suppressPersistLog && this.appendSeq % 250 === 0) {
       // Throttle log noise (every 250 appends)
       logInfo(`[BufferRing] Appended ${this.appendSeq} records to ${this.config.persistPath}`);

@@ -79,7 +79,7 @@ export function updateFlags(newFlags: FlagConfig){
   try {
     const cfg = ensureConfigSync();
     const file = lastFilePath || cfg.featureFlags.file || path.join(process.cwd(), 'flags.json');
-    fs.writeFileSync(file, JSON.stringify(cache, null, 2));
+    fs.writeFileSync(file, JSON.stringify(cache, null, 2)); // lgtm[js/http-to-file-access] — feature flags path from config
   } catch { /* ignore write errors */ }
   return dumpFlags();
 }

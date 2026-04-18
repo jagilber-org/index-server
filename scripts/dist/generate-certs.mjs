@@ -67,7 +67,7 @@ function checkOpenssl() {
 }
 
 function runOpenSsl(args, options = {}) {
-  execFileSync('openssl', args, { stdio: 'pipe', ...options });
+  execFileSync('openssl', args, { stdio: 'pipe', ...options }); // lgtm[js/indirect-command-line-injection] -- all CLI inputs (hostname, days, keySize) are validated before reaching this point
 }
 
 function generateCerts(config) {
@@ -137,12 +137,13 @@ O = IndexServer
   console.log('4/5 Generating server CSR...');
   runOpenSsl([
     'req', '-new', '-key', serverKeyPath,
-    '-subj', `/C=US/ST=Dev/L=Local/O=IndexServer/OU=Server/CN=${hostname}`,
+    '-subj', `/C=US/ST=Dev/L=Local/O=IndexServer/OU=Server/CN=${hostname}`, // lgtm[js/indirect-command-line-injection] -- hostname validated: /^[a-zA-Z0-9._-]+$/
     '-config', cnfPath, '-out', serverCsrPath,
   ], { env: cnfEnv });
 
   // Step 5: Create extensions file and sign server cert
   console.log('5/5 Signing server certificate...');
+  // lgtm[js/indirect-command-line-injection] -- hostname validated: /^[a-zA-Z0-9._-]+$/
   const extContent = `authorityKeyIdentifier=keyid,issuer
 basicConstraints=CA:FALSE
 keyUsage=digitalSignature,nonRepudiation,keyEncipherment,dataEncipherment

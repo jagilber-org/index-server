@@ -43,7 +43,7 @@ async function spawnServer(env: Record<string, string>, label: string): Promise<
   });
 
   let dashUrl = '';
-  const pat = /Server started on (http:\/\/[^\s]+)/;
+  const pat = /Server started on (https?:\/\/[^\s"]+)/;
 
   proc.stdout.setEncoding('utf8');
   proc.stderr.setEncoding('utf8');
@@ -88,7 +88,7 @@ async function spawnServer(env: Record<string, string>, label: string): Promise<
 }
 
 /** Fetch JSON from a server endpoint with timeout. */
-async function fetchJson(base: string, path: string, timeoutMs = 5000): Promise<{ status: number; data: unknown }> {
+async function fetchJson(base: string, path: string, timeoutMs = 10000): Promise<{ status: number; data: unknown }> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {

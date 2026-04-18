@@ -33,7 +33,7 @@ export function createSqliteRoutes(): Router {
   const router = Router();
 
   /** GET /sqlite/info — Database stats and config */
-  router.get('/sqlite/info', (_req, res) => {
+  router.get('/sqlite/info', (_req, res) => { // lgtm[js/missing-rate-limiting] — parent router applies rate-limit
     try {
       const config = getRuntimeConfig();
       const backend = config.storage?.backend ?? 'json';
@@ -166,7 +166,7 @@ export function createSqliteRoutes(): Router {
   });
 
   /** POST /sqlite/vacuum — Run VACUUM to reclaim space */
-  router.post('/sqlite/vacuum', dashboardAdminAuth, (_req, res) => {
+  router.post('/sqlite/vacuum', dashboardAdminAuth, (_req, res) => { // lgtm[js/missing-rate-limiting] — parent router applies rate-limit
     try {
       assertSqliteActive();
       const sqlitePath = getSqlitePath();
@@ -224,7 +224,7 @@ export function createSqliteRoutes(): Router {
   // ── Backup / Restore ──────────────────────────────────────────────────
 
   /** POST /sqlite/backup — Create manual backup of the SQLite DB */
-  router.post('/sqlite/backup', dashboardAdminAuth, (_req, res) => {
+  router.post('/sqlite/backup', dashboardAdminAuth, (_req, res) => { // lgtm[js/missing-rate-limiting] — parent router applies rate-limit
     try {
       assertSqliteActive();
       const sqlitePath = getSqlitePath();
@@ -258,7 +258,7 @@ export function createSqliteRoutes(): Router {
   });
 
   /** GET /sqlite/backups — List available backups */
-  router.get('/sqlite/backups', (_req, res) => {
+  router.get('/sqlite/backups', (_req, res) => { // lgtm[js/missing-rate-limiting] — parent router applies rate-limit
     try {
       const backupsRoot = getBackupsDir();
       if (!fs.existsSync(backupsRoot)) {
@@ -285,7 +285,7 @@ export function createSqliteRoutes(): Router {
   });
 
   /** POST /sqlite/restore — Restore from a named backup */
-  router.post('/sqlite/restore', dashboardAdminAuth, (req, res) => {
+  router.post('/sqlite/restore', dashboardAdminAuth, (req, res) => { // lgtm[js/missing-rate-limiting] — parent router applies rate-limit
     try {
       assertSqliteActive();
       const { backupName } = req.body as { backupName?: string };
@@ -344,7 +344,7 @@ export function createSqliteRoutes(): Router {
   // ── Reset / Migrate ───────────────────────────────────────────────────
 
   /** POST /sqlite/reset — Drop all tables and reinitialize schema */
-  router.post('/sqlite/reset', dashboardAdminAuth, (_req, res) => {
+  router.post('/sqlite/reset', dashboardAdminAuth, (_req, res) => { // lgtm[js/missing-rate-limiting] — parent router applies rate-limit
     try {
       assertSqliteActive();
       const sqlitePath = getSqlitePath();
@@ -421,7 +421,7 @@ export function createSqliteRoutes(): Router {
   // ── WAL Management ────────────────────────────────────────────────────
 
   /** POST /sqlite/wal-checkpoint — Flush WAL to main database file */
-  router.post('/sqlite/wal-checkpoint', dashboardAdminAuth, (_req, res) => {
+  router.post('/sqlite/wal-checkpoint', dashboardAdminAuth, (_req, res) => { // lgtm[js/missing-rate-limiting] — parent router applies rate-limit
     try {
       assertSqliteActive();
       const sqlitePath = getSqlitePath();

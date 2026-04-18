@@ -58,7 +58,6 @@
                 if (statusEl) statusEl.textContent = `Restore failed: ${data.error || data.message || 'unknown'}`;
             }
         } catch (err) {
-            const statusEl = document.getElementById('backup-restore-status');
             if (statusEl) statusEl.textContent = 'Error restoring backup';
         }
     }

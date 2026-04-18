@@ -14,7 +14,7 @@ export async function startDashboardServer(extraEnv: NodeJS.ProcessEnv = {}, tim
   const env = { ...process.env, INDEX_SERVER_DASHBOARD: '1', ...extraEnv };
   const proc = spawn('node', ['dist/server/index-server.js', '--dashboard-port=0', '--dashboard-host=127.0.0.1'], { env, stdio: ['pipe', 'pipe', 'pipe'] });
   let url: string | undefined;
-  const pat = /Server started on (http:\/\/[^\s]+)/;
+  const pat = /Server started on (https?:\/\/[^\s"]+)/;
   const capture = (data: string) => {
     const m = pat.exec(data);
     if (m) url = m[1];

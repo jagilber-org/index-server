@@ -51,35 +51,39 @@ function cleanDist() {
   const distPath = path.join(process.cwd(), 'dist');
   const keepFile = path.join(process.cwd(), '.dist.keep');
 
-  if (fs.existsSync(keepFile)) {
+  try {
+    fs.accessSync(keepFile);
     log('Skipping dist clean (sentinel file present)', 'info');
     return;
-  }
+  } catch { /* sentinel absent — proceed with clean */ }
 
-  if (fs.existsSync(distPath)) {
-    log('Cleaning dist directory', 'info');
-    fs.rmSync(distPath, { recursive: true, force: true });
-  }
+  log('Cleaning dist directory', 'info');
+  fs.rmSync(distPath, { recursive: true, force: true });
 }
 
 function createDistSentinel() {
   const keepFile = path.join(process.cwd(), '.dist.keep');
-  if (!fs.existsSync(keepFile)) {
-    fs.writeFileSync(keepFile, 'persist dist between builds');
+  try {
+    fs.writeFileSync(keepFile, 'persist dist between builds', { flag: 'wx' });
     log('Created dist sentinel file', 'debug');
-  }
+  } catch (e) { if (e.code !== 'EEXIST') throw e; }
 }
 
 function verifyBuildArtifacts() {
   const serverEntry = path.join(process.cwd(), 'dist', 'server', 'index-server.js');
   const srcServerEntry = path.join(process.cwd(), 'dist', 'src', 'server', 'index-server.js');
 
-  if (!fs.existsSync(serverEntry) && !fs.existsSync(srcServerEntry)) {
+  let serverExists = false;
+  let srcServerExists = false;
+  try { fs.accessSync(serverEntry); serverExists = true; } catch { /* missing */ }
+  try { fs.accessSync(srcServerEntry); srcServerExists = true; } catch { /* missing */ }
+
+  if (!serverExists && !srcServerExists) {
     throw new Error('Build verification failed: No server index-server.js found');
   }
 
   // Create compatibility shim if needed
-  if (fs.existsSync(srcServerEntry) && !fs.existsSync(serverEntry)) {
+  if (srcServerExists && !serverExists) {
     const distServerDir = path.dirname(serverEntry);
     fs.mkdirSync(distServerDir, { recursive: true });
 
@@ -102,7 +106,9 @@ function main() {
     checkNodeVersion();
 
     // Clean dist if not in rapid development mode
-    if (isCI || !fs.existsSync(path.join(process.cwd(), '.dist.keep'))) {
+    let keepExists = false;
+    try { fs.accessSync(path.join(process.cwd(), '.dist.keep')); keepExists = true; } catch { /* absent */ }
+    if (isCI || !keepExists) {
       cleanDist();
     }
 

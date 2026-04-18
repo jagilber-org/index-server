@@ -172,8 +172,8 @@ describe('CRUD Matrix', () => {
         mode: 'keyword',
         limit: 10,
       });
-      const results = (result as { results?: Array<{ id: string }> }).results ?? [];
-      const foundIds = results.map(r => r.id);
+      const results = (result as { results?: Array<{ instructionId: string }> }).results ?? [];
+      const foundIds = results.map(r => r.instructionId);
       expect(foundIds).toContain(lifecycleId);
     });
 
@@ -195,8 +195,9 @@ describe('CRUD Matrix', () => {
         action: 'get',
         id: lifecycleId,
       });
-      expect(result.id).toBe(lifecycleId);
-      expect(result.title).toBe('Matrix Lifecycle Test');
+      const item = result.item as Record<string, unknown> | undefined;
+      expect(item?.id).toBe(lifecycleId);
+      expect(item?.title).toBe('Matrix Lifecycle Test');
     });
 
     it('should be removable', async () => {

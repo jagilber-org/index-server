@@ -9,8 +9,7 @@ The Enhanced profile enables HTTPS for the admin dashboard. You need a TLS certi
 - **OpenSSL for Windows** — [slproweb.com/products/Win32OpenSSL.html](https://slproweb.com/products/Win32OpenSSL.html)
 - **Linux / macOS** — `sudo apt install openssl` or `brew install openssl`
 
-<!-- env-leak-allowlist: standard Windows path for documentation -->
-> The script automatically checks well-known paths like `C:\Program Files\Git\usr\bin` if `openssl` is not on your PATH.
+> The script automatically checks well-known paths like `C:\Program Files\Git\usr\bin` if `openssl` is not on your PATH. <!-- env-leak-allowlist: standard Windows path for documentation -->
 
 ### Generate a Self-Signed Certificate
 

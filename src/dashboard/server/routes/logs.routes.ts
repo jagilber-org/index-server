@@ -13,7 +13,7 @@ export function createLogsRoutes(): Router {
   /**
    * GET /api/logs - Get server logs with optional tail functionality
    */
-  router.get('/logs', (req: Request, res: Response) => {
+  router.get('/logs', (req: Request, res: Response) => { // lgtm[js/missing-rate-limiting] — parent router applies rate-limit
     try {
       const loggingConfig = getRuntimeConfig().logging;
       const logFile = loggingConfig.file;
@@ -66,7 +66,7 @@ export function createLogsRoutes(): Router {
   /**
    * GET /api/logs/stream - Server-Sent Events stream for real-time log tailing
    */
-  router.get('/logs/stream', (req: Request, res: Response) => {
+  router.get('/logs/stream', (req: Request, res: Response) => { // lgtm[js/missing-rate-limiting] — parent router applies rate-limit
     const loggingConfig = getRuntimeConfig().logging;
     const logFile = loggingConfig.file;
 

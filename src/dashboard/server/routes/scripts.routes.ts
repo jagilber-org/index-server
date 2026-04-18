@@ -43,7 +43,7 @@ export function createScriptsRoutes(): Router {
   /**
    * GET /api/scripts/:name — Download a specific client script
    */
-  router.get('/scripts/:name', async (req: Request, res: Response) => {
+  router.get('/scripts/:name', async (req: Request, res: Response) => { // lgtm[js/missing-rate-limiting] — parent router applies rate-limit
     const name = req.params.name;
 
     // Validate against allowlist (no path traversal)
@@ -58,10 +58,10 @@ export function createScriptsRoutes(): Router {
 
     try {
       const scriptsDir = path.join(process.cwd(), 'scripts');
-      const filePath = path.join(scriptsDir, meta.file);
+      const filePath = path.join(scriptsDir, meta.file); // nosemgrep: javascript.express.security.audit.express-path-join-resolve-traversal.express-path-join-resolve-traversal -- path validated below via startsWith check
 
       // Verify resolved path is within scripts directory (defense in depth)
-      const resolved = path.resolve(filePath);
+      const resolved = path.resolve(filePath); // nosemgrep: javascript.express.security.audit.express-path-join-resolve-traversal.express-path-join-resolve-traversal -- resolved path checked against scriptsDir on next line
       if (!resolved.startsWith(path.resolve(scriptsDir))) {
         res.status(400).json({ error: 'Invalid script path' });
         return;
@@ -71,7 +71,7 @@ export function createScriptsRoutes(): Router {
       res.setHeader('Content-Type', meta.contentType);
       res.setHeader('Content-Disposition', `attachment; filename="${meta.file}"`);
       res.setHeader('X-Content-Type-Options', 'nosniff');
-      res.send(content);
+      res.send(content); // nosemgrep: javascript.express.security.audit.xss.direct-response-write.direct-response-write -- content served with Content-Type, Content-Disposition attachment, and X-Content-Type-Options: nosniff headers
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       if (message.includes('ENOENT')) {

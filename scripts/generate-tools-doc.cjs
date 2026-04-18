@@ -18,7 +18,7 @@ lines.push('');
 lines.push('| Method | Stable | Mutation | Description |');
 lines.push('|--------|--------|----------|-------------|');
 for(const e of entries){
-  lines.push(`| ${e.name} | ${e.stable ? 'yes' : ''} | ${e.mutation ? 'yes' : ''} | ${e.description.replace(/\|/g,'\\|')} |`);
+  lines.push(`| ${e.name} | ${e.stable ? 'yes' : ''} | ${e.mutation ? 'yes' : ''} | ${e.description.replace(/\|/g,'\\|')} |`); // lgtm[js/incomplete-sanitization] — markdown pipe escaping
 }
 lines.push('');
 lines.push('## Schemas');

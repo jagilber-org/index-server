@@ -88,8 +88,7 @@ export function emitReadyGlobal(server: any, reason: string){
     try {
       const t = (server as any)._transport;
       if(t?.send){
-        const p = t.send(msg);
-        p?.catch?.(()=>{});
+        t.send(msg)?.catch?.(()=>{});
         dispatched = true;
       }
     } catch { /* ignore */ }
@@ -211,7 +210,7 @@ export function setupStdinSniffer(server: any): void {
                         const tr = (server as any)._transport || (server as any).__transportRef;
                         if(tr && typeof tr.send === 'function'){
                           let negotiated = '2024-11-05';
-                          try { negotiated = (typeof negotiateProtocolVersion === 'function' ? negotiateProtocolVersion('2024-11-05') : negotiated) || negotiated; } catch { /* ignore */ }
+                          try { negotiated = negotiateProtocolVersion('2024-11-05') || negotiated; } catch { /* ignore */ }
                           const frame = { jsonrpc:'2.0', id:1, result:{ protocolVersion: negotiated, capabilities:{}, instructions:'Use initialize -> tools/list -> tools/call { name, arguments }. (forced-init-fallback)' } };
                           (server as any).__initResponseSent = true;
                           if(getRuntimeConfig().trace.has('healthMixed')){

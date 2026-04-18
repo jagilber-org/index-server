@@ -6,6 +6,7 @@ import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { createInstructionsRoutes } from '../dashboard/server/routes/instructions.routes';
+import { ensureLoadedMiddleware } from '../dashboard/server/middleware/ensureLoadedMiddleware';
 import { invalidate } from '../services/indexContext';
 import { reloadRuntimeConfig } from '../config/runtimeConfig';
 
@@ -74,6 +75,7 @@ describe('instructions search route', () => {
     });
 
     const app = express();
+    app.use(ensureLoadedMiddleware);
     app.use('/api', createInstructionsRoutes());
     await new Promise<void>((resolve) => {
       server = app.listen(0, () => {

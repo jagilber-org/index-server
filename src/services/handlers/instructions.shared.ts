@@ -69,7 +69,7 @@ export function traceInstructionVisibility(id: string, phase: string, extra?: Re
       serverHash: st.hash,
       listCount: st.list.length,
       sampleIds: st.list.slice(0, 3).map(e => e.id),
-      ...extra
+      ...extra // lgtm[js/file-system-race]
     });
   } catch { /* swallow tracing issues */ }
 }

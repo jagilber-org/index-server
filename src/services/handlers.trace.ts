@@ -18,7 +18,7 @@ registerHandler('trace_dump', (p:{ file?: string }) => {
   }
   dumpTraceBufferNow(file);
   let size = 0; let bytes = 0;
-  try { if(fs.existsSync(file)){ const stat = fs.statSync(file); bytes = stat.size; const raw = JSON.parse(fs.readFileSync(file,'utf8')); if(raw && Array.isArray(raw.records)) size = raw.records.length; } } catch { /* ignore */ }
+  try { const stat = fs.statSync(file); bytes = stat.size; const raw = JSON.parse(fs.readFileSync(file,'utf8')); if(raw && Array.isArray(raw.records)) size = raw.records.length; } catch { /* ignore */ }
   return { dumped:true, file, records:size, bytes, env: summarizeTraceEnv(), bufferEnabled: getTraceBuffer().length>0 };
 });
 

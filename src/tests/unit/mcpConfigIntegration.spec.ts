@@ -332,7 +332,7 @@ describe('MCP Config — Generated Ephemeral Config', { timeout: 30_000 }, () =>
 	});
 
 	afterEach(async () => {
-		try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* */ }
+		fs.rmSync(tmpDir, { recursive: true, force: true });
 	});
 
 	it('generates config, writes it, loads it, and connects', async () => {
