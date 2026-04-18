@@ -415,20 +415,21 @@ describe('Client Scripts E2E', () => {
 
     it.skipIf(!hasPwsh)('add with overwrite should update existing instruction', async () => {
       if (!server) return;
+      const testId = `e2e-ps1-ow-${Date.now()}`;
       // Create
       await runPwshWithRetry(
-        `& '${PS1_SCRIPT}' -BaseUrl '${activeBaseUrl}' -Action add -Id 'e2e-ps1-overwrite' -Title 'Original' -Body 'Original body'`
+        `& '${PS1_SCRIPT}' -BaseUrl '${activeBaseUrl}' -Action add -Id '${testId}' -Title 'Original' -Body 'Original body'`
       );
       // Overwrite
       const output = await runPwshWithRetry(
-        `& '${PS1_SCRIPT}' -BaseUrl '${activeBaseUrl}' -Action add -Id 'e2e-ps1-overwrite' -Title 'Updated' -Body 'Updated body' -Overwrite`
+        `& '${PS1_SCRIPT}' -BaseUrl '${activeBaseUrl}' -Action add -Id '${testId}' -Title 'Updated' -Body 'Updated body' -Overwrite`
       );
       const result = JSON.parse(output);
       expect(result.success).toBe(true);
       expect(result.result.overwritten).toBe(true);
       // Cleanup
       await runPwshWithRetry(
-        `& '${PS1_SCRIPT}' -BaseUrl '${activeBaseUrl}' -Action remove -Id 'e2e-ps1-overwrite'`
+        `& '${PS1_SCRIPT}' -BaseUrl '${activeBaseUrl}' -Action remove -Id '${testId}'`
       );
     }, 90_000);
   });
@@ -546,17 +547,18 @@ describe('Client Scripts E2E', () => {
     it.skipIf(!hasBash)('add with overwrite should update existing', async () => {
       if (!server) return;
       const sp = getBashScriptPath();
+      const testId = `e2e-sh-ow-${Date.now()}`;
       await runBash(
-        `INDEX_SERVER_URL='${activeBaseUrl}' bash '${sp}' add 'e2e-sh-overwrite' 'Original' 'Original body'`
+        `INDEX_SERVER_URL='${activeBaseUrl}' bash '${sp}' add '${testId}' 'Original' 'Original body'`
       );
       const output = await runBash(
-        `INDEX_SERVER_URL='${activeBaseUrl}' bash '${sp}' add 'e2e-sh-overwrite' 'Updated' 'Updated body' 50 --overwrite`
+        `INDEX_SERVER_URL='${activeBaseUrl}' bash '${sp}' add '${testId}' 'Updated' 'Updated body' 50 --overwrite`
       );
       const result = JSON.parse(output);
       expect(result.success).toBe(true);
       expect(result.result.overwritten).toBe(true);
       await runBash(
-        `INDEX_SERVER_URL='${activeBaseUrl}' bash '${sp}' remove 'e2e-sh-overwrite'`
+        `INDEX_SERVER_URL='${activeBaseUrl}' bash '${sp}' remove '${testId}'`
       );
     }, 30_000);
   });
@@ -566,52 +568,47 @@ describe('Client Scripts E2E', () => {
   // ═══════════════════════════════════════════════════════════════════════
 
   describe('Nmap security scanning', () => {
-    it.skipIf(!hasNmap)('port scan should show only expected port open', () => {
+    it.skipIf(!hasNmap)('port scan should show only expected port open', async () => {
       if (!server) return;
-      const output = execSync(
-        `nmap -p ${activePort} --open -T4 -oG - ${TEST_HOST}`,
-        { encoding: 'utf-8', timeout: 60_000, stdio: 'pipe' }
-      );
-      expect(output).toContain(`${activePort}/open`);
+      const { stdout } = await execFileAsync('nmap', ['-p', String(activePort), '--open', '-T4', '-oG', '-', TEST_HOST], {
+        encoding: 'utf-8', timeout: 60_000,
+      });
+      expect(stdout).toContain(`${activePort}/open`);
     }, 90_000);
 
-    it.skipIf(!hasNmap)('service detection should identify HTTP', () => {
+    it.skipIf(!hasNmap)('service detection should identify HTTP', async () => {
       if (!server) return;
-      const output = execSync(
-        `nmap -sV -T4 --version-intensity 2 -p ${activePort} ${TEST_HOST}`,
-        { encoding: 'utf-8', timeout: 120_000, stdio: 'pipe' }
-      );
-      expect(output.toLowerCase()).toMatch(/http|node/);
+      const { stdout } = await execFileAsync('nmap', ['-sV', '-T4', '--version-intensity', '2', '-p', String(activePort), TEST_HOST], {
+        encoding: 'utf-8', timeout: 120_000,
+      });
+      expect(stdout.toLowerCase()).toMatch(/http|node/);
     }, 150_000);
 
-    it.skipIf(!hasNmap)('should not expose unnecessary services on adjacent ports', () => {
+    it.skipIf(!hasNmap)('should not expose unnecessary services on adjacent ports', async () => {
       if (!server) return;
       const scanRange = `${activePort - 5}-${activePort + 5}`;
-      const output = execSync(
-        `nmap -p ${scanRange} --open -T4 -oG - ${TEST_HOST}`,
-        { encoding: 'utf-8', timeout: 60_000, stdio: 'pipe' }
-      );
-      const openPorts = (output.match(/\d+\/open/g) || []);
+      const { stdout } = await execFileAsync('nmap', ['-p', scanRange, '--open', '-T4', '-oG', '-', TEST_HOST], {
+        encoding: 'utf-8', timeout: 60_000,
+      });
+      const openPorts = (stdout.match(/\d+\/open/g) || []);
       expect(openPorts.length).toBeLessThanOrEqual(2);
-      expect(output).toContain(`${activePort}/open`);
+      expect(stdout).toContain(`${activePort}/open`);
     }, 90_000);
 
-    it.skipIf(!hasNmap)('SSL/TLS scan should report no TLS on HTTP port', () => {
+    it.skipIf(!hasNmap)('SSL/TLS scan should report no TLS on HTTP port', async () => {
       if (!server) return;
-      const output = execSync(
-        `nmap --script ssl-enum-ciphers -T4 -p ${activePort} ${TEST_HOST}`,
-        { encoding: 'utf-8', timeout: 60_000, stdio: 'pipe' }
-      );
-      expect(output).not.toContain('TLSv1.3');
-    }, 90_000);
+      const { stdout } = await execFileAsync('nmap', ['--script', 'ssl-enum-ciphers', '-T4', '-p', String(activePort), TEST_HOST], {
+        encoding: 'utf-8', timeout: 120_000,
+      });
+      expect(stdout).not.toContain('TLSv1.3');
+    }, 150_000);
 
-    it.skipIf(!hasNmap)('HTTP vuln scan should not find critical issues', () => {
+    it.skipIf(!hasNmap)('HTTP vuln scan should not find critical issues', async () => {
       if (!server) return;
-      const output = execSync(
-        `nmap --script http-methods -T4 -p ${activePort} ${TEST_HOST}`,
-        { encoding: 'utf-8', timeout: 60_000, stdio: 'pipe' }
-      );
-      expect(output.toUpperCase()).not.toContain('TRACE');
+      const { stdout } = await execFileAsync('nmap', ['--script', 'http-methods', '-T4', '-p', String(activePort), TEST_HOST], {
+        encoding: 'utf-8', timeout: 60_000,
+      });
+      expect(stdout.toUpperCase()).not.toContain('TRACE');
     }, 90_000);
   });
 });
@@ -729,42 +726,38 @@ describe.skipIf(!hasOpenssl)('HTTPS / TLS Tests', () => {
   // ── Nmap HTTPS Scans ────────────────────────────────────────────────
 
   describe('Nmap HTTPS scanning', () => {
-    it.skipIf(!hasNmap)('HTTPS port should be open', () => {
+    it.skipIf(!hasNmap)('HTTPS port should be open', async () => {
       if (!httpsServer) return;
-      const output = execSync(
-        `nmap -p ${activeHttpsPort} --open -oG - ${TEST_HOST}`,
-        { encoding: 'utf-8', timeout: 30_000, stdio: 'pipe' }
-      );
-      expect(output).toContain(`${activeHttpsPort}/open`);
+      const { stdout } = await execFileAsync('nmap', ['-p', String(activeHttpsPort), '--open', '-oG', '-', TEST_HOST], {
+        encoding: 'utf-8', timeout: 30_000,
+      });
+      expect(stdout).toContain(`${activeHttpsPort}/open`);
     }, 35_000);
 
-    it.skipIf(!hasNmap)('should detect TLS/SSL on HTTPS port', () => {
+    it.skipIf(!hasNmap)('should detect TLS/SSL on HTTPS port', async () => {
       if (!httpsServer) return;
-      const output = execSync(
-        `nmap --script ssl-enum-ciphers -p ${activeHttpsPort} ${TEST_HOST}`,
-        { encoding: 'utf-8', timeout: 30_000, stdio: 'pipe' }
-      );
+      const { stdout } = await execFileAsync('nmap', ['--script', 'ssl-enum-ciphers', '-p', String(activeHttpsPort), TEST_HOST], {
+        encoding: 'utf-8', timeout: 30_000,
+      });
       // Should have TLS ciphers listed
-      expect(output.toLowerCase()).toMatch(/tls|ssl/);
+      expect(stdout.toLowerCase()).toMatch(/tls|ssl/);
     }, 35_000);
 
-    it.skipIf(!hasNmap)('should identify HTTPS service', () => {
+    it.skipIf(!hasNmap)('should identify HTTPS service', async () => {
       if (!httpsServer) return;
-      const output = execSync(
-        `nmap -sV -p ${activeHttpsPort} ${TEST_HOST}`,
-        { encoding: 'utf-8', timeout: 30_000, stdio: 'pipe' }
-      );
-      expect(output.toLowerCase()).toMatch(/https|ssl|tls|node/);
+      const { stdout } = await execFileAsync('nmap', ['-sV', '-p', String(activeHttpsPort), TEST_HOST], {
+        encoding: 'utf-8', timeout: 30_000,
+      });
+      expect(stdout.toLowerCase()).toMatch(/https|ssl|tls|node/);
     }, 35_000);
 
-    it.skipIf(!hasNmap)('should not have weak SSL protocols', () => {
+    it.skipIf(!hasNmap)('should not have weak SSL protocols', async () => {
       if (!httpsServer) return;
-      const output = execSync(
-        `nmap --script ssl-enum-ciphers -p ${activeHttpsPort} ${TEST_HOST}`,
-        { encoding: 'utf-8', timeout: 30_000, stdio: 'pipe' }
-      );
+      const { stdout } = await execFileAsync('nmap', ['--script', 'ssl-enum-ciphers', '-p', String(activeHttpsPort), TEST_HOST], {
+        encoding: 'utf-8', timeout: 30_000,
+      });
       // SSLv2 and SSLv3 should not be present
-      expect(output).not.toMatch(/SSLv[23]/);
+      expect(stdout).not.toMatch(/SSLv[23]/);
     }, 35_000);
   });
 });

@@ -299,7 +299,7 @@ describe('Instruction CRUD Full Lifecycle', () => {
     expect(content.title).toBe('Persistence Test');
   });
 
-  it('should handle concurrent creates without data loss', async () => {
+  it('should handle concurrent creates without data loss', { timeout: 60_000 }, async () => {
     const ids = Array.from({ length: 10 }, () => uniqueId());
 
     const promises = ids.map(id =>

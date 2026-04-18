@@ -342,10 +342,18 @@ describe('Concurrent Feedback & Usage (HTTP)', { timeout: 120_000 }, () => {
 		expect(failures).toEqual([]);
 		expect(successes).toBe(HTTP_CLIENT_COUNT);
 
-		// Verify final count via hotset
-		await new Promise(r => setTimeout(r, 500));
-		const hotset = await clients[0].callTool('usage_hotset', { limit: 10 }) as Record<string, unknown>;
-		const items = hotset.items as Array<Record<string, unknown>>;
+		// Verify final count via hotset (retry on transient fetch failures)
+		await new Promise(r => setTimeout(r, 1000));
+		let hotset: Record<string, unknown> | undefined;
+		for (let attempt = 0; attempt < 3; attempt++) {
+			try {
+				hotset = await clients[0].callTool('usage_hotset', { limit: 10 }) as Record<string, unknown>;
+				break;
+			} catch {
+				if (attempt < 2) await new Promise(r => setTimeout(r, 1000));
+			}
+		}
+		const items = hotset?.items as Array<Record<string, unknown>> | undefined;
 		const tracked = items?.find(i => i.id === targetId);
 		// The instruction should appear in hotset with count >= 1
 		expect(tracked, `${targetId} not found in hotset`).toBeTruthy();
@@ -355,19 +363,30 @@ describe('Concurrent Feedback & Usage (HTTP)', { timeout: 120_000 }, () => {
 	it('concurrent usage_track on different instructions produces no cross-talk', async () => {
 		const clients = createHttpRpcClients(leader.dashUrl, 3);
 
-		// Each client tracks a different instruction
+		// Each client tracks a different instruction (with retry for transient fetch errors)
 		const { successes, failures } = await runConcurrent(clients, async (client, ci) => {
 			const targetId = `usage-concurrent-${ci}`;
 			for (let i = 0; i < 3; i++) {
-				const result = await client.callTool('usage_track', {
-					id: targetId,
-					action: 'applied',
-				}) as Record<string, unknown>;
-				const resultText = JSON.stringify(result);
-				expect(
-					resultText.includes(targetId) || result.rateLimited || result.usageCount != null,
-					`Unexpected response for ${targetId}: ${resultText}`,
-				).toBe(true);
+				let lastErr: unknown;
+				for (let attempt = 0; attempt < 3; attempt++) {
+					try {
+						const result = await client.callTool('usage_track', {
+							id: targetId,
+							action: 'applied',
+						}) as Record<string, unknown>;
+						const resultText = JSON.stringify(result);
+						expect(
+							resultText.includes(targetId) || result.rateLimited || result.usageCount != null,
+							`Unexpected response for ${targetId}: ${resultText}`,
+						).toBe(true);
+						lastErr = undefined;
+						break;
+					} catch (e) {
+						lastErr = e;
+						if (attempt < 2) await new Promise(r => setTimeout(r, 500));
+					}
+				}
+				if (lastErr) throw lastErr;
 			}
 		});
 

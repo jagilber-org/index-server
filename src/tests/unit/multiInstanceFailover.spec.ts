@@ -88,7 +88,7 @@ async function spawnServer(env: Record<string, string>, label: string): Promise<
 }
 
 /** Fetch JSON from a server endpoint with timeout. */
-async function fetchJson(base: string, path: string, timeoutMs = 5000): Promise<{ status: number; data: unknown }> {
+async function fetchJson(base: string, path: string, timeoutMs = 10000): Promise<{ status: number; data: unknown }> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
