@@ -717,11 +717,11 @@
         const err = data.error ? String(data.error).slice(0,80) : '';
         const skipped = data.skipped ? ' (skipped)' : '';
         const tr = document.createElement('tr');
-        tr.innerHTML = `<td class="trace-cell">${escapeHtml(data.seq)}</td>
-            <td class="trace-cell trace-mono">${escapeHtml(data.method)}${escapeHtml(skipped)}</td>
-            <td class="trace-cell ${data.success ? 'text-ok' : 'text-fail'}">${data.success?'✓':'✗'}</td>
-            <td class="trace-cell">${escapeHtml(data.durationMs)}ms</td>
-            <td class="trace-cell ${data.error ? 'text-err' : 'text-muted'}">${escapeHtml(err)}</td>`;
+        const td1 = document.createElement('td'); td1.className = 'trace-cell'; td1.textContent = String(data.seq); tr.appendChild(td1);
+        const td2 = document.createElement('td'); td2.className = 'trace-cell trace-mono'; td2.textContent = String(data.method) + skipped; tr.appendChild(td2);
+        const td3 = document.createElement('td'); td3.className = 'trace-cell ' + (data.success ? 'text-ok' : 'text-fail'); td3.textContent = data.success ? '✓' : '✗'; tr.appendChild(td3);
+        const td4 = document.createElement('td'); td4.className = 'trace-cell'; td4.textContent = String(data.durationMs) + 'ms'; tr.appendChild(td4);
+        const td5 = document.createElement('td'); td5.className = 'trace-cell ' + (data.error ? 'text-err' : 'text-muted'); td5.textContent = err; tr.appendChild(td5);
         body.appendChild(tr);
         const wrap = document.getElementById('synthetic-traces-wrapper');
         if (wrap && wrap.style.display === 'none') wrap.style.display='block';
@@ -1375,7 +1375,7 @@
                 const cats = Array.isArray(parsed.categories)? parsed.categories.length : 0;
                 const schemaVer = parsed.schemaVersion || parsed.schema || '?';
                 const changed = instructionOriginalContent && raw !== instructionOriginalContent;
-                diag.textContent = `Size: ${size} chars • Categories: ${cats} • Schema: ${schemaVer}`;
+                diag.textContent = `Size: ${size} chars • Categories: ${cats} • Schema: ${schemaVer}`; // lgtm[js/xss-through-dom]
                 if(changed){
                     const modified = document.createElement('span');
                     modified.className = 'text-warn';

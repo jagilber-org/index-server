@@ -317,7 +317,7 @@
       const cats = Array.isArray(parsed.categories)? parsed.categories.length : 0;
       const schemaVer = parsed.schemaVersion || parsed.schema || '?';
       const changed = globals.instructionOriginalContent && raw !== globals.instructionOriginalContent;
-      diag.textContent = `Size: ${size} chars • Categories: ${cats} • Schema: ${schemaVer}`;
+      diag.textContent = `Size: ${size} chars • Categories: ${cats} • Schema: ${schemaVer}`; // lgtm[js/xss-through-dom]
       if (changed) {
         const modified = document.createElement('span');
         modified.style.color = '#ff9830';
@@ -483,7 +483,7 @@
       }
       const elapsed = Math.round(performance.now() - started);
       if(!Array.isArray(results.results) || !results.results.length){
-        outEl.textContent = `No global matches (${isRegex ? 'regex' : 'q'}='${trimmed}', ${elapsed}ms).`;
+        outEl.textContent = `No global matches (${isRegex ? 'regex' : 'q'}='${trimmed}', ${elapsed}ms).`; // lgtm[js/xss-through-exception]
         return;
       }
       const rows = results.results.map(r=>{
@@ -491,12 +491,12 @@
         let safeSnippet = (r.snippet||'').replace(/[&<>]/g, c=> ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])).replace(/\*\*(.+?)\*\*/g,'<mark>$1</mark>');
         safeName = highlightMatch(safeName, trimmed, isRegex);
         safeSnippet = highlightMatch(safeSnippet, trimmed, isRegex);
-        const cats = Array.isArray(r.categories) && r.categories.length? r.categories.slice(0,6).join(', ') : '—';
+        const cats = Array.isArray(r.categories) && r.categories.length? r.categories.slice(0,6).map(c => String(c).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]))).join(', ') : '—';
         return `<div class="instruction-global-result" style="background:#1f2228; border:1px solid #2c3038; border-radius:4px; padding:6px 8px; margin-bottom:6px;">
           <div style="font-weight:600; font-size:12px;">${safeName} <span style="opacity:.55; font-weight:400;">(${cats})</span></div>
           <div style="font-size:11px; white-space:normal;">${safeSnippet}</div>
         </div>`; }).join('');
-      outEl.innerHTML = `<div style="margin-bottom:6px; font-weight:600;">Global Search Results (${results.count})${isRegex ? ' <span style="color:#73bf69;">[regex]</span>' : ''} <span style="opacity:.55; font-weight:400;">${elapsed}ms</span></div>` + rows;
+      outEl.innerHTML = `<div style="margin-bottom:6px; font-weight:600;">Global Search Results (${Number(results.count) || 0})${isRegex ? ' <span style="color:#73bf69;">[regex]</span>' : ''} <span style="opacity:.55; font-weight:400;">${elapsed}ms</span></div>` + rows; // lgtm[js/xss-through-dom]
       try { outEl.scrollIntoView({ behavior:'smooth', block:'center' }); } catch { /* ignore */ }
     } catch(e){ outEl.textContent = 'Global search error: ' + (e.message||e); }
   }
