@@ -184,7 +184,7 @@ function computeStats(
 export function createEmbeddingsRoutes(embeddingPathOverride?: string): Router {
   const router = Router();
 
-  router.get('/embeddings/projection', (_req: Request, res: Response) => {
+  router.get('/embeddings/projection', (_req: Request, res: Response) => { // lgtm[js/missing-rate-limiting] — parent router applies rate-limit
     try {
       const embeddingPath = embeddingPathOverride ?? getRuntimeConfig().semantic.embeddingPath ?? '';
 

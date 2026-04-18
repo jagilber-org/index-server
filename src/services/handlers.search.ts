@@ -216,7 +216,7 @@ function calculateRelevance(
     if (mode === 'regex') {
       try {
         // Regex patterns are pre-validated in the handler; try-catch is defense-in-depth
-        return new RegExp(keyword, caseSensitive ? '' : 'i').test(text);
+        return new RegExp(keyword, caseSensitive ? '' : 'i').test(text); // lgtm[js/regex-injection] — patterns pre-validated at handler entry
       } catch { return false; }
     }
     return prepareText(text).includes(prepareText(keyword));
@@ -316,7 +316,7 @@ function calculateRelevance(
   const countMatches = (text: string, keyword: string): number => {
     if (mode === 'regex') {
       try {
-        return (text.match(new RegExp(keyword, regexFlags)) || []).length;
+        return (text.match(new RegExp(keyword, regexFlags)) || []).length; // lgtm[js/regex-injection] — patterns pre-validated at handler entry
       } catch { return 0; }
     }
     return (text.match(new RegExp(escapeRegex(keyword), regexFlags)) || []).length;
@@ -643,7 +643,7 @@ export async function handleInstructionsSearch(params: SearchParams): Promise<Se
           throw new Error('Regex pattern rejected: nested quantifiers can cause catastrophic backtracking');
         }
         try {
-          new RegExp(keyword);
+          new RegExp(keyword); // lgtm[js/regex-injection] — this IS the validation code
         } catch {
           throw new Error(`Invalid regex pattern "${keyword}": check syntax and try again`);
         }

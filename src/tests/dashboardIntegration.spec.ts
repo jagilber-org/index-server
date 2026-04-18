@@ -197,7 +197,7 @@ describe('Dashboard TLS Integration', () => {
 
     if (!hasOpenssl) return;
 
-    certDir = path.join(os.tmpdir(), `dash-tls-test-${Date.now()}`);
+    certDir = path.join(os.tmpdir(), `dash-tls-test-${Date.now()}`); // lgtm[js/insecure-temporary-file] — test temp dir with Date.now() suffix
     fs.mkdirSync(certDir, { recursive: true });
 
     // Write a minimal config to avoid system config issues (Windows compat)

@@ -43,7 +43,7 @@ const url = process.argv[3] || '';
 // Extract owner/repo from GitHub URL
 // Handles: https://github.com/owner/repo.git, git@github.com:owner/repo.git # pii-allowlist
 let ownerRepo = '';
-if (url.includes('github.com')) {
+if (url.includes('github.com')) { // lgtm[js/incomplete-url-substring-sanitization] — URL parsing for validation
   const match = url.match(/github\.com[/:]([^/]+\/[^/.]+?)(?:\.git)?$/);
   if (match) ownerRepo = match[1];
 }
@@ -83,7 +83,7 @@ if (isPublicationRemote) {
 // Query GitHub API for repo visibility
 let visibility = '';
 try {
-  visibility = execFileSync('gh', ['api', `repos/${ownerRepo}`, '--jq', '.visibility'], {
+  visibility = execFileSync('gh', ['api', `repos/${ownerRepo}`, '--jq', '.visibility'], { // lgtm[js/indirect-command-line-injection] — execFileSync with array args + validated ownerRepo
     encoding: 'utf8',
     stdio: ['pipe', 'pipe', 'pipe'],
     timeout: 10000,

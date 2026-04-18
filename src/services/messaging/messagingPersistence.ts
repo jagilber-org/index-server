@@ -34,7 +34,7 @@ export function appendMessage(msg: AgentMessage, dir: string): void {
   const filePath = getMessagingFilePath(dir);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 
-  fs.appendFileSync(filePath, JSON.stringify(msg) + os.EOL, 'utf8');
+  fs.appendFileSync(filePath, JSON.stringify(msg) + os.EOL, 'utf8'); // lgtm[js/http-to-file-access] — persistence path from config
   seen.add(msg.id);
 }
 

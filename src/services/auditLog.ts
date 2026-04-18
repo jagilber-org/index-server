@@ -86,7 +86,7 @@ export function logAudit(action: string, ids?: string[]|string, meta?: Record<st
     entry.meta = m;
   }
   try {
-    fs.appendFileSync(file, JSON.stringify(entry)+'\n','utf8');
+    fs.appendFileSync(file, JSON.stringify(entry)+'\n','utf8'); // lgtm[js/http-to-file-access] — audit log path from config
   } catch { /* swallow logging errors to avoid impacting primary operation path */ }
 }
 

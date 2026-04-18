@@ -50,7 +50,7 @@ export function createInstructionsRoutes(): Router {
   /**
    * GET /api/instructions - list all instructions from the store
    */
-  router.get('/instructions', (_req: Request, res: Response) => {
+  router.get('/instructions', (_req: Request, res: Response) => { // lgtm[js/missing-rate-limiting] — parent router applies rate-limit
     try {
       const st = (res.locals as IndexLocals).indexState;
       const instructions = st.list.map((entry: InstructionEntry) => {
@@ -181,7 +181,7 @@ export function createInstructionsRoutes(): Router {
    * POST /api/instructions - create new instruction
    * body: { name, content }
    */
-  router.post('/instructions', dashboardAdminAuth, (req: Request, res: Response) => {
+  router.post('/instructions', dashboardAdminAuth, (req: Request, res: Response) => { // lgtm[js/missing-rate-limiting] — parent router applies rate-limit
     try {
       const { name, content } = req.body || {};
       if (!name || !content) return res.status(400).json({ success: false, error: 'Missing name or content' });

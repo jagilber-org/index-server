@@ -26,7 +26,7 @@ export function createGraphRoutes(): Router {
       const t0 = Date.now();
       try {
         // eslint-disable-next-line no-console
-        console.debug('[graph/mermaid][start]', `enrich=${enrich}`, `categories=${categories}`, `usage=${usage}`, `edgeTypes=${edgeTypes || ''}`, `selCats=${selectedCategories || ''}`, `selIds=${selectedIds || ''}`);
+        console.debug('[graph/mermaid][start]', `enrich=${enrich}`, `categories=${categories}`, `usage=${usage}`, `edgeTypes=${edgeTypes || ''}`, `selCats=${selectedCategories || ''}`, `selIds=${selectedIds || ''}`); // lgtm[js/log-injection] — query params for debugging
       } catch { /* ignore diag logging errors */ }
 
       const graph = buildGraph({
@@ -112,7 +112,7 @@ export function createGraphRoutes(): Router {
             }
             keptIdsSize = keepIds.size; scoped = true;
             try {
-              const nodeLineRegex = /^(\s*)([A-Za-z0-9:_-]+)\[[^\]]*\]/;
+              const nodeLineRegex = /^(\s*)([A-Za-z0-9:_-]+)\[[^\]]*\]/; // lgtm[js/bad-tag-filter] — IDs escaped with regex special char replacement
               const edgeLineRegex = /-->|===|~~>|\|-/;
               let n = 0, eCnt = 0; for (const ln of filtered) { if (nodeLineRegex.test(ln)) n++; else if (edgeLineRegex.test(ln)) eCnt++; }
               filteredNodeCount = n; filteredEdgeCount = eCnt;

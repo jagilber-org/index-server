@@ -92,7 +92,7 @@ describe('Performance: Index Operations', () => {
         categories: [`category-${i % 5}`],
       };
       fs.writeFileSync(
-        path.join(tempDir, `perf-test-${i}.json`),
+        path.join(tempDir, `perf-test-${i}.json`), // lgtm[js/insecure-temporary-file] — test temp dir with mkdtemp
         JSON.stringify(instruction, null, 2)
       );
     }
