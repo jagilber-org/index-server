@@ -15,20 +15,22 @@ interface InstructionEntry { id: string; body: string; version?: string; }
 
 function writeInstruction(id: string, body: string){
   const dir = path.resolve(process.cwd(), 'instructions');
-  if(!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  fs.mkdirSync(dir, { recursive: true });
   const file = path.join(dir, id + '.json');
-  if(!fs.existsSync(file)){
+  try {
     const entry: InstructionEntry = { id, body, version: 'seed-1' };
-    fs.writeFileSync(file, JSON.stringify(entry, null, 2));
+    fs.writeFileSync(file, JSON.stringify(entry, null, 2), { flag: 'wx' });
     console.log('[seed] wrote instruction', file);
-  } else {
-    console.log('[seed] instruction already exists', id);
+  } catch (e: unknown) {
+    if ((e as NodeJS.ErrnoException).code === 'EEXIST') {
+      console.log('[seed] instruction already exists', id);
+    } else { throw e; }
   }
 }
 
 function appendLog(){
   const logsDir = path.resolve(process.cwd(), 'logs');
-  if(!fs.existsSync(logsDir)) fs.mkdirSync(logsDir, { recursive: true });
+  fs.mkdirSync(logsDir, { recursive: true });
   const file = path.join(logsDir, 'server.log');
   const line = `[seed-log] ${new Date().toISOString()} sample seeded log line for dashboard tail`;
   fs.appendFileSync(file, line + '\n');

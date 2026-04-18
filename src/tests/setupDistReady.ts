@@ -73,12 +73,8 @@ beforeAll(async () => {
   try {
     const keep = path.join(process.cwd(),'dist','.keep');
     const rootKeep = path.join(process.cwd(),'.dist.keep');
-    if(!fs.existsSync(keep)){
-      fs.mkdirSync(path.dirname(keep),{recursive:true});
-      fs.writeFileSync(keep,'test sentinel');
-    }
-    if(!fs.existsSync(rootKeep)){
-      fs.writeFileSync(rootKeep,'persist dist between rapid test cycles');
-    }
+    fs.mkdirSync(path.dirname(keep),{recursive:true});
+    try { fs.writeFileSync(keep,'test sentinel', { flag: 'wx' }); } catch (e: unknown) { if ((e as NodeJS.ErrnoException).code !== 'EEXIST') throw e; }
+    try { fs.writeFileSync(rootKeep,'persist dist between rapid test cycles', { flag: 'wx' }); } catch (e: unknown) { if ((e as NodeJS.ErrnoException).code !== 'EEXIST') throw e; }
   } catch {/* ignore */}
 }, 25000);

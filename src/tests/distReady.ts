@@ -9,12 +9,14 @@ export async function waitForDist(timeoutMs=18000, intervalMs=50){
   const start = Date.now();
   const debug = process.env.DIST_WAIT_DEBUG === '1';
   while(Date.now() - start < timeoutMs){
-    if(fs.existsSync(target)) return true;
+    try { fs.accessSync(target); return true; } catch { /* not yet */ }
     // If modern path exists but legacy shim missing, create lightweight forwarder
-    if(fs.existsSync(modern) && !fs.existsSync(target)){
+    try {
+      fs.accessSync(modern);
+      // modern exists, check if target is still missing
+      try { fs.accessSync(target); return true; } catch { /* target missing, create shim */ }
       try {
-        const serverDir = path.dirname(target);
-        if(!fs.existsSync(serverDir)) fs.mkdirSync(serverDir,{recursive:true});
+        fs.mkdirSync(path.dirname(target),{recursive:true});
   fs.writeFileSync(target, "// auto-generated test shim (invokes main)\nconst mod = require('../src/server/index-server.js');\nif(mod && typeof mod.main==='function'){ try { mod.main(); } catch(e){ console.error('[shim] main failed', e); } }\nmodule.exports = mod;\n");
         if(debug){
           // eslint-disable-next-line no-console
@@ -22,7 +24,7 @@ export async function waitForDist(timeoutMs=18000, intervalMs=50){
         }
         return true;
       } catch{/* ignore */}
-    }
+    } catch { /* modern missing too */ }
     await new Promise(r=> setTimeout(r, intervalMs));
   }
   // Fallback: if file still missing but dist directory exists and compile may still be finishing, allow one

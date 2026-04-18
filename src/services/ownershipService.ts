@@ -9,7 +9,6 @@ let cached: { mtimeMs: number; rules: OwnershipRule[] } | null = null;
 function loadRules(): OwnershipRule[] {
   const file = path.join(process.cwd(), 'owners.json');
   try {
-    if(!fs.existsSync(file)) return [];
     const stat = fs.statSync(file);
     if(cached && cached.mtimeMs === stat.mtimeMs) return cached.rules;
     const raw = JSON.parse(fs.readFileSync(file,'utf8')) as OwnershipConfig;

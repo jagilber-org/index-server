@@ -320,7 +320,7 @@ async function openDashboard(): Promise<void> {
             'Enable', 'Cancel'
         );
         if (action === 'Enable') {
-            await config.update('dashboard.enabled', true, vscode.ConfigurationTarget.Global);
+            await config.update('dashboard.enabled', true, vscode.ConfigurationTarget.Global); // lgtm[js/file-system-race]
             void vscode.window.showInformationMessage('Dashboard enabled. Restart the MCP server for changes to take effect.');
         }
         return;

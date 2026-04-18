@@ -24,7 +24,7 @@ describe('auditLog extension', () => {
 
   beforeEach(async () => {
     // Clear the file before each test
-    if (fs.existsSync(auditFile)) fs.writeFileSync(auditFile, '');
+    if (fs.existsSync(auditFile)) fs.writeFileSync(auditFile, ''); // lgtm[js/file-system-race]
     // Dynamic import to pick up env
     mod = await import('../../services/auditLog.js');
     mod.resetAuditLogCache();

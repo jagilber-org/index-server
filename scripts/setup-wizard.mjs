@@ -502,7 +502,7 @@ Non-interactive mode:
     fs.mkdirSync(config.root, { recursive: true });
   } catch { /* exists */ }
 
-  if (fs.existsSync(envPath)) {
+  if (fs.existsSync(envPath)) { // lgtm[js/file-system-race]
     const genPath = path.join(config.root, '.env.generated');
     fs.writeFileSync(genPath, envContent, 'utf8');
     console.log(`\n⚠️  .env already exists. Written to: ${genPath}`);

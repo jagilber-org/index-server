@@ -228,10 +228,6 @@ function scanContent(content, filePath) {
  */
 function scanFile(filePath) {
   try {
-    if (!fs.existsSync(filePath)) {
-      return null;
-    }
-
     const stats = fs.statSync(filePath);
     if (stats.isDirectory() || stats.size > 10 * 1024 * 1024) { // Skip files > 10MB
       return null;
@@ -240,6 +236,7 @@ function scanFile(filePath) {
     const content = fs.readFileSync(filePath, 'utf8');
     return scanContent(content, filePath);
   } catch (error) {
+    if (error.code === 'ENOENT') return null;
     return {
       file: filePath,
       error: error.message,

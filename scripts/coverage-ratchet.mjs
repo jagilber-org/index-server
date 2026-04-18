@@ -34,10 +34,11 @@ const metrics = {
 };
 
 let baseline;
-if(fs.existsSync(BASELINE_PATH)){
+try {
   baseline = JSON.parse(fs.readFileSync(BASELINE_PATH,'utf-8'));
   log(`Loaded baseline: ${JSON.stringify(baseline)}`);
-} else {
+} catch (e) {
+  if (e.code !== 'ENOENT') throw e;
   log('No existing baseline detected. Creating initial baseline.');
   fs.writeFileSync(BASELINE_PATH, JSON.stringify(metrics, null, 2));
   process.exit(0);
