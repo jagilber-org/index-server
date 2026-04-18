@@ -46,7 +46,7 @@ function inspectMetricsCollector() {
     // Check tool metrics accumulation
     const toolMetrics = collector.getToolMetrics();
     const toolCount = Object.keys(toolMetrics || {}).length;
-    console.log(`\n🔧 TOOL METRICS:');
+    console.log(`\n🔧 TOOL METRICS:`);
     console.log(`  Tracked tools: ${toolCount}`);
 
     if (toolMetrics) {
@@ -59,7 +59,7 @@ function inspectMetricsCollector() {
     try {
         // Try to access private property (might not work)
         const recentCalls = collector.recentCallTimestamps?.length || 'unknown';
-        console.log(`\n⏱️  RECENT CALL BUFFER:');
+        console.log(`\n⏱️  RECENT CALL BUFFER:`);
         console.log(`  Recent call timestamps: ${recentCalls}`);
         if (typeof recentCalls === 'number') {
             const estimatedCallMemory = recentCalls * 8; // 8 bytes per timestamp

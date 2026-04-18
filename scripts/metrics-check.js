@@ -58,7 +58,8 @@ function checkMetricsMemory() {
     }
 }
 
-function stopMetricsCollection() {
+// Available as a REPL helper: call _stopMetricsCollection() manually
+function _stopMetricsCollection() {
     console.log('\n=== STOPPING METRICS COLLECTION ===');
     try {
         let metricsModule;
@@ -83,7 +84,7 @@ function stopMetricsCollection() {
 
 console.log('📊 Commands loaded:');
 console.log('  checkMetricsMemory() - Check current state');
-console.log('  stopMetricsCollection() - Stop collection to test');
+console.log('  _stopMetricsCollection() - Stop collection to test');
 
 // Run initial check
 checkMetricsMemory();

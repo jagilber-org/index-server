@@ -714,15 +714,14 @@
         lastSyntheticRunId = data.runId;
         const body = document.getElementById('synthetic-traces-body');
         if (!body) return;
-        const clr = data.success ? '#0a0' : '#a00';
         const err = data.error ? String(data.error).slice(0,80) : '';
         const skipped = data.skipped ? ' (skipped)' : '';
         const tr = document.createElement('tr');
-        tr.innerHTML = `<td class="trace-cell">${data.seq}</td>
-            <td class="trace-cell trace-mono">${data.method}${skipped}</td>
+        tr.innerHTML = `<td class="trace-cell">${escapeHtml(data.seq)}</td>
+            <td class="trace-cell trace-mono">${escapeHtml(data.method)}${escapeHtml(skipped)}</td>
             <td class="trace-cell ${data.success ? 'text-ok' : 'text-fail'}">${data.success?'✓':'✗'}</td>
-            <td class="trace-cell">${data.durationMs}ms</td>
-            <td class="trace-cell ${data.error ? 'text-err' : 'text-muted'}">${err}</td>`;
+            <td class="trace-cell">${escapeHtml(data.durationMs)}ms</td>
+            <td class="trace-cell ${data.error ? 'text-err' : 'text-muted'}">${escapeHtml(err)}</td>`;
         body.appendChild(tr);
         const wrap = document.getElementById('synthetic-traces-wrapper');
         if (wrap && wrap.style.display === 'none') wrap.style.display='block';
@@ -802,11 +801,10 @@
             try {
                 const el = document.getElementById('maintenance-overview');
                 if (!el || !maintenance) return; // Safe no-op if overview element not present
-                const mode = maintenance.maintenanceMode ? 'ENABLED' : 'Disabled';
                 el.innerHTML = `
                     <div class="stat-row">
                         <span class="stat-label">Last Backup</span>
-                        <span class="stat-value">${maintenance.lastBackup ? new Date(maintenance.lastBackup).toLocaleString() : 'Never'}</span>
+                        <span class="stat-value">${escapeHtml(maintenance.lastBackup ? new Date(maintenance.lastBackup).toLocaleString() : 'Never')}</span>
                     </div>`;
             } catch (err) {
                 console.warn('displayMaintenanceInfo error:', err);
@@ -1827,7 +1825,6 @@
                         const categoryLaneY = new Map();
                         categories.forEach((c,i)=> categoryLaneY.set(c, padY + i*laneHeight));
                         // Reposition nodes: keep original x, quantize y to lane + small intra-lane spread based on original y ordering
-                        const laneOffsets = new Map();
                         instructions.forEach(inst=>{
                             const cat = (inst.categories&&inst.categories[0])||'uncategorized';
                             const baseY = categoryLaneY.get(cat) || padY;
@@ -2097,7 +2094,10 @@
                         if(srcEl && host && window.mermaid){
                             const codeRaw = srcEl.textContent || '';
                             const code = ensureMermaidDirective(codeRaw);
-                            host.innerHTML = `<div class="mermaid">${code}</div>`;
+                            const mermaidDiv = document.createElement('div');
+                            mermaidDiv.className = 'mermaid';
+                            mermaidDiv.textContent = code;
+                            host.replaceChildren(mermaidDiv);
                             await window.mermaid.run({ querySelector:'#graph-mermaid-svg .mermaid' });
                             if(window.__GRAPH_DEBUG || document.getElementById('graph-debug')?.checked){
                                 graphLog('re-render after high edge cap toggle', { firstLine: code.split(/\n/)[0] });
@@ -2124,7 +2124,10 @@
                         if(srcEl && host && window.mermaid){
                             const codeRaw = srcEl.textContent || '';
                             const code = ensureMermaidDirective(codeRaw);
-                            host.innerHTML = `<div class=\"mermaid\">${code}</div>`;
+                            const mermaidDiv = document.createElement('div');
+                            mermaidDiv.className = 'mermaid';
+                            mermaidDiv.textContent = code;
+                            host.replaceChildren(mermaidDiv);
                             await window.mermaid.run({ querySelector:'#graph-mermaid-svg .mermaid' });
                             if(window.__GRAPH_DEBUG || document.getElementById('graph-debug')?.checked){
                                 graphLog('re-render after large graph toggle', { firstLine: code.split(/\n/)[0], largeGraph: window.__MERMAID_LARGE_GRAPH_FLAG });
@@ -2154,11 +2157,11 @@
             const outgoing = edges.filter(e=> e.from===id).map(e=> e.to);
             const cats = inst.categories || [];
             detail.style.display='block';
-            detail.innerHTML = `<div class="drill-detail-heading">📄 ${id}</div>` +
-                `<div class="drill-detail-sub">Primary: ${(inst.primaryCategory||cats[0]||'–')}` +
-                (cats.length? ` | Categories: ${cats.join(', ')}`:'') + `</div>` +
-                `<div class="drill-detail-section">Incoming (${incoming.length}): ${incoming.length? incoming.join(', '):'none'}</div>` +
-                `<div class="drill-detail-section">Outgoing (${outgoing.length}): ${outgoing.length? outgoing.join(', '):'none'}</div>` +
+            detail.innerHTML = `<div class="drill-detail-heading">📄 ${escapeHtml(id)}</div>` +
+                `<div class="drill-detail-sub">Primary: ${escapeHtml(inst.primaryCategory||cats[0]||'–')}` +
+                (cats.length? ` | Categories: ${escapeHtml(cats.join(', '))}`:'') + `</div>` +
+                `<div class="drill-detail-section">Incoming (${incoming.length}): ${incoming.length? escapeHtml(incoming.join(', ')):'none'}</div>` +
+                `<div class="drill-detail-section">Outgoing (${outgoing.length}): ${outgoing.length? escapeHtml(outgoing.join(', ')):'none'}</div>` +
                 `<div class="drill-detail-footer">Click another node to update. (Future: open file / copy / filter.)</div>`;
         }
         // Auto-preload categories when graph section first opened (best-effort)

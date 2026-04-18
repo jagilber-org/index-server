@@ -8,7 +8,7 @@
  * Usage:
  *   node scripts/generate-certs.mjs [--hostname <name>] [--days <n>] [--output <dir>]
  */
-import { execSync } from 'child_process';
+import { execFileSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -50,7 +50,7 @@ const WELL_KNOWN_OPENSSL_DIRS = [
 
 function checkOpenssl() {
   try {
-    execSync('openssl version', { stdio: 'pipe' });
+    execFileSync('openssl', ['version'], { stdio: 'pipe' });
     return true;
   } catch {
     // Try well-known paths on Windows
@@ -66,12 +66,24 @@ function checkOpenssl() {
   }
 }
 
+function runOpenSsl(args, options = {}) {
+  execFileSync('openssl', args, { stdio: 'pipe', ...options });
+}
+
 function generateCerts(config) {
   const { hostname, days, outputDir, keySize } = config;
 
   // Validate hostname to prevent command injection via -subj parameter
   if (!/^[a-zA-Z0-9._-]+$/.test(hostname)) {
     console.error(`❌ Invalid hostname: "${hostname}". Only alphanumeric, dots, hyphens, and underscores allowed.`);
+    process.exit(1);
+  }
+  if (!Number.isInteger(days) || days < 1 || days > 3650) {
+    console.error(`❌ Invalid days value: "${days}". Expected an integer between 1 and 3650.`);
+    process.exit(1);
+  }
+  if (!Number.isInteger(keySize) || ![2048, 3072, 4096].includes(keySize)) {
+    console.error(`❌ Invalid key size: "${keySize}". Allowed values: 2048, 3072, 4096.`);
     process.exit(1);
   }
 
@@ -107,29 +119,27 @@ O = IndexServer
 
   // Step 1: Generate CA private key
   console.log('1/5 Generating CA private key...');
-  execSync(`openssl genrsa -out "${caKeyPath}" ${keySize}`, { stdio: 'pipe', env: cnfEnv });
+  runOpenSsl(['genrsa', '-out', caKeyPath, String(keySize)], { env: cnfEnv });
 
   // Step 2: Generate CA certificate
   console.log('2/5 Generating CA certificate...');
-  execSync(
-    `openssl req -x509 -new -nodes -key "${caKeyPath}" -sha256 -days ${days} ` +
-    `-subj "/C=US/ST=Dev/L=Local/O=IndexServer/OU=Dev/CN=IndexServerCA" ` +
-    `-config "${cnfPath}" -out "${caCertPath}"`,
-    { stdio: 'pipe', env: cnfEnv }
-  );
+  runOpenSsl([
+    'req', '-x509', '-new', '-nodes', '-key', caKeyPath, '-sha256', '-days', String(days),
+    '-subj', '/C=US/ST=Dev/L=Local/O=IndexServer/OU=Dev/CN=IndexServerCA',
+    '-config', cnfPath, '-out', caCertPath,
+  ], { env: cnfEnv });
 
   // Step 3: Generate server private key
   console.log('3/5 Generating server private key...');
-  execSync(`openssl genrsa -out "${serverKeyPath}" ${keySize}`, { stdio: 'pipe', env: cnfEnv });
+  runOpenSsl(['genrsa', '-out', serverKeyPath, String(keySize)], { env: cnfEnv });
 
   // Step 4: Generate server CSR
   console.log('4/5 Generating server CSR...');
-  execSync(
-    `openssl req -new -key "${serverKeyPath}" ` +
-    `-subj "/C=US/ST=Dev/L=Local/O=IndexServer/OU=Server/CN=${hostname}" ` +
-    `-config "${cnfPath}" -out "${serverCsrPath}"`,
-    { stdio: 'pipe', env: cnfEnv }
-  );
+  runOpenSsl([
+    'req', '-new', '-key', serverKeyPath,
+    '-subj', `/C=US/ST=Dev/L=Local/O=IndexServer/OU=Server/CN=${hostname}`,
+    '-config', cnfPath, '-out', serverCsrPath,
+  ], { env: cnfEnv });
 
   // Step 5: Create extensions file and sign server cert
   console.log('5/5 Signing server certificate...');
@@ -146,11 +156,10 @@ IP.2=::1`;
 
   fs.writeFileSync(extPath, extContent, 'utf8');
 
-  execSync(
-    `openssl x509 -req -in "${serverCsrPath}" -CA "${caCertPath}" -CAkey "${caKeyPath}" ` +
-    `-CAcreateserial -out "${serverCertPath}" -days ${days} -sha256 -extfile "${extPath}"`,
-    { stdio: 'pipe', env: cnfEnv }
-  );
+  runOpenSsl([
+    'x509', '-req', '-in', serverCsrPath, '-CA', caCertPath, '-CAkey', caKeyPath,
+    '-CAcreateserial', '-out', serverCertPath, '-days', String(days), '-sha256', '-extfile', extPath,
+  ], { env: cnfEnv });
 
   // Cleanup intermediate files
   try { fs.unlinkSync(serverCsrPath); } catch { /* ok */ }

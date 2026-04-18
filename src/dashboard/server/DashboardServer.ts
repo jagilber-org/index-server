@@ -144,9 +144,11 @@ export class DashboardServer {
 
   private setupMiddleware(): void {
     if (this.options.enableCors) {
+      // Security: only allow loopback origins (localhost, 127.0.0.1, [::1]).
+      // No wildcard (*) origins; credentials are not exposed cross-origin.
       this.app.use((req, res, next) => {
         const origin = req.headers.origin;
-        if (origin && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
+        if (origin && /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/.test(origin)) {
           res.header('Access-Control-Allow-Origin', origin);
         }
         res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');

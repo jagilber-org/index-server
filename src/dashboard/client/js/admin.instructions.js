@@ -278,7 +278,7 @@
         attempts++;
         if(contentEl && attempts===1) contentEl.value = '// Loading ' + name + '...';
         const res = await adminAuth.adminFetch('/api/instructions/' + encodeURIComponent(name));
-        if(!res.ok) throw new Error('http '+res.status);
+        if(!res.ok) throw new Error('http ' + Number(res.status));
         const data = await res.json();
         if(data.success === false && !data.content && !data.data?.content) throw new Error('server reported failure');
         if(!data.content && data.data?.content) data.content = data.data.content;
@@ -301,18 +301,6 @@
   }
 
   function cancelEditInstruction(){ const ed = document.getElementById('instruction-editor'); if(ed) ed.classList.add('hidden'); const diff = document.getElementById('instruction-diff-container'); if(diff) diff.classList.add('hidden'); const preview = document.getElementById('instruction-preview-container'); if(preview) preview.classList.add('hidden'); globals.instructionOriginalContent=''; globals.instructionPreviewVisible = false; const btn = document.getElementById('instruction-preview-btn'); if(btn) btn.textContent = '📖 Preview'; }
-
-  function ensureInstructionEditorAtTop(){
-    try{
-      const editor = document.getElementById('instruction-editor');
-      const list = document.getElementById('instructions-list');
-      if(!editor || !list) return;
-      const parent = list.parentElement;
-      if(parent && parent.contains(list)){
-        if(editor.nextElementSibling !== list) parent.insertBefore(editor, list);
-      }
-    }catch{}
-  }
 
   function safeParseInstruction(raw){ try { return JSON.parse(raw); } catch { return null; } }
 

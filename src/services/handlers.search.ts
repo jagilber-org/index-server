@@ -214,7 +214,10 @@ function calculateRelevance(
   // Build matchers: regex mode uses raw patterns, keyword mode uses substring/escaped regex
   const testMatch = (text: string, keyword: string): boolean => {
     if (mode === 'regex') {
-      return new RegExp(keyword, caseSensitive ? '' : 'i').test(text);
+      try {
+        // Regex patterns are pre-validated in the handler; try-catch is defense-in-depth
+        return new RegExp(keyword, caseSensitive ? '' : 'i').test(text);
+      } catch { return false; }
     }
     return prepareText(text).includes(prepareText(keyword));
   };
@@ -312,7 +315,9 @@ function calculateRelevance(
 
   const countMatches = (text: string, keyword: string): number => {
     if (mode === 'regex') {
-      return (text.match(new RegExp(keyword, regexFlags)) || []).length;
+      try {
+        return (text.match(new RegExp(keyword, regexFlags)) || []).length;
+      } catch { return 0; }
     }
     return (text.match(new RegExp(escapeRegex(keyword), regexFlags)) || []).length;
   };

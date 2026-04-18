@@ -325,7 +325,6 @@ describe('MCP Config-Driven CRUD Lifecycle', { timeout: 30_000 }, () => {
 });
 
 describe('MCP Config — Generated Ephemeral Config', { timeout: 30_000 }, () => {
-	let client: TestClient | null = null;
 	let tmpDir: string;
 
 	beforeEach(() => {
@@ -333,10 +332,6 @@ describe('MCP Config — Generated Ephemeral Config', { timeout: 30_000 }, () =>
 	});
 
 	afterEach(async () => {
-		if (client) {
-			await client.close();
-			client = null;
-		}
 		try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* */ }
 	});
 

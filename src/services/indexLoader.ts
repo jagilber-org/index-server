@@ -431,7 +431,6 @@ export class IndexLoader {
       }
     }
     if(changedLegacy){
-      needsRewrite = true; // ensure persisted normalization
       try {
         // Produce diff (post-normalization snapshot limited to mutated fields)
         const postSnapshot: NormalizationSnapshot = {

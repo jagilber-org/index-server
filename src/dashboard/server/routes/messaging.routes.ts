@@ -209,7 +209,7 @@ export function createMessagingRoutes(): Router {
     try {
       const mailbox = getMailbox();
       let removed = 0;
-      let action = 'none';
+      let action: string;
 
       if (req.body?.messageIds?.length) {
         removed = mailbox.deleteMessages(req.body.messageIds);

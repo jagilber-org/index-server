@@ -143,7 +143,10 @@ export function mountDashboardRoutes(app: Express, ctx: DashboardRoutesContext):
   app.get('/api/docs/:name', async (req, res) => {
     const name = req.params.name.replace(/[^a-z0-9_-]/gi, '');
     if (!name) { res.status(400).send('Invalid doc name'); return; }
-    const docPath = path.join(__dirname, '..', '..', '..', '..', 'docs', 'panels', `${name}.md`);
+    const docsDir = path.resolve(__dirname, '..', '..', '..', '..', 'docs', 'panels');
+    const docPath = path.resolve(docsDir, `${name}.md`);
+    // Security: verify resolved path stays inside the allowed docs directory
+    if (!docPath.startsWith(docsDir + path.sep) && docPath !== docsDir) { res.status(400).send('Invalid doc name'); return; }
     try {
       const md = await readFile(docPath, 'utf-8');
       res.type('html').send(renderPanelMarkdownHtml(name, md));
@@ -157,8 +160,9 @@ export function mountDashboardRoutes(app: Express, ctx: DashboardRoutesContext):
     const fileName = req.params.name.replace(/[^a-z0-9._-]/gi, '');
     if (!fileName || !fileName.endsWith('.png')) { res.status(400).send('Invalid'); return; }
     const screenshotsDir = path.resolve(__dirname, '..', '..', '..', '..', 'docs', 'screenshots');
-    const filePath = path.join(screenshotsDir, fileName);
-    if (!filePath.startsWith(screenshotsDir)) { res.status(400).send('Invalid path'); return; }
+    const filePath = path.resolve(screenshotsDir, fileName);
+    // Security: verify resolved path stays inside the allowed screenshots directory
+    if (!filePath.startsWith(screenshotsDir + path.sep)) { res.status(400).send('Invalid path'); return; }
     try {
       const data = await readFile(filePath);
       res.setHeader('Content-Type', 'image/png');

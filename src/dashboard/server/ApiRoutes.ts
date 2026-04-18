@@ -45,10 +45,12 @@ export function createApiRoutes(options: ApiRoutesOptions = {}): Router {
   const rateLimitOpts = options.rateLimit ?? { windowMs: 60_000, max: 100 };
 
   // CORS middleware (if enabled)
+  // Security: only allow loopback origins (localhost, 127.0.0.1, [::1]) to prevent
+  // cross-origin attacks. No wildcard (*) origins; credentials are not exposed.
   if (options.enableCors) {
     router.use((req: Request, res: Response, next: () => void) => {
       const origin = req.headers.origin;
-      if (origin && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
+      if (origin && /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/.test(origin)) {
         res.header('Access-Control-Allow-Origin', origin);
       }
       res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
