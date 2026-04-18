@@ -4,7 +4,7 @@
  * Checks env flags, optionally runs build, and creates legacy dist shim.
  */
 import { execSync } from 'node:child_process';
-import { accessSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { accessSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const force = process.env.INDEX_SERVER_FORCE_REBUILD === '1';

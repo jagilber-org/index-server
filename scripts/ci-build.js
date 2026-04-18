@@ -51,10 +51,11 @@ function cleanDist() {
   const distPath = path.join(process.cwd(), 'dist');
   const keepFile = path.join(process.cwd(), '.dist.keep');
 
-  if (fs.existsSync(keepFile)) {
+  try {
+    fs.accessSync(keepFile);
     log('Skipping dist clean (sentinel file present)', 'info');
     return;
-  }
+  } catch { /* sentinel absent — proceed with clean */ }
 
   log('Cleaning dist directory', 'info');
   fs.rmSync(distPath, { recursive: true, force: true });
@@ -105,7 +106,9 @@ function main() {
     checkNodeVersion();
 
     // Clean dist if not in rapid development mode
-    if (isCI || !fs.existsSync(path.join(process.cwd(), '.dist.keep'))) {
+    let keepExists = false;
+    try { fs.accessSync(path.join(process.cwd(), '.dist.keep')); keepExists = true; } catch { /* absent */ }
+    if (isCI || !keepExists) {
       cleanDist();
     }
 

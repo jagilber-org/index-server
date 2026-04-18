@@ -90,7 +90,7 @@ export function createInstructionsRoutes(): Router {
    */
   router.get('/instructions_search', async (req: Request, res: Response) => { // lgtm[js/missing-rate-limiting] — parent router applies rate-limit
     try {
-      const qRaw = String(req.query.q || '').trim(); // lgtm[js/file-system-race]
+      const qRaw = String(req.query.q || '').trim();
       const query = qRaw.slice(0, 256);
       const limitRaw = parseInt(String(req.query.limit || '20'), 10);
       const limit = Math.min(100, Math.max(1, isNaN(limitRaw) ? 20 : limitRaw));
