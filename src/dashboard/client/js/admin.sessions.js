@@ -144,11 +144,10 @@
                     connEl.innerHTML = '<div class="error-message">Failed to load active connections</div>';
                 }
             } catch (e) {
-                const connEl = document.getElementById('connections-list');
                 if (connEl) connEl.innerHTML = '<div class="error-message">Error loading active connections</div>';
             }
 
-            try { if (typeof loadSessionHistory === 'function') loadSessionHistory(parseInt((document.getElementById('session-history-limit')||{value:'50'}).value,10)); } catch {}
+            try { if (typeof loadSessionHistory === 'function') loadSessionHistory(parseInt(document.getElementById('session-history-limit')?.value || '50', 10)); } catch {}
             window.__lastSessionsCount = sessionsCount;
             window.__lastConnectionsCount = connectionsCount;
             updateSessionsNavBadge();

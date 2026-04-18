@@ -82,6 +82,10 @@ function _stopMetricsCollection() {
     }
 }
 
+// Expose as REPL helpers
+globalThis.checkMetricsMemory = checkMetricsMemory;
+globalThis._stopMetricsCollection = _stopMetricsCollection;
+
 console.log('📊 Commands loaded:');
 console.log('  checkMetricsMemory() - Check current state');
 console.log('  _stopMetricsCollection() - Stop collection to test');

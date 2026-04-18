@@ -208,8 +208,8 @@ export function createMessagingRoutes(): Router {
   router.delete('/messages', dashboardAdminAuth, (req: Request, res: Response) => {
     try {
       const mailbox = getMailbox();
-      let removed = 0;
-      let action: string;
+      let removed: number;
+      let action = 'purge_all';
 
       if (req.body?.messageIds?.length) {
         removed = mailbox.deleteMessages(req.body.messageIds);

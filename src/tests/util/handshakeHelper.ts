@@ -87,7 +87,7 @@ export async function performHandshake(opts?: { cwd?: string; protocolVersion?: 
   let initFrame: { id?: number } | undefined;
   const resendDeadline = Date.now()+resendGapMs;
   let lastDiag = start;
-  for(;;){
+  while(true){
     initFrame = parser.findById(1);
     if(initFrame) break;
     if(Date.now()>resendDeadline){
