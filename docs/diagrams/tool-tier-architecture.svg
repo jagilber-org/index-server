@@ -1,0 +1,100 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 400" fill="none">
+  <style>
+    text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
+  </style>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="8" markerHeight="7" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#8b949e"/>
+    </marker>
+    <marker id="arrow-dash" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="8" markerHeight="7" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#8b949e"/>
+    </marker>
+  </defs>
+
+  <!-- MCP Client -->
+  <rect x="365" y="12" width="170" height="38" rx="6" fill="#57606a"/>
+  <text x="450" y="36" text-anchor="middle" fill="#fff" font-size="14" font-weight="600">MCP Client</text>
+
+  <!-- Arrow: Client → Core (solid = always available) -->
+  <line x1="400" y1="50" x2="149" y2="115" stroke="#8b949e" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <!-- Arrow: Client → Extended (dashed = opt-in) -->
+  <line x1="450" y1="50" x2="440" y2="115" stroke="#8b949e" stroke-width="1.5" stroke-dasharray="6 3" marker-end="url(#arrow-dash)"/>
+  <!-- Arrow: Client → Admin (dashed = opt-in) -->
+  <line x1="500" y1="50" x2="741" y2="115" stroke="#8b949e" stroke-width="1.5" stroke-dasharray="6 3" marker-end="url(#arrow-dash)"/>
+
+  <!-- ═══════════════ CORE TIER ═══════════════ -->
+  <rect x="20" y="118" width="258" height="50" rx="6" fill="#1a7f37"/>
+  <text x="149" y="140" text-anchor="middle" fill="#fff" font-size="13" font-weight="700">CORE · 7 tools</text>
+  <text x="149" y="156" text-anchor="middle" fill="#aff5b4" font-size="10">Always available</text>
+
+  <!-- Core tool pills -->
+  <rect x="29" y="176" width="240" height="24" rx="4" fill="#238636"/>
+  <text x="149" y="192" text-anchor="middle" fill="#fff" font-size="12">bootstrap</text>
+
+  <rect x="29" y="204" width="240" height="24" rx="4" fill="#238636"/>
+  <text x="149" y="220" text-anchor="middle" fill="#fff" font-size="12">feedback_dispatch</text>
+
+  <rect x="29" y="232" width="240" height="24" rx="4" fill="#238636"/>
+  <text x="149" y="248" text-anchor="middle" fill="#fff" font-size="12">health_check</text>
+
+  <rect x="29" y="260" width="240" height="24" rx="4" fill="#238636"/>
+  <text x="149" y="276" text-anchor="middle" fill="#fff" font-size="12">help_overview</text>
+
+  <rect x="29" y="288" width="240" height="24" rx="4" fill="#238636"/>
+  <text x="149" y="304" text-anchor="middle" fill="#fff" font-size="12">index_dispatch</text>
+
+  <rect x="29" y="316" width="240" height="24" rx="4" fill="#238636"/>
+  <text x="149" y="332" text-anchor="middle" fill="#fff" font-size="12">index_search</text>
+
+  <rect x="29" y="344" width="240" height="24" rx="4" fill="#238636"/>
+  <text x="149" y="360" text-anchor="middle" fill="#fff" font-size="12">prompt_review</text>
+
+  <!-- ═══════════════ EXTENDED TIER ═══════════════ -->
+  <rect x="298" y="118" width="284" height="50" rx="6" fill="#0550ae"/>
+  <text x="440" y="140" text-anchor="middle" fill="#fff" font-size="13" font-weight="700">EXTENDED · 24 tools</text>
+  <text x="440" y="156" text-anchor="middle" fill="#a5d6ff" font-size="10">Flag: TOOLS_EXTENDED=1</text>
+
+  <!-- Extended category blocks (two-line pills) -->
+  <rect x="307" y="176" width="266" height="42" rx="4" fill="#1f6feb"/>
+  <text x="440" y="195" text-anchor="middle" fill="#fff" font-size="12" font-weight="600">Index Operations × 5</text>
+  <text x="440" y="211" text-anchor="middle" fill="#a5d6ff" font-size="9">add · import · remove · reload · schema</text>
+
+  <rect x="307" y="224" width="266" height="42" rx="4" fill="#1f6feb"/>
+  <text x="440" y="243" text-anchor="middle" fill="#fff" font-size="12" font-weight="600">Governance × 4</text>
+  <text x="440" y="259" text-anchor="middle" fill="#a5d6ff" font-size="9">govHash · govUpdate · gates · integrity</text>
+
+  <rect x="307" y="272" width="266" height="42" rx="4" fill="#1f6feb"/>
+  <text x="440" y="291" text-anchor="middle" fill="#fff" font-size="12" font-weight="600">Analytics × 5</text>
+  <text x="440" y="307" text-anchor="middle" fill="#a5d6ff" font-size="9">graph · usage · hotset · metrics · promote</text>
+
+  <rect x="307" y="320" width="266" height="42" rx="4" fill="#1f6feb"/>
+  <text x="440" y="339" text-anchor="middle" fill="#fff" font-size="12" font-weight="600">Messaging × 10</text>
+  <text x="440" y="355" text-anchor="middle" fill="#a5d6ff" font-size="9">send · read · channels · ack · stats · get …</text>
+
+  <!-- ═══════════════ ADMIN TIER ═══════════════ -->
+  <rect x="602" y="118" width="278" height="50" rx="6" fill="#953800"/>
+  <text x="741" y="140" text-anchor="middle" fill="#fff" font-size="13" font-weight="700">ADMIN · 30 tools</text>
+  <text x="741" y="156" text-anchor="middle" fill="#ffd33d" font-size="10">Flag: TOOLS_ADMIN=1</text>
+
+  <!-- Admin category pills -->
+  <rect x="611" y="176" width="260" height="24" rx="4" fill="#bf5b00"/>
+  <text x="741" y="192" text-anchor="middle" fill="#fff" font-size="12">Feedback × 6</text>
+
+  <rect x="611" y="204" width="260" height="24" rx="4" fill="#bf5b00"/>
+  <text x="741" y="220" text-anchor="middle" fill="#fff" font-size="12">Index Management × 8</text>
+
+  <rect x="611" y="232" width="260" height="24" rx="4" fill="#bf5b00"/>
+  <text x="741" y="248" text-anchor="middle" fill="#fff" font-size="12">Meta × 4</text>
+
+  <rect x="611" y="260" width="260" height="24" rx="4" fill="#bf5b00"/>
+  <text x="741" y="276" text-anchor="middle" fill="#fff" font-size="12">Bootstrap × 3</text>
+
+  <rect x="611" y="288" width="260" height="24" rx="4" fill="#bf5b00"/>
+  <text x="741" y="304" text-anchor="middle" fill="#fff" font-size="12">Manifest × 3</text>
+
+  <rect x="611" y="316" width="260" height="24" rx="4" fill="#bf5b00"/>
+  <text x="741" y="332" text-anchor="middle" fill="#fff" font-size="12">Diagnostics × 3</text>
+
+  <rect x="611" y="344" width="260" height="24" rx="4" fill="#bf5b00"/>
+  <text x="741" y="360" text-anchor="middle" fill="#fff" font-size="12">Other × 3</text>
+</svg>

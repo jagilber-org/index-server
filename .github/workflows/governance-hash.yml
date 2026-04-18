@@ -1,0 +1,45 @@
+name: Governance Hash Enforcement
+on:
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  governance-hash:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: 'npm'
+      - name: Install
+        run: npm ci
+      - name: Build
+        run: npm run build
+      - name: Compute governance hash (current)
+        id: current
+        run: |
+          CUR=$(echo '{"jsonrpc":"2.0","id":1,"method":"instructions/governanceHash"}' | node dist/server/index-server.js | jq -r '.result.governanceHash')
+          echo "hash=$CUR" >> $GITHUB_OUTPUT
+      - name: Checkout base for comparison
+        run: |
+          git fetch origin ${{ github.base_ref }} --depth=1
+          git checkout FETCH_HEAD
+          npm ci
+          npm run build
+      - name: Compute governance hash (base)
+        id: base
+        run: |
+          BASE=$(echo '{"jsonrpc":"2.0","id":2,"method":"instructions/governanceHash"}' | node dist/server/index-server.js | jq -r '.result.governanceHash')
+          echo "hash=$BASE" >> $GITHUB_OUTPUT
+      - name: Compare
+        run: |
+          echo "Base: ${{ steps.base.outputs.hash }}"; echo "Current: ${{ steps.current.outputs.hash }}";
+          if [ "${{ steps.base.outputs.hash }}" != "${{ steps.current.outputs.hash }}" ]; then
+            echo 'Governance metadata changed.'
+            if [ ! -f governance/ALLOW_HASH_CHANGE ]; then
+              echo 'Missing governance/ALLOW_HASH_CHANGE justification file.' >&2
+              exit 7
+            fi
+            echo 'Justification file present; continuing.'
+          fi

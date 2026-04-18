@@ -1,0 +1,56 @@
+{
+  "mcpServers": {
+    "Index": {
+      "type": "stdio",
+      "command": "node",
+      "cwd": "C:/mcp/index-server",
+      "tools": [
+        "*"
+      ],
+      "args": [
+        "dist/server/index-server.js"
+      ],
+      "env": {
+        "INDEX_SERVER_SEMANTIC_ENABLED": "1",
+        "INDEX_SERVER_SEMANTIC_MODEL": "Xenova/all-MiniLM-L6-v2",
+        "INDEX_SERVER_SEMANTIC_DEVICE": "dml",
+        "INDEX_SERVER_FLAG_TOOLS_EXTENDED": "1",
+        "INDEX_SERVER_SEMANTIC_LOCAL_ONLY": "1",
+        "INDEX_SERVER_MODE": "standalone",
+        "INDEX_SERVER_MUTATION": "1",
+        "INDEX_SERVER_DASHBOARD": "0",
+        "INDEX_SERVER_DASHBOARD_PORT": "8787",
+        "INDEX_SERVER_DASHBOARD_TLS_CERT": "C:/mcp/index-server/.certs/localhost.crt",
+        "INDEX_SERVER_DASHBOARD_TLS_KEY": "C:/mcp/index-server/.certs/localhost.key",
+        "INDEX_SERVER_AUTO_SPLIT_OVERSIZED": "1",
+        "INDEX_SERVER_FEATURES": "usage,window,hotness,drift,risk",
+        "INDEX_SERVER_DIR": "<root>/<org>/Internal/index-Index",
+        "INDEX_SERVER_FEEDBACK_DIR": "<root>/<org>/Internal/index-feedback",
+        "INDEX_SERVER_EMBEDDING_PATH": "<root>/<org>/Internal/embeddings.json",
+        "INDEX_SERVER_STATE_DIR": "<root>/<org>/Internal/index-state",
+        "INDEX_SERVER_AUTO_BACKUP": "0"
+      }
+    },
+    "Index-dev": {
+      "type": "stdio",
+      "command": "node",
+      "args": [
+        "dist/server/index-server.js"
+      ],
+      "cwd": "./",
+      "env": {
+        "INDEX_SERVER_MODE": "standalone",
+        "INDEX_SERVER_MUTATION": "1",
+        "INDEX_SERVER_DASHBOARD": "1",
+        "INDEX_SERVER_DASHBOARD_PORT": "8900",
+        "INDEX_SERVER_FLAG_TOOLS_EXTENDED": "1",
+        "INDEX_SERVER_SEMANTIC_ENABLED": "1",
+        "INDEX_SERVER_AUTO_BACKUP": "0",
+        "NODE_ENV": "development"
+      },
+      "tools": [
+        "*"
+      ]
+    }
+  }
+}

@@ -1,0 +1,78 @@
+{
+  "version": "1.18.0",
+  "generatedAt": "2026-04-07T00:08:19.479Z",
+  "trackedDir": "schemas",
+  "distDir": "dist/schemas",
+  "jsonSchemas": [
+    {
+      "type": "AudienceScope",
+      "source": "src/models/instruction.ts",
+      "file": "json-schema/instruction-audience-scope.schema.json"
+    },
+    {
+      "type": "ContentType",
+      "source": "src/models/instruction.ts",
+      "file": "json-schema/instruction-content-type.schema.json"
+    },
+    {
+      "type": "InstructionEntry",
+      "source": "src/models/instruction.ts",
+      "file": "json-schema/instruction-instruction-entry.schema.json"
+    },
+    {
+      "type": "RequirementLevel",
+      "source": "src/models/instruction.ts",
+      "file": "json-schema/instruction-requirement-level.schema.json"
+    },
+    {
+      "type": "PersistedAdminSession",
+      "source": "src/models/SessionPersistence.ts",
+      "file": "json-schema/SessionPersistence-persisted-admin-session.schema.json"
+    },
+    {
+      "type": "PersistedSessionHistoryEntry",
+      "source": "src/models/SessionPersistence.ts",
+      "file": "json-schema/SessionPersistence-persisted-session-history-entry.schema.json"
+    },
+    {
+      "type": "PersistedWebSocketConnection",
+      "source": "src/models/SessionPersistence.ts",
+      "file": "json-schema/SessionPersistence-persisted-web-socket-connection.schema.json"
+    },
+    {
+      "type": "SessionPersistenceConfig",
+      "source": "src/models/SessionPersistence.ts",
+      "file": "json-schema/SessionPersistence-session-persistence-config.schema.json"
+    },
+    {
+      "type": "SessionPersistenceData",
+      "source": "src/models/SessionPersistence.ts",
+      "file": "json-schema/SessionPersistence-session-persistence-data.schema.json"
+    },
+    {
+      "type": "SessionPersistenceManifest",
+      "source": "src/models/SessionPersistence.ts",
+      "file": "json-schema/SessionPersistence-session-persistence-manifest.schema.json"
+    },
+    {
+      "type": "SessionPersistenceMetadata",
+      "source": "src/models/SessionPersistence.ts",
+      "file": "json-schema/SessionPersistence-session-persistence-metadata.schema.json"
+    }
+  ],
+  "skippedJsonSchemas": [],
+  "codeModel": {
+    "file": "index-server.code-schema.json",
+    "sourceRoots": [
+      "src",
+      "scripts"
+    ],
+    "fileCount": 214,
+    "features": {
+      "jsdoc": true,
+      "lineNumbers": true,
+      "typeParameters": true,
+      "decorators": true
+    }
+  }
+}

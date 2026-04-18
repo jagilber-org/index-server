@@ -1,0 +1,125 @@
+###############################################################################
+# docker-compose.yml — Index Server with HTTPS + persistent volumes
+#
+# Usage:
+#   docker compose up -d                    # HTTP mode (default)
+#   docker compose --profile tls up -d      # HTTPS mode (generate certs first)
+#
+# Generate self-signed TLS certs:
+#   node scripts/generate-certs.mjs
+#
+# Interactive setup:
+#   node scripts/setup-wizard.mjs
+###############################################################################
+
+services:
+  index-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: index-server
+    restart: unless-stopped
+    ports:
+      - "${INDEX_SERVER_PORT_BIND_HOST:-127.0.0.1}:${INDEX_SERVER_DASHBOARD_PORT:-8787}:8787"
+    volumes:
+      - index-data:/app/data
+      - index-instructions:/app/instructions
+      - index-logs:/app/logs
+      - index-metrics:/app/metrics
+      - index-feedback:/app/feedback
+    environment:
+      - NODE_ENV=production
+      - INDEX_SERVER_DIR=/app/instructions
+      - INDEX_SERVER_DASHBOARD=1
+      - INDEX_SERVER_DASHBOARD_PORT=8787
+      - INDEX_SERVER_DASHBOARD_HOST=0.0.0.0
+      - INDEX_SERVER_LOG_LEVEL=${INDEX_SERVER_LOG_LEVEL:-info}
+      - INDEX_SERVER_MUTATION=${INDEX_SERVER_MUTATION:-0}
+      # Uncomment to require Bearer token auth for dashboard mutation endpoints:
+      # - INDEX_SERVER_ADMIN_API_KEY=your-secret-key-here
+      - INDEX_SERVER_STORAGE_BACKEND=${INDEX_SERVER_STORAGE_BACKEND:-json}
+      - INDEX_SERVER_SQLITE_PATH=${INDEX_SERVER_SQLITE_PATH:-/app/data/index.db}
+      - INDEX_SERVER_SQLITE_WAL=${INDEX_SERVER_SQLITE_WAL:-1}
+      - INDEX_SERVER_SQLITE_MIGRATE_ON_START=${INDEX_SERVER_SQLITE_MIGRATE_ON_START:-1}
+      - INDEX_SERVER_METRICS_DIR=/app/metrics
+      - INDEX_SERVER_FEEDBACK_DIR=/app/feedback
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:8787/api/status"]
+      interval: 30s
+      timeout: 10s
+      start_period: 15s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "1.0"
+        reservations:
+          memory: 128M
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp:size=64M
+
+  # HTTPS-enabled variant — activate with: docker compose --profile tls up -d
+  index-server-tls:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: index-server-tls
+    profiles: ["tls"]
+    restart: unless-stopped
+    ports:
+      - "${INDEX_SERVER_PORT_BIND_HOST:-127.0.0.1}:${INDEX_SERVER_DASHBOARD_PORT:-8787}:8787"
+    volumes:
+      - index-data:/app/data
+      - index-instructions:/app/instructions
+      - index-logs:/app/logs
+      - index-metrics:/app/metrics
+      - index-feedback:/app/feedback
+      - ./certs:/app/certs:ro
+    environment:
+      - NODE_ENV=production
+      - INDEX_SERVER_DIR=/app/instructions
+      - INDEX_SERVER_DASHBOARD=1
+      - INDEX_SERVER_DASHBOARD_PORT=8787
+      - INDEX_SERVER_DASHBOARD_HOST=0.0.0.0
+      - INDEX_SERVER_DASHBOARD_TLS=1
+      - INDEX_SERVER_DASHBOARD_TLS_CERT=/app/certs/server.crt
+      - INDEX_SERVER_DASHBOARD_TLS_KEY=/app/certs/server.key
+      - INDEX_SERVER_LOG_LEVEL=${INDEX_SERVER_LOG_LEVEL:-info}
+      - INDEX_SERVER_MUTATION=${INDEX_SERVER_MUTATION:-0}
+      # Uncomment to require Bearer token auth for dashboard mutation endpoints:
+      # - INDEX_SERVER_ADMIN_API_KEY=your-secret-key-here
+      - INDEX_SERVER_STORAGE_BACKEND=${INDEX_SERVER_STORAGE_BACKEND:-json}
+      - INDEX_SERVER_SQLITE_PATH=${INDEX_SERVER_SQLITE_PATH:-/app/data/index.db}
+      - INDEX_SERVER_SQLITE_WAL=${INDEX_SERVER_SQLITE_WAL:-1}
+      - INDEX_SERVER_SQLITE_MIGRATE_ON_START=${INDEX_SERVER_SQLITE_MIGRATE_ON_START:-1}
+      - INDEX_SERVER_METRICS_DIR=/app/metrics
+      - INDEX_SERVER_FEEDBACK_DIR=/app/feedback
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--no-check-certificate", "--spider", "https://127.0.0.1:8787/api/status"]
+      interval: 30s
+      timeout: 10s
+      start_period: 15s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "1.0"
+        reservations:
+          memory: 128M
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp:size=64M
+
+volumes:
+  index-data:
+  index-instructions:
+  index-logs:
+  index-metrics:
+  index-feedback:

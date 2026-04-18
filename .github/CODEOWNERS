@@ -1,0 +1,10 @@
+# Code owners for governance-critical paths
+/instructions/ @jagilber
+/schemas/ @jagilber
+/src/services/ @jagilber
+
+# Security-sensitive paths
+/src/dashboard/ @jagilber
+/src/server/ @jagilber
+/.github/workflows/ @jagilber
+/src/config/ @jagilber

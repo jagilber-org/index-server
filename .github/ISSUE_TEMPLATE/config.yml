@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Documentation
+    url: https://github.com/jagilber-org/index-server/blob/main/README.md
+    about: Read the repository documentation before opening an issue

@@ -1,0 +1,206 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$ref": "#/definitions/InstructionEntry",
+  "definitions": {
+    "InstructionEntry": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "body": {
+          "type": "string"
+        },
+        "rationale": {
+          "type": "string"
+        },
+        "priority": {
+          "type": "number"
+        },
+        "audience": {
+          "$ref": "#/definitions/AudienceScope"
+        },
+        "requirement": {
+          "$ref": "#/definitions/RequirementLevel"
+        },
+        "categories": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "contentType": {
+          "$ref": "#/definitions/ContentType"
+        },
+        "primaryCategory": {
+          "type": "string"
+        },
+        "sourceHash": {
+          "type": "string"
+        },
+        "schemaVersion": {
+          "type": "string"
+        },
+        "deprecatedBy": {
+          "type": "string"
+        },
+        "createdAt": {
+          "type": "string"
+        },
+        "updatedAt": {
+          "type": "string"
+        },
+        "usageCount": {
+          "type": "number"
+        },
+        "firstSeenTs": {
+          "type": "string"
+        },
+        "lastUsedAt": {
+          "type": "string"
+        },
+        "riskScore": {
+          "type": "number"
+        },
+        "workspaceId": {
+          "type": "string"
+        },
+        "userId": {
+          "type": "string"
+        },
+        "teamIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "version": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "draft",
+            "review",
+            "approved",
+            "deprecated"
+          ]
+        },
+        "owner": {
+          "type": "string"
+        },
+        "priorityTier": {
+          "type": "string",
+          "enum": [
+            "P1",
+            "P2",
+            "P3",
+            "P4"
+          ]
+        },
+        "classification": {
+          "type": "string",
+          "enum": [
+            "public",
+            "internal",
+            "restricted"
+          ]
+        },
+        "lastReviewedAt": {
+          "type": "string"
+        },
+        "nextReviewDue": {
+          "type": "string"
+        },
+        "reviewIntervalDays": {
+          "type": "number"
+        },
+        "changeLog": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "version": {
+                "type": "string"
+              },
+              "changedAt": {
+                "type": "string"
+              },
+              "summary": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "version",
+              "changedAt",
+              "summary"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "supersedes": {
+          "type": "string"
+        },
+        "archivedAt": {
+          "type": "string"
+        },
+        "semanticSummary": {
+          "type": "string"
+        },
+        "createdByAgent": {
+          "type": "string"
+        },
+        "sourceWorkspace": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "body",
+        "priority",
+        "audience",
+        "requirement",
+        "categories",
+        "contentType",
+        "sourceHash",
+        "schemaVersion",
+        "createdAt",
+        "updatedAt"
+      ],
+      "additionalProperties": false
+    },
+    "AudienceScope": {
+      "type": "string",
+      "enum": [
+        "individual",
+        "group",
+        "all"
+      ]
+    },
+    "RequirementLevel": {
+      "type": "string",
+      "enum": [
+        "mandatory",
+        "critical",
+        "recommended",
+        "optional",
+        "deprecated"
+      ]
+    },
+    "ContentType": {
+      "type": "string",
+      "enum": [
+        "instruction",
+        "template",
+        "chat-session",
+        "reference",
+        "example",
+        "agent"
+      ]
+    }
+  }
+}

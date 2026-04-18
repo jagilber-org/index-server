@@ -1,0 +1,54 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$ref": "#/definitions/PersistedAdminSession",
+  "definitions": {
+    "PersistedAdminSession": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "userId": {
+          "type": "string"
+        },
+        "startTime": {
+          "type": "string"
+        },
+        "lastActivity": {
+          "type": "string"
+        },
+        "ipAddress": {
+          "type": "string"
+        },
+        "userAgent": {
+          "type": "string"
+        },
+        "permissions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "persistedAt": {
+          "type": "string"
+        },
+        "version": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "id",
+        "userId",
+        "startTime",
+        "lastActivity",
+        "ipAddress",
+        "userAgent",
+        "permissions",
+        "persistedAt",
+        "version"
+      ],
+      "additionalProperties": false,
+      "description": "Session Persistence Schema Design\n\nPersistent storage design for admin sessions, websocket connections, and session history with deduplication, atomic writes, and backup integration."
+    }
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "$id": "https://example.local/schemas/usage-batch.schema.json",
+  "title": "InstructionUsageBatch",
+  "type": "object",
+  "description": "Batch of usage events prior to materialization into counters.",
+  "required": ["events","createdAt"],
+  "additionalProperties": false,
+  "properties": {
+    "createdAt": { "type": "string", "format": "date-time" },
+    "events": { "type": "array", "items": { "$ref": "usage-event.schema.json" }, "minItems": 1, "maxItems": 500 },
+    "agentId": { "type": "string" },
+    "workspace": { "type": "string" },
+    "flushReason": { "type": "string", "enum": ["interval","size","shutdown","manual"] }
+  }
+}

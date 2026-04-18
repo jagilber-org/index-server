@@ -1,0 +1,24 @@
+{
+  // Narrow TypeScript program just for eslint --type-aware rules.
+  // Excludes parked legacy tests and declaration files that are
+  // intentionally outside the main project scope to prevent
+  // recurrent "file not included in tsconfig" parse errors.
+  "extends": "./tsconfig.json",
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "src/dashboard/client/js/**/*.js",
+    "scripts/**/*.mjs",
+    "scripts/**/*.ts",
+    "playwright.config.ts",
+    "tests/playwright/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    // Legacy/parked test corpus (excluded from typed lint)
+    "src/tests._park/**/*",
+    // All declaration files – we run them under parserOptions.project:null via override
+    "**/*.d.ts"
+  ]
+}
