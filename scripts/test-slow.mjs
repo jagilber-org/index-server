@@ -33,6 +33,6 @@ if (process.env.INCLUDE_UNSTABLE_SLOW === '1' && unstable.length) {
 }
 const vitestArgs = ['run', '--bail', '1', '--reporter', 'verbose', ...selected];
 
-const childEnv = { ...process.env, INDEX_SERVER_MUTATION: '1', INDEX_SERVER_MUTATION: '1' };
+const childEnv = { ...process.env, INDEX_SERVER_MUTATION: '1' };
 const child = spawn('npx', ['vitest', ...vitestArgs], { stdio: 'inherit', shell: process.platform === 'win32', env: childEnv });
 child.on('exit', code => process.exit(code));

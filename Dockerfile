@@ -76,11 +76,13 @@ ENV NODE_ENV=production \
     INDEX_SERVER_DIR=/app/instructions \
     INDEX_SERVER_DASHBOARD=1 \
     INDEX_SERVER_DASHBOARD_PORT=8787 \
-    INDEX_SERVER_DASHBOARD_HOST=0.0.0.0 \
     INDEX_SERVER_LOG_LEVEL=info \
     INDEX_SERVER_METRICS_DIR=/app/metrics \
     INDEX_SERVER_FEEDBACK_DIR=/app/feedback \
     INDEX_SERVER_MUTATION=0
+
+# nosemgrep: semgrep.tree-scan-dashboard-bind-all-interfaces -- intentional: container binds 0.0.0.0; host exposure controlled via Docker Compose port mapping
+ENV INDEX_SERVER_DASHBOARD_HOST=0.0.0.0
 
 # Expose dashboard port
 EXPOSE 8787

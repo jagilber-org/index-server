@@ -56,7 +56,7 @@ async function waitForServer(port, timeoutMs) {
 
 async function main() {
   const opts = parseArgs();
-  const env = { ...process.env, INDEX_SERVER_DASHBOARD: '1', DASHBOARD_PORT: opts.port, INDEX_SERVER_DIR: process.env.INDEX_SERVER_DIR || `${process.cwd()}/devinstructions` };
+  const env = { INDEX_SERVER_DIR: `${process.cwd()}/devinstructions`, ...process.env, INDEX_SERVER_DASHBOARD: '1', DASHBOARD_PORT: opts.port };
 
   console.log(`[run-playwright] Starting dashboard server on port ${opts.port} ...`);
   const server = spawn(process.execPath, ['dist/server/index-server.js'], {
