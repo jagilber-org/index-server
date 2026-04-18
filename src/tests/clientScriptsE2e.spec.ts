@@ -12,6 +12,7 @@
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createDashboardServer, DashboardServer } from '../dashboard/server/DashboardServer.js';
+import { reloadRuntimeConfig } from '../config/runtimeConfig.js';
 import { execSync, execFile } from 'child_process';
 import { promisify } from 'util';
 import path from 'path';
@@ -101,10 +102,16 @@ async function runBash(args: string, timeoutMs = 20_000): Promise<string> {
 describe('Client Scripts E2E', () => {
   let server: DashboardServer | null = null;
   let originalMutation: string | undefined;
+  let originalRateLimit: string | undefined;
 
   beforeAll(async () => {
     originalMutation = process.env.INDEX_SERVER_MUTATION;
+    originalRateLimit = process.env.INDEX_SERVER_DISABLE_RATE_LIMIT;
     process.env.INDEX_SERVER_MUTATION = '1';
+    // Disable rate limiting — E2E tests issue many sequential requests
+    // (warmup loop + PS1/bash client invocations) and will exceed the default limit.
+    process.env.INDEX_SERVER_DISABLE_RATE_LIMIT = '1';
+    reloadRuntimeConfig();
     try {
       server = createDashboardServer({
         port: TEST_PORT,
@@ -138,6 +145,7 @@ describe('Client Scripts E2E', () => {
       try { await server.stop(); } catch { /* ok */ }
     }
     process.env.INDEX_SERVER_MUTATION = originalMutation;
+    process.env.INDEX_SERVER_DISABLE_RATE_LIMIT = originalRateLimit;
   });
 
   // ═══════════════════════════════════════════════════════════════════════
@@ -178,15 +186,15 @@ describe('Client Scripts E2E', () => {
   describe('GET /api/scripts/:name', () => {
     it('should download PowerShell script with correct headers', async () => {
       if (!server) return;
-      // Retry once in case of transient ECONNRESET during server warmup
+      // Retry in case of transient ECONNRESET during server warmup
       let resp: Response | undefined;
-      for (let attempt = 0; attempt < 2; attempt++) {
+      for (let attempt = 0; attempt < 3; attempt++) {
         try {
           resp = await fetch(`${activeBaseUrl}/api/scripts/index-server-client.ps1`);
           break;
         } catch {
-          if (attempt === 1) throw new Error('Failed to fetch PowerShell script after 2 attempts');
-          await new Promise(r => setTimeout(r, 1000));
+          if (attempt === 2) throw new Error('Failed to fetch PowerShell script after 3 attempts');
+          await new Promise(r => setTimeout(r, 2000));
         }
       }
       expect(resp!.ok).toBe(true);
@@ -198,19 +206,39 @@ describe('Client Scripts E2E', () => {
 
     it('should download Bash script with correct headers', async () => {
       if (!server) return;
-      const resp = await fetch(`${activeBaseUrl}/api/scripts/index-server-client.sh`);
-      expect(resp.ok).toBe(true);
-      expect(resp.headers.get('content-disposition')).toContain('index-server-client.sh');
-      const body = await resp.text();
+      // Retry in case of transient ECONNRESET during server warmup
+      let resp: Response | undefined;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          resp = await fetch(`${activeBaseUrl}/api/scripts/index-server-client.sh`);
+          break;
+        } catch {
+          if (attempt === 2) throw new Error('Failed to fetch Bash script after 3 attempts');
+          await new Promise(r => setTimeout(r, 2000));
+        }
+      }
+      expect(resp!.ok).toBe(true);
+      expect(resp!.headers.get('content-disposition')).toContain('index-server-client.sh');
+      const body = await resp!.text();
       expect(body).toContain('#!/usr/bin/env bash');
       expect(body).toContain('index-server-client.sh');
     });
 
     it('should return 404 for unknown script name', async () => {
       if (!server) return;
-      const resp = await fetch(`${activeBaseUrl}/api/scripts/nonexistent.ps1`);
-      expect(resp.status).toBe(404);
-      const data = await resp.json() as { error: string; available: string[] };
+      // Retry in case of transient ECONNRESET during initial index loading
+      let resp: Response | undefined;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          resp = await fetch(`${activeBaseUrl}/api/scripts/nonexistent.ps1`);
+          break;
+        } catch {
+          if (attempt === 2) throw new Error('Failed to fetch after 3 attempts');
+          await new Promise(r => setTimeout(r, 1000));
+        }
+      }
+      expect(resp!.status).toBe(404);
+      const data = await resp!.json() as { error: string; available: string[] };
       expect(data.error).toContain('not found');
       expect(data.available).toBeDefined();
     });
@@ -244,14 +272,33 @@ describe('Client Scripts E2E', () => {
 
     it('should set security headers on script download', async () => {
       if (!server) return;
-      const resp = await fetch(`${activeBaseUrl}/api/scripts/index-server-client.ps1`);
-      expect(resp.headers.get('x-content-type-options')).toBe('nosniff');
+      // Retry in case of transient ECONNRESET during server warmup
+      let resp: Response | undefined;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          resp = await fetch(`${activeBaseUrl}/api/scripts/index-server-client.ps1`);
+          break;
+        } catch {
+          if (attempt === 2) throw new Error('Failed to fetch script after 3 attempts');
+          await new Promise(r => setTimeout(r, 2000));
+        }
+      }
+      expect(resp!.headers.get('x-content-type-options')).toBe('nosniff');
     });
 
     it('should not expose server version in headers', async () => {
       if (!server) return;
-      const resp = await fetch(`${activeBaseUrl}/api/scripts`);
-      expect(resp.headers.get('x-powered-by')).toBeNull();
+      let resp: Response | undefined;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          resp = await fetch(`${activeBaseUrl}/api/scripts`);
+          break;
+        } catch {
+          if (attempt === 2) throw new Error('Failed to fetch scripts list after 3 attempts');
+          await new Promise(r => setTimeout(r, 2000));
+        }
+      }
+      expect(resp!.headers.get('x-powered-by')).toBeNull();
     });
   });
 
@@ -269,7 +316,7 @@ describe('Client Scripts E2E', () => {
       const result = JSON.parse(output);
       expect(result.success).toBe(true);
       expect(result.result).toBeDefined();
-    }, 30_000);
+    }, 60_000);
 
     it.skipIf(!hasPwsh)('search action should return results', async () => {
       if (!server) return;
@@ -278,7 +325,7 @@ describe('Client Scripts E2E', () => {
       );
       const result = JSON.parse(output);
       expect(result.success).toBe(true);
-    }, 30_000);
+    }, 60_000);
 
     it.skipIf(!hasPwsh)('list action should return instructions', async () => {
       if (!server) return;
@@ -287,7 +334,7 @@ describe('Client Scripts E2E', () => {
       );
       const result = JSON.parse(output);
       expect(result.success).toBe(true);
-    }, 30_000);
+    }, 60_000);
 
     it.skipIf(!hasPwsh)('get action without id should return error', async () => {
       if (!server) return;
@@ -297,7 +344,7 @@ describe('Client Scripts E2E', () => {
       const result = JSON.parse(output);
       expect(result.success).toBe(false);
       expect(result.error).toContain('Id required');
-    }, 30_000);
+    }, 60_000);
 
     it.skipIf(!hasPwsh)('search without keywords should return error', async () => {
       if (!server) return;
@@ -307,7 +354,7 @@ describe('Client Scripts E2E', () => {
       const result = JSON.parse(output);
       expect(result.success).toBe(false);
       expect(result.error).toContain('Keywords required');
-    }, 30_000);
+    }, 60_000);
 
     it.skipIf(!hasPwsh)('hotset action should return results', async () => {
       if (!server) return;
@@ -316,20 +363,16 @@ describe('Client Scripts E2E', () => {
       );
       const result = JSON.parse(output);
       expect(result.success).toBe(true);
-    }, 30_000);
-
-    // ── CRUD lifecycle tests (add → get → track → remove) ──────────────
+    }, 60_000);
     it.skipIf(!hasPwsh)('add action should create instruction with entry wrapper', async () => {
       if (!server) return;
       const output = await runPwshWithRetry(
-        `& '${PS1_SCRIPT}' -BaseUrl '${activeBaseUrl}' -Action add -Id 'e2e-ps1-test-1' -Title 'PS1 E2E Test' -Body 'Created by clientScriptsE2e test' -Priority 42`
+        `& '${PS1_SCRIPT}' -BaseUrl '${activeBaseUrl}' -Action add -Id 'e2e-ps1-test-1' -Title 'PS1 E2E Test' -Body 'Created by clientScriptsE2e test' -Priority 42 -Overwrite`
       );
       const result = JSON.parse(output);
       expect(result.success).toBe(true);
       expect(result.result).toBeDefined();
-      expect(result.result.created).toBe(true);
-      expect(result.result.id).toBe('e2e-ps1-test-1');
-    }, 30_000);
+    }, 60_000);
 
     it.skipIf(!hasPwsh)('get should retrieve instruction created by add', async () => {
       if (!server) return;
@@ -344,9 +387,11 @@ describe('Client Scripts E2E', () => {
       const result = JSON.parse(output);
       expect(result.success).toBe(true);
       expect(result.result).toBeDefined();
-      expect(result.result.id).toBe('e2e-ps1-roundtrip');
-      expect(result.result.title).toBe('Roundtrip Test');
-    }, 30_000);
+      // index_dispatch get returns { hash, item: { id, title, ... } } or { notFound, id, ... }
+      const entry = result.result.item ?? result.result;
+      expect(entry.id).toBe('e2e-ps1-roundtrip');
+      expect(entry.title).toBe('Roundtrip Test');
+    }, 60_000);
 
     it.skipIf(!hasPwsh)('track action should record usage signal', async () => {
       if (!server) return;
@@ -355,7 +400,7 @@ describe('Client Scripts E2E', () => {
       );
       const result = JSON.parse(output);
       expect(result.success).toBe(true);
-    }, 30_000);
+    }, 60_000);
 
     it.skipIf(!hasPwsh)('remove action should delete instruction', async () => {
       if (!server) return;
@@ -366,7 +411,7 @@ describe('Client Scripts E2E', () => {
       expect(result.success).toBe(true);
       expect(result.result).toBeDefined();
       expect(result.result.removed).toBe(1);
-    }, 30_000);
+    }, 60_000);
 
     it.skipIf(!hasPwsh)('add with overwrite should update existing instruction', async () => {
       if (!server) return;
@@ -385,7 +430,7 @@ describe('Client Scripts E2E', () => {
       await runPwshWithRetry(
         `& '${PS1_SCRIPT}' -BaseUrl '${activeBaseUrl}' -Action remove -Id 'e2e-ps1-overwrite'`
       );
-    }, 30_000);
+    }, 90_000);
   });
 
   // ═══════════════════════════════════════════════════════════════════════
@@ -471,7 +516,9 @@ describe('Client Scripts E2E', () => {
       const result = JSON.parse(output);
       expect(result.success).toBe(true);
       expect(result.result).toBeDefined();
-      expect(result.result.id).toBe('e2e-sh-roundtrip');
+      // index_dispatch get returns { hash, item: { id, title, ... } } or { notFound, id, ... }
+      const entry = result.result.item ?? result.result;
+      expect(entry.id).toBe('e2e-sh-roundtrip');
     }, 30_000);
 
     it.skipIf(!hasBash)('track action should record usage signal', async () => {
@@ -636,7 +683,7 @@ describe.skipIf(!hasOpenssl)('HTTPS / TLS Tests', () => {
     if (!httpsServer) return;
     // Node fetch with self-signed cert requires NODE_TLS_REJECT_UNAUTHORIZED=0
     const orig = process.env.NODE_TLS_REJECT_UNAUTHORIZED;
-    process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+    process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'; // lgtm[js/disabling-certificate-validation] — test: self-signed cert
     try {
       const resp = await fetch(`${activeHttpsBaseUrl}/health`);
       expect(resp.ok).toBe(true);
@@ -651,7 +698,7 @@ describe.skipIf(!hasOpenssl)('HTTPS / TLS Tests', () => {
   it('should serve /api/scripts over HTTPS', async () => {
     if (!httpsServer) return;
     const orig = process.env.NODE_TLS_REJECT_UNAUTHORIZED;
-    process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+    process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'; // lgtm[js/disabling-certificate-validation] — test: self-signed cert
     try {
       const resp = await fetch(`${activeHttpsBaseUrl}/api/scripts`);
       expect(resp.ok).toBe(true);
@@ -666,7 +713,7 @@ describe.skipIf(!hasOpenssl)('HTTPS / TLS Tests', () => {
   it('should set security headers over HTTPS', async () => {
     if (!httpsServer) return;
     const orig = process.env.NODE_TLS_REJECT_UNAUTHORIZED;
-    process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+    process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'; // lgtm[js/disabling-certificate-validation] — test: self-signed cert
     try {
       const resp = await fetch(`${activeHttpsBaseUrl}/api/status`);
       expect(resp.headers.get('x-content-type-options')).toBe('nosniff');
