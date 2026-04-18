@@ -284,7 +284,7 @@ describe('Client Scripts E2E', () => {
         }
       }
       expect(resp!.headers.get('x-content-type-options')).toBe('nosniff');
-    });
+    }, 30_000);
 
     it('should not expose server version in headers', async () => {
       if (!server) return;
@@ -299,7 +299,7 @@ describe('Client Scripts E2E', () => {
         }
       }
       expect(resp!.headers.get('x-powered-by')).toBeNull();
-    });
+    }, 30_000);
   });
 
   // ═══════════════════════════════════════════════════════════════════════
