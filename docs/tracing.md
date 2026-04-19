@@ -59,7 +59,7 @@ At TRACE level, use arrow prefixes for call-graph support:
 
 ```jsonl
 {"ts":"2026-04-03T18:52:12.000Z","level":"INFO","msg":"[server] listening","port":"3000","pid":12345}
-{"ts":"2026-04-03T18:52:12.100Z","level":"DEBUG","msg":"[handler] index_search invoked","tool":"index_search","correlationId":"a1b2c3d4e5f6a7b8","pid":12345}
+{"ts":"2026-04-03T18:52:12.100Z","level":"DEBUG","msg":"[handler] index_search invoked","tool":"index_search","correlationId":"a1b2c3d4e5f6a7b8","pid":12345}  # pragma: allowlist secret
 {"ts":"2026-04-03T18:52:12.142Z","level":"INFO","msg":"[handler] index_search complete","tool":"index_search","ms":42,"pid":12345}
 {"ts":"2026-04-03T18:52:13.000Z","level":"ERROR","msg":"[rpc] readSession failed","detail":"Error: ENOENT\n    at readSession (server/rpc.ts:42:9)","pid":12345}
 ```

@@ -44,7 +44,7 @@ describe('Dashboard synthetic activity security', () => {
   const originalAdminKey = process.env.INDEX_SERVER_ADMIN_API_KEY;
 
   beforeAll(async () => {
-    process.env.INDEX_SERVER_ADMIN_API_KEY = 'test-admin-key';
+    process.env.INDEX_SERVER_ADMIN_API_KEY = 'test-admin-key'; // pragma: allowlist secret
     reloadRuntimeConfig();
 
     const app = express();

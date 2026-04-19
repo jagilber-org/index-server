@@ -21,7 +21,7 @@ import http from 'http';
  * @see https://github.com/jagilber-dev/index-server/issues/42
  */
 
-const TEST_API_KEY = 'e2e-test-admin-key-42';
+const TEST_API_KEY = 'e2e-test-admin-key-42'; // pragma: allowlist secret
 const STORAGE_KEY = 'indexserver_admin_token';
 const SERVER_STARTUP_TIMEOUT = 30_000;
 

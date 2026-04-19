@@ -132,7 +132,7 @@ If the server requires authentication, pass the admin key:
 ```powershell
 .\scripts\stress-test.ps1 -AdminKey "your-key-here"
 # Or set the environment variable:
-$env:INDEX_SERVER_ADMIN_API_KEY = "your-key-here"
+$env:INDEX_SERVER_ADMIN_API_KEY = "your-key-here"  # pragma: allowlist secret
 ```
 
 ### TLS Certificate Errors
