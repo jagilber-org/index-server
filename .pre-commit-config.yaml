@@ -1,0 +1,85 @@
+# Pre-commit hooks for index-server
+# Security gates and validation are orchestrated through pre-commit.
+
+repos:
+  # Standard code quality and security checks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: '\.(md|txt)$'
+      - id: end-of-file-fixer
+      - id: check-yaml
+        exclude: '^(.vscode/|config/|\.github/workflows/)'
+      - id: check-json
+        exclude: '^(\.vscode/|tsconfig|\.eslintrc\.json|tests/outputs/\.eslintrc\.json)'
+      - id: check-merge-conflict
+      - id: detect-private-key
+        exclude: '^(test/|examples/|__tests__|scripts/pre-commit\.(ps1|mjs)$|docs/prompt_criteria\.json$)'
+      - id: no-commit-to-branch
+        args: ['--branch', 'main']
+
+
+  # Pre-push guard: blocks pushes to public repos (PB-6)
+  - repo: local
+    hooks:
+      - id: repo-local-security-gates
+        name: Run repo-local security gates
+        entry: pwsh -NoProfile -File scripts/pre-commit.ps1
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]
+      - id: gitleaks
+        name: Run gitleaks on commit
+        entry: gitleaks dir --config .gitleaks.toml . --redact --no-banner
+        language: golang
+        additional_dependencies:
+          - github.com/zricethezav/gitleaks/v8@v8.30.1
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+      - id: semgrep-pre-push
+        name: Run Semgrep before push
+        entry: pwsh -NoProfile -File scripts/run-semgrep-pre-push.ps1
+        language: python
+        additional_dependencies:
+          - semgrep==1.159.0
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
+        require_serial: true
+      - id: public-repo-push-guard
+        name: Block pushes to public repos
+        entry: node scripts/pre-push-public-guard.cjs
+        language: system
+        always_run: true
+        stages: [pre-push]
+      - id: repo-slow-pre-push-suite
+        name: Run slow pre-push suite
+        entry: pwsh -NoProfile -File scripts/pre-push.ps1
+        language: system
+        pass_filenames: false
+        stages: [pre-push]
+  - repo: https://github.com/GitGuardian/ggshield
+    rev: v1.49.0
+    hooks:
+      - id: ggshield
+        language_version: python3
+        stages: [pre-push]
+  # Credential scanning - Critical for security-focused portfolio project
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.5.0
+    hooks:
+      - id: detect-secrets
+        args: ['--baseline', '.secrets.baseline']
+        exclude: '^(__tests__/|test/|stress/|perf-|kusto-|debug-|.*\.mjs$|package-lock\.json|\.secrets\.baseline|snapshots/)'
+
+# Configuration
+default_install_hook_types: [pre-commit, pre-push]
+fail_fast: false
+minimum_pre_commit_version: '3.6.0'
+
+# NOTE: Curated repo-specific PII and env leak detection lives in
+# scripts/pre-commit.ps1, with ggshield and detect-secrets layered on top for
+# standard secret scanning coverage and pre-push replay using gitleaks and
+# semgrep.

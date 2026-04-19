@@ -1,0 +1,132 @@
+name: "Security — Tier 2 (Merge)"
+
+# Tier 2: DAST + header validation on merge to main
+# Target: ~10 minutes. Starts ephemeral server, runs ZAP baseline scan,
+# validates security headers against live server, checks container image.
+# Runs AFTER CI passes (not on PRs — too slow for PR feedback loop).
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  issues: write  # for auto-creating issues on failure
+
+jobs:
+  dast-scan:
+    name: DAST — ZAP Baseline + Header Validation
+    runs-on: ubuntu-latest
+    env:
+      DASHBOARD_PORT: 8787
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      # --- Start ephemeral dashboard server ---
+      - name: Start dashboard server
+        run: |
+          export INDEX_SERVER_DASHBOARD=1
+          export INDEX_SERVER_DASHBOARD_PORT=$DASHBOARD_PORT
+          export INDEX_SERVER_DASHBOARD_HOST=127.0.0.1
+          mkdir -p logs
+          sleep infinity | node dist/server/index-server.js > logs/server-stdout.log 2> logs/server-stderr.log &
+          echo "SERVER_PID=$!" >> $GITHUB_ENV
+
+          # Wait for server to be ready
+          for i in $(seq 1 30); do
+            if curl -sf http://127.0.0.1:$DASHBOARD_PORT/health > /dev/null 2>&1; then
+              echo "Server ready on port $DASHBOARD_PORT"
+              break
+            fi
+            echo "Waiting for server... ($i/30)"
+            sleep 1
+          done
+
+          # Final check
+          curl -sf http://127.0.0.1:$DASHBOARD_PORT/health || {
+            echo "::error::Server failed to start within 30 seconds"
+            exit 1
+          }
+
+      # --- Security header validation ---
+      - name: Validate security headers
+        run: node scripts/validate-security-headers.mjs http://127.0.0.1:$DASHBOARD_PORT
+
+      # --- ZAP Baseline Scan ---
+      - name: ZAP Baseline Scan
+        uses: zaproxy/action-baseline@v0.15.0
+        with:
+          target: http://127.0.0.1:${{ env.DASHBOARD_PORT }}/
+          rules_file_name: '.github/zap-baseline-rules.tsv'
+          cmd_options: '-I'  # don't fail on informational alerts
+          allow_issue_writing: false
+        continue-on-error: true  # ZAP findings are advisory in Tier 2
+
+      # --- Upload ZAP report ---
+      - name: Upload ZAP report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: zap-baseline-report
+          path: report_html.html
+          retention-days: 30
+
+      # --- Upload server logs ---
+      - name: Upload server logs and audit trail
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: dast-server-logs
+          path: |
+            logs/server-*.log
+            logs/mcp-server.log
+            logs/instruction-transactions.log.jsonl
+          retention-days: 30
+          if-no-files-found: warn
+
+      # --- Cleanup ---
+      - name: Stop server
+        if: always()
+        run: |
+          if [ -n "$SERVER_PID" ]; then
+            kill $SERVER_PID 2>/dev/null || true
+          fi
+
+  container-scan:
+    name: Container Image Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Build Docker image
+        run: docker build -t index-server:scan .
+
+      - name: Trivy container scan
+        uses: aquasecurity/trivy-action@v0.35.0
+        with:
+          image-ref: 'index-server:scan'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH'
+          exit-code: '0'  # advisory in Tier 2
+
+      - name: Upload Trivy results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: trivy-container-report
+          path: trivy-results.sarif
+          retention-days: 30

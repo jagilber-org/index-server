@@ -1,0 +1,1193 @@
+{
+  "schemaVersion": 2,
+  "version": "2.4.0",
+  "name": "Index",
+  "ratifiedAt": "2026-02-16",
+  "lastAmendedAt": "2026-04-14",
+  "description": "Index Server — Enterprise instruction indexing platform for AI assistant governance. Aligned to the layered hook security template constitution v2.4.0.",
+  "articles": {
+    "governance": {
+      "title": "Template Governance And Change Control",
+      "intent": "Keep template updates versioned, reviewable, and safe to adopt across many repositories without erasing repo-specific intent.",
+      "rules": [
+        {
+          "id": "TG-1",
+          "severity": "error",
+          "rule": "Template changes MUST land as versioned deltas rather than wholesale repo overwrites.",
+          "rationale": "Adopting repositories need predictable, reviewable change sets that preserve local decisions and existing delivery workflows.",
+          "required": [
+            "Use template version transitions such as old-version -> new-version when applying updates to an existing repository.",
+            "Review merge-review and repo-specific files explicitly instead of assuming byte-for-byte replacement is safe."
+          ],
+          "prohibited": [
+            "Do not replace an existing repo wholesale from the template after the repo has independent history or documented local decisions."
+          ],
+          "evidence": [
+            "Diff from scripts/Compare-TemplateSpec.ps1 or equivalent review notes",
+            "Versioned adoption update in .template-adoption.json when migration completes"
+          ],
+          "enforcedBy": [
+            "scripts/Compare-TemplateSpec.ps1",
+            ".instructions/shared/template-adoption-workflow.md",
+            "README.md"
+          ]
+        },
+        {
+          "id": "TG-2",
+          "severity": "error",
+          "rule": "When template-managed behavior changes, the manifest, adoption markers, dependent guidance, and helper scripts MUST be updated in the same change.",
+          "rationale": "The template is a control plane. Partial updates create false confidence and break adoption guidance for downstream repos and agents.",
+          "required": [
+            "Keep template-manifest.json, .template-adoption.json, and template-adoption.example.json aligned.",
+            "Update dependent docs, validation steps, and helper scripts when the constitution or template behavior changes."
+          ],
+          "prohibited": [
+            "Do not bump template-managed behavior in one file and defer matching version or guidance changes to a later commit without an explicit blocker."
+          ],
+          "evidence": [
+            "Focused metadata validation output",
+            "Updated documentation and helper script diffs in the same branch"
+          ],
+          "enforcedBy": [
+            "scripts/validate-template-metadata.ps1",
+            "template-manifest.json",
+            ".github/copilot-instructions.md"
+          ]
+        },
+        {
+          "id": "TG-3",
+          "severity": "warning",
+          "rule": "Repositories aligned to this template SHOULD record their adopted version only after the intended delta is actually complete.",
+          "rationale": "The adoption marker is a compatibility claim, not a todo list.",
+          "required": [
+            "Update the target repo's .template-adoption.json after migration and validation are complete."
+          ],
+          "prohibited": [
+            "Do not advertise a newer adopted version while required template deltas are still pending."
+          ],
+          "evidence": [
+            "Adoption marker version matches the reviewed target state"
+          ],
+          "enforcedBy": [
+            "scripts/Compare-TemplateSpec.ps1",
+            ".instructions/shared/template-adoption-workflow.md"
+          ]
+        }
+      ]
+    },
+    "gitWorkflow": {
+      "title": "Git Workflow, Branch Lifecycle, And Merge Safety",
+      "intent": "Keep changes reviewable, preserve branch ancestry, and ensure agents clean up branches predictably instead of leaving ambiguous Git state behind.",
+      "rules": [
+        {
+          "id": "GW-1",
+          "severity": "error",
+          "rule": "Substantive changes MUST use short-lived topic branches and reviewed pull requests into the repository's protected default branch or documented equivalent integration branch.",
+          "rationale": "The index-server reference flow and this template both rely on reviewable PR-based change control rather than direct pushes to the default branch.",
+          "required": [
+            "Create a focused branch for non-trivial changes instead of working directly on the default branch.",
+            "Merge through a reviewed pull request into the protected default branch or a documented equivalent branch.",
+            "Keep each branch scoped tightly enough that validation and rollback remain understandable."
+          ],
+          "prohibited": [
+            "Do not push human or agent feature work directly to the default branch as a normal workflow.",
+            "Do not keep long-lived feature branches open after their intended change is merged or abandoned without explicit reason."
+          ],
+          "evidence": [
+            "Branch and pull request history",
+            "Repository instructions or branch protection settings"
+          ],
+          "enforcedBy": [
+            ".github/copilot-instructions.md",
+            "repo branch protection",
+            ".instructions/local/project-context.md"
+          ]
+        },
+        {
+          "id": "GW-2",
+          "severity": "error",
+          "rule": "Default pull request merges MUST preserve reviewable branch ancestry and cleanup safety; squash merging is prohibited unless a repository documents that policy or the user explicitly requests it for the specific merge.",
+          "rationale": "Ancestry-preserving merges make it easier for agents and maintainers to reconcile history, delete merged branches safely, and audit how a change landed.",
+          "required": [
+            "Prefer merge commits or rebase merges that preserve commit ancestry for the reviewed branch history.",
+            "Document any repository-level deviation from the ancestry-preserving default."
+          ],
+          "prohibited": [
+            "Do not choose squash merge as an agent default.",
+            "Do not force branch deletion as routine cleanup when the merge strategy could have preserved safe merged-branch deletion semantics."
+          ],
+          "evidence": [
+            "Merge history for pull requests",
+            "Repository merge settings or documented workflow guidance"
+          ],
+          "enforcedBy": [
+            ".github/copilot-instructions.md",
+            "pull request review",
+            "repository merge settings"
+          ],
+          "exceptions": [
+            "A repository may intentionally require squash merges or another policy if that rule is documented locally and agents follow it explicitly.",
+            "A user may explicitly request a one-off squash merge for a specific pull request."
+          ]
+        },
+        {
+          "id": "GW-3",
+          "severity": "warning",
+          "rule": "Merged topic branches SHOULD be cleaned up locally and remotely after merge when safe, and agents SHOULD synchronize the default branch before deleting local work branches.",
+          "rationale": "Reliable cleanup prevents agent-created branch sprawl and reduces ambiguity about whether local state still contains unique work.",
+          "required": [
+            "Delete remote topic branches after merge when the repository does not auto-delete them.",
+            "Switch back to the default branch and sync it with the remote before deleting the local merged branch.",
+            "Leave an explicit note when cleanup is intentionally deferred."
+          ],
+          "prohibited": [
+            "Do not leave merged agent branches behind without an intentional reason.",
+            "Do not treat forced local branch deletion as the preferred cleanup path."
+          ],
+          "evidence": [
+            "Post-merge branch state",
+            "Agent closeout note or repository auto-delete setting"
+          ],
+          "enforcedBy": [
+            ".github/copilot-instructions.md",
+            "agent closeout workflow"
+          ]
+        }
+      ]
+    },
+    "agentBehavior": {
+      "title": "Agent Scope, Evidence, And Change Discipline",
+      "intent": "Constrain agent behavior so changes remain local, falsifiable, and justified instead of speculative or over-broad.",
+      "rules": [
+        {
+          "id": "AG-1",
+          "severity": "error",
+          "rule": "Agents MUST prefer the narrowest local hypothesis, the smallest testable edit, and the nearest controlling code or document surface before expanding scope.",
+          "rationale": "Broad exploration and speculative patching are common failure modes for coding agents and create avoidable regressions.",
+          "required": [
+            "Start with the current implementation surface, neighboring tests, or owning abstraction.",
+            "Form a falsifiable local hypothesis before making the first substantive edit when editing is required."
+          ],
+          "prohibited": [
+            "Do not map broad surrounding surfaces when a nearby discriminating check exists.",
+            "Do not continue unrelated patching before the first focused validation step."
+          ],
+          "evidence": [
+            "Focused validation or failing check tied to the changed slice",
+            "Change scope limited to the owning surface and directly dependent guidance"
+          ],
+          "enforcedBy": [
+            ".github/copilot-instructions.md",
+            "review and PR discussion"
+          ]
+        },
+        {
+          "id": "AG-2",
+          "severity": "error",
+          "rule": "Agents MUST not invent requirements, widen scope, or add speculative abstractions when the current request or local evidence does not justify them.",
+          "rationale": "Template repos need high-signal defaults. Speculative features make the template harder to adopt and reduce downstream trust.",
+          "required": [
+            "Document assumptions when defaults are necessary.",
+            "Resolve material ambiguity with clarification or by choosing the safest narrow default."
+          ],
+          "prohibited": [
+            "Do not add future-proofing layers, extensibility points, or optional frameworks without a present requirement.",
+            "Do not silently reinterpret a binding rule as optional."
+          ],
+          "evidence": [
+            "Requirements trace back to the request, constitution, or validated repo guidance"
+          ],
+          "enforcedBy": [
+            ".github/copilot-instructions.md",
+            "constitution review"
+          ]
+        },
+        {
+          "id": "AG-3",
+          "severity": "warning",
+          "rule": "When ambiguity materially affects security, scope, architecture, or validation strategy, agents SHOULD surface the ambiguity explicitly instead of guessing.",
+          "rationale": "Spec-Kit's strongest quality lever is forcing ambiguity into visible clarification rather than hidden assumptions.",
+          "required": [
+            "Call out missing decision points that change implementation or validation materially.",
+            "Prefer measurable wording over vague adjectives such as robust, scalable, or intuitive."
+          ],
+          "evidence": [
+            "Clarifying question, explicit assumption note, or measurable default"
+          ],
+          "enforcedBy": [
+            "spec review",
+            "plan review"
+          ]
+        }
+      ]
+    },
+    "security": {
+      "title": "Security And Secret Hygiene",
+      "intent": "Preserve layered protections, avoid secret leakage, and require narrow exception handling rather than broad weakening of controls.",
+      "rules": [
+        {
+          "id": "SH-1",
+          "severity": "error",
+          "rule": "pre-commit MUST remain the single Git hook orchestrator unless a repository explicitly replaces it and documents the equivalent enforcement model.",
+          "rationale": "Security enforcement becomes fragile when multiple hook orchestrators overlap or silently diverge.",
+          "required": [
+            "Keep forbidden-file, PII, env-leak, secret, and protected-remote enforcement under one documented orchestration path."
+          ],
+          "prohibited": [
+            "Do not layer Husky or parallel hook managers on top of pre-commit without an intentional replacement decision."
+          ],
+          "evidence": [
+            ".pre-commit-config.yaml",
+            "documented deviation in .template-adoption.json if replaced"
+          ],
+          "enforcedBy": [
+            "scripts/pre-commit.ps1",
+            ".github/copilot-instructions.md"
+          ]
+        },
+        {
+          "id": "SH-2",
+          "severity": "error",
+          "rule": "The layered hook model MUST preserve forbidden-file blocking, curated PII scanning, live env-value leak scanning, secret scanning, and protected-remote enforcement.",
+          "rationale": "Each layer catches a different class of failure; dropping layers creates blind spots.",
+          "required": [
+            "Keep each protection category present locally and in CI.",
+            "Prefer narrow allowlists or diagnostics improvements when false positives occur."
+          ],
+          "prohibited": [
+            "Do not disable an entire detector class to address a local false positive when a narrower fix exists."
+          ],
+          "evidence": [
+            "Hook scripts and CI workflow configuration",
+            "Narrow allowlist markers or documented exception rationale"
+          ],
+          "enforcedBy": [
+            "scripts/pre-commit.ps1",
+            ".github/workflows/ci.yml"
+          ]
+        },
+        {
+          "id": "SH-3",
+          "severity": "error",
+          "rule": "Repositories MUST not commit real secrets, real PII, or unaudited secret allowlists, and CI MUST replay the same security policy as local development.",
+          "rationale": "Local success is insufficient if CI can diverge or if sensitive values are normalized into source control.",
+          "required": [
+            "Use synthetic or allowlisted examples in documentation and test fixtures.",
+            "Configure CI secrets explicitly for scanners that require them, such as GITGUARDIAN_API_KEY for ggshield."
+          ],
+          "prohibited": [
+            "Do not treat CI-only enforcement as a substitute for local checks.",
+            "Do not store real secret values in examples, scripts, docs, or baselines."
+          ],
+          "evidence": [
+            "pre-commit output",
+            "CI run status",
+            "documented narrow allowlists"
+          ],
+          "enforcedBy": [
+            ".github/workflows/ci.yml",
+            ".secrets.baseline"
+          ]
+        },
+        {
+          "id": "SH-4",
+          "severity": "error",
+          "rule": "File-system operations influenced by user input MUST validate that resolved paths stay within an intended base directory; unchecked path traversal is prohibited.",
+          "rationale": "User-controlled path handling is a recurring source of read, write, and delete vulnerabilities when containment is assumed instead of verified.",
+          "required": [
+            "Resolve candidate paths against a known base directory and verify normalized containment before file-system reads, writes, or deletes.",
+            "Add focused tests for traversal attempts such as .. segments or equivalent escape paths when user-controlled file-system access exists."
+          ],
+          "prohibited": [
+            "Do not treat path.join(), string concatenation, or relative-segment stripping alone as proof that containment is safe."
+          ],
+          "evidence": [
+            "Path-validation helper or containment checks in handlers or services",
+            "Traversal-focused tests or validation output"
+          ],
+          "enforcedBy": [
+            "repo-local file-system handlers",
+            "security review"
+          ]
+        },
+        {
+          "id": "SH-5",
+          "severity": "error",
+          "rule": "Administrative servers, dashboards, and control-plane endpoints MUST default to loopback-only binding unless broader exposure is an explicit documented opt-in.",
+          "rationale": "Control-plane and admin surfaces become materially riskier when broad network exposure is the default rather than a deliberate deployment choice.",
+          "required": [
+            "Default local admin surfaces to 127.0.0.1, ::1, or an equivalent loopback-only binding when the runtime supports it.",
+            "Document the security implications of any configuration that allows broader binding."
+          ],
+          "prohibited": [
+            "Do not default admin or dashboard surfaces to 0.0.0.0 or other broad external bindings without an explicit opt-in."
+          ],
+          "evidence": [
+            "Runtime config defaults",
+            "Deployment or hosting guidance"
+          ],
+          "enforcedBy": [
+            "server configuration defaults",
+            "deployment review"
+          ]
+        },
+        {
+          "id": "SH-6",
+          "severity": "error",
+          "rule": "Production code MUST keep TLS certificate verification enabled; self-signed or private-CA scenarios MUST use explicit trust configuration rather than disabling verification.",
+          "rationale": "Disabling certificate verification turns transport encryption into an integrity illusion and enables trivial interception on hostile networks.",
+          "required": [
+            "Use trusted CA bundles, platform trust stores, or equivalent runtime configuration for private certificate chains.",
+            "Keep production HTTPS and TLS client verification enabled by default."
+          ],
+          "prohibited": [
+            "Do not set rejectUnauthorized: false or equivalent verification-bypass settings in production paths."
+          ],
+          "evidence": [
+            "HTTP or TLS client configuration",
+            "Documentation for private CA handling when relevant"
+          ],
+          "enforcedBy": [
+            "repo-local network clients",
+            "security review"
+          ]
+        },
+        {
+          "id": "SH-7",
+          "severity": "error",
+          "rule": "API keys, admin tokens, and similar bearer credentials MUST be accepted through Authorization or other non-URL secret-bearing headers; query-parameter authentication is prohibited.",
+          "rationale": "Query-string credentials leak into logs, browser history, caches, and proxies even when application code handles them carefully.",
+          "required": [
+            "Accept bearer or key credentials through headers or another transport that does not expose them in URLs.",
+            "Keep auth examples and API docs aligned with the non-URL credential transport model."
+          ],
+          "prohibited": [
+            "Do not accept API keys or tokens via query parameters in normal application or admin flows."
+          ],
+          "evidence": [
+            "Auth middleware or route-handler parsing logic",
+            "API documentation and examples"
+          ],
+          "enforcedBy": [
+            "auth middleware",
+            "API route handlers"
+          ]
+        },
+        {
+          "id": "SH-8",
+          "severity": "warning",
+          "rule": "Browser-facing applications SHOULD enforce Content-Security-Policy defaults that avoid unsafe-inline and unsafe-eval; any exception should be narrow, documented, and time-bounded.",
+          "rationale": "Unsafe inline and eval allowances meaningfully weaken browser-side injection defenses and often persist far longer than intended once normalized.",
+          "required": [
+            "Prefer nonce-based, hash-based, or equivalent CSP approaches when inline content is unavoidable.",
+            "Document why any CSP relaxation exists and what will remove it."
+          ],
+          "prohibited": [
+            "Do not ship broad unsafe-inline or unsafe-eval defaults without explicit rationale."
+          ],
+          "evidence": [
+            "HTTP security header configuration",
+            "UI deployment or security guidance"
+          ],
+          "enforcedBy": [
+            "browser server configuration",
+            "security review"
+          ]
+        },
+        {
+          "id": "SH-9",
+          "severity": "warning",
+          "rule": "Debug, trace, synthetic, or diagnostic behaviors that expose internal detail or change execution SHOULD be disabled by default in production and gated by configuration or environment rather than request parameters alone.",
+          "rationale": "Request-triggered debug modes are easy to leave reachable accidentally and can expose internal state or enable riskier execution paths in production.",
+          "required": [
+            "Gate production diagnostic behavior behind explicit environment or configuration controls when such behavior exists.",
+            "Document how diagnostic modes are enabled safely for operational use."
+          ],
+          "prohibited": [
+            "Do not allow request query flags alone to enable privileged debug, trace, or synthetic behaviors in production."
+          ],
+          "evidence": [
+            "Diagnostic route or configuration gating",
+            "Operational documentation for debug enablement"
+          ],
+          "enforcedBy": [
+            "diagnostic route handlers",
+            "deployment review"
+          ]
+        },
+        {
+          "id": "S-3",
+          "severity": "error",
+          "rule": "Mutation tools require INDEX_SERVER_MUTATION=1 and bootstrap gating.",
+          "rationale": "Write operations must be gated to prevent accidental catalog modification."
+        },
+        {
+          "id": "S-4",
+          "severity": "error",
+          "rule": "All environment configuration must flow through src/config/runtimeConfig.ts.",
+          "rationale": "Centralized config prevents hardcoded paths and secrets."
+        }
+      ]
+    },
+    "architecture": {
+      "title": "Architecture Simplicity And Enterprise Change Safety",
+      "intent": "Push agents toward direct, maintainable designs and safe evolution rather than speculative enterprise complexity.",
+      "rules": [
+        {
+          "id": "AR-1",
+          "severity": "error",
+          "rule": "Designs MUST default to the simplest structure that satisfies the current requirement set and documented enterprise constraints.",
+          "rationale": "Template repos should bias toward reusable fundamentals, not complexity that assumes future needs.",
+          "required": [
+            "Use existing framework and platform primitives directly when they already solve the current problem.",
+            "Document why extra layers are necessary when direct use is insufficient."
+          ],
+          "prohibited": [
+            "Do not add wrappers, adapters, indirection layers, or extra projects solely for symmetry or future-proofing."
+          ],
+          "evidence": [
+            "Design notes or PR rationale for any non-trivial abstraction"
+          ],
+          "enforcedBy": [
+            "plan review",
+            "constitution review"
+          ]
+        },
+        {
+          "id": "AR-2",
+          "severity": "warning",
+          "rule": "Changes that affect compatibility, operational workflows, or generated artifacts SHOULD include explicit migration or adoption notes.",
+          "rationale": "Enterprise-safe templates need predictable upgrade behavior, especially when many repositories inherit from them.",
+          "required": [
+            "Call out breaking or adoption-relevant behavior changes in docs, notes, or PR descriptions."
+          ],
+          "prohibited": [
+            "Do not silently change template-managed defaults that alter downstream repo behavior without update guidance."
+          ],
+          "evidence": [
+            "README or adoption workflow updates",
+            "template-manifest note describing the change"
+          ],
+          "enforcedBy": [
+            "README.md",
+            "template-manifest.json"
+          ]
+        },
+        {
+          "id": "A-1",
+          "severity": "error",
+          "rule": "Handler registration uses side-effect imports in src/services/toolHandlers.ts.",
+          "rationale": "Consistent registration keeps the handler catalog discoverable."
+        },
+        {
+          "id": "A-2",
+          "severity": "error",
+          "rule": "Tool registry (INPUT_SCHEMAS, STABLE, MUTATION sets) must be updated for new tools.",
+          "rationale": "Missing registry entries cause silent tool invisibility."
+        },
+        {
+          "id": "A-3",
+          "severity": "error",
+          "rule": "IndexContext is the single source of truth for instruction state (writeEntry + ensureLoaded).",
+          "rationale": "Bypassing IndexContext creates state divergence."
+        },
+        {
+          "id": "A-4",
+          "severity": "warning",
+          "rule": "Schema version must be tracked via src/versioning/schemaVersion.ts.",
+          "rationale": "Version tracking enables safe migrations."
+        },
+        {
+          "id": "A-5",
+          "severity": "error",
+          "rule": "Audit logging (logAudit) is required for all mutation operations.",
+          "rationale": "Mutation audit trail is required for governance compliance."
+        },
+        {
+          "id": "A-6",
+          "severity": "error",
+          "rule": "Instruction body size must be enforced at write-time: index_add and index_import must reject bodies exceeding bodyMaxLength with actionable split/cross-link guidance.",
+          "rationale": "Unbounded bodies degrade search and transport reliability."
+        },
+        {
+          "id": "A-7",
+          "severity": "error",
+          "rule": "Canonical seeds in seedBootstrap.ts must contain only generalized, public-safe content about the index server, Index operations, and bootstrapping — no environment-specific, org-specific, or custom configuration data.",
+          "rationale": "Seeds are published to public repos; org-specific content leaks sensitive context."
+        }
+      ]
+    },
+    "observability": {
+      "title": "Observability, Structured Logging, And Diagnostics",
+      "intent": "Make runtime behavior inspectable by default so agents and operators can troubleshoot failures quickly without reconstructing missing execution context.",
+      "rules": [
+        {
+          "id": "OB-1",
+          "severity": "warning",
+          "rule": "Repositories SHOULD standardize on structured NDJSON or JSONL logging for machine-parsable diagnostics unless an existing platform logging standard already provides equivalent structure.",
+          "rationale": "Normalized structured logs allow agents, tooling, and humans to search, correlate, and visualize behavior consistently across projects.",
+          "required": [
+            "Emit one JSON object per log line when the repo owns its logging format.",
+            "Use stable severity levels such as TRACE, DEBUG, INFO, WARN, and ERROR.",
+            "Preserve timestamp and message fields in every structured log event."
+          ],
+          "evidence": [
+            "Logger helper or framework configuration",
+            "Example log output in docs or test fixtures"
+          ],
+          "enforcedBy": [
+            "repo-local logging conventions",
+            "review expectations"
+          ],
+          "exceptions": [
+            "An adopting repo may keep an existing structured platform logging standard if it provides equivalent machine-parsable fields and severity semantics."
+          ]
+        },
+        {
+          "id": "OB-2",
+          "severity": "warning",
+          "rule": "Application and service code SHOULD provide enter and exit tracing with relevant values for operationally meaningful functions, workflows, and boundaries, and MUST document any deliberate exclusions for hot paths or noise-sensitive loops.",
+          "rationale": "Consistent function tracing is often the fastest path for agents to isolate bad inputs, state transitions, and control-flow gaps, but extremely hot paths may require documented exceptions.",
+          "required": [
+            "Use a consistent entry and exit convention such as directional markers or equivalent structured fields.",
+            "Include relevant input, output, or state identifiers when they materially aid diagnosis and do not leak secrets or PII.",
+            "Document modules or paths where tracing is intentionally reduced for performance or noise reasons."
+          ],
+          "prohibited": [
+            "Do not emit sensitive values directly in traces when identifiers or redacted representations are sufficient.",
+            "Do not disable tracing broadly without a documented operational reason."
+          ],
+          "evidence": [
+            "Trace log samples for key functions or request boundaries",
+            "Documented exclusion rationale for hot paths if tracing is reduced"
+          ],
+          "enforcedBy": [
+            "repo-local logging helpers",
+            "review and troubleshooting guidance"
+          ]
+        },
+        {
+          "id": "OB-3",
+          "severity": "error",
+          "rule": "Exceptions, failed operations, and unexpected states MUST be logged with enough stack or call-site context to support direct troubleshooting when the runtime can provide it.",
+          "rationale": "Error records without stack or call-site detail force slow reproduction work and weaken agent-assisted debugging.",
+          "required": [
+            "Capture and log stack traces for exceptions when the runtime supports them.",
+            "Include structured error details, correlation identifiers, or equivalent context when available.",
+            "Prefer native stack capture utilities over ad hoc string formatting when possible."
+          ],
+          "prohibited": [
+            "Do not swallow exceptions without logging the failure context.",
+            "Do not reduce errors to message-only text when stack or call-site context is available and safe to log."
+          ],
+          "evidence": [
+            "Error logs containing stack or call-site context",
+            "Runtime error handling code or logger helpers"
+          ],
+          "enforcedBy": [
+            "repo-local exception handling",
+            "review and production incident analysis"
+          ]
+        },
+        {
+          "id": "OB-4",
+          "severity": "warning",
+          "rule": "Structured logging defaults SHOULD include stable fields for timestamp, severity, message, and optional execution context such as module, request, process, or port identifiers.",
+          "rationale": "Consistent fields increase portability across viewers, skills, instructions, and automated analysis tools.",
+          "required": [
+            "Use an ISO 8601 timestamp or an unambiguous platform-native equivalent that can be normalized reliably.",
+            "Keep module or component naming stable enough to match source files or logical ownership.",
+            "Preserve extra fields instead of flattening all context into unstructured message text."
+          ],
+          "evidence": [
+            "Logger schema docs or sample output",
+            "Consistent field names across emitted logs"
+          ],
+          "enforcedBy": [
+            "logging helpers",
+            "documentation and review standards"
+          ]
+        }
+      ]
+    },
+    "testing": {
+      "title": "Testing And Validation Strategy",
+      "intent": "Require proportionate, evidence-driven testing across logic, integrations, scenarios, and browser experiences without pretending every repo has the same runtime surface.",
+      "rules": [
+        {
+          "id": "TS-1",
+          "severity": "error",
+          "rule": "Changes MUST use the narrowest falsifiable validation first, then broaden only as the changed surface requires.",
+          "rationale": "Focused validation catches local defects earlier and keeps agent reasoning anchored to evidence.",
+          "required": [
+            "Run focused file-scoped or behavior-scoped checks before broad repo-wide validation when such checks exist.",
+            "Re-run the same focused check after repairing a locally exposed defect."
+          ],
+          "prohibited": [
+            "Do not rely on diff review alone when an executable focused validation path exists."
+          ],
+          "evidence": [
+            "Focused validation command output",
+            "Broader validation output when required"
+          ],
+          "enforcedBy": [
+            ".github/copilot-instructions.md",
+            ".instructions/shared/template-adoption-workflow.md"
+          ]
+        },
+        {
+          "id": "TS-2",
+          "severity": "warning",
+          "rule": "Repositories SHOULD maintain layered testing that matches their runtime surface: unit for deterministic logic, integration or contract for boundaries, functional or scenario tests for workflows, and end-to-end browser tests for critical UI journeys.",
+          "rationale": "A base template cannot mandate identical tests everywhere, but it should mandate the categories that serious repos must think through.",
+          "required": [
+            "Unit tests when pure logic or deterministic helpers exist.",
+            "Integration, contract, or scenario tests when boundaries, schemas, workflows, or external interactions change.",
+            "Critical-path E2E coverage for browser applications when UI behavior is part of the repo."
+          ],
+          "prohibited": [
+            "Do not treat only unit tests or only manual testing as sufficient for cross-component or user-critical behavior."
+          ],
+          "evidence": [
+            "Test selection rationale in PR or plan",
+            "Executed focused tests for the changed surface"
+          ],
+          "enforcedBy": [
+            "repo-local test suites",
+            "review expectations"
+          ]
+        },
+        {
+          "id": "TS-3",
+          "severity": "warning",
+          "rule": "When a repository includes a browser UI, Playwright SHOULD be the default E2E framework unless the repo already has a documented stronger standard.",
+          "rationale": "A base template needs a clear browser-testing default without forcing all repos to adopt browser tooling they do not use.",
+          "required": [
+            "Document the chosen browser E2E framework in repo guidance when a UI exists."
+          ],
+          "exceptions": [
+            "An adopter may keep an existing documented browser E2E standard if the deviation is intentional and reviewable."
+          ],
+          "evidence": [
+            "Repo-local testing docs or package configuration"
+          ],
+          "enforcedBy": [
+            "repo-local testing guidance",
+            "review and adoption decisions"
+          ]
+        },
+        {
+          "id": "TS-4",
+          "severity": "error",
+          "rule": "All tests MUST pass before commit.",
+          "rationale": "Broken tests committed to the repo erode trust in the test suite."
+        },
+        {
+          "id": "TS-5",
+          "severity": "error",
+          "rule": "New features MUST include test coverage.",
+          "rationale": "Untested features become invisible regressions."
+        },
+        {
+          "id": "TS-6",
+          "severity": "error",
+          "rule": "Functional tests MUST validate full pipeline round-trips.",
+          "rationale": "Pipeline round-trips catch integration failures that unit tests miss."
+        },
+        {
+          "id": "TS-7",
+          "severity": "error",
+          "rule": "TDD red/green is NON-NEGOTIABLE: tests MUST be written and verified FAILING before implementation code; failing test first, fix second (red-green-refactor).",
+          "rationale": "Red-green-refactor prevents tests that pass by accident."
+        },
+        {
+          "id": "TS-8",
+          "severity": "error",
+          "rule": "Every bug fix MUST start with a failing regression test: write a test that reproduces the failure, then fix and verify pass.",
+          "rationale": "Regression tests prevent recurrence and prove the fix addresses the reported failure."
+        },
+        {
+          "id": "TS-9",
+          "severity": "error",
+          "rule": "Tests MUST exercise the REAL production code; toy reimplementations and stub copies of the code under test are prohibited.",
+          "rationale": "Testing stubs instead of real code creates false confidence."
+        },
+        {
+          "id": "TS-10",
+          "severity": "error",
+          "rule": "Playwright e2e tests MUST cover dashboard UI, instruction CRUD lifecycle, and search functionality.",
+          "rationale": "The dashboard is a primary user surface and needs E2E coverage."
+        },
+        {
+          "id": "TS-11",
+          "severity": "error",
+          "rule": "Bug-prone handlers and complex code paths MUST have >= 5 test cases covering normal, edge, error, boundary, and concurrent scenarios.",
+          "rationale": "Complex paths need comprehensive coverage to catch interaction effects."
+        }
+      ]
+    },
+    "documentation": {
+      "title": "Documentation, Traceability, And Consistency",
+      "intent": "Keep the template explainable and internally consistent so adopters and agents can follow it without guesswork.",
+      "rules": [
+        {
+          "id": "DC-1",
+          "severity": "error",
+          "rule": "Behavioral changes MUST update the affected documentation, setup guidance, and examples in the same change when those materials are part of the canonical template contract.",
+          "rationale": "Templates fail when code and guidance diverge; adopters follow docs long after authors forget intent.",
+          "required": [
+            "Update README, bootstrap docs, and template-managed instructions when they describe the changed behavior.",
+            "Keep examples and validation commands current with the actual workflow."
+          ],
+          "prohibited": [
+            "Do not leave known doc drift for a later cleanup when the changed behavior is already being shipped."
+          ],
+          "evidence": [
+            "Docs changed in the same PR as behavior",
+            "Validation commands in docs match runnable commands"
+          ],
+          "enforcedBy": [
+            "README.md",
+            ".instructions/*",
+            ".github/copilot-instructions.md"
+          ]
+        },
+        {
+          "id": "DC-2",
+          "severity": "warning",
+          "rule": "Non-obvious constraints, exceptions, and design choices SHOULD carry explicit rationale rather than relying on tribal knowledge.",
+          "rationale": "Agents and adopting teams need enough context to repeat the right decision without re-learning old mistakes.",
+          "required": [
+            "Document why a narrow allowlist, migration step, or deviation exists when the reason is not self-evident."
+          ],
+          "evidence": [
+            "Inline rationale, notes, or guidance updates"
+          ],
+          "enforcedBy": [
+            "review and documentation standards"
+          ]
+        },
+        {
+          "id": "DC-3",
+          "severity": "error",
+          "rule": "Repositories intended for reuse, publication, or external distribution MUST declare an explicit license or explicitly document proprietary or internal-only status.",
+          "rationale": "Templates and adopting repositories create legal ambiguity when consumers cannot tell whether reuse is permitted or intentionally restricted.",
+          "required": [
+            "Commit a root LICENSE file for repositories that are meant to be licensed for reuse, or document proprietary or internal-only status clearly in repo-local guidance before public distribution.",
+            "Document when the template repo's own license does not automatically govern adopting repositories."
+          ],
+          "prohibited": [
+            "Do not leave repository license posture implicit when the repo is meant to be shared, published, or used as a template.",
+            "Do not assume the canonical template repo's license applies to adopters without an explicit local decision."
+          ],
+          "evidence": [
+            "Root LICENSE file or explicit proprietary-status note",
+            "README or adoption guidance describing the repo-specific license decision"
+          ],
+          "enforcedBy": [
+            "LICENSE",
+            "README.md",
+            ".instructions/shared/template-adoption-workflow.md"
+          ]
+        },
+        {
+          "id": "G-6",
+          "severity": "warning",
+          "rule": "Documentation filenames use lowercase_underscore convention (e.g. project_prd.md, mcp_configuration.md).",
+          "rationale": "Consistent naming reduces lookup ambiguity."
+        }
+      ]
+    },
+    "knowledge": {
+      "title": "Knowledge Retrieval And Promotion",
+      "intent": "Keep agents grounded in the current workspace first while preserving a clean path for promoting stable learnings.",
+      "rules": [
+        {
+          "id": "KR-1",
+          "severity": "warning",
+          "rule": "Agents SHOULD search nearby code and docs first, then repo-local instructions, then index-server, and only then external sources.",
+          "rationale": "Current workspace truth must outrank promoted summaries or general web knowledge.",
+          "required": [
+            "Use local files to answer questions about current implementation state before citing promoted guidance."
+          ],
+          "prohibited": [
+            "Do not treat index-server or external docs as proof of current file contents."
+          ],
+          "evidence": [
+            "Local file inspection before broader retrieval"
+          ],
+          "enforcedBy": [
+            ".github/copilot-instructions.md",
+            ".instructions/shared/index-server-bootstrap.md"
+          ]
+        },
+        {
+          "id": "KR-2",
+          "severity": "warning",
+          "rule": "Stable learnings SHOULD begin in local instructions or repo memory and be promoted only after validation proves they are reusable.",
+          "rationale": "Premature promotion hardens local experiments into false shared truths.",
+          "required": [
+            "Keep agent-only operational learnings in repo memory when they are not adopter-facing contract.",
+            "Promote only after the pattern is validated and intentionally generalized."
+          ],
+          "evidence": [
+            "Local instruction updates or repo memory note before promotion",
+            "Promotion map entry when guidance becomes canonical"
+          ],
+          "enforcedBy": [
+            ".instructions/shared/index-server-bootstrap.md",
+            ".specify/config/promotion-map.json"
+          ]
+        },
+        {
+          "id": "KR-3",
+          "severity": "error",
+          "rule": "The index-server primer, promotion map, and Copilot instructions MUST stay aligned when the template knowledge model changes.",
+          "rationale": "Agents will drift quickly if the retrieval order and promotion boundaries disagree across the template surfaces.",
+          "required": [
+            "Update all runtime guidance surfaces that teach retrieval order or promotion flow when that model changes."
+          ],
+          "evidence": [
+            "Aligned updates across copilot instructions, index-server bootstrap, and promotion metadata"
+          ],
+          "enforcedBy": [
+            ".github/copilot-instructions.md",
+            ".instructions/shared/index-server-bootstrap.md",
+            ".specify/config/promotion-map.json"
+          ]
+        }
+      ]
+    },
+    "integrations": {
+      "title": "Optional Integration Profiles",
+      "intent": "Keep optional profiles useful without letting them silently become mandatory runtime dependencies.",
+      "rules": [
+        {
+          "id": "IP-1",
+          "severity": "error",
+          "rule": "A base .github/copilot-instructions.md file MUST exist and teach the retrieval order, constitution authority, and validation expectations for the template.",
+          "rationale": "Agent runtime behavior needs a checked-in baseline that matches the constitution.",
+          "required": [
+            "Preserve constitution and validation guidance in the base agent instructions."
+          ],
+          "evidence": [
+            ".github/copilot-instructions.md"
+          ],
+          "enforcedBy": [
+            ".github/copilot-instructions.md"
+          ]
+        },
+        {
+          "id": "IP-2",
+          "severity": "warning",
+          "rule": ".specify scaffolding is optional and MUST not impose mandatory runtime or toolchain dependencies on small tasks.",
+          "rationale": "Optional process aids become adoption friction when treated as universal prerequisites.",
+          "prohibited": [
+            "Do not require .specify or Spec-Kit flows for routine small fixes unless the repo explicitly chooses that workflow."
+          ],
+          "evidence": [
+            "README and agent instructions treat .specify as optional"
+          ],
+          "enforcedBy": [
+            "README.md",
+            ".github/copilot-instructions.md"
+          ]
+        },
+        {
+          "id": "IP-3",
+          "severity": "warning",
+          "rule": "squad and other optional profiles MAY complement repository workflows, but they do not replace repo-local instructions, constitution rules, or promoted knowledge boundaries.",
+          "rationale": "Optional orchestration tools should extend, not erase, the template's local-first model.",
+          "evidence": [
+            "Shared guidance keeps role boundaries explicit"
+          ],
+          "enforcedBy": [
+            ".instructions/shared/squad-index-server-complement.md"
+          ]
+        }
+      ]
+    },
+    "delivery": {
+      "title": "CI, Release, And Deployment Discipline",
+      "intent": "Keep CI reproducible, require green reviewable release inputs, and make deployments auditable and verifiable instead of opaque one-off pushes.",
+      "rules": [
+        {
+          "id": "CD-1",
+          "severity": "error",
+          "rule": "CI MUST run on pull requests and MUST validate the same required security and quality policy as local development, using reproducible install and build steps when the stack supports them.",
+          "rationale": "The index-server reference setup uses specialized GitHub Actions workflows and reproducible commands so CI is a trustworthy replay of required validation rather than a separate best-effort environment.",
+          "required": [
+            "Run required checks on pull requests before merge.",
+            "Use deterministic install or restore commands such as npm ci or equivalent lockfile-respecting commands when the stack supports them.",
+            "Declare workflow permissions and required secrets explicitly for security-sensitive automation."
+          ],
+          "prohibited": [
+            "Do not make CI materially weaker than the repository's required local gates.",
+            "Do not rely on ad hoc mutable build setup when a reproducible project-native path exists."
+          ],
+          "evidence": [
+            "GitHub Actions workflow definitions",
+            "Successful pull request CI runs"
+          ],
+          "enforcedBy": [
+            ".github/workflows/*",
+            ".github/copilot-instructions.md",
+            "README.md"
+          ]
+        },
+        {
+          "id": "CD-2",
+          "severity": "error",
+          "rule": "Repositories with release, publish, or deployment flows MUST release from clean trees and green CI using tagged, reviewable commits or another documented immutable version marker.",
+          "rationale": "The index-server release and publish flows explicitly require clean working state, validated inputs, and tagged versions so deployments can be traced back to a reviewed source state.",
+          "required": [
+            "Verify the working tree is clean before a normal release or publish step.",
+            "Require CI to be green before release, publish, or deploy promotion.",
+            "Use a tag, release identifier, or equivalent immutable version marker for deployable outputs."
+          ],
+          "prohibited": [
+            "Do not deploy dirty-tree content as a normal workflow.",
+            "Do not publish unreviewed or unversioned artifacts as if they were a formal release."
+          ],
+          "evidence": [
+            "Release script behavior or docs",
+            "Tags, releases, or immutable build identifiers"
+          ],
+          "enforcedBy": [
+            "release or publish scripts",
+            "versioning or release docs",
+            "CI release workflows"
+          ]
+        },
+        {
+          "id": "CD-3",
+          "severity": "warning",
+          "rule": "Deployments SHOULD emit machine-readable manifests or retained artifacts and SHOULD run post-deploy smoke, integrity, or readiness checks before they are treated as successful.",
+          "rationale": "The index-server deployment flow keeps deployment manifests, CI artifacts, and smoke validation outputs so maintainers can audit what was shipped and detect drift quickly.",
+          "required": [
+            "Record deployment provenance such as version, commit, build details, or destination when the repo has a deployment surface.",
+            "Run a smoke, readiness, or integrity check after deployment when the runtime can support one."
+          ],
+          "evidence": [
+            "Deployment manifest or retained CI artifact",
+            "Smoke or integrity validation output"
+          ],
+          "enforcedBy": [
+            "deployment scripts",
+            "post-deploy workflows",
+            "release documentation"
+          ]
+        },
+        {
+          "id": "CD-4",
+          "severity": "warning",
+          "rule": "Repositories MAY use specialized scheduled or domain-specific workflows for security, governance, performance, or UI drift, but those workflows do not replace required pull request gates.",
+          "rationale": "The index-server reference setup benefits from specialized governance and drift workflows, but merge safety still depends on the required PR gate path remaining authoritative.",
+          "required": [
+            "Keep required merge-blocking validation distinct from optional or scheduled workflows.",
+            "Document which workflows are required for merge versus additional monitoring or deeper assurance."
+          ],
+          "evidence": [
+            "Workflow documentation and repository guidance",
+            "Required status check configuration"
+          ],
+          "enforcedBy": [
+            ".github/workflows/*",
+            "README.md",
+            "branch protection rules"
+          ]
+        },
+        {
+          "id": "PB-1",
+          "severity": "error",
+          "rule": "All active repos MUST follow the dual-repo pattern: private dev repo for all development, public pub repo as read-only mirror.",
+          "rationale": "Separation prevents accidental exposure of internal artifacts."
+        },
+        {
+          "id": "PB-2",
+          "severity": "error",
+          "rule": "Public publication repos MUST NOT receive direct pushes; all updates MUST flow through the publish script (scripts/publish-direct-to-remote.cjs) from the dev repo.",
+          "rationale": "Centralized publish prevents ad-hoc content leaks."
+        },
+        {
+          "id": "PB-3",
+          "severity": "error",
+          "rule": "Internal artifacts (.specify/, specs/, issue templates, state/, logs/) MUST be excluded from publication via .publish-exclude.",
+          "rationale": "Internal artifacts contain sensitive operational context."
+        },
+        {
+          "id": "PB-6",
+          "severity": "error",
+          "rule": "Dev repos MUST have a pre-push hook that queries GitHub API for repo visibility and blocks pushes to public remotes; bypass requires a SHA-256 token computed by the publish scripts (PUBLISH_OVERRIDE=1 is NOT sufficient).",
+          "rationale": "Public push guard prevents accidental exposure of the dev repo."
+        }
+      ]
+    },
+    "validation": {
+      "title": "Validation, Testing Outputs, And Determinism",
+      "intent": "Make constitutional compliance observable through deterministic validation, generated artifacts, and reproducible diagnostics.",
+      "rules": [
+        {
+          "id": "VA-1",
+          "severity": "error",
+          "rule": "Template changes affecting hooks, instructions, constitution, templates, or bootstrap files MUST pass focused validation before broader checks.",
+          "rationale": "Focused checks create the shortest path from local hypothesis to correction and keep failures readable.",
+          "required": [
+            "Run the closest available focused executable check for the changed slice before repo-wide validation.",
+            "Escalate to broader validation only after focused checks pass or when no narrower executable check exists."
+          ],
+          "evidence": [
+            "Focused validation output included in local work or PR summary"
+          ],
+          "enforcedBy": [
+            ".github/copilot-instructions.md",
+            "README.md"
+          ]
+        },
+        {
+          "id": "VA-2",
+          "severity": "error",
+          "rule": "constitution.md MUST be regenerated from constitution.json before commit whenever the constitution source changes.",
+          "rationale": "The generated human-readable view is part of the template contract and cannot drift from the machine-readable source.",
+          "required": [
+            "Run pwsh -File scripts/sync-constitution.ps1 after editing constitution.json.",
+            "Run pwsh -File scripts/sync-constitution.ps1 -Check during validation."
+          ],
+          "evidence": [
+            "Generated constitution.md diff",
+            "sync-constitution check output"
+          ],
+          "enforcedBy": [
+            "scripts/sync-constitution.ps1",
+            ".github/copilot-instructions.md"
+          ]
+        },
+        {
+          "id": "VA-3",
+          "severity": "warning",
+          "rule": "Helper scripts and generated outputs SHOULD be deterministic, readable, and specific enough that failures do not require manual guesswork.",
+          "rationale": "Strong templates reduce debugging cost by making failure output actionable instead of opaque.",
+          "required": [
+            "Prefer stable output order and explicit file or rule references in diagnostics.",
+            "Improve diagnostics before weakening coverage when a check is hard to interpret."
+          ],
+          "evidence": [
+            "Deterministic generated files",
+            "Actionable error messages with local context"
+          ],
+          "enforcedBy": [
+            "scripts/*",
+            "hook diagnostics",
+            "review expectations"
+          ]
+        }
+      ]
+    },
+    "codeQuality": {
+      "title": "Code Quality",
+      "intent": "Maintain readable, maintainable code with clear ownership, minimal dead code, and explicit error handling.",
+      "rules": [
+        {
+          "id": "CQ-1",
+          "severity": "warning",
+          "rule": "Source files SHOULD target <=600 lines; MUST NOT exceed 1000 (template literals exempt).",
+          "rationale": "Long files obscure ownership and make reviews harder."
+        },
+        {
+          "id": "CQ-2",
+          "severity": "error",
+          "rule": "Each module MUST have a single primary responsibility; god-modules that mix unrelated concerns are prohibited.",
+          "rationale": "Single responsibility keeps modules discoverable and testable."
+        },
+        {
+          "id": "CQ-3",
+          "severity": "error",
+          "rule": "Source code MUST follow the project declared layered architecture; cross-layer imports MUST flow downward only.",
+          "rationale": "Layered imports prevent circular coupling."
+        },
+        {
+          "id": "CQ-4",
+          "severity": "error",
+          "rule": "Circular dependencies are prohibited; module dependency graphs MUST be acyclic.",
+          "rationale": "Cycles create unpredictable initialization and test isolation failures."
+        },
+        {
+          "id": "CQ-5",
+          "severity": "warning",
+          "rule": "Dead code MUST be removed before commit; unused imports, variables, and unreachable branches are not allowed.",
+          "rationale": "Dead code creates false search hits and maintenance burden."
+        },
+        {
+          "id": "CQ-6",
+          "severity": "error",
+          "rule": "Error handling MUST be explicit; swallowed exceptions (empty catch blocks) are prohibited — errors MUST be logged, re-thrown, or handled with documented rationale.",
+          "rationale": "Swallowed exceptions hide failures and break agent-assisted debugging."
+        },
+        {
+          "id": "CQ-7",
+          "severity": "warning",
+          "rule": "Public APIs MUST have JSDoc documentation including @param, @returns, and @throws where applicable.",
+          "rationale": "JSDoc enables IDE assistance and agent code understanding."
+        }
+      ]
+    },
+    "dataIntegrity": {
+      "title": "Data Integrity & Persistence",
+      "intent": "Ensure stateful data survives restarts, schema changes are migratable, and corruption results in safe empty state.",
+      "rules": [
+        {
+          "id": "DI-1",
+          "severity": "error",
+          "rule": "All stateful data MUST persist to disk; startup MUST auto-restore.",
+          "rationale": "Loss of state on restart degrades operational continuity."
+        },
+        {
+          "id": "DI-2",
+          "severity": "error",
+          "rule": "Corrupted or empty files MUST result in safe empty state, not crashes.",
+          "rationale": "Crash-on-corruption makes recovery impossible without manual intervention."
+        },
+        {
+          "id": "DI-3",
+          "severity": "warning",
+          "rule": "Schema changes to persisted files MUST include migration logic or be backwards-compatible.",
+          "rationale": "Breaking schema changes strand existing deployments."
+        }
+      ]
+    }
+  },
+  "governancePolicy": {
+    "amendmentProcess": [
+      "Constitution changes require explicit rationale and review in the same change set as dependent artifact updates.",
+      "If a principle is materially added, removed, or redefined, evaluate the version bump semantically rather than treating the edit as a wording change.",
+      "If a downstream template or instruction surface cannot be updated immediately, record that gap explicitly before merge."
+    ],
+    "versioningPolicy": [
+      "MAJOR: backward-incompatible principle changes, article removals, or schema changes that require consumers or tooling to adapt.",
+      "MINOR: new principles, materially expanded requirements, or new governance sections that tighten expected behavior without redefining existing ones.",
+      "PATCH: wording clarifications, rationale improvements, or non-semantic presentation changes."
+    ],
+    "complianceReview": [
+      "PRs that change template behavior should identify which constitution rules are being exercised or amended.",
+      "Plans, tasks, and agent guidance should treat constitution conflicts as blockers unless an explicit amendment is under review."
+    ]
+  },
+  "thresholds": {
+    "minTestCount": 1,
+    "maxTestDurationMs": 5000,
+    "minCoveragePercent": 80,
+    "maxLintErrors": 0
+  },
+  "references": {
+    "templateManifest": "template-manifest.json",
+    "copilotInstructions": ".github/copilot-instructions.md",
+    "instructionsReadme": ".instructions/README.md",
+    "promotionMap": ".specify/config/promotion-map.json",
+    "constitutionSyncScript": "scripts/sync-constitution.ps1",
+    "architecture": "docs/architecture.md",
+    "prd": "docs/project_prd.md",
+    "contributing": "CONTRIBUTING.md",
+    "tools": "docs/tools.md",
+    "changelog": "CHANGELOG.md"
+  }
+}

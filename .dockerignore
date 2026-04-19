@@ -1,0 +1,60 @@
+# Dependencies
+node_modules/
+
+# Build output (rebuilt in container)
+dist/
+
+# Test artifacts
+coverage/
+test-results/
+playwright-report/
+tmp/
+
+# Development files
+.specify/
+specs/
+backups/
+logs/
+metrics/
+data/
+feedback/
+snapshots/
+memory/
+
+# Source control
+.git/
+.gitignore
+
+# IDE
+.vscode/
+*.swp
+*.swo
+
+# Documentation (not needed at runtime)
+docs/
+*.md
+!README.md
+!LICENSE
+
+# CI/CD
+azure-pipelines.yml
+codecov.yml
+.github/
+
+# Test files
+src/tests/
+src/tests._park/
+src/tests._legacy/
+tests/
+src/perf/
+
+# Scripts not needed at runtime
+scripts/
+!scripts/copy-dashboard-assets.mjs
+
+# Misc
+*.log
+*.log.jsonl
+sbom.json
+release/
+templates/

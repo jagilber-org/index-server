@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "$id": "https://example.com/schemas/graph-export-v2.schema.json",
+  "title": "Graph Export Response (Schema v2)",
+  "type": "object",
+  "required": ["meta","nodes","edges"],
+  "additionalProperties": false,
+  "properties": {
+    "meta": {
+      "type": "object",
+      "required": ["graphSchemaVersion","nodeCount","edgeCount"],
+      "properties": {
+        "graphSchemaVersion": {"const": 2},
+        "nodeCount": {"type": "number"},
+        "edgeCount": {"type": "number"},
+        "truncated": {"type": "boolean"},
+        "notes": {"type": "array", "items": {"type": "string"}}
+      },
+      "additionalProperties": false
+    },
+    "nodes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id"],
+        "properties": {
+          "id": {"type": "string"},
+          "nodeType": {"type": "string", "enum": ["instruction","category"]},
+          "categories": {"type": "array", "items": {"type": "string"}},
+          "primaryCategory": {"type": "string"},
+          "priority": {"type": "number"},
+          "priorityTier": {"type": "string"},
+          "requirement": {"type": "string"},
+          "owner": {"type": "string"},
+          "status": {"type": "string"},
+          "createdAt": {"type": "string"},
+          "updatedAt": {"type": "string"},
+          "usageCount": {"type": "number"}
+        },
+        "additionalProperties": false
+      }
+    },
+    "edges": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["from","to","type"],
+        "properties": {
+          "from": {"type": "string"},
+            "to": {"type": "string"},
+            "type": {"type": "string", "enum": ["primary","category","belongs"]},
+            "weight": {"type": "number"}
+        },
+        "additionalProperties": false
+      }
+    },
+    "dot": {"type": "string"},
+    "mermaid": {"type": "string"}
+  }
+}

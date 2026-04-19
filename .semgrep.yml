@@ -1,0 +1,55 @@
+rules:
+  - id: powershell-invoke-expression
+    patterns:
+      - pattern-regex: 'Invoke-Expression'
+    message: >
+      Avoid Invoke-Expression (IEX) as it executes arbitrary strings and is a
+      common injection vector. Use direct command invocation or the call operator (&) instead.
+    languages: [generic]
+    severity: WARNING
+    paths:
+      include:
+        - "hooks/*.ps1"
+        - "scripts/*.ps1"
+
+  - id: powershell-convertto-securestring-plaintext
+    patterns:
+      - pattern-regex: 'ConvertTo-SecureString\s.*-AsPlainText'
+    message: >
+      ConvertTo-SecureString -AsPlainText often indicates hardcoded secrets.
+      Use secure credential storage or environment variables instead.
+    languages: [generic]
+    severity: ERROR
+    paths:
+      include:
+        - "hooks/*.ps1"
+        - "scripts/*.ps1"
+
+  - id: github-actions-expression-injection
+    patterns:
+      - pattern-regex: 'run:\s*[|>]??\s*.*\$\{\{\s*github\.event\.(issue|pull_request|comment|review|discussion)'
+    message: >
+      Potential GitHub Actions expression injection. User-controlled event data
+      interpolated into run steps can execute arbitrary commands.
+      Use an environment variable instead of direct interpolation.
+      Note: this rule only catches same-line occurrences; review multi-line
+      run blocks manually for direct expression interpolation.
+    languages: [generic]
+    severity: ERROR
+    paths:
+      include:
+        - ".github/workflows/*.yml"
+        - ".github/workflows/*.yaml"
+
+  - id: workflow-permissions-too-broad
+    patterns:
+      - pattern-regex: 'permissions:\s*write-all'
+    message: >
+      Overly broad workflow permissions. Use granular per-job permissions
+      following the principle of least privilege.
+    languages: [generic]
+    severity: WARNING
+    paths:
+      include:
+        - ".github/workflows/*.yml"
+        - ".github/workflows/*.yaml"

@@ -1,0 +1,41 @@
+name: Instruction Snapshot
+
+on:
+  # DISABLED: Scheduled snapshots run on-demand only
+  # schedule:
+  #   - cron: '0 2 * * *'
+  workflow_dispatch: {}
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Use Node.js 20
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: 'npm'
+      - name: Install
+        run: npm ci
+      - name: Build
+        run: npm run build --if-present
+      - name: Export Index
+        run: |
+          HASH_LINE=$(echo '{"jsonrpc":"2.0","id":1,"method":"instructions/export"}' | node dist/server/index-server.js | jq -r '.result.hash')
+          echo "Index hash: $HASH_LINE"
+          TS=$(date -u +%Y%m%dT%H%M%SZ)
+          mkdir -p snapshots
+          echo '{"jsonrpc":"2.0","id":2,"method":"instructions/export"}' | node dist/server/index-server.js | jq -r '.result.items' > snapshots/Index-$TS.json
+          sha256sum snapshots/Index-$TS.json > snapshots/Index-$TS.sha256
+      - name: Commit Snapshot
+        run: |
+          if [ -n "$(git status --porcelain snapshots)" ]; then
+            git config user.name "snapshot-bot"
+            git config user.email "snapshot-bot@users.noreply.github.com" # pii-allowlist: GitHub Actions bot
+            git add snapshots
+            git commit -m "chore: instruction snapshot $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            git push || echo "Push skipped"
+          else
+            echo "No changes"
+          fi
