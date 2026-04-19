@@ -65,8 +65,7 @@ function httpGet(url, allowInsecureTls = false) {
       ? { rejectUnauthorized: false } // nosemgrep: semgrep.tree-scan.reject-unauthorized-false, problem-based-packs.insecure-transport.js-node.bypass-tls-verification.bypass-tls-verification -- opt-in flag for validating self-signed cert servers // lgtm[js/disabling-certificate-validation]
       : undefined;
     mod.get(url, requestOptions, (res) => {
-      let body = '';
-      res.on('data', (c) => { body += c; });
+      res.on('data', () => { /* drain response */ });
       res.on('end', () => resolve({ status: res.statusCode ?? 0, headers: res.headers }));
       res.on('error', reject);
     }).on('error', reject);

@@ -66,7 +66,7 @@ function inspectMetricsCollector() {
             const estimatedCallMemory = recentCalls * 8; // 8 bytes per timestamp
             console.log(`  Estimated call buffer memory: ${(estimatedCallMemory / 1024).toFixed(1)} KB`);
         }
-    } catch (e) {
+    } catch {
         console.log('\n⏱️  RECENT CALL BUFFER: Cannot access (private property)');
     }
 
@@ -93,7 +93,7 @@ function inspectMetricsCollector() {
         if (isCollecting) {
             console.log('  📈 MetricsCollector is actively taking snapshots every minute');
         }
-    } catch (e) {
+    } catch {
         console.log('  Collection status: Unknown (cannot access timer)');
     }
 
@@ -113,7 +113,7 @@ function inspectMetricsCollector() {
     };
 }
 
-// Also provide a function to disable metrics collection temporarily
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- exported utility for manual diagnostics
 function disableMetricsCollection() {
     console.log('\n🛑 DISABLING METRICS COLLECTION...');
     try {

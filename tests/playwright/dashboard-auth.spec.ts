@@ -139,7 +139,7 @@ test.describe('Dashboard Auth @auth', () => {
     serverProcess = null;
   });
 
-  test.beforeEach(async ({ page }) => {
+  test.beforeEach(async () => {
     test.skip(!serverProcess, 'Auth test server failed to start');
   });
 

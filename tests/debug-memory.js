@@ -17,8 +17,9 @@ console.log('  checkListeners() - Check event listeners');
 console.log('');
 
 // Show current memory immediately
+// eslint-disable-next-line no-undef -- memStatus loaded by require() at runtime
 if (typeof memStatus === 'function') {
-  memStatus();
+  memStatus(); // eslint-disable-line no-undef
 } else {
   console.log('Memory monitor not yet loaded. Try: require("./dist/utils/memoryMonitor.js")');
 }

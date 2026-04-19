@@ -52,7 +52,7 @@ const handlers: Record<string, Handler> = {
     let instances: Array<{ pid: number; port: number; host: string; startedAt: string; current: boolean }> = [];
     try {
       // Dynamic require avoids circular dependency at module load time
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { getActiveInstances } = require('../dashboard/server/InstanceManager') as typeof import('../dashboard/server/InstanceManager');
       instances = getActiveInstances().map(i => ({ pid: i.pid, port: i.port, host: i.host, startedAt: i.startedAt, current: i.current }));
     } catch { /* fail-open */ }

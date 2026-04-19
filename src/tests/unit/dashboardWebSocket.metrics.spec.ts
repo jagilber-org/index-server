@@ -85,7 +85,7 @@ describe('Dashboard WebSocket metrics_update broadcast (P1)', () => {
 
       ws.close();
     } finally {
-      try { close && close(); } catch { /* ignore */ }
+      try { if (close) close(); } catch { /* ignore */ }
       await new Promise(r => setTimeout(r, 50));
     }
   }, 15000);

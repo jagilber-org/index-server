@@ -24,7 +24,7 @@ function fileHash(p) {
 }
 
 function ensureDir(p) {
-  try { mkdirSync(p, { recursive: true }); } catch (e) { /* noop ensure */ }
+  try { mkdirSync(p, { recursive: true }); } catch { /* noop ensure */ }
 }
 
 function copyAssets() {

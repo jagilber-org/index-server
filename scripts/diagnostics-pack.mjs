@@ -57,14 +57,14 @@ function captureLogs(){
 }
 
 // Health response if exists
-let healthResponse; try { if(fs.existsSync('health_response.json')) healthResponse = JSON.parse(fs.readFileSync('health_response.json','utf-8')); } catch (err) { /* ignore parse errors */ }
+let healthResponse; try { if(fs.existsSync('health_response.json')) healthResponse = JSON.parse(fs.readFileSync('health_response.json','utf-8')); } catch { /* ignore parse errors */ }
 
 // Select environment snapshot
 const ENV_KEYS = Object.keys(process.env).filter(k=> /^(INDEX_SERVER_|CI|GITHUB_|TEST_|VITEST_)/.test(k));
 const envSnapshot = Object.fromEntries(ENV_KEYS.map(k=> [k, process.env[k]]));
 
 // Package version
-let pkg; try { pkg = JSON.parse(fs.readFileSync('package.json','utf-8')); } catch (err) { /* ignore */ }
+let pkg; try { pkg = JSON.parse(fs.readFileSync('package.json','utf-8')); } catch { /* ignore */ }
 
 const pack = {
   generatedAt: new Date().toISOString(),
@@ -88,6 +88,6 @@ try {
 try {
   const list = fs.readdirSync(OUT_DIR);
   fs.writeFileSync(`${OUT_DIR}/_index.txt`, list.join('\n'));
-} catch (err) { /* ignore directory listing errors */ }
+} catch { /* ignore directory listing errors */ }
 
 log('Diagnostics collection complete.');

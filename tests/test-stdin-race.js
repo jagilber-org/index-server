@@ -64,7 +64,7 @@ proc.stdout.on('data', (chunk) => {
           }
         }
       }
-    } catch (e) {
+    } catch {
       // Content-Length framing - try to parse
       const match = stdoutBuffer.match(/{"jsonrpc":"2.0","id":2[^}]+}/);
       if (match) {
@@ -73,7 +73,7 @@ proc.stdout.on('data', (chunk) => {
           if (obj.result && obj.result.tools) {
             console.log('[test-client] Tool count:', obj.result.tools.length);
           }
-        } catch {}
+        } catch { /* nested parse failure */ }
       }
     }
 

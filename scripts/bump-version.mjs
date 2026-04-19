@@ -3,7 +3,7 @@
  * Cross-platform version bump script.
  * Usage: node scripts/bump-version.mjs <major|minor|patch> [changelog message]
  */
-import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { execSync } from 'node:child_process';
 

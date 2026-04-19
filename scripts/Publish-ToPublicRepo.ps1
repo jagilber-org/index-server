@@ -162,9 +162,8 @@ foreach ($pattern in $excludePatterns) {
 # --- Remove blocked dotfiles/dotfolders (preserve essential ones like .gitignore) ---
 $dotfileBlocklist = @(
     '.env', '.env.example', '.env.local',
-    '.secrets.baseline', '.pre-commit-config.yaml',
     '.specify', '.instructions',
-    '.pii-allowlist', '.ggshield.yml', '.gitleaks.toml',
+    '.ggshield.yml',
     '.template-adoption.json', '.publish-exclude',
     '.private', '.certs'
 )
@@ -183,9 +182,8 @@ foreach ($item in $dotItems) {
 # --- Verify no forbidden artifacts remain ---
 $builtinForbidden = @(
     '.env', '.env.example', '.env.local',
-    '.secrets.baseline', '.pre-commit-config.yaml',
     '.specify', '.instructions',
-    '.pii-allowlist', '.ggshield.yml', '.gitleaks.toml',
+    '.ggshield.yml',
     '.template-adoption.json'
 )
 $allForbidden = $builtinForbidden

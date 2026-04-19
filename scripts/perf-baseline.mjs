@@ -83,7 +83,7 @@ async function main(){
       let ok = true;
       try {
         await client.callTool({ name:t, arguments: t==='graph_export'? { maxEdges:50 }: {} });
-      } catch(e){ ok = false; }
+      } catch{ ok = false; }
       const dur = performance.now()-start;
       durations.push(+dur.toFixed(2));
       try { const mem = process.memoryUsage(); rssValues.push(mem.rss); } catch { /* ignore */ }

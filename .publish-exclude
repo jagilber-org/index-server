@@ -16,9 +16,9 @@ specs/
 .github/workflows/squad-*
 .github/workflows/sync-squad-labels.yml
 .env
-.secrets.baseline
-.pre-commit-config.yaml
-.pii-allowlist
+# .secrets.baseline — published (needed by detect-secrets pre-commit hook)
+# .pre-commit-config.yaml — published (needed by precommit workflow)
+# .pii-allowlist — published (needed by security-scan.mjs)
 state/
 logs/
 meta/
@@ -117,8 +117,7 @@ scripts/MCPActivation.psm1
 scripts/powershell-mcp-server.ps1
 scripts/powershell-mcp-template.ps1
 
-# Sync script
-sync-constitution.cjs
+# sync-constitution.cjs — published (needed by precommit workflow constitution check)
 
 # TLS certificates (private keys!)
 .certs/

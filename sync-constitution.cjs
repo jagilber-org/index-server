@@ -103,6 +103,8 @@ function main() {
 
   if (checkOnly) {
     const staleOutputs = OUTPUT_FILES.filter((outputPath) => {
+      const outDir = path.dirname(outputPath);
+      if (!fs.existsSync(outDir)) return false; // skip if parent dir missing (e.g., .specify/ not published)
       const existing = fs.existsSync(outputPath) ? fs.readFileSync(outputPath, 'utf-8') : '';
       return existing.trim() !== newContent.trim();
     });

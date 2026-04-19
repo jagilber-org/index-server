@@ -29,16 +29,16 @@ jobs:
         env:
           GITGUARDIAN_API_KEY: ${{ secrets.GITGUARDIAN_API_KEY }}
         run: pre-commit run --all-files
+        continue-on-error: ${{ secrets.GITGUARDIAN_API_KEY == '' }}
 
       - name: Run pre-push security policy replay
         env:
           GITGUARDIAN_API_KEY: ${{ secrets.GITGUARDIAN_API_KEY }}
         run: |
-          pre-commit run gitleaks-pre-push --all-files --hook-stage pre-push
-          pre-commit run semgrep-pre-push --all-files --hook-stage pre-push
+          pre-commit run --all-files --hook-stage pre-push
 
       - name: Generate ggshield JSON report
-        if: ${{ always() }}
+        if: ${{ always() && env.GITGUARDIAN_API_KEY != '' }}
         env:
           GITGUARDIAN_API_KEY: ${{ secrets.GITGUARDIAN_API_KEY }}
         run: |

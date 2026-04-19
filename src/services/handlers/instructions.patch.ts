@@ -45,7 +45,7 @@ registerHandler('index_governanceUpdate', guard('index_governanceUpdate', (p: { 
   const existing = st.byId.get(id);
   if (!existing) return { id, notFound: true };
   // Read from store (in-memory), fall back to disk for JSON backend
-  let record: InstructionEntry = { ...existing };
+  const record: InstructionEntry = { ...existing };
   let changed = false; const now = new Date().toISOString();
   const bump = p.bump || 'none';
   if (p.owner && p.owner !== record.owner) { record.owner = p.owner; changed = true; }

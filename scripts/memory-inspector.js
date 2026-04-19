@@ -60,7 +60,7 @@ function inspectProcessState() {
                 const isArray = Array.isArray(value);
                 const size = isArray ? value.length : (type === 'object' && value ? Object.keys(value).length : 'N/A');
                 console.log(`  ${key}: ${type}${isArray ? '[]' : ''} (size: ${size})`);
-            } catch (e) {
+            } catch {
                 console.log(`  ${key}: <inspection failed>`);
             }
         });

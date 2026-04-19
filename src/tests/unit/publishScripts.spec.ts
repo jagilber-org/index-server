@@ -130,7 +130,7 @@ describe('publish script hardening', () => {
     it('both lists include critical internal artifact names', () => {
       const critical = [
         '.specify', '.private', '.env', '.certs',
-        '.squad', '.squad-templates', '.secrets.baseline',
+        '.squad', '.squad-templates',
         'instructions', 'devinstructions', 'logs',
         'backups', 'governance', 'memory', 'feedback',
         'NVIDIA Corporation', 'data', 'node_modules',
@@ -247,9 +247,9 @@ describe('publish script hardening', () => {
       expect(builtinForbidden).toContain('.env');
     });
 
-    it('.secrets.baseline is in both blocklists', () => {
-      expect(dotfileBlocklist).toContain('.secrets.baseline');
-      expect(builtinForbidden).toContain('.secrets.baseline');
+    it('.secrets.baseline is NOT in blocklists (published for detect-secrets hook)', () => {
+      expect(dotfileBlocklist).not.toContain('.secrets.baseline');
+      expect(builtinForbidden).not.toContain('.secrets.baseline');
     });
 
     it('.private is in $dotfileBlocklist', () => {
@@ -272,8 +272,7 @@ describe('publish script hardening', () => {
 
 const PRIVATE_DOTFILES = new Set([
   '.certs', '.copilot', '.env', '.private', '.specify', '.squad',
-  '.squad-templates', '.vscode', '.publish-exclude', '.secrets.baseline',
-  '.pre-commit-config.yaml',
+  '.squad-templates', '.vscode', '.publish-exclude',
 ]);
 
 function copyRecursiveLocal(

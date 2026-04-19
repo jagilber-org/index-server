@@ -225,7 +225,7 @@ function flushUsageSnapshot(){
 // The guard ensures cleanup runs exactly once even if multiple signals race.
 try {
   // Import directly from shutdownGuard module (no circular dependency)
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { createShutdownGuard } = require('../server/shutdownGuard');
   // Get or create a process-wide singleton via a global symbol
   const key = Symbol.for('mcp-shutdown-guard');

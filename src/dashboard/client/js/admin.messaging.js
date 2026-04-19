@@ -1,3 +1,4 @@
+/* global adminAuth */
 /**
  * admin.messaging.js — Dashboard messaging panel (enriched).
  *

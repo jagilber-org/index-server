@@ -98,9 +98,9 @@ export class StdioFramingParser {
           try {
             // Write once per timeout id for post-mortem (non-fatal if fails)
             // Using tmp/mcp-diag to keep repo root clean.
-            // eslint-disable-next-line @typescript-eslint/no-var-requires
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
             const fs = require('fs') as typeof import('fs');
-            // eslint-disable-next-line @typescript-eslint/no-var-requires
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
             const path = require('path') as typeof import('path');
             const dir = path.join(process.cwd(), 'tmp', 'mcp-diag');
             fs.mkdirSync(dir, { recursive:true });

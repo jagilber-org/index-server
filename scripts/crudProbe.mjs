@@ -7,11 +7,11 @@ import path from 'path';
 const server = spawn('node', ['dist/server/index-server.js'], { stdio: ['pipe','pipe','pipe'], env:{ ...process.env, INDEX_SERVER_MUTATION:'1' } });
 const out = [];
 server.stdout.on('data', d=>{ out.push(...d.toString().trim().split(/\n+/).filter(l=>l)); });
-server.stderr.on('data', d=>{ /* suppress for clean JSON; could log to file if needed */ });
+server.stderr.on('data', ()=>{ /* suppress for clean JSON; could log to file if needed */ });
 
 let nextId = 1;
 function send(method, params){ const id = nextId++; server.stdin.write(JSON.stringify({ jsonrpc:'2.0', id, method, params })+'\n'); return id; }
-function waitId(id, timeout=4000){ const start=Date.now(); return new Promise((resolve,reject)=>{ const iv=setInterval(()=>{ for(const l of out){ try { const o=JSON.parse(l); if(o && o.id===id){ clearInterval(iv); return resolve(o); } } catch{} } if(Date.now()-start>timeout){ clearInterval(iv); reject(new Error('timeout id='+id)); } },25); }); }
+function waitId(id, timeout=4000){ const start=Date.now(); return new Promise((resolve,reject)=>{ const iv=setInterval(()=>{ for(const l of out){ try { const o=JSON.parse(l); if(o && o.id===id){ clearInterval(iv); return resolve(o); } } catch{ /* non-JSON line */ } } if(Date.now()-start>timeout){ clearInterval(iv); reject(new Error('timeout id='+id)); } },25); }); }
 
 async function rpc(method, params, timeout){ const id=send(method, params); return await waitId(id, timeout); }
 
@@ -50,9 +50,9 @@ function summarizeList(resp){ if(!resp || !resp.result) return { count:0, ids:[]
 
   // Persist raw log for offline review
   const logPath = path.join(process.cwd(),'crudProbe.log.jsonl');
-  try { fs.writeFileSync(logPath, out.join('\n')); summary.notes.push({ logPath }); } catch {}
+  try { fs.writeFileSync(logPath, out.join('\n')); summary.notes.push({ logPath }); } catch { /* non-fatal */ }
 
   // Output summary JSON (single line)
   process.stdout.write(JSON.stringify({ summary })+'\n');
   server.kill();
-})().catch(err=>{ process.stdout.write(JSON.stringify({ error:err.message })+'\n'); try{ server.kill(); }catch{} });
+})().catch(err=>{ process.stdout.write(JSON.stringify({ error:err.message })+'\n'); try{ server.kill(); }catch{ /* already dead */ } });

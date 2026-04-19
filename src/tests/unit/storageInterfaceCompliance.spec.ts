@@ -65,7 +65,7 @@ describe('Storage Interface Compliance - SQLite', () => {
   beforeEach(() => { invalidate(); });
 
   afterAll(() => {
-    try { fs.rmSync(TMP_ROOT, { recursive: true, force: true }); } catch {}
+    try { fs.rmSync(TMP_ROOT, { recursive: true, force: true }); } catch { /* cleanup best-effort */ }
     delete process.env.INDEX_SERVER_STORAGE_BACKEND;
     delete process.env.INDEX_SERVER_SQLITE_PATH;
     delete process.env.INDEX_SERVER_DIR;

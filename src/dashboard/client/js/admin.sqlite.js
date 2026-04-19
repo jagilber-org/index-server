@@ -1,3 +1,4 @@
+/* global adminAuth */
 /**
  * admin.sqlite.js — SQLite dashboard tab controller.
  *

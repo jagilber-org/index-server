@@ -128,7 +128,7 @@ const SECRET_PATTERNS = [
 
 // ── 2. Curated PII and sensitive infrastructure patterns ─────────────────
 const PII_PATTERNS = [
-  { pat: /\b[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}\b/gi, label: 'Email address' },
+  { pat: /\b[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}\b/gi, label: 'Email address' },
   { pat: /\b(?:\+?1[-.\s]?)?(?:\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4})\b/g, label: 'US phone number' },
   { pat: /\b\d{3}-\d{2}-\d{4}\b/g, label: 'SSN' },
   { pat: /(?<!\d)(?:\d{1,3}\.){3}\d{1,3}(?!\d)/g, label: 'Public IPv4 address' },

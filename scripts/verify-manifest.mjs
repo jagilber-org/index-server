@@ -10,7 +10,7 @@ if(!fs.existsSync(manifestPath)){
   process.exit(2);
 }
 let manifest;
-try { manifest = JSON.parse(fs.readFileSync(manifestPath,'utf8')); } catch(e){
+try { manifest = JSON.parse(fs.readFileSync(manifestPath,'utf8')); } catch{
   console.error('manifest invalid json');
   process.exit(3);
 }

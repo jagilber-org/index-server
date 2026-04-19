@@ -52,7 +52,7 @@ class MCPClient extends EventEmitter {
             try {
               const message = JSON.parse(line);
               this.handleMessage(message);
-            } catch (e) {
+            } catch {
               // Ignore non-JSON output (startup logs, etc.)
             }
           }

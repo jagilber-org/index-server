@@ -58,7 +58,7 @@ describe('instructions search endpoint', () => {
   process.env.INDEX_SERVER_MUTATION = '1';
         // Ensure a deterministic port for tests to probe quickly
         process.env.INDEX_SERVER_DASHBOARD_PORT = process.env.INDEX_SERVER_DASHBOARD_PORT || '8787';
-        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
         const mod = require('../../dist/server/index-server.js');
         if(typeof mod.main === 'function'){
           await mod.main();

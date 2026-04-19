@@ -50,19 +50,19 @@ function waitFor(fn, ms=4000, step=40){ return new Promise((res,rej)=>{ const st
     await waitFor(()=> !!find(2), 6000);
     const addLine = find(2);
     let verified=false; let payloadId;
-    try { const outer=JSON.parse(addLine); const txt=outer?.result?.content?.[0]?.text; if(txt){ const payload=JSON.parse(txt); verified = !!payload.verified; payloadId=payload.id; } } catch {}
+    try { const outer=JSON.parse(addLine); const txt=outer?.result?.content?.[0]?.text; if(txt){ const payload=JSON.parse(txt); verified = !!payload.verified; payloadId=payload.id; } } catch { /* parse failure */ }
     if(!verified || payloadId!==id) throw new Error('add not verified or id mismatch');
     // immediate get
     send({ jsonrpc:'2.0', id:3, method:'tools/call', params:{ name:'instructions/dispatch', arguments:{ action:'get', id } }});
     await waitFor(()=> !!find(3), 4000);
     const getLine = find(3);
-    let got=false; try { const outer=JSON.parse(getLine); const txt=outer?.result?.content?.[0]?.text; if(txt){ const payload=JSON.parse(txt); got = !!payload.item && payload.item.id===id; } } catch {}
+    let got=false; try { const outer=JSON.parse(getLine); const txt=outer?.result?.content?.[0]?.text; if(txt){ const payload=JSON.parse(txt); got = !!payload.item && payload.item.id===id; } } catch { /* parse failure */ }
     if(!got) throw new Error('get missing item');
     // immediate list
     send({ jsonrpc:'2.0', id:4, method:'tools/call', params:{ name:'instructions/dispatch', arguments:{ action:'list' } }});
     await waitFor(()=> !!find(4), 4000);
     const listLine = find(4);
-    let listed=false; try { const outer=JSON.parse(listLine); const txt=outer?.result?.content?.[0]?.text; if(txt){ const payload=JSON.parse(txt); listed = Array.isArray(payload.items) && payload.items.some(i=> i.id===id); } } catch {}
+    let listed=false; try { const outer=JSON.parse(listLine); const txt=outer?.result?.content?.[0]?.text; if(txt){ const payload=JSON.parse(txt); listed = Array.isArray(payload.items) && payload.items.some(i=> i.id===id); } } catch { /* parse failure */ }
     if(!listed) throw new Error('list missing id');
     console.log('[repro] PASS id', id);
     process.exit(0);
@@ -71,5 +71,5 @@ function waitFor(fn, ms=4000, step=40){ return new Promise((res,rej)=>{ const st
     // dump last few lines for diagnostics
     for(const l of lines.slice(-15)) console.error('[repro][tail]', l);
     process.exit(1);
-  } finally { try { server.kill(); } catch {} }
+  } finally { try { server.kill(); } catch { /* process already exited */ } }
 })();

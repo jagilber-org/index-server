@@ -111,7 +111,7 @@ if (audit) {
 
 // 2. PII pattern scan aligned with pre-commit rules
 const PII_PATTERNS = [
-  { regex: /\b[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}\b/gi, label: 'Email address' },
+  { regex: /\b[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}\b/gi, label: 'Email address' },
   { regex: /(?<!\d)(?:\+?1[-.\s])?(?:\(?[2-9]\d{2}\)?[-.\s]?\d{3}[-.\s]?\d{4})(?!\d)/g, label: 'US phone number' },
   { regex: /\b\d{3}-\d{2}-\d{4}\b/g, label: 'SSN' },
   { regex: /(?<!\d)(?:\d{1,3}\.){3}\d{1,3}(?!\d)/g, label: 'Public IPv4 address' },

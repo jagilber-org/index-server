@@ -2,6 +2,7 @@ import { InstructionEntry, RequirementLevel } from '../models/instruction';
 import { SCHEMA_VERSION } from '../versioning/schemaVersion';
 import crypto from 'crypto';
 
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type -- extends InstructionEntry with potential future fields
 export interface NormalizedInstruction extends InstructionEntry {}
 
 export class ClassificationService {

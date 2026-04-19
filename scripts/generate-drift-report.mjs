@@ -45,7 +45,7 @@ function extractAnnotations() {
         }
       }
     }
-  } catch (e) {
+  } catch {
     // ignore non-fatal
   }
   return perf;

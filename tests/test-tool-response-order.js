@@ -48,7 +48,7 @@ async function runTest() {
     }
   });
 
-  proc.stderr.on('data', (chunk) => {
+  proc.stderr.on('data', () => {
     // Suppress stderr unless debugging
     // process.stderr.write(chunk);
   });

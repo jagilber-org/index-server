@@ -1,3 +1,4 @@
+/* global adminAuth */
 /**
  * admin.embeddings.js — Embeddings Visualization Panel
  *

@@ -87,8 +87,7 @@ function loadExcludeList() {
 // Everything else (including .eslintrc.json, .dockerignore, .nvmrc, etc.) passes through.
 const PRIVATE_DOTFILES = new Set([
   '.certs', '.copilot', '.env', '.private', '.specify', '.squad',
-  '.squad-templates', '.vscode', '.publish-exclude', '.secrets.baseline',
-  '.pre-commit-config.yaml',
+  '.squad-templates', '.vscode', '.publish-exclude',
 ]);
 
 function copyRecursive(src, dest, excludePaths) {
@@ -134,7 +133,7 @@ function verifyNoLeakedArtifacts(dir) {
     '.specify', 'specs', 'state', 'logs', 'backups',
     'feedback', 'governance', 'memory', 'metrics',
     'snapshots', 'tmp', 'test-results', 'coverage',
-    'seed', '.secrets.baseline', '.pii-allowlist',
+    'seed',
     'instructions', 'devinstructions', 'NVIDIA Corporation',
     '.private', '.env', '.certs', '.squad', '.squad-templates',
     'templates', 'data', 'node_modules'
@@ -174,7 +173,7 @@ const VALUE_ALLOWLIST = new Set([
   'jagilber', // public GitHub/org identifier used in package names and repo URLs
   'public', 'private', 'default',
   './exports', './export', // generic path values
-  '00000000-0000-0000-0000-000000000000', // nil UUID placeholder
+  '00000000-0000-0000-0000-000000000000', // nil UUID placeholder  # pii-allowlist
 ]);
 const SCANNABLE_EXTENSIONS = new Set([
   '.ts', '.js', '.mjs', '.cjs', '.json', '.md', '.yml', '.yaml',
@@ -442,6 +441,7 @@ Files: ${fileCount}`;
   try {
     runGitShow(['push', '--force', 'public', 'main'], { cwd: tmpDir, env: publishEnv });
   } finally {
+    // push completed — tag step follows
   }
 
   // ── Tag ─────────────────────────────────────────────────────────────────────
