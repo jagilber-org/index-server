@@ -1,0 +1,51 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$ref": "#/definitions/PersistedSessionHistoryEntry",
+  "definitions": {
+    "PersistedSessionHistoryEntry": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "userId": {
+          "type": "string"
+        },
+        "startTime": {
+          "type": "string"
+        },
+        "endTime": {
+          "type": "string"
+        },
+        "ipAddress": {
+          "type": "string"
+        },
+        "userAgent": {
+          "type": "string"
+        },
+        "terminated": {
+          "type": "boolean"
+        },
+        "terminationReason": {
+          "type": "string"
+        },
+        "persistedAt": {
+          "type": "string"
+        },
+        "version": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "id",
+        "userId",
+        "startTime",
+        "ipAddress",
+        "userAgent",
+        "persistedAt",
+        "version"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "commitSha": "f50e51121606c91858077f8cd1b68827f32a8524",
+  "tag": null,
+  "localPath": "C:\\github\\jagilber-org\\index-server",
+  "forbiddenArtifactCheck": "passed",
+  "preparedAt": "2026-04-20T23:27:37.4705564Z",
+  "sourceRepo": "index-server",
+  "fileCount": 1036,
+  "piiScanPassed": true,
+  "contentHash": "45d50b860b8ad5395a99bbd7781b546ec3fb03f518552d5f801fe505cae2871d"
+}

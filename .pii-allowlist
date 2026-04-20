@@ -1,0 +1,40 @@
+# PII Allowlist
+
+## Documentation placeholder emails
+
+^.*@contoso\.com$
+^.*@example\.(com|net|org)$
+^.*@company\.com$
+
+## Metadata and documentation IPs
+
+^127\.0\.0\.1$
+^169\.254\.169\.254$
+^192\.0\.2\.
+^198\.51\.100\.
+^203\.0\.113\.
+
+## Well-known public DNS resolvers (documentation-safe)
+
+^1\.0\.0\.1$
+^1\.1\.1\.1$
+^8\.8\.4\.4$
+^8\.8\.8\.8$
+^9\.9\.9\.9$
+^208\.67\.(222\.222|220\.220)$
+
+## Intentional test values
+
+^123-45-6789$
+^555-867-5309$
+
+## Documentation numeric ranges
+
+^1000-1000000$
+
+## SHA-pinned GitHub Actions commit hashes (public metadata, not secrets)
+
+^de0fac2e4500dabe0009e67214ff5f5447ce83dd$
+^a309ff8b426b58ec0e2a45f0f869d46889d02405$
+^043fb46d1a93c77aae656e7c1c64a875d1fc6a0a$
+^95e58e9a2cdfd71adc6e0353d5c52f41a045d225$

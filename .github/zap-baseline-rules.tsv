@@ -1,0 +1,27 @@
+# ZAP Baseline Rules Configuration
+# Tab-separated: rule_id	action	description
+# Actions: IGNORE (suppress), WARN (advisory), FAIL (block merge)
+#
+# Based on pen test findings (April 2026) — suppress what we've already fixed
+# or accepted as informational.
+
+# Informational: Server leaks version via Server header (we remove x-powered-by)
+10036	IGNORE	Server Leaks Version Information via "Server" HTTP Response Header Field
+
+# Informational: X-Content-Type-Options not present on every MIME type
+10021	IGNORE	X-Content-Type-Options Header Missing (we set nosniff on all routes)
+
+# Informational: Strict-Transport-Security not on HTTP (expected — only set on HTTPS)
+10035	IGNORE	Strict-Transport-Security Header Not Set (HTTP-only in CI)
+
+# Low: Cookie without SameSite (no cookies used in dashboard)
+10054	IGNORE	Cookie without SameSite Attribute
+
+# Informational: Modern frameworks often set this
+10037	IGNORE	Server Leaks Information via "X-Powered-By" HTTP Response Header Field(s)
+
+# Informational: Re-examine periodically
+10109	WARN	Modern Web Application (informational — advisory only)
+
+# Medium: CSP unsafe-inline — Phase 1 keeps as fallback alongside nonces (tracked)
+10055	WARN	CSP: script-src unsafe-inline

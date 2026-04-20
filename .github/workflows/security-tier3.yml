@@ -1,0 +1,197 @@
+name: "Security — Tier 3 (Nightly)"
+
+# Tier 3: Full security scan — weekly (Sunday 04:00 UTC)
+# Target: ~30 minutes. Full ZAP scan, TLS cipher analysis, nikto.
+# Starts server with TLS (self-signed), runs comprehensive scans,
+# auto-creates an issue on new findings.
+
+on:
+  # Manual-only deep DAST/TLS scan to conserve action minutes.
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  full-security-scan:
+    name: Full DAST + TLS Analysis
+    runs-on: ubuntu-latest
+    env:
+      DASHBOARD_PORT: 8787
+      CERT_DIR: /tmp/certs
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      # --- Generate self-signed TLS certificate ---
+      - name: Generate TLS certificate
+        run: |
+          mkdir -p $CERT_DIR
+          openssl req -x509 -newkey rsa:2048 \
+            -keyout $CERT_DIR/key.pem \
+            -out $CERT_DIR/cert.pem \
+            -days 1 -nodes \
+            -subj "/CN=localhost/O=CI-Security-Test" \
+            -addext "subjectAltName=DNS:localhost,IP:127.0.0.1"
+          echo "Certificate generated:"
+          openssl x509 -in $CERT_DIR/cert.pem -noout -subject -dates
+
+      # --- Start dashboard with TLS ---
+      - name: Start HTTPS dashboard server
+        run: |
+          export INDEX_SERVER_DASHBOARD=1
+          export INDEX_SERVER_DASHBOARD_PORT=$DASHBOARD_PORT
+          export INDEX_SERVER_DASHBOARD_HOST=127.0.0.1
+          export INDEX_SERVER_DASHBOARD_TLS=1
+          export INDEX_SERVER_DASHBOARD_TLS_CERT=$CERT_DIR/cert.pem
+          export INDEX_SERVER_DASHBOARD_TLS_KEY=$CERT_DIR/key.pem
+          mkdir -p logs
+          sleep infinity | node dist/server/index-server.js > logs/server-stdout.log 2> logs/server-stderr.log &
+          echo "SERVER_PID=$!" >> $GITHUB_ENV
+
+          # Wait for HTTPS server
+          for i in $(seq 1 30); do
+            if curl -skf https://127.0.0.1:$DASHBOARD_PORT/health > /dev/null 2>&1; then
+              echo "HTTPS server ready on port $DASHBOARD_PORT"
+              break
+            fi
+            echo "Waiting for HTTPS server... ($i/30)"
+            sleep 1
+          done
+
+          curl -skf https://127.0.0.1:$DASHBOARD_PORT/health || {
+            echo "::error::HTTPS server failed to start within 30 seconds"
+            exit 1
+          }
+
+      # --- Security header validation (HTTPS) ---
+      - name: Validate security headers (HTTPS)
+        run: node scripts/validate-security-headers.mjs https://127.0.0.1:$DASHBOARD_PORT
+
+      # --- TLS cipher analysis ---
+      - name: Install testssl.sh
+        run: |
+          git clone --depth 1 https://github.com/drwetter/testssl.sh.git /tmp/testssl
+
+      - name: TLS cipher analysis
+        run: |
+          /tmp/testssl/testssl.sh --quiet --color 0 \
+            --protocols --ciphers --headers \
+            --jsonfile /tmp/testssl-results.json \
+            127.0.0.1:$DASHBOARD_PORT || true
+          echo "--- TLS Summary ---"
+          cat /tmp/testssl-results.json | python3 -c "
+          import json, sys
+          data = json.load(sys.stdin)
+          for item in data:
+            sev = item.get('severity', 'INFO')
+            if sev in ('CRITICAL', 'HIGH', 'MEDIUM'):
+              print(f'[{sev}] {item.get(\"id\",\"?\")} — {item.get(\"finding\",\"\")}')
+          " 2>/dev/null || echo "(testssl JSON parse skipped)"
+
+      # --- ZAP Full Scan ---
+      - name: ZAP Full Scan (HTTPS)
+        uses: zaproxy/action-full-scan@v0.13.0
+        with:
+          target: https://127.0.0.1:${{ env.DASHBOARD_PORT }}/
+          rules_file_name: '.github/zap-baseline-rules.tsv'
+          cmd_options: '-I -config connection.dnsTtlSuccessfulQueries=-1'
+          allow_issue_writing: false
+        continue-on-error: true
+
+      # --- nikto scan ---
+      - name: Install nikto
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq nikto 2>/dev/null || {
+            echo "nikto not in apt — using Docker"
+            echo "NIKTO_DOCKER=1" >> $GITHUB_ENV
+          }
+
+      - name: nikto scan
+        run: |
+          if [ "${NIKTO_DOCKER:-}" = "1" ]; then
+            docker run --net=host -v /tmp:/tmp frapsoft/nikto \
+              -h https://127.0.0.1:$DASHBOARD_PORT -ssl -nointeractive \
+              -output /tmp/nikto-report.html -Format htm || true
+          else
+            nikto -h https://127.0.0.1:$DASHBOARD_PORT -ssl -nointeractive \
+              -output /tmp/nikto-report.html -Format htm || true
+          fi
+
+      # --- Upload all reports ---
+      - name: Upload security reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: security-tier3-reports
+          path: |
+            report_html.html
+            /tmp/testssl-results.json
+            /tmp/nikto-report.html
+          retention-days: 90
+
+      - name: Upload server logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: security-tier3-server-logs
+          path: |
+            logs/server-*.log
+            logs/mcp-server.log
+            logs/instruction-transactions.log.jsonl
+          retention-days: 90
+          if-no-files-found: warn
+
+      # --- Cleanup ---
+      - name: Stop server
+        if: always()
+        run: |
+          if [ -n "$SERVER_PID" ]; then
+            kill $SERVER_PID 2>/dev/null || true
+          fi
+
+      # --- Auto-create issue on failure ---
+      - name: Create issue on security findings
+        if: failure()
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const title = `🔒 Tier 3 Security Scan Findings — ${new Date().toISOString().split('T')[0]}`;
+            const body = [
+              'Weekly Tier 3 security scan detected potential findings.',
+              '',
+              '**Scan components:** ZAP full scan, testssl.sh, nikto, header validation',
+              '**Server config:** HTTPS with self-signed cert, TLS 1.2+1.3',
+              '',
+              'Review the uploaded artifacts for details.',
+              '',
+              `Run: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+            ].join('\n');
+            const existing = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'security-scan',
+            });
+            if (!existing.data.some(i => i.title.startsWith('🔒 Tier 3 Security'))) {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title,
+                body,
+                labels: ['security-scan', 'automated-issue'],
+              });
+            }

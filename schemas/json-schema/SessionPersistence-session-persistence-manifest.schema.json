@@ -1,0 +1,109 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$ref": "#/definitions/SessionPersistenceManifest",
+  "definitions": {
+    "SessionPersistenceManifest": {
+      "type": "object",
+      "properties": {
+        "metadata": {
+          "$ref": "#/definitions/SessionPersistenceMetadata"
+        },
+        "files": {
+          "type": "object",
+          "properties": {
+            "adminSessions": {
+              "type": "string"
+            },
+            "webSocketConnections": {
+              "type": "string"
+            },
+            "sessionHistory": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "adminSessions",
+            "webSocketConnections",
+            "sessionHistory"
+          ],
+          "additionalProperties": false
+        },
+        "retention": {
+          "type": "object",
+          "properties": {
+            "maxHistoryEntries": {
+              "type": "number"
+            },
+            "maxHistoryDays": {
+              "type": "number"
+            },
+            "maxConnectionHistoryDays": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "maxHistoryEntries",
+            "maxHistoryDays",
+            "maxConnectionHistoryDays"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "metadata",
+        "files",
+        "retention"
+      ],
+      "additionalProperties": false
+    },
+    "SessionPersistenceMetadata": {
+      "type": "object",
+      "properties": {
+        "lastPersisted": {
+          "type": "string"
+        },
+        "version": {
+          "type": "number"
+        },
+        "totalSessions": {
+          "type": "number"
+        },
+        "totalConnections": {
+          "type": "number"
+        },
+        "totalHistoryEntries": {
+          "type": "number"
+        },
+        "checksums": {
+          "type": "object",
+          "properties": {
+            "sessions": {
+              "type": "string"
+            },
+            "connections": {
+              "type": "string"
+            },
+            "history": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "sessions",
+            "connections",
+            "history"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "lastPersisted",
+        "version",
+        "totalSessions",
+        "totalConnections",
+        "totalHistoryEntries",
+        "checksums"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

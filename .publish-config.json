@@ -1,0 +1,10 @@
+{
+  "sanctionedRemotes": ["https://github.com/jagilber-org/index-server.git"],
+  "allowDirectPublish": true,
+  "notes": [
+    "List authorized public mirror URLs in sanctionedRemotes.",
+    "Set allowDirectPublish to true to permit force-push delivery via Publish-ToMirror.ps1.",
+    "The pre-push-public-guard.ps1 hook also reads this file for sanctioned remote enforcement.",
+    "This file should be committed for auditability. Use .publish-config.local.json (gitignored) for machine-specific overrides."
+  ]
+}
