@@ -1,0 +1,11 @@
+{
+  "tag": null,
+  "commitSha": "2940528e311227ef46daaebe740704e06a0536ed",
+  "piiScanPassed": true,
+  "fileCount": 1028,
+  "contentHash": "4ce9eb0139777ce648398d0904a538742924d4cde5dd712a8498d40af58fa584",
+  "localPath": "c:\\github\\jagilber-org\\index-server",
+  "sourceRepo": "index-server",
+  "preparedAt": "2026-04-21T19:16:09.1422472Z",
+  "forbiddenArtifactCheck": "passed"
+}

@@ -1,0 +1,116 @@
+version: 2
+
+secret:
+  ignored-paths:
+    # --- Dependency and virtual-environment directories ---
+    - node_modules/
+    - .venv/
+    - venv/
+    - __pycache__/
+    - vendor/
+    - packages/
+    - .tox/
+    - bower_components/
+
+    # --- Build outputs ---
+    - dist/
+    - build/
+    - .next/
+    - .nuxt/
+    - obj/
+    - bin/
+    - out/
+
+    # --- .NET publish and intermediate ---
+    - publish/
+
+    # --- Caches ---
+    - .git/
+    - .hg/
+    - .svn/
+    - .cache_ggshield/
+    - .cache/
+    - .mypy_cache/
+    - .pytest_cache/
+    - coverage/
+    - .nyc_output/
+
+    # --- Infrastructure state ---
+    - .terraform/
+
+    # --- Lock files (large, deterministic, no secrets) ---
+    - package-lock.json
+    - yarn.lock
+    - pnpm-lock.yaml
+    - Gemfile.lock
+    - poetry.lock
+    - Pipfile.lock
+    - composer.lock
+
+    # --- Images ---
+    - "**/*.png"
+    - "**/*.jpg"
+    - "**/*.jpeg"
+    - "**/*.gif"
+    - "**/*.ico"
+    - "**/*.bmp"
+    - "**/*.svg"
+    - "**/*.webp"
+
+    # --- Fonts ---
+    - "**/*.woff"
+    - "**/*.woff2"
+    - "**/*.ttf"
+    - "**/*.eot"
+    - "**/*.otf"
+
+    # --- Audio and video ---
+    - "**/*.mp3"
+    - "**/*.mp4"
+    - "**/*.avi"
+    - "**/*.mov"
+    - "**/*.wav"
+    - "**/*.flac"
+
+    # --- Archives ---
+    - "**/*.zip"
+    - "**/*.tar"
+    - "**/*.gz"
+    - "**/*.bz2"
+    - "**/*.7z"
+    - "**/*.rar"
+
+    # --- Native binaries and compiled objects ---
+    - "**/*.exe"
+    - "**/*.dll"
+    - "**/*.so"
+    - "**/*.dylib"
+    - "**/*.bin"
+    - "**/*.obj"
+    - "**/*.o"
+    - "**/*.pyc"
+    - "**/*.pyo"
+    - "**/*.class"
+    - "**/*.jar"
+
+    # --- Documents (binary formats) ---
+    - "**/*.pdf"
+    - "**/*.doc"
+    - "**/*.docx"
+    - "**/*.xls"
+    - "**/*.xlsx"
+    - "**/*.ppt"
+    - "**/*.pptx"
+
+    # --- Repo-specific exclusions ---
+    - backups/
+    - data/
+    - feedback/
+    - instructions/
+    - logs/
+    - metrics/
+    - snapshots/
+    - test-results/
+    - tmp/
+    - .certs/
+    - .secrets.baseline

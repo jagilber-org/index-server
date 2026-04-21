@@ -1,0 +1,55 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$ref": "#/definitions/SessionPersistenceMetadata",
+  "definitions": {
+    "SessionPersistenceMetadata": {
+      "type": "object",
+      "properties": {
+        "lastPersisted": {
+          "type": "string"
+        },
+        "version": {
+          "type": "number"
+        },
+        "totalSessions": {
+          "type": "number"
+        },
+        "totalConnections": {
+          "type": "number"
+        },
+        "totalHistoryEntries": {
+          "type": "number"
+        },
+        "checksums": {
+          "type": "object",
+          "properties": {
+            "sessions": {
+              "type": "string"
+            },
+            "connections": {
+              "type": "string"
+            },
+            "history": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "sessions",
+            "connections",
+            "history"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "lastPersisted",
+        "version",
+        "totalSessions",
+        "totalConnections",
+        "totalHistoryEntries",
+        "checksums"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

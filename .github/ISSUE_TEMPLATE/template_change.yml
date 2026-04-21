@@ -1,0 +1,73 @@
+name: Template Change Proposal
+description: Propose a reusable change that should be reflected in jagilber/template-repo
+title: "[Template]: "
+labels:
+
+  - template-change
+body:
+  - type: textarea
+    id: proposed-change
+    attributes:
+      label: Proposed change
+      description: What do you want to change in the template?
+    validations:
+      required: true
+
+  - type: dropdown
+    id: breaking-change
+    attributes:
+      label: Breaking change?
+      description: Does this require adopters to update behavior or files?
+      options:
+        - "No"
+        - "Yes"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: version-bump
+    attributes:
+      label: Version bump
+      description: What version bump should this template change require?
+      options:
+        - Patch
+        - Minor
+        - Major
+    validations:
+      required: true
+
+  - type: input
+    id: affected-adopters
+    attributes:
+      label: Affected adopters
+      description: All adopters, or only specific configurations?
+      placeholder: All adopters
+
+  - type: input
+    id: constitution-alignment
+    attributes:
+      label: Constitution alignment
+      description: Which constitution articles does this relate to?
+      placeholder: GW-1, SH-2, CD-1
+
+  - type: textarea
+    id: migration-path
+    attributes:
+      label: Migration path
+      description: How should existing adopters apply this change?
+
+  - type: textarea
+    id: rationale
+    attributes:
+      label: Rationale
+      description: Why is this change needed? What evidence supports it?
+    validations:
+      required: true
+
+  - type: textarea
+    id: validation-plan
+    attributes:
+      label: Validation plan
+      description: How will you verify this does not break existing adopters?
+    validations:
+      required: true

@@ -1,0 +1,59 @@
+name: Promotion Freshness Check
+
+on:
+  schedule:
+    - cron: '0 8 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check-freshness:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
+
+      - name: Check promotion-map source hashes
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          $mapPath = '.specify/config/promotion-map.json'
+          if (-not (Test-Path $mapPath)) {
+            Write-Host '::warning::No promotion-map.json found, skipping freshness check.'
+            exit 0
+          }
+
+          $map = Get-Content $mapPath -Raw | ConvertFrom-Json
+          $stale = @()
+
+          foreach ($source in $map.sources) {
+            if (-not (Test-Path $source.file)) {
+              $stale += [PSCustomObject]@{
+                Id     = $source.id
+                File   = $source.file
+                Status = 'FILE_MISSING'
+              }
+              continue
+            }
+
+            $content = Get-Content $source.file -Raw
+            $hash = [System.BitConverter]::ToString(
+              [System.Security.Cryptography.SHA256]::Create().ComputeHash(
+                [System.Text.Encoding]::UTF8.GetBytes($content)
+              )
+            ).Replace('-', '').ToLower()
+
+            Write-Host "  $($source.id): hash=$($hash.Substring(0,12))... file=$($source.file)"
+          }
+
+          if ($stale.Count -gt 0) {
+            Write-Host ''
+            Write-Host '::error::Promotion map references missing files:' -ForegroundColor Red
+            $stale | Format-Table -AutoSize
+            exit 1
+          }
+
+          Write-Host ''
+          Write-Host 'All promotion-map sources are present and hashable.' -ForegroundColor Green

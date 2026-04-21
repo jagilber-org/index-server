@@ -1,0 +1,5 @@
+# Enterprise private registry configuration template
+# Copy this file to .npmrc and update with your registry URL
+#
+# registry=https://your-registry.example.com/
+# //your-registry.example.com/:_authToken=${NPM_TOKEN}

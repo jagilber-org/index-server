@@ -1,0 +1,23 @@
+name: Manifest Verify
+on:
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch: {}
+
+jobs:
+  manifest-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: 'npm'
+      - name: Install
+        run: npm ci
+      - name: Build
+        run: npm run build
+      - name: Generate Manifest (current)
+        run: npm run manifest:generate
+      - name: Verify Manifest
+        run: npm run verify:manifest

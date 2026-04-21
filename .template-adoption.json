@@ -1,0 +1,36 @@
+{
+  "templateName": "layered-hook-security-template",
+  "templateVersion": "1.24.0",
+  "hookStandardInstruction": "repository-hook-security-standard",
+  "hookStandardVersion": "1.4.0",
+  "adoptedAt": "2026-04-19T00:00:00.000Z",
+  "notes": [
+    "Adopted from template v1.0.0 -> v1.8.0 in a single parity pass.",
+    "Constitution upgraded to schemaVersion 2 / v2.2.0 with structured rules, rationale, and new articles.",
+    "Template manifest upgraded to v1.8.0 with full version history notes.",
+    "Added observability-logging.md and repository-security-hooks.md shared instructions.",
+    "Added .pii-allowlist with standard placeholder patterns.",
+    "Hook coverage aligned with the template for curated PII, env leak scanning, and ggshield while preserving scripts/ as the implementation surface.",
+    "Added the template's dedicated Gitleaks and Semgrep GitHub Actions workflows for CI-side secret and configuration analysis.",
+    "Added the template's GGShield audit workflow, repo-owned .gitleaks.toml baseline, local pre-push Gitleaks and Semgrep hooks, and CI replay of the security pre-push policy.",
+    "v1.11.0: Added DC-3 license-declaration constitutional rule to documentation article.",
+    "v1.12.0: Added SH-4 through SH-9 application-security constitutional rules (path containment, loopback binding, TLS verification, header credentials, CSP, config-gated diagnostics).",
+    "v1.13.0: Promoted gitleaks to pre-commit hook, ggshield to pre-push hook; added .ggshield.yml with aligned exclusions.",
+    "v1.14.0: Added well-known DNS resolver IPs to .pii-allowlist; merged template generic path exclusions into .gitleaks.toml; added .github/workflows/ to check-yaml exclude.",
+    "v1.15.0: Added Publish-ToPublicRepo.ps1 clean-room publish script and .publish-exclude.example.",
+    "v1.16.0: Updated Publish-ToPublicRepo.ps1 with dotfile allowlist, robocopy pre-exclusion, PII scan auto-detect, optional RemoteUrl for local mode, and .publish-exclude.example comment update.",
+    "v1.16.0 reconcile follow-up: adopted the current template metadata schema, git workflow guidance, issue forms, Semgrep custom rules, promotion freshness workflow, and template metadata validation script.",
+    "v1.17.0–v1.22.0: Adopted adopter-hook-patterns.md, public-mirror-guard.md, mirrored-release-workflow.md, iac-patterns.md, language-ecosystem-patterns.md, codeql-configuration-patterns.md shared instructions. Migrated manifest to schemaVersion 2.",
+    "v1.23.0: Adopted New-CleanRoomCopy.ps1 and Publish-ToMirror.ps1 two-step publish safety workflow. Added .publish-config.json with sanctioned remote enforcement. Replaced Publish-ToPublicRepo.ps1 with deprecated wrapper. Added Compare-TemplateSpec.ps1 and migrate-manifest-schema.ps1.",
+    "v1.24.0: Deleted deprecated Publish-ToPublicRepo.ps1. Constitution bumped to v2.7.0 with agentBehavior article (AG-1..AG-4), SH-10 prompt-injection rule, OB-5, TS-4, IP-4, IP-5. Adopted prompt-injection scanning hook (hooks/check-prompt-injection.ps1), hallucination quality gates (hooks/check-hallucinations.ps1), agent attestation framework (.squad/templates/, .instructions/shared/agent-attestation.md, scripts/append-agent-provenance.ps1, hooks/validate-agent-trailers.ps1). Expanded env-leak scanner with identity vars, vault/tool-path keywords, username-in-path detection, and lockfile skips. Added commit-msg stage to .pre-commit-config.yaml."
+  ],
+  "localDeviations": [
+    { "surface": ".pre-commit-config.yaml", "deviation": "PII and env-leak scanning remain in scripts/pre-commit.ps1; new hooks (prompt-injection, hallucination, agent-trailers) are registered as standalone entries in hooks/ alongside the consolidated script." },
+    { "surface": "instructions/", "deviation": "instructions/ remains the checked-in runtime instruction catalog; .instructions/ is reserved for repo-local guidance." },
+    { "surface": "scripts/sync-constitution.ps1", "deviation": "The Node entry point sync-constitution.cjs remains the source implementation, with scripts/sync-constitution.ps1 as the template-compatible wrapper." },
+    { "surface": ".github/workflows/precommit.yml", "deviation": "The precommit.yml workflow replays the dedicated security pre-push hooks directly; the existing repo-local slow pre-push suite remains enforced by its own workflow surfaces." },
+    { "surface": ".github/workflows/auto-tag.yml", "deviation": "The template auto-tag workflow is intentionally not adopted because this repository's git tags represent product releases rather than templateVersion milestones." },
+    { "surface": "scripts/test-hook-regressions.ps1", "deviation": "Validates the repo's consolidated scripts/pre-commit.ps1 behavior rather than canonical hooks/* entry points." },
+    { "surface": "scripts/validate-constitution-ci.ps1", "deviation": "Not yet adopted — CI constitution validation is handled by existing pre-commit and build-time checks." }
+  ]
+}

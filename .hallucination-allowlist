@@ -1,0 +1,18 @@
+# Hallucination Allowlist
+#
+# Each non-blank, non-comment line suppresses a specific finding.
+# Format: <category>:<pattern>
+#
+# Categories:
+#   dependency   - suppress fabricated-dependency warnings for a package name
+#   import       - suppress phantom-import warnings for a module path
+#   test         - suppress self-validating-test warnings for a file path glob
+#
+# IMPORTANT: Category-wide wildcards (e.g., dependency:*) are rejected.
+# Patterns must be specific enough to target individual items.
+# Changes to this file require CODEOWNERS approval.
+#
+# Examples:
+#   dependency:my-internal-package
+#   import:src/utils/internal-helper
+#   test:tests/smoke/*.test.js

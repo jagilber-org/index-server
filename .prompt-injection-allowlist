@@ -1,0 +1,12 @@
+# Prompt Injection Allowlist
+#
+# Each non-comment, non-blank line is a regex tested against matched values.
+# Lines starting with # are comments.
+#
+# Example: suppress a specific pattern match
+# ^ignore all previous instructions$
+#
+# env-leak-allowlist: documented template terminology
+# The word "jailbreak" appears in constitution rules and changelog describing
+# what the prompt injection scanner detects — not actual injection content.
+jailbreak delimiters

@@ -1,0 +1,54 @@
+name: Coverage & Dist Freshness
+on:
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch: {}
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: 'npm'
+      - name: Install
+        run: npm ci
+      - name: Build
+        run: npm run build
+      - name: Dist Freshness
+        run: npm run check:dist
+      - name: Coverage
+        run: npm run coverage:ci
+        continue-on-error: true
+      - name: Upload coverage to Codecov
+        if: always()
+        uses: codecov/codecov-action@v6
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./coverage/cobertura-coverage.xml,./coverage/lcov.info
+          flags: unittests
+          fail_ci_if_error: false
+          directory: ./coverage
+      - name: Upload Coverage
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-report
+          path: coverage
+      - name: Generate Manifest
+        run: npm run manifest:generate
+      - name: Upload Manifest
+        uses: actions/upload-artifact@v7
+        with:
+          name: Index-manifest
+          path: snapshots/Index-manifest.json
+      - name: Generate SBOM
+        run: npm run sbom || true
+      - name: Upload SBOM
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: sbom
+          path: sbom.json

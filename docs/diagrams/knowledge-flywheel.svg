@@ -1,0 +1,69 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 320" fill="none">
+  <style>
+    text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
+  </style>
+  <defs>
+    <marker id="fa" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="8" markerHeight="7" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#8b949e"/>
+    </marker>
+    <marker id="fa-green" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="8" markerHeight="7" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#238636"/>
+    </marker>
+  </defs>
+
+  <!-- Step 1: Agent encounters problem (top-left) -->
+  <rect x="20" y="30" width="200" height="36" rx="6" fill="#1f6feb"/>
+  <text x="120" y="53" text-anchor="middle" fill="#fff" font-size="12" font-weight="600">Agent encounters problem</text>
+
+  <!-- Arrow → -->
+  <line x1="220" y1="48" x2="268" y2="48" stroke="#8b949e" stroke-width="1.5" marker-end="url(#fa)"/>
+
+  <!-- Step 2: Creates local .instructions/ -->
+  <rect x="270" y="30" width="220" height="36" rx="6" fill="#1f6feb"/>
+  <text x="380" y="53" text-anchor="middle" fill="#fff" font-size="12" font-weight="600">Creates local .instructions/</text>
+
+  <!-- Arrow ↓ -->
+  <line x1="380" y1="66" x2="380" y2="98" stroke="#8b949e" stroke-width="1.5" marker-end="url(#fa)"/>
+
+  <!-- Step 3: Tests & validates -->
+  <rect x="270" y="100" width="220" height="36" rx="6" fill="#1f6feb"/>
+  <text x="380" y="123" text-anchor="middle" fill="#fff" font-size="12" font-weight="600">Tests &amp; validates solution</text>
+
+  <!-- Arrow ↓ -->
+  <line x1="380" y1="136" x2="380" y2="164" stroke="#8b949e" stroke-width="1.5" marker-end="url(#fa)"/>
+
+  <!-- Decision: Valuable to others? -->
+  <g transform="translate(380, 195)">
+    <polygon points="0,-28 100,0 0,28 -100,0" fill="#bf5b00"/>
+    <text x="0" y="4" text-anchor="middle" fill="#fff" font-size="11" font-weight="600">Valuable to others?</text>
+  </g>
+
+  <!-- Yes → Promote (right) -->
+  <line x1="480" y1="195" x2="528" y2="195" stroke="#238636" stroke-width="1.5" marker-end="url(#fa-green)"/>
+  <rect x="488" y="180" width="34" height="16" rx="8" fill="#238636"/>
+  <text x="505" y="192" text-anchor="middle" fill="#fff" font-size="9" font-weight="600">Yes</text>
+
+  <!-- Step 5: Promote to shared index -->
+  <rect x="530" y="177" width="210" height="36" rx="6" fill="#238636"/>
+  <text x="635" y="200" text-anchor="middle" fill="#fff" font-size="12" font-weight="600">Promote to shared index</text>
+
+  <!-- Arrow ↓ -->
+  <line x1="635" y1="213" x2="635" y2="245" stroke="#8b949e" stroke-width="1.5" marker-end="url(#fa)"/>
+
+  <!-- Step 6: Other agents benefit -->
+  <rect x="530" y="247" width="210" height="36" rx="6" fill="#8250df"/>
+  <text x="635" y="270" text-anchor="middle" fill="#fff" font-size="12" font-weight="600">Other agents benefit</text>
+
+  <!-- Cycle arrow: back to Step 1 (up and left) -->
+  <line x1="530" y1="265" x2="120" y2="265" stroke="#8b949e" stroke-width="1.5"/>
+  <line x1="120" y1="265" x2="120" y2="70" stroke="#8b949e" stroke-width="1.5" marker-end="url(#fa)"/>
+
+  <!-- No → Keep local (down) -->
+  <line x1="380" y1="223" x2="380" y2="270" stroke="#8b949e" stroke-width="1.5" marker-end="url(#fa)"/>
+  <rect x="363" y="232" width="26" height="16" rx="8" fill="#57606a"/>
+  <text x="376" y="244" text-anchor="middle" fill="#fff" font-size="9" font-weight="600">No</text>
+
+  <!-- Step: Keep local only -->
+  <rect x="300" y="274" width="160" height="36" rx="6" fill="#57606a"/>
+  <text x="380" y="297" text-anchor="middle" fill="#fff" font-size="12" font-weight="600">Keep local only</text>
+</svg>
