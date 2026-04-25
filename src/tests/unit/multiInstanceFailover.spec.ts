@@ -43,7 +43,7 @@ async function spawnServer(env: Record<string, string>, label: string): Promise<
   });
 
   let dashUrl = '';
-  const pat = /Server started on (https?:\/\/[^\s"]+)/;
+  const pat = /(?:Server started on|\[startup\] Dashboard URL:)\s+(https?:\/\/[^\s"]+)/;
 
   proc.stdout.setEncoding('utf8');
   proc.stderr.setEncoding('utf8');

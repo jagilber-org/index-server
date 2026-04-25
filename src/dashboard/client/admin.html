@@ -22,6 +22,7 @@
     <script defer src="js/admin.messaging.js"></script>
     <script defer src="js/admin.sqlite.js"></script>
     <script defer src="js/admin.boot.js"></script>
+    <script defer src="js/admin.feedback.js"></script>
 </head>
 <body>
     <div class="admin-container admin-root">
@@ -39,7 +40,6 @@
                 </div>
             </div>
             <div id="buildMeta" class="build-meta">Loading build metadata…</div>
-            <a id="feedback-btn" class="feedback-btn" href="https://github.com/jagilber-org/index-server/issues/new/choose" target="_blank" rel="noopener noreferrer" title="Send Feedback (opens GitHub Issues)">&#x1F4AC; Feedback</a>
             <div class="admin-nav">
                 <!-- Added explicit data-section attributes so JS can reliably map buttons to sections after HTML refactor -->
                 <!-- Redundant inline onclick fallback keeps basic navigation working even if JS wiring changes -->
@@ -52,6 +52,7 @@
                 <button class="nav-btn" data-section="graph" onclick="window.showSection && window.showSection('graph')">Graph</button>
                 <button class="nav-btn" data-section="embeddings" onclick="window.showSection && window.showSection('embeddings')">Embeddings</button>
                 <button class="nav-btn" data-section="messaging" onclick="window.showSection && window.showSection('messaging')">Messaging</button>
+                <button class="nav-btn" data-section="feedback" onclick="window.showSection && window.showSection('feedback')">Feedback</button>
                 <button class="nav-btn" data-section="sqlite" id="nav-sqlite" onclick="window.showSection && window.showSection('sqlite')" style="display:none">SQLite</button>
             </div>
         </div>
@@ -596,6 +597,90 @@
             <div id="messaging-detail"></div>
         </div>
 
+        <!-- Feedback Section -->
+        <div id="feedback-section" class="admin-section hidden">
+            <div class="admin-card">
+                <div class="card-header">
+                    <div class="card-icon">💬</div>
+                    <div class="card-title">Feedback Entries</div>
+                </div>
+                <div class="feedback-toolbar">
+                    <button id="feedback-create-btn" class="action-btn" data-fb-action="create">➕ New Entry</button>
+                    <button class="action-btn" data-fb-action="refresh">🔄 Refresh</button>
+                    <input id="feedback-filter" class="form-input" type="text" placeholder="Filter entries…" />
+                    <select id="feedback-status-filter" class="form-input feedback-status-filter">
+                        <option value="">All Status</option>
+                        <option value="new">New</option>
+                        <option value="acknowledged">Acknowledged</option>
+                        <option value="in-progress">In Progress</option>
+                        <option value="resolved">Resolved</option>
+                        <option value="closed">Closed</option>
+                    </select>
+                </div>
+                <div id="feedback-table" class="feedback-table-wrap" role="region" aria-label="Feedback entries">
+                    <div class="feedback-empty">Click <strong>Refresh</strong> or <strong>New Entry</strong> to get started.</div>
+                </div>
+            </div>
+
+            <!-- Detail / edit area -->
+            <div id="feedback-detail" class="admin-card hidden feedback-detail-card">
+                <div class="card-header">
+                    <div class="card-icon">📝</div>
+                    <div class="card-title" id="feedback-detail-title">Entry Details</div>
+                </div>
+                <div class="feedback-form">
+                    <div class="form-group">
+                        <label class="form-label" for="feedback-entry-title">Title <span class="feedback-required">*</span></label>
+                        <input id="feedback-entry-title" class="form-input" type="text" placeholder="Short summary" aria-required="true" />
+                    </div>
+                    <div class="feedback-form-row">
+                        <div class="form-group">
+                            <label class="form-label" for="feedback-entry-type">Type</label>
+                            <select id="feedback-entry-type" class="form-input">
+                                <option value="bug-report">Bug Report</option>
+                                <option value="feature-request">Feature Request</option>
+                                <option value="issue">Issue</option>
+                                <option value="performance">Performance</option>
+                                <option value="usability">Usability</option>
+                                <option value="security">Security</option>
+                                <option value="status">Status</option>
+                                <option value="other">Other</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="feedback-entry-severity">Severity</label>
+                            <select id="feedback-entry-severity" class="form-input">
+                                <option value="low">Low</option>
+                                <option value="medium" selected>Medium</option>
+                                <option value="high">High</option>
+                                <option value="critical">Critical</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="feedback-entry-status">Status</label>
+                            <select id="feedback-entry-status" class="form-input">
+                                <option value="new">New</option>
+                                <option value="acknowledged">Acknowledged</option>
+                                <option value="in-progress">In Progress</option>
+                                <option value="resolved">Resolved</option>
+                                <option value="closed">Closed</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="feedback-entry-description">Description</label>
+                        <textarea id="feedback-entry-description" class="form-input feedback-entry-description" rows="5" placeholder="Detailed description…"></textarea>
+                    </div>
+                </div>
+                <div class="feedback-detail-actions">
+                    <button id="feedback-save-btn" class="action-btn" data-fb-action="save">💾 Save</button>
+                    <button id="feedback-delete-btn" class="action-btn danger" data-fb-action="delete">🗑️ Delete</button>
+                    <button id="feedback-github-btn" class="action-btn btn-info" data-fb-action="github" title="Open as GitHub issue in jagilber-org/index-server (client-side only)">🐙 Open GitHub Issue</button>
+                    <button class="action-btn warning" data-fb-action="cancel">✖ Cancel</button>
+                </div>
+            </div>
+        </div>
+
         <!-- SQLite Section -->
         <div id="sqlite-section" class="admin-section hidden">
             <div class="admin-grid">
@@ -786,6 +871,9 @@
                     break;
                 case 'messaging':
                     if (window.initMessaging) window.initMessaging();
+                    break;
+                case 'feedback':
+                    if (window.initFeedback) window.initFeedback();
                     break;
             }
         }

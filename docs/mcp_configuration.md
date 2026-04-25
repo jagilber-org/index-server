@@ -21,7 +21,7 @@ Different MCP clients use different configuration file formats. Choose the right
 | **Copilot CLI** | `~/.copilot/mcp-config.json` | `mcpServers` | `cwd`, `tools` | All env values are quoted strings |
 | **Claude Desktop** | `claude_desktop_config.json` | `mcpServers` | `cwd` | Same root key as Copilot CLI |
 
-> **Tip:** VS Code can auto-discover servers configured for Copilot CLI via `chat.mcp.discovery.enabled`. The VS Code extension's Configure command generates both formats.
+> **Tip:** VS Code can auto-discover servers configured for Copilot CLI via `chat.mcp.discovery.enabled`. The `npx -y @jagilber-org/index-server@latest --setup` flow generates both formats without relying on the legacy extension.
 
 #### VS Code format (`servers`)
 
@@ -32,7 +32,7 @@ Different MCP clients use different configuration file formats. Choose the right
     "index-server": {
       "type": "stdio",
       "command": "npx",
-      "args": ["@jagilber-org/index-server@latest"],
+      "args": ["-y", "@jagilber-org/index-server@latest"],
       "env": {
         "INDEX_SERVER_PROFILE": "default"
       }
@@ -100,13 +100,66 @@ graph TD
     style F fill:#238636
 ```
 
-## 🚀 Quick Start Configurations
+## � How to Invoke Tools
 
-> **Note:** The examples below use the `mcpServers` format (Copilot CLI / Claude Desktop). For VS Code's `servers` format, see the [Config File Formats](#config-file-formats) section above, or use the VS Code extension's **Configure MCP Client** command to generate either format.
+Once configured, how you invoke index-server tools depends on your MCP client:
 
-### Recommended: Read-Only Production
+### VS Code (Copilot Chat)
 
-**Use Case**: Enterprise environments, shared access, audit trail capabilities
+Type `#index-server` in the Copilot Chat input to attach the server's tools, then ask naturally:
+
+```
+#index-server search for logging best practices
+```
+
+If the server is listed in `.vscode/mcp.json`, Copilot may auto-discover tools without `#index-server`.
+
+### Copilot CLI
+
+Tools are auto-discovered from `~/.copilot/mcp-config.json`. Just ask:
+
+```
+copilot "search index-server for deployment patterns"
+```
+
+### Claude Desktop
+
+Tools are auto-discovered from the Claude Desktop config. Use them naturally in conversation:
+
+```
+Search the index for security guidelines
+```
+
+### Setup Wizard
+
+Generate config for any target client with the interactive setup wizard (arrow-key menus):
+
+```bash
+# Via npx (no clone required)
+npx -y @jagilber-org/index-server@latest --setup
+
+# Via npm script (from repo)
+npm run setup
+
+# Direct
+node scripts/setup-wizard.mjs
+
+# Non-interactive, multiple targets
+node scripts/setup-wizard.mjs --non-interactive --target vscode,copilot-cli,claude --write
+
+# Via the server entry point
+node dist/server/index-server.js --setup
+```
+
+## �🚀 Quick Start Configurations
+
+> **Note:** The examples below use the `mcpServers` format (Copilot CLI / Claude Desktop). For VS Code's `servers` format, see the [Config File Formats](#config-file-formats) section above, or use `npx -y @jagilber-org/index-server@latest --setup` to generate either format.
+>
+> **Best practice:** keep `INDEX_SERVER_DIR` in a stable data folder outside MCP client config paths and application install folders so backups and reinstalls do not disturb your catalog.
+
+### Recommended: High-Security Read-Only Production
+
+**Use Case**: Enterprise environments that require an explicit read-only runtime, shared access without direct writes, or stricter separation between production readers and trusted mutation workflows
 
 ```json
 {
@@ -121,6 +174,7 @@ graph TD
       "cwd": "C:/mcp/index-server",
       "env": {
         "INDEX_SERVER_DIR": "C:/mcp/instructions",
+        "INDEX_SERVER_MUTATION": "0",
         "INDEX_SERVER_VERBOSE_LOGGING": "0"
       },
       "restart": "onExit",
@@ -129,6 +183,8 @@ graph TD
   }
 }
 ```
+
+Use this profile when production must remain explicitly read-only. Governed production deployments that need trusted write flows can leave mutation enabled by default and rely on bootstrap gating, admin controls, and operator policy instead.
 
 ### Development: Full Mutation Access
 
@@ -148,7 +204,6 @@ graph TD
       "cwd": "<root>/index-server",
       "env": {
         "INDEX_SERVER_DIR": "<root>/index-server/instructions",
-        "INDEX_SERVER_MUTATION": "1",
         "INDEX_SERVER_VERBOSE_LOGGING": "1",
         "INDEX_SERVER_LOG_MUTATION": "1"
       },
@@ -176,7 +231,6 @@ graph TD
       "cwd": "C:/Program Files/Server-Index",
       "env": {
         "INDEX_SERVER_DIR": "D:/MCPData/instructions",
-        "INDEX_SERVER_MUTATION": "1",
         "INDEX_SERVER_VERBOSE_LOGGING": "0",
         "USAGE_ANALYTICS_DIR": "D:/MCPData/analytics"
       },
@@ -199,7 +253,7 @@ graph TD
 | Variable | Type | Default | Description | Security Impact |
 |----------|------|---------|-------------|-----------------|
 | `INDEX_SERVER_DIR` | Path | `./instructions` | Directory containing instruction JSON files | **HIGH** - Controls data access |
-| `INDEX_SERVER_MUTATION` | Boolean | `false` | Enable write operations (add, update, delete) | **CRITICAL** - Enables data modification |
+| `INDEX_SERVER_MUTATION` | Boolean | `true` | Write operations are enabled by default; set `0` for read-only | **CRITICAL** - Enables data modification |
 | `INDEX_SERVER_CACHE_MODE` | String | `normal` | Index caching mode: `normal`, `memoize`, `memoize+hash`, `reload`, `reload+memo` | Low |
 | `INDEX_SERVER_WORKSPACE` | String | - | Workspace identifier for Index operations | Low |
 | `INDEX_SERVER_MODE` | String | `standalone` | Server mode: `standalone`, `leader`, `follower`, `auto` | Medium |
@@ -238,6 +292,8 @@ graph TD
 | `INDEX_SERVER_MEMOIZE` | Boolean | `false` | Enable memoized Index caching | Production optimization |
 | `INDEX_SERVER_BODY_WARN_LENGTH` | Number | `100000` | Warn/truncate threshold for instruction body length | Content limits |
 | `INDEX_SERVER_SEMANTIC_ENABLED` | Boolean | `false` | Enable semantic search with embeddings | Feature toggle |
+| `INDEX_SERVER_SQLITE_VEC_ENABLED` | Boolean | `false` | Enable sqlite-vec vector embedding storage (requires SQLite backend, Node.js ≥ 22.13.0) | Feature toggle |
+| `INDEX_SERVER_SQLITE_VEC_PATH` | String | `""` | Custom path to sqlite-vec native binary (auto-detected if empty) | Deployment |
 | `GOV_HASH_TRAILING_NEWLINE` | Boolean | `false` | Hash compatibility mode | Legacy Compatibility |
 
 ### Backup & Recovery
@@ -274,7 +330,7 @@ graph TD
       "cwd": "/opt/index-server",
       "env": {
         "INDEX_SERVER_DIR": "/var/lib/mcp/instructions",
-        "INDEX_SERVER_MUTATION": "",
+        "INDEX_SERVER_MUTATION": "0",
         "INDEX_SERVER_VERBOSE_LOGGING": "0",
         "INDEX_SERVER_LOG_MUTATION": "0"
       },
@@ -306,7 +362,6 @@ graph TD
       "cwd": "C:/CorporateApps/MCP-Index",
       "env": {
         "INDEX_SERVER_DIR": "C:/CorporateData/MCP/instructions",
-        "INDEX_SERVER_MUTATION": "1",
         "INDEX_SERVER_VERBOSE_LOGGING": "0",
         "INDEX_SERVER_LOG_MUTATION": "1"
       },
@@ -340,7 +395,6 @@ graph TD
       "cwd": "C:/index-server",
       "env": {
         "INDEX_SERVER_DIR": "E:/FastSSD/mcp-instructions",
-        "INDEX_SERVER_MUTATION": "1",
         "INDEX_SERVER_VERBOSE_LOGGING": "0",
         "NODE_OPTIONS": "--max-old-space-size=2048"
       },
@@ -386,7 +440,6 @@ graph TD
       "cwd": "./",
       "env": {
         "INDEX_SERVER_DIR": "./instructions",
-        "INDEX_SERVER_MUTATION": "1",
         "INDEX_SERVER_VERBOSE_LOGGING": "1",
         "INDEX_SERVER_LOG_MUTATION": "1",
         "INDEX_SERVER_LOG_DIAG": "1",
@@ -421,8 +474,7 @@ graph TD
       "transport": "stdio",
       "env": {
         "INDEX_SERVER_DIR": "./test-instructions",
-        "INDEX_SERVER_MUTATION": "1",
-  "INDEX_SERVER_VERBOSE_LOGGING": "1"
+        "INDEX_SERVER_VERBOSE_LOGGING": "1"
       },
       "restart": "never",
   "tags": ["testing", "ci-cd"]
@@ -459,7 +511,6 @@ graph TD
       "cwd": "C:/mcp/staging",
       "env": {
         "INDEX_SERVER_DIR": "C:/mcp/data/staging/instructions",
-        "INDEX_SERVER_MUTATION": "1",
         "INDEX_SERVER_LOG_MUTATION": "1"
       },
       "restart": "onExit",
@@ -474,7 +525,6 @@ graph TD
       "cwd": "./",
       "env": {
         "INDEX_SERVER_DIR": "./instructions",
-        "INDEX_SERVER_MUTATION": "1",
         "INDEX_SERVER_VERBOSE_LOGGING": "1"
       },
       "restart": "onExit",
@@ -492,7 +542,7 @@ graph TD
 |-------|---------|----------|
 | **Server won't start** | No response to MCP calls | Check `npm run build` completed successfully |
 | **Permission denied** | File access errors | Verify `INDEX_SERVER_DIR` permissions |
-| **Mutation disabled** | Add/update operations fail | Set `INDEX_SERVER_MUTATION=1` |
+| **Mutation disabled** | Add/update operations fail | Remove `INDEX_SERVER_MUTATION=0` or set it to `1` |
 | **Dashboard not accessible** | Dashboard URL not working | Check `--dashboard` flag and port availability |
 | **High memory usage** | Performance degradation | Set `NODE_OPTIONS=--max-old-space-size=2048` |
 
@@ -523,7 +573,7 @@ node dist/server/index-server.js --help
 
 ```text
 Error: ENOENT: no such file or directory, scandir 'instructions'
-Error: Mutation disabled. Set INDEX_SERVER_MUTATION=1 to enable.
+Error: Direct mutation calls are disabled by the current runtime override. Remove INDEX_SERVER_MUTATION=0 to re-enable direct calls.
 ```
 
 ## 📊 Performance Monitoring
@@ -543,7 +593,6 @@ Error: Mutation disabled. Set INDEX_SERVER_MUTATION=1 to enable.
       "transport": "stdio",
       "env": {
         "INDEX_SERVER_DIR": "/data/instructions",
-        "INDEX_SERVER_MUTATION": "1",
         "INDEX_SERVER_FEATURES": "usage",
         "NODE_OPTIONS": "--enable-source-maps"
       },
@@ -602,7 +651,6 @@ Error: Mutation disabled. Set INDEX_SERVER_MUTATION=1 to enable.
       "transport": "stdio",
       "env": {
         "INDEX_SERVER_DIR": "./custom-instructions",
-        "INDEX_SERVER_MUTATION": "1",
         "CUSTOM_SCHEMA_PATH": "./custom-schemas",
         "VALIDATION_STRICT": "1"
       },
@@ -618,7 +666,6 @@ Error: Mutation disabled. Set INDEX_SERVER_MUTATION=1 to enable.
 # GitHub Actions example
 - name: Test Index
   env:
-    INDEX_SERVER_MUTATION: "1"
     INDEX_SERVER_DIR: "./test-data/instructions"
     INDEX_SERVER_VERBOSE_LOGGING: "1"
   run: |
@@ -663,8 +710,8 @@ function Test-MCPConfig {
         }
         
         # Security check
-        if ($serverConfig.env.INDEX_SERVER_MUTATION -eq "1") {
-            Write-Warning "Mutation enabled for $($server.Name) - ensure this is intentional"
+        if ($serverConfig.env.INDEX_SERVER_MUTATION -eq "0") {
+            Write-Warning "Read-only override enabled for $($server.Name)"
         }
     }
 }

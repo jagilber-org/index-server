@@ -21,6 +21,7 @@ import { dumpFlags, updateFlags } from '../../../services/featureFlags.js';
 import { getFlagRegistrySnapshot } from '../../../services/handlers.dashboardConfig.js';
 import { getLocalHandler } from '../../../server/registry.js';
 import { dashboardAdminAuth } from './adminAuth.js';
+import { logError, logWarn } from '../../../services/logger.js';
 
 export function createAdminRoutes(metricsCollector: MetricsCollector): Router {
   const router = Router();
@@ -48,7 +49,7 @@ export function createAdminRoutes(metricsCollector: MetricsCollector): Router {
         timestamp: Date.now()
       });
     } catch (error) {
-      console.error('[API] Get admin config error:', error);
+      logError('[API] Get admin config error:', error);
       res.status(500).json({
         success: false,
         error: 'Failed to get admin configuration',
@@ -65,7 +66,7 @@ export function createAdminRoutes(metricsCollector: MetricsCollector): Router {
       try { allFlags = getFlagRegistrySnapshot(); } catch { /* ignore */ }
       res.json({ success: true, featureFlags, allFlags, total: allFlags.length, timestamp: Date.now() });
     } catch (error) {
-      console.error('[Admin] Failed to get flags snapshot:', error);
+      logError('[Admin] Failed to get flags snapshot:', error);
       res.status(500).json({ success: false, error: 'Failed to get flags snapshot' });
     }
   });
@@ -79,7 +80,7 @@ export function createAdminRoutes(metricsCollector: MetricsCollector): Router {
       const result = adminPanel.updateAdminConfig(updates);
       // Feature flag persistence (optional field featureFlags { name:boolean })
       if (updates.featureFlags && typeof updates.featureFlags === 'object') {
-        try { updateFlags(updates.featureFlags); } catch (e) { console.warn('[API] feature flag update failed:', e instanceof Error ? e.message : e); }
+        try { updateFlags(updates.featureFlags); } catch (e) { logWarn('[API] feature flag update failed:', e instanceof Error ? e.message : e); }
       }
 
       if (result.success) {
@@ -96,7 +97,7 @@ export function createAdminRoutes(metricsCollector: MetricsCollector): Router {
         });
       }
     } catch (error) {
-      console.error('[API] Update admin config error:', error);
+      logError('[API] Update admin config error:', error);
       res.status(500).json({
         success: false,
         error: 'Failed to update admin configuration',
@@ -117,7 +118,7 @@ export function createAdminRoutes(metricsCollector: MetricsCollector): Router {
         timestamp: Date.now()
       });
     } catch (error) {
-      console.error('[API] Get admin sessions error:', error);
+      logError('[API] Get admin sessions error:', error);
       res.status(500).json({
         success: false,
         error: 'Failed to get admin sessions',
@@ -139,7 +140,7 @@ export function createAdminRoutes(metricsCollector: MetricsCollector): Router {
         timestamp: Date.now()
       });
     } catch (error) {
-      console.error('[API] Get active connections error:', error);
+      logError('[API] Get active connections error:', error);
       res.status(500).json({ success: false, error: 'Failed to get active connections' });
     }
   });
@@ -162,7 +163,7 @@ export function createAdminRoutes(metricsCollector: MetricsCollector): Router {
         timestamp: Date.now()
       });
     } catch (error) {
-      console.error('[API] Create admin session error:', error);
+      logError('[API] Create admin session error:', error);
       res.status(500).json({
         success: false,
         error: 'Failed to create admin session',
@@ -192,7 +193,7 @@ export function createAdminRoutes(metricsCollector: MetricsCollector): Router {
         });
       }
     } catch (error) {
-      console.error('[API] Terminate admin session error:', error);
+      logError('[API] Terminate admin session error:', error);
       res.status(500).json({
         success: false,
         error: 'Failed to terminate admin session',
@@ -212,7 +213,7 @@ export function createAdminRoutes(metricsCollector: MetricsCollector): Router {
         timestamp: Date.now()
       });
     } catch (error) {
-      console.error('[API] Get maintenance info error:', error);
+      logError('[API] Get maintenance info error:', error);
       res.status(500).json({
         success: false,
         error: 'Failed to get maintenance information',
@@ -242,7 +243,7 @@ export function createAdminRoutes(metricsCollector: MetricsCollector): Router {
         });
       }
     } catch (error) {
-      console.error('[API] Set maintenance mode error:', error);
+      logError('[API] Set maintenance mode error:', error);
       res.status(500).json({
         success: false,
         error: 'Failed to set maintenance mode',
@@ -267,7 +268,7 @@ export function createAdminRoutes(metricsCollector: MetricsCollector): Router {
       const durationMs = Date.now() - started;
       res.json({ success: true, durationMs, dryRun: !!dryRun, forceCanonical: !!forceCanonical, summary });
     } catch (err) {
-      console.error('[Admin] Normalize failed:', err);
+      logError('[Admin] Normalize failed:', err);
       res.status(500).json({ success: false, error: 'normalize_failed' });
     }
   });
@@ -294,7 +295,7 @@ export function createAdminRoutes(metricsCollector: MetricsCollector): Router {
         });
       }
     } catch (error) {
-      console.error('[API] Perform backup error:', error);
+      logError('[API] Perform backup error:', error);
       res.status(500).json({
         success: false,
         error: 'Failed to perform backup',
@@ -310,7 +311,7 @@ export function createAdminRoutes(metricsCollector: MetricsCollector): Router {
       const backups = adminPanel.listBackups();
       res.json({ success: true, backups, count: backups.length, timestamp: Date.now() });
     } catch (error) {
-      console.error('[API] List backups error:', error);
+      logError('[API] List backups error:', error);
       res.status(500).json({ success: false, error: 'Failed to list backups' });
     }
   });
@@ -329,7 +330,7 @@ export function createAdminRoutes(metricsCollector: MetricsCollector): Router {
         res.status(400).json({ success: false, error: result.message, timestamp: Date.now() });
       }
     } catch (error) {
-      console.error('[API] Restore backup error:', error);
+      logError('[API] Restore backup error:', error);
       res.status(500).json({ success: false, error: 'Failed to restore backup' });
     }
   });
@@ -347,7 +348,7 @@ export function createAdminRoutes(metricsCollector: MetricsCollector): Router {
         res.status(400).json({ success: false, error: result.message, timestamp: Date.now() });
       }
     } catch (error) {
-      console.error('[API] Delete backup error:', error);
+      logError('[API] Delete backup error:', error);
       res.status(500).json({ success: false, error: 'Failed to delete backup' });
     }
   });
@@ -365,7 +366,7 @@ export function createAdminRoutes(metricsCollector: MetricsCollector): Router {
         res.status(400).json({ success: false, error: result.message, timestamp: Date.now() });
       }
     } catch (error) {
-      console.error('[API] Prune backups error:', error);
+      logError('[API] Prune backups error:', error);
       res.status(500).json({ success: false, error: 'Failed to prune backups' });
     }
   });
@@ -391,7 +392,7 @@ export function createAdminRoutes(metricsCollector: MetricsCollector): Router {
         res.status(400).json({ success: false, error: result.message, timestamp: Date.now() });
       }
     } catch (error) {
-      console.error('[API] Export backup error:', error);
+      logError('[API] Export backup error:', error);
       res.status(500).json({ success: false, error: 'Failed to export backup' });
     }
   });
@@ -422,7 +423,7 @@ export function createAdminRoutes(metricsCollector: MetricsCollector): Router {
         res.status(400).json({ success: false, error: result.message, timestamp: Date.now() });
       }
     } catch (error) {
-      console.error('[API] Import backup error:', error);
+      logError('[API] Import backup error:', error);
       res.status(500).json({ success: false, error: 'Failed to import backup' });
     }
   });
@@ -439,7 +440,7 @@ export function createAdminRoutes(metricsCollector: MetricsCollector): Router {
         timestamp: Date.now()
       });
     } catch (error) {
-      console.error('[API] Get admin stats error:', error);
+      logError('[API] Get admin stats error:', error);
       res.status(500).json({
         success: false,
         error: 'Failed to get admin statistics',
@@ -462,7 +463,7 @@ export function createAdminRoutes(metricsCollector: MetricsCollector): Router {
         timestamp: Date.now()
       });
     } catch (error) {
-      console.error('[API] Get session history error:', error);
+      logError('[API] Get session history error:', error);
       res.status(500).json({
         success: false,
         error: 'Failed to get session history',
@@ -492,7 +493,7 @@ export function createAdminRoutes(metricsCollector: MetricsCollector): Router {
         });
       }
     } catch (error) {
-      console.error('[API] Restart server error:', error);
+      logError('[API] Restart server error:', error);
       res.status(500).json({
         success: false,
         error: 'Failed to restart server',
@@ -522,7 +523,7 @@ export function createAdminRoutes(metricsCollector: MetricsCollector): Router {
         });
       }
     } catch (error) {
-      console.error('[API] Clear caches error:', error);
+      logError('[API] Clear caches error:', error);
       res.status(500).json({
         success: false,
         error: 'Failed to clear caches',
@@ -543,7 +544,7 @@ export function createAdminRoutes(metricsCollector: MetricsCollector): Router {
         timestamp: Date.now(),
       });
     } catch (error) {
-      console.error('[API] Clear metrics error:', error);
+      logError('[API] Clear metrics error:', error);
       res.status(500).json({
         error: 'Failed to clear metrics',
       });

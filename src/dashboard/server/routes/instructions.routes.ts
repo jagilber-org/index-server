@@ -13,6 +13,8 @@ import { dashboardAdminAuth } from './adminAuth.js';
 import { handleInstructionsSearch } from '../../../services/handlers.search.js';
 import { InstructionEntry } from '../../../models/instruction.js';
 import type { IndexLocals } from '../middleware/ensureLoadedMiddleware.js';
+import { isInstructionValidationError } from '../../../services/instructionRecordValidation.js';
+import { logError } from '../../../services/logger.js';
 
 /** Sanitize an instruction name with defense-in-depth path-traversal guard. */
 function safeName(name: string): string {
@@ -80,7 +82,7 @@ export function createInstructionsRoutes(): Router {
       });
       res.json({ success: true, instructions, count: instructions.length, timestamp: Date.now() });
     } catch (error) {
-      console.error('[API] Failed to list instructions:', error);
+      logError('[API] Failed to list instructions:', error);
       res.status(500).json({ success: false, error: 'Failed to list instructions' });
     }
   });
@@ -127,7 +129,7 @@ export function createInstructionsRoutes(): Router {
       }
       res.json({ success: true, query, count: results.length, results, timestamp: Date.now() });
     } catch (error) {
-      console.error('[API] instructions search error:', error);
+      logError('[API] instructions search error:', error);
       res.status(500).json({ success: false, error: 'search_failed' });
     }
   });
@@ -153,7 +155,7 @@ export function createInstructionsRoutes(): Router {
         timestamp: Date.now()
       });
     } catch (error) {
-      console.error('[API] Failed to get categories:', error);
+      logError('[API] Failed to get categories:', error);
       res.status(500).json({
         success: false,
         error: 'Failed to get categories',
@@ -172,7 +174,7 @@ export function createInstructionsRoutes(): Router {
       if (!entry) return res.status(404).json({ success: false, error: 'Not found' });
       res.json({ success: true, content: entry, timestamp: Date.now() });
     } catch (error) {
-      console.error('[API] Failed to load instruction:', error);
+      logError('[API] Failed to load instruction:', error);
       res.status(500).json({ success: false, error: 'Failed to load instruction' });
     }
   });
@@ -202,7 +204,10 @@ export function createInstructionsRoutes(): Router {
       ensureLoaded();
       res.json({ success: true, message: 'Instruction created', name: id, timestamp: Date.now() });
     } catch (error) {
-      console.error('[API] Failed to create instruction:', error);
+      if (isInstructionValidationError(error)) {
+        return res.status(400).json({ success: false, error: 'invalid_instruction', validationErrors: error.validationErrors });
+      }
+      logError('[API] Failed to create instruction:', error);
       res.status(500).json({ success: false, error: 'Failed to create instruction' });
     }
   });
@@ -230,7 +235,10 @@ export function createInstructionsRoutes(): Router {
       ensureLoaded();
       res.json({ success: true, message: 'Instruction updated', timestamp: Date.now() });
     } catch (error) {
-      console.error('[API] Failed to update instruction:', error);
+      if (isInstructionValidationError(error)) {
+        return res.status(400).json({ success: false, error: 'invalid_instruction', validationErrors: error.validationErrors });
+      }
+      logError('[API] Failed to update instruction:', error);
       res.status(500).json({ success: false, error: 'Failed to update instruction' });
     }
   });
@@ -249,7 +257,7 @@ export function createInstructionsRoutes(): Router {
       ensureLoaded();
       res.json({ success: true, message: 'Instruction deleted', timestamp: Date.now() });
     } catch (error) {
-      console.error('[API] Failed to delete instruction:', error);
+      logError('[API] Failed to delete instruction:', error);
       res.status(500).json({ success: false, error: 'Failed to delete instruction' });
     }
   });

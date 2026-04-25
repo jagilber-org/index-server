@@ -41,7 +41,10 @@ docker compose --profile tls up -d
 ### Interactive Setup
 
 ```bash
-# Guided configuration wizard
+# Guided configuration wizard (arrow-key menus)
+npm run setup
+
+# Or directly
 node scripts/setup-wizard.mjs
 
 # Non-interactive
@@ -62,13 +65,14 @@ The compose file also supports `INDEX_SERVER_PORT_BIND_HOST` and defaults it to 
 | `INDEX_SERVER_DASHBOARD_TLS_CERT` | — | TLS certificate path (PEM) |
 | `INDEX_SERVER_DASHBOARD_TLS_KEY` | — | TLS private key path (PEM) |
 | `INDEX_SERVER_DASHBOARD_TLS_CA` | — | CA certificate path (PEM) |
-| `INDEX_SERVER_MUTATION` | `0` | Enable write operations |
+| `INDEX_SERVER_MUTATION` | `1` | Write operations are enabled by default; set `0` for read-only |
 | `INDEX_SERVER_LOG_LEVEL` | `info` | Log level (error/warn/info/debug/trace) |
 | `INDEX_SERVER_DIR` | `/app/instructions` | Instruction index directory |
 | `INDEX_SERVER_METRICS_DIR` | `/app/metrics` | Metrics storage |
 | `INDEX_SERVER_FEEDBACK_DIR` | `/app/feedback` | Feedback storage |
 | `INDEX_SERVER_SEMANTIC_ENABLED` | `0` | `1` to enable semantic/embedding search (requires ~90MB model download on first use) |
 | `INDEX_SERVER_STORAGE_BACKEND` | `json` | `sqlite` for SQLite storage, `json` (default) for JSON files |
+| `INDEX_SERVER_SQLITE_VEC_ENABLED` | `0` | `1` to enable sqlite-vec vector embedding storage (requires Node.js ≥ 22.13.0). Falls back to JSON if native binary unavailable. |
 | `INDEX_SERVER_DISABLE_RATE_LIMIT` | `0` | `1` to disable all rate limiting |
 
 ## Volumes
@@ -121,6 +125,18 @@ environment:
 - **Tini** — prevents zombie processes, proper signal forwarding
 - **No new privileges** — `security_opt: no-new-privileges:true`
 - **Read-only rootfs** — writable only via tmpfs and named volumes
+
+> **⚠️ sqlite-vec limitation:** The default Alpine image uses musl libc. The `sqlite-vec` npm package ships glibc-linked binaries that may not load on Alpine. If you enable `INDEX_SERVER_SQLITE_VEC_ENABLED=1`, build with the `BASE_IMAGE` arg to switch to a Debian-based image:
+>
+> ```bash
+> # Build with sqlite-vec support (glibc)
+> docker build --build-arg BASE_IMAGE=node:22-slim -t index-server .
+>
+> # Or via docker-compose
+> BASE_IMAGE=node:22-slim docker compose build
+> ```
+>
+> Without this, the server will silently fall back to JSON embedding storage.
 
 ### Network Security
 - **Single port exposed** — only dashboard port (8787)

@@ -10,6 +10,15 @@ import { getToolRegistry, ToolRegistryEntry } from './toolRegistry';
 // ── Reusable primitives ──────────────────────────────────────────────────────
 const zEmpty = z.object({}).passthrough();
 const zStringId = z.object({ id: z.string().min(1) }).strict();
+const zExtensionValue: z.ZodType<unknown> = z.lazy(() =>
+  z.union([
+    z.string(),
+    z.number(),
+    z.boolean(),
+    z.array(zExtensionValue),
+    z.record(z.string(), zExtensionValue),
+  ]),
+);
 // ── Index dispatcher ───────────────────────────────────────────────────────
 const zDispatch = z.object({
   action: z.enum([
@@ -24,7 +33,7 @@ const zDispatch = z.object({
   keywords: z.array(z.string()).optional(),
   ids: z.array(z.string()).optional(),
   category: z.string().optional(),
-  contentType: z.string().optional(),
+  contentType: z.enum(['instruction', 'template', 'chat-session', 'reference', 'example', 'agent']).optional(),
   text: z.string().optional(),
   includeCategories: z.boolean().optional(),
   caseSensitive: z.boolean().optional(),
@@ -35,13 +44,26 @@ const zDispatch = z.object({
   limit: z.number().optional(),
   offset: z.number().optional(),
   entry: z.object({}).passthrough().optional(),
+  title: z.string().optional(),
+  body: z.string().optional(),
+  rationale: z.string().optional(),
+  priority: z.number().optional(),
+  audience: z.string().optional(),
+  requirement: z.string().optional(),
+  categories: z.array(z.string()).optional(),
+  deprecatedBy: z.string().optional(),
+  riskScore: z.number().optional(),
+  priorityTier: z.enum(['P1', 'P2', 'P3', 'P4']).optional(),
+  classification: z.enum(['public', 'internal', 'restricted']).optional(),
+  semanticSummary: z.string().optional(),
+  changeLog: z.array(z.object({}).passthrough()).optional(),
   overwrite: z.boolean().optional(),
   lax: z.boolean().optional(),
   entries: z.union([z.array(z.object({}).passthrough()), z.string()]).optional(),
   source: z.string().optional(),
   mode: z.unknown().optional(),
   owner: z.string().optional(),
-  status: z.string().optional(),
+  status: z.enum(['approved', 'draft', 'review', 'deprecated']).optional(),
   bump: z.enum(['patch','minor','major','none']).optional(),
   lastReviewedAt: z.string().optional(),
   nextReviewDue: z.string().optional(),
@@ -62,7 +84,17 @@ const zIndexEntry = z.object({
   categories: z.array(z.string()).max(50).optional(),
   deprecatedBy: z.string().optional(),
   riskScore: z.number().optional(),
-  extensions: z.record(z.string(), z.unknown()).optional()
+  version: z.string().optional(),
+  owner: z.string().optional(),
+  status: z.enum(['approved', 'draft', 'review', 'deprecated']).optional(),
+  priorityTier: z.enum(['P1', 'P2', 'P3', 'P4']).optional(),
+  classification: z.enum(['public', 'internal', 'restricted']).optional(),
+  lastReviewedAt: z.string().optional(),
+  nextReviewDue: z.string().optional(),
+  semanticSummary: z.string().optional(),
+  changeLog: z.array(z.object({}).passthrough()).optional(),
+  contentType: z.enum(['instruction', 'template', 'chat-session', 'reference', 'example', 'agent']).optional(),
+  extensions: z.record(z.string(), zExtensionValue).optional()
 }).strict();
 
 const zAdd = z.object({
@@ -82,7 +114,7 @@ const zImport = z.object({
       audience: z.string(),
       requirement: z.string(),
       categories: z.array(z.string()).optional(),
-      extensions: z.record(z.string(), z.unknown()).optional(),
+      extensions: z.record(z.string(), zExtensionValue).optional(),
       mode: z.string().optional()
     }).passthrough()).min(1),
     z.string()
@@ -150,47 +182,6 @@ const zFeedbackSubmit = z.object({
   metadata: z.object({}).passthrough().optional(),
   tags: z.array(z.string()).max(10).optional()
 }).strict();
-
-const zFeedbackList = z.object({
-  type: z.enum(['issue', 'status', 'security', 'feature-request', 'bug-report', 'performance', 'usability', 'other']).optional(),
-  severity: z.enum(['low','medium','high','critical']).optional(),
-  status: z.enum(['new', 'acknowledged', 'in-progress', 'resolved', 'closed']).optional(),
-  limit: z.number().int().min(1).max(200).optional(),
-  offset: z.number().int().min(0).optional(),
-  since: z.string().optional(),
-  tags: z.array(z.string()).optional()
-}).strict();
-
-const zFeedbackGet = zStringId;
-
-const zFeedbackUpdate = z.object({
-  id: z.string().min(1),
-  status: z.enum(['new', 'acknowledged', 'in-progress', 'resolved', 'closed']).optional(),
-  metadata: z.object({}).passthrough().optional()
-}).strict();
-
-const zFeedbackStats = z.object({
-  since: z.string().optional()
-}).strict();
-
-const zFeedbackDispatch = z.object({
-  action: z.enum(['submit', 'list', 'get', 'update', 'stats', 'health', 'rate']),
-  instructionId: z.string().optional(),
-  rating: z.enum(['useful', 'not-useful', 'outdated', 'incomplete']).optional(),
-  comment: z.string().max(1000).optional(),
-  type: z.enum(['issue', 'status', 'security', 'feature-request', 'bug-report', 'performance', 'usability', 'other']).optional(),
-  severity: z.enum(['low','medium','high','critical']).optional(),
-  title: z.string().max(200).optional(),
-  description: z.string().max(10000).optional(),
-  body: z.string().max(10000).optional(),
-  id: z.string().optional(),
-  status: z.enum(['new', 'acknowledged', 'in-progress', 'resolved', 'closed']).optional(),
-  limit: z.number().int().min(1).max(200).optional(),
-  offset: z.number().int().min(0).optional(),
-  since: z.string().optional(),
-  tags: z.array(z.string()).optional(),
-  metadata: z.object({}).passthrough().optional()
-}).passthrough();
 
 // ── Usage ────────────────────────────────────────────────────────────────────
 const zUsageTrack = z.object({
@@ -286,7 +277,6 @@ const zodMap: Record<string, z.ZodTypeAny> = {
   'index_search': zSearch,
   'prompt_review': zPromptReview,
   'help_overview': zEmpty,
-  'feedback_dispatch': zFeedbackDispatch,
   'bootstrap': zBootstrap,
 
   // Extended tools
@@ -307,11 +297,6 @@ const zodMap: Record<string, z.ZodTypeAny> = {
 
   // Admin tools
   'feedback_submit': zFeedbackSubmit,
-  'feedback_list': zFeedbackList,
-  'feedback_get': zFeedbackGet,
-  'feedback_update': zFeedbackUpdate,
-  'feedback_stats': zFeedbackStats,
-  'feedback_health': zEmpty,
   'meta_tools': zEmpty,
   'meta_activation_guide': zEmpty,
   'meta_check_activation': zMetaCheckActivation,

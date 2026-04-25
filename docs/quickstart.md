@@ -10,6 +10,22 @@ Get Index Server running with HTTPS and semantic search in 5 minutes.
 
 ## 1. Install
 
+### Recommended: use the published package and setup wizard
+
+```bash
+npx -y @jagilber-org/index-server@latest --setup
+```
+
+This generates MCP client configuration for VS Code, Copilot CLI, or Claude Desktop and keeps the install flow MCP-native from the start.
+
+### Alternative: install or build locally
+
+```bash
+npm install @jagilber-org/index-server
+```
+
+Or build from source:
+
 ```bash
 git clone https://github.com/jagilber-org/index-server.git
 cd index-server
@@ -17,43 +33,43 @@ npm install
 npm run build
 ```
 
-Or via npm:
-
-```bash
-npm install @jagilber-org/index-server
-```
-
 ## 2. Configure MCP Client
 
-Add to your VS Code `.vscode/mcp.json`:
+If you used `--setup`, it can generate this for you. Otherwise add this to your VS Code `.vscode/mcp.json`:
 
 ```jsonc
 {
   "servers": {
     "index-server": {
       "type": "stdio",
-      "command": "node",
+      "command": "npx",
       "args": [
-        "C:/path/to/index-server/dist/server/index-server.js",
+        "-y",
+        "@jagilber-org/index-server@latest",
         "--dashboard",
         "--dashboard-port=8787"
       ],
       "env": {
-        "INDEX_SERVER_MUTATION": "1",
         "INDEX_SERVER_LOG_LEVEL": "info",
-        "INDEX_SERVER_DIR": "C:/path/to/index-server/instructions"
+        "INDEX_SERVER_DIR": "C:/mcp/index-data/instructions"
       }
     }
   }
 }
 ```
 
-Replace `C:/path/to/index-server` with your actual install path.
+Replace `C:/mcp/index-data/instructions` with your preferred persistent data directory.
+
+> **Best practice:** keep `INDEX_SERVER_DIR` in a stable data location outside VS Code and MCP client config paths so backups and reinstalls do not disturb your instruction catalog.
 
 ## 3. Enable HTTPS (Optional)
 
 ```bash
-node scripts/setup-wizard.mjs --non-interactive --tls --port 8787 --mutation
+# Interactive (arrow-key menus)
+npm run setup
+
+# Non-interactive
+node scripts/setup-wizard.mjs --non-interactive --tls --port 8787
 ```
 
 This generates self-signed certificates in `.certs/` and configures the dashboard for HTTPS.
@@ -109,7 +125,11 @@ On first search, the server downloads a ~90 MB embedding model from Hugging Face
 1. Restart VS Code / your MCP client
 2. The server should appear in the MCP server list
 3. Open `http://localhost:8787` (or `https://`) for the dashboard
-4. Ask your agent: _"search index-server for getting started"_
+4. Run a health check — ask your agent: _"use health_check to verify index-server is running"_
+5. Verify bootstrap status: _"use bootstrap to check initialization status"_
+
+> **Tip:** On a fresh install, bootstrap may report `gated` status until the bootstrapper instruction is loaded.
+> This is normal — index_add and other mutation tools are available immediately.
 
 ## 6. Add Your First Instruction
 
@@ -121,6 +141,26 @@ title "Getting Started Guide", and body with your team's onboarding steps.
 ```
 
 Or via the dashboard: navigate to **Instructions** → **+ New**.
+
+Verify it was created:
+
+```
+Use index_search with keywords "getting started" to find your new instruction.
+```
+
+## How to Invoke Tools
+
+Different MCP clients discover tools differently:
+
+| Client | How to invoke tools |
+|--------|-------------------|
+| **VS Code** | Type `#index-server` in Copilot Chat to attach tools, then ask naturally |
+| **Copilot CLI** | Tools are auto-discovered from `~/.copilot/mcp-config.json` — just ask |
+| **Claude Desktop** | Tools are auto-discovered from `claude_desktop_config.json` — just ask |
+| **Dashboard** | Navigate to the Tools panel and invoke directly |
+
+> **VS Code tip:** You can also invoke tools without `#index-server` if the server is in your
+> `.vscode/mcp.json` — Copilot will auto-discover available MCP tools.
 
 ## What's Next
 

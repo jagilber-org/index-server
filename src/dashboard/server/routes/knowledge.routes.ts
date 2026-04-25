@@ -6,6 +6,7 @@
 import { Router, Request, Response } from 'express';
 import { getKnowledgeStore } from '../KnowledgeStore.js';
 import { dashboardAdminAuth } from './adminAuth.js';
+import { logError } from '../../../services/logger.js';
 
 export function createKnowledgeRoutes(): Router {
   const router = Router();
@@ -27,7 +28,7 @@ export function createKnowledgeRoutes(): Router {
       const entry = store.upsert(key, content, metadata || {});
       res.json({ success: true, entry, timestamp: Date.now() });
     } catch (error) {
-      console.error('[API] Knowledge store error:', error);
+      logError('[API] Knowledge store error:', error);
       res.status(500).json({
         success: false,
         error: 'Failed to store knowledge entry',
@@ -53,7 +54,7 @@ export function createKnowledgeRoutes(): Router {
         results, count: results.length, totalEntries: store.count(), timestamp: Date.now(),
       });
     } catch (error) {
-      console.error('[API] Knowledge search error:', error);
+      logError('[API] Knowledge search error:', error);
       res.status(500).json({ success: false, error: 'Failed to search knowledge' });
     }
   });
@@ -71,7 +72,7 @@ export function createKnowledgeRoutes(): Router {
       }
       res.json({ success: true, ...entry, timestamp: Date.now() });
     } catch (error) {
-      console.error('[API] Knowledge get error:', error);
+      logError('[API] Knowledge get error:', error);
       res.status(500).json({ success: false, error: 'Failed to get knowledge entry' });
     }
   });

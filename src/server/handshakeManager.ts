@@ -5,6 +5,7 @@
  * emission, stdin sniffing for initialize detection, and safety fallbacks.
  */
 import { getRuntimeConfig } from '../config/runtimeConfig';
+import { activateMcpLogBridge } from '../services/mcpLogBridge';
 
 // ---------------------------------------------------------------------------
 // Optional handshake tracing (enable via INDEX_SERVER_TRACE=handshake)
@@ -80,6 +81,8 @@ export function emitReadyGlobal(server: any, reason: string){
     const v = (server as any).__declaredVersion || (server as any).version || '0.0.0';
     // Mark before sending to avoid re-entrancy
     (server as any).__readyNotified = true;
+    // Activate MCP log bridge now that protocol is established
+    activateMcpLogBridge();
     record('ready_emitted', { reason, version: v });
     try { process.stderr.write(`[ready] emit reason=${reason} version=${v}\n`); } catch { /* ignore */ }
     const msg = { jsonrpc: '2.0', method: 'server/ready', params: { version: v } };

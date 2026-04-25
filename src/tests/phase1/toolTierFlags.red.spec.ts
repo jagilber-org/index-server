@@ -32,14 +32,14 @@ describe('RED: Tool tier flags (002-tool-consolidation Phase 1)', () => {
 
     const registry = getToolRegistry();
     const names = registry.map(t => t.name);
-    // Should have exactly 7 core tools (5 original + feedback_dispatch + bootstrap)
-    expect(names.length).toBe(7);
+    // Should have exactly 6 core tools (feedback_dispatch removed in Phase 2b — feedback_submit is admin-tier only)
+    expect(names.length).toBe(6);
     expect(names).toContain('health_check');
     expect(names).toContain('index_dispatch');
     expect(names).toContain('index_search');
     expect(names).toContain('prompt_review');
     expect(names).toContain('help_overview');
-    expect(names).toContain('feedback_dispatch');
+    expect(names).not.toContain('feedback_dispatch');
     expect(names).toContain('bootstrap');
   });
 

@@ -7,6 +7,7 @@ import { Router, Request, Response } from 'express';
 import { buildGraph, GraphExportParams } from '../../../services/handlers.graph.js';
 import { getRuntimeConfig } from '../../../config/runtimeConfig.js';
 import type { IndexLocals } from '../middleware/ensureLoadedMiddleware.js';
+import { logDebug, logError, logWarn } from '../../../services/logger.js';
 
 export function createGraphRoutes(): Router {
   const router = Router();
@@ -25,8 +26,7 @@ export function createGraphRoutes(): Router {
       const includeEdgeTypes = edgeTypes ? (edgeTypes.split(',').filter(Boolean) as GraphExportParams['includeEdgeTypes']) : undefined;
       const t0 = Date.now();
       try {
-        // eslint-disable-next-line no-console
-        console.debug('[graph/mermaid][start]', `enrich=${enrich}`, `categories=${categories}`, `usage=${usage}`, `edgeTypes=${edgeTypes || ''}`, `selCats=${selectedCategories || ''}`, `selIds=${selectedIds || ''}`); // lgtm[js/log-injection] — query params for debugging
+        logDebug('[graph/mermaid][start]', { enrich, categories, usage, edgeTypes: edgeTypes || '', selCats: selectedCategories || '', selIds: selectedIds || '' }); // lgtm[js/log-injection] — query params for debugging
       } catch { /* ignore diag logging errors */ }
 
       const graph = buildGraph({
@@ -107,8 +107,7 @@ export function createGraphRoutes(): Router {
             parts.push(...filtered);
             mermaidSource = parts.join('\n');
             if (getRuntimeConfig().logging.verbose) {
-              // eslint-disable-next-line no-console
-              console.debug('[graph/mermaid][filter:new]', { selectedIds: idFilter.length, selectedCategories: catFilter.length, kept: keepIds.size, totalLines: lines.length, emittedLines: parts.length });
+              logDebug('[graph/mermaid][filter:new]', { selectedIds: idFilter.length, selectedCategories: catFilter.length, kept: keepIds.size, totalLines: lines.length, emittedLines: parts.length });
             }
             keptIdsSize = keepIds.size; scoped = true;
             try {
@@ -120,12 +119,11 @@ export function createGraphRoutes(): Router {
             catch { /* ignore count derivation errors */ }
           }
         } catch (filterErr) {
-          console.warn('[graph/mermaid][filter-failed]', filterErr);
+          logWarn('[graph/mermaid][filter-failed]', filterErr);
         }
       }
       try {
-        // eslint-disable-next-line no-console
-        console.debug('[graph/mermaid][ok]', { ms: Date.now() - t0, nodes: graph.meta?.nodeCount, edges: graph.meta?.edgeCount, bytes: mermaidSource.length });
+        logDebug('[graph/mermaid][ok]', { ms: Date.now() - t0, nodes: graph.meta?.nodeCount, edges: graph.meta?.edgeCount, bytes: mermaidSource.length });
       } catch { /* ignore diag logging errors */ }
       let metaOut: typeof graph.meta = graph.meta;
       if (scoped && graph.meta) {
@@ -144,8 +142,7 @@ export function createGraphRoutes(): Router {
     } catch (err) {
       const e = err as Error;
       try {
-        // eslint-disable-next-line no-console
-        console.warn('[graph/mermaid][error]', e.message);
+        logWarn('[graph/mermaid][error]', e.message);
       } catch { /* ignore diag logging errors */ }
       res.status(500).json({ success: false, error: 'Failed to generate mermaid graph' });
     }
@@ -166,7 +163,7 @@ export function createGraphRoutes(): Router {
       const categories = [...map.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([id, count]) => ({ id, count }));
       res.json({ success: true, categories, total: categories.length, timestamp: Date.now() });
     } catch (err) {
-      console.error('[graph/categories] Error:', err);
+      logError('[graph/categories] Error:', err);
       res.status(500).json({ success: false, error: 'Failed to get categories' });
     }
   });
@@ -191,7 +188,7 @@ export function createGraphRoutes(): Router {
       const flat = instructions.map(i => ({ id: i.id, primaryCategory: i.primaryCategory || i.categories?.[0], categories: i.categories || [] }));
       res.json({ success: true, instructions: flat, count: flat.length, filtered: !!filterCats.length, timestamp: Date.now() });
     } catch (err) {
-      console.error('[graph/instructions] Error:', err);
+      logError('[graph/instructions] Error:', err);
       res.status(500).json({ success: false, error: 'Failed to get instructions' });
     }
   });
@@ -231,7 +228,7 @@ export function createGraphRoutes(): Router {
       const expandedCount = workingSet.size - selectedSet.size;
       res.json({ success: true, nodes: finalNodes, edges, categories, expanded: expand ? expandedCount : 0, timestamp: Date.now() });
     } catch (err) {
-      console.error('[graph/relations] Error:', err);
+      logError('[graph/relations] Error:', err);
       res.status(500).json({ success: false, error: 'Failed to get relations' });
     }
   });

@@ -5,6 +5,7 @@
 
 import { Router, Request, Response } from 'express';
 import { loadUsageSnapshot } from '../../../services/indexContext.js';
+import { logError } from '../../../services/logger.js';
 
 export function createUsageRoutes(): Router {
   const router = Router();
@@ -17,7 +18,7 @@ export function createUsageRoutes(): Router {
       const snap = loadUsageSnapshot() as Record<string, Record<string, unknown>>;
       res.json({ success: true, snapshot: snap, count: Object.keys(snap).length, timestamp: Date.now() });
     } catch (error) {
-      console.error('[API] Failed to load usage snapshot:', error);
+      logError('[API] Failed to load usage snapshot:', error);
       res.status(500).json({ success: false, error: 'Failed to load usage snapshot' });
     }
   });

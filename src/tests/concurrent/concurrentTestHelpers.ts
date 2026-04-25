@@ -145,6 +145,7 @@ export async function spawnLeaderServer(opts: {
 	}
 	Object.assign(mergedEnv, {
 		INDEX_SERVER_DASHBOARD: '1',
+		INDEX_SERVER_DISABLE_STDERR_BRIDGE: '1',
 		INDEX_SERVER_MODE: 'leader',
 		INDEX_SERVER_LEADER_PORT: '0',
 		INDEX_SERVER_STATE_DIR: opts.stateDir,
@@ -165,7 +166,7 @@ export async function spawnLeaderServer(opts: {
 	});
 
 	let dashUrl = '';
-	const pat = /Server started on (https?:\/\/[^\s"]+)/;
+	const pat = /(?:Server started on|\[startup\] Dashboard URL:)\s+(https?:\/\/[^\s"]+)/;
 
 	proc.stdout!.setEncoding('utf8');
 	proc.stderr!.setEncoding('utf8');

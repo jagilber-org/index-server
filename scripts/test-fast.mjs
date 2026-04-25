@@ -5,7 +5,7 @@
  */
 import { readdirSync, statSync } from 'fs';
 import { spawn } from 'child_process';
-import { slowTests, isSlowTest } from './slow-tests.mjs';
+import { slowTests, isSlowTest, normalizeSpecPath } from './slow-tests.mjs';
 import path from 'path';
 
 function walk(dir) {
@@ -32,12 +32,13 @@ if (fastSpecs.length === 0) {
 console.log(`Discovered ${allSpecs.length} spec files; excluding ${slowTests.length} slow => running ${fastSpecs.length} fast specs.`);
 
 // Safety net: ensure none of the enumerated fast specs are actually tagged slow (defensive in case list drift)
-const leaked = fastSpecs.filter(f => slowTests.includes(f));
+const leaked = fastSpecs.filter(f => slowTests.includes(normalizeSpecPath(f)));
 if (leaked.length) {
   console.error('[test:fast] Detected slow tests leaking into fast set:', leaked);
   process.exit(1);
 }
 
 const childEnv = { ...process.env, INDEX_SERVER_MUTATION: '1' };
-const child = spawn('npx', ['vitest', 'run', ...fastSpecs], { stdio: 'inherit', shell: process.platform === 'win32', env: childEnv });
+const vitestBin = path.resolve('node_modules', 'vitest', 'vitest.mjs');
+const child = spawn(process.execPath, [vitestBin, 'run', ...fastSpecs], { stdio: 'inherit', env: childEnv });
 child.on('exit', code => process.exit(code));

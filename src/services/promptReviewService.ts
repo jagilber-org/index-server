@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { logWarn, logInfo } from './logger.js';
 
 export interface PromptRule {
   id: string; pattern?: string; mustContain?: string; severity: string; description: string;
@@ -40,11 +41,11 @@ export class PromptReviewService {
     if(!loaded){
       // Graceful fallback: empty criteria so server can still start.
       const msg = `[promptReviewService] WARN: Could not locate PROMPT-CRITERIA.json in any candidate paths. Using empty criteria.`;
-      // Write to stderr explicitly (console.error already does)
-      console.error(msg);
+      // Write to stderr explicitly (logWarn writes to stderr)
+      logWarn(msg);
       loaded = { version: '0.0.0', categories: [] };
     } else {
-      console.error(`[promptReviewService] Loaded criteria from ${usedPath}`); // stderr so it won't pollute stdout
+      logInfo(`[promptReviewService] Loaded criteria from ${usedPath}`); // stderr so it won't pollute stdout
     }
     this.criteria = loaded;
   }

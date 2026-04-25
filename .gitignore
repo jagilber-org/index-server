@@ -34,7 +34,6 @@ test-mermaid*.md
 
 # Build output and dependencies
 dist/
-!release/vscode-extension/dist/
 !scripts/dist/
 node_modules/
 
@@ -45,9 +44,6 @@ schemas/archive/
 .certs/
 certs/
 
-# VSIX binary artifacts (built by CI)
-release/*.vsix
-release/vscode-extension/*.vsix
 coverage/
 *.log
 logs/

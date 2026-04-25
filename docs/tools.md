@@ -1,6 +1,6 @@
 # Index - Tools API Reference
 
-**Version:** 1.16.0 (MCP Protocol Compliant)  
+**Version:** 1.17.0 (MCP Protocol Compliant)  
 **Protocol:** Model Context Protocol (MCP) v1.0+  
 **Transport:** JSON-RPC 2.0 over stdio, REST bridge via dashboard HTTP(S)  
 **Last Updated:** February 24, 2026
@@ -16,7 +16,7 @@ the index provides a comprehensive instruction index management system through t
 * **High Performance**: Optimized for <120ms P95 response times
 * **Governance Ready**: Built-in versioning and change tracking
 * **Developer Friendly**: Comprehensive error handling and diagnostics
-* **Feedback Subsystem**: 6 MCP tools for structured client feedback (submit/list/get/update/stats/health)
+* **Feedback Subsystem**: MCP tool for structured client feedback (submit only; dashboard CRUD via operator HTTP API)
 * **Structured Tracing (1.1.2+)**: Rotated JSONL trace lines `[trace:category[:sub]] { json }` for reliable test parsing
 * **Schema-Aided Add Failures**: Inline JSON Schema returned on early structural `index_add` errors (1.1.0+)
 
@@ -138,7 +138,7 @@ sequenceDiagram
 
 | Variable | Type | Default | Description |
 |----------|------|---------|-------------|
-| `INDEX_SERVER_MUTATION` | Boolean | `false` | Enable write operations (add, remove, update) |
+| `INDEX_SERVER_MUTATION` | Boolean | `true` | Write operations are enabled by default; set `0` for read-only |
 | `INDEX_SERVER_VERBOSE_LOGGING` | Boolean | `false` | Enable detailed logging to stderr |
 | `INDEX_SERVER_LOG_MUTATION` | Boolean | `false` | Log only mutation operations |
 | `INDEX_SERVER_LOG_FILE` | Path | - | Enable file logging to specified path (dual stderr/file output) |
@@ -154,9 +154,9 @@ config:
 graph TD
     A[Incoming Request] --> B{Mutation Required?}
     B -->|No| C[Process Read Operation]
-    B -->|Yes| D{INDEX_SERVER_MUTATION?}
-    D -->|No| E[Return Error -32000<br/>Mutation Disabled]
-    D -->|Yes| F[Validate Request Schema]
+    B -->|Yes| D{INDEX_SERVER_MUTATION=0?}
+    D -->|Yes| E[Return Error -32000<br/>Mutation Disabled]
+    D -->|No| F[Validate Request Schema]
     F --> G{Valid Schema?}
     G -->|No| H[Return Error -32602<br/>Invalid Params]
     G -->|Yes| I[Execute Mutation]
@@ -652,7 +652,7 @@ The dashboard provides:
 }
 ```
 
-### ✏️ Mutation Operations (Requires `INDEX_SERVER_MUTATION=1`)
+### ✏️ Mutation Operations (Enabled by default; set `INDEX_SERVER_MUTATION=0` for read-only)
 
 #### `add` - Create New Instruction
 
@@ -700,10 +700,16 @@ The dashboard provides:
 
 // Common Error Response
 {
+  "success": false,
   "created": false,
-  "error": "missing entry",           // Machine-readable error code
-  "feedbackHint": string,             // User guidance
-  "reproEntry": object                // Debugging info
+  "error": "missing entry" | "invalid_instruction",
+  "message": "Instruction not added.",
+  "validationErrors": string[],       // Exact schema / field failures
+  "hints": string[],                  // Repair guidance
+  "schemaRef": "index_add#input",
+  "inputSchema": object,
+  "feedbackHint": string,
+  "reproEntry": object
 }
 ```
 
@@ -1138,7 +1144,7 @@ All mutation operations now return enhanced error information:
 
 ## Tool Inventory (Authoritative Reference)
 
-> **50 registered tools** — This table is generated from the live tool registry and is the authoritative tool name reference. Use `meta_tools` to get the runtime version of this list.
+> **44 registered tools** — This table is generated from the live tool registry and is the authoritative tool name reference. Use `meta_tools` to get the runtime version of this list.
 
 | Tool Name | Classification | Tier | Description |
 |-----------|---------------|------|-------------|
@@ -1150,13 +1156,7 @@ All mutation operations now return enhanced error information:
 | `diagnostics_memoryPressure` | stable | admin | Allocate & release transient memory to induce GC / memory pressure. |
 | `diagnostics_microtaskFlood` | stable | admin | Flood the microtask queue with many Promise resolutions to probe event loop starvation. |
 | `feature_status` | stable | admin | Report active index feature flags and counters. |
-| `feedback_dispatch` | stable | core | Unified feedback dispatcher. Actions: submit, list, get, update, stats, health. |
-| `feedback_get` | stable | admin | Get specific feedback entry by ID with full details. |
-| `feedback_health` | stable | admin | Health check for feedback system storage and configuration. |
-| `feedback_list` | stable | admin | List feedback entries with filtering options (type, severity, status, date range). |
-| `feedback_stats` | stable | admin | Get feedback system statistics and metrics dashboard. |
 | `feedback_submit` | mutation | admin | Submit feedback entry (issue, status report, security alert, feature request). |
-| `feedback_update` | mutation | admin | Update feedback entry status and metadata (admin function). |
 | `gates_evaluate` | stable | extended | Evaluate configured gating criteria over current Index. |
 | `graph_export` | stable | extended | Export instruction relationship graph (schema v1 minimal or v2 enriched). |
 | `health_check` | stable | core | Returns server health status & version. |
@@ -1195,9 +1195,9 @@ All mutation operations now return enhanced error information:
 
 ### Tier Visibility
 
-- **Core** (7 tools): Always visible. Essential daily-use tools.
+- **Core** (6 tools): Always visible. Essential daily-use tools.
 - **Extended** (14 tools): Opt-in via `INDEX_SERVER_FLAG_TOOLS_EXTENDED=1`
-- **Admin** (29 tools): Opt-in via `INDEX_SERVER_FLAG_TOOLS_ADMIN=1`. Operations/debug tools.
+- **Admin** (24 tools): Opt-in via `INDEX_SERVER_FLAG_TOOLS_ADMIN=1`. Operations/debug tools.
 
 ## 📈 Performance Characteristics
 
@@ -1233,7 +1233,7 @@ All mutation operations now return enhanced error information:
 
 | Code | Name | Description |
 |------|------|-------------|
-| -32000 | Mutation Disabled | Write operation attempted without `INDEX_SERVER_MUTATION=1` |
+| -32000 | Mutation Disabled | Write operation attempted while direct mutations were disabled via `INDEX_SERVER_MUTATION=0` |
 | -32001 | Resource Limit | Operation exceeds configured limits |
 | -32002 | Validation Error | Schema validation failed with details |
 | -32003 | Integrity Error | Index integrity check failed |
@@ -1263,8 +1263,7 @@ interface ErrorResponse {
 ### PowerShell Client
 
 ```powershell
-# Start server with mutation enabled
-$env:INDEX_SERVER_MUTATION = "1"
+# Start server with verbose logging
 $env:INDEX_SERVER_VERBOSE_LOGGING = "1"
 
 # Launch server process
@@ -1296,7 +1295,7 @@ class MCPIndexClient {
   async start() {
     this.server = spawn('node', ['dist/server/index-server.js'], {
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: { ...process.env, INDEX_SERVER_MUTATION: '1' }
+      env: { ...process.env }
     })
     
     // Handle server initialization
@@ -1360,7 +1359,7 @@ export class IndexServerClient extends MCPClient {
 
 | Variable | Purpose | Default |
 |----------|---------|---------|
-| `INDEX_SERVER_MUTATION` | Enables mutation tools (add/remove/update). | `0` |
+| `INDEX_SERVER_MUTATION` | Optional read-only override for mutation tools (set `0` to disable direct writes). | `1` |
 | `INDEX_SERVER_DIR` | Override instruction storage directory. | `instructions/` |
 | `INDEX_SERVER_STRICT_CREATE` | Enforce strict create (no implicit upsert). | `0` |
 | `INDEX_SERVER_STRICT_REMOVE` | Enforce strict remove (must exist). | `0` |
@@ -1493,7 +1492,7 @@ interface InstructionEntry {
 
 | batch | { operations:[ { action,... }, ... ] } | { results:[ ... ] } | Per-op isolation; continues after failures |
 
-Mutation actions (require INDEX_SERVER_MUTATION=1):
+Mutation actions (enabled by default unless `INDEX_SERVER_MUTATION=0`):
 
 | Action | Params | Result (primary fields) | Notes |
 |--------|--------|------------------------|-------|
@@ -1553,7 +1552,7 @@ Effect: Clears in-memory cache and reloads from disk.
 
 Params: { ids: string[] }
 Result: { removed, removedIds: string[], missing: string[], errorCount, errors: [{ id, error }] }
-Notes: Permanently deletes matching instruction JSON files from disk. Missing ids are reported; operation still succeeds unless all fail. Requires INDEX_SERVER_MUTATION=1.
+Notes: Permanently deletes matching instruction JSON files from disk. Missing ids are reported; operation still succeeds unless all fail. Set `INDEX_SERVER_MUTATION=0` when you need to disable this behavior explicitly.
 
 ### index_groom (mutation)
 
@@ -1588,7 +1587,7 @@ Notes:
 * **repoId:** Override the repository identifier used in category tags and `sourceWorkspace`. Defaults to directory name of `repoPath`.
 * Entries are validated via `ClassificationService.normalize()` before writing. Invalid entries are reported in `failed[]`.
 * Audit log entries emitted for each promoted/updated instruction.
-* Requires INDEX_SERVER_MUTATION=1.
+* Enabled by default; set `INDEX_SERVER_MUTATION=0` to disable direct writes.
 
 ---
 

@@ -6,6 +6,7 @@
 import { Router, Request, Response } from 'express';
 import { MetricsCollector } from '../MetricsCollector.js';
 import { dashboardAdminAuth } from './adminAuth.js';
+import { logError } from '../../../services/logger.js';
 
 export function createAlertsRoutes(metricsCollector: MetricsCollector): Router {
   const router = Router();
@@ -23,7 +24,7 @@ export function createAlertsRoutes(metricsCollector: MetricsCollector): Router {
         timestamp: Date.now()
       });
     } catch (error) {
-      console.error('[API] Active alerts error:', error);
+      logError('[API] Active alerts error:', error);
       res.status(500).json({
         error: 'Failed to get active alerts',
       });
@@ -52,7 +53,7 @@ export function createAlertsRoutes(metricsCollector: MetricsCollector): Router {
         });
       }
     } catch (error) {
-      console.error('[API] Resolve alert error:', error);
+      logError('[API] Resolve alert error:', error);
       res.status(500).json({
         error: 'Failed to resolve alert',
       });
@@ -84,7 +85,7 @@ export function createAlertsRoutes(metricsCollector: MetricsCollector): Router {
         timestamp: Date.now()
       });
     } catch (error) {
-      console.error('[API] Generate alert error:', error);
+      logError('[API] Generate alert error:', error);
       res.status(500).json({
         error: 'Failed to generate alert',
       });

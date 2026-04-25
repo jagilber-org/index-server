@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { getRuntimeConfig } from '../config/runtimeConfig';
+import { logError } from './logger.js';
 
 export type TraceLevel = 0|1|2|3|4;
 
@@ -196,8 +197,7 @@ export function emitTrace(label: string, data: unknown, min: TraceLevel = 1): vo
   pushBuffer(rec, tracing.buffer);
 
   try {
-    // eslint-disable-next-line no-console
-    console.error(label, JSON.stringify(rec));
+    logError(label, JSON.stringify(rec));
   } catch { /* ignore */ }
 
   if (!(tracing.persist || tracing.file)) return;

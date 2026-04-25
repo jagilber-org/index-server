@@ -77,3 +77,56 @@ export function atomicWriteJson(filePath: string, obj: unknown){
   const err = lastErr instanceof Error? lastErr: new Error('atomicWriteJson failed');
   throw err;
 }
+
+export function atomicCreateJson(filePath: string, obj: unknown){
+  const dir = path.dirname(filePath);
+  if(!fs.existsSync(dir)) fs.mkdirSync(dir,{recursive:true});
+  const data = JSON.stringify(obj,null,2);
+  const atomicConfig = getRuntimeConfig().atomicFs;
+  const maxAttempts = Math.max(1, atomicConfig.retries);
+  const baseBackoff = Math.max(1, atomicConfig.backoffMs);
+  let lastErr: unknown = null;
+  for(let attempt=1; attempt<=maxAttempts; attempt++){
+    const tmp = path.join(dir, `.${path.basename(filePath)}.${crypto.randomBytes(6).toString('hex')}.tmp`);
+    try {
+      fs.writeFileSync(tmp, data, 'utf8');
+      try {
+        fs.linkSync(tmp, filePath);
+        try { fs.unlinkSync(tmp); } catch { /* ignore */ }
+        return;
+      } catch(linkErr){
+        const code = (linkErr as NodeJS.ErrnoException).code;
+        try { if(fs.existsSync(tmp)) fs.unlinkSync(tmp); } catch { /* ignore */ }
+        if(code==='EEXIST'){
+          lastErr = linkErr;
+          break;
+        }
+        const transient = code==='EPERM' || code==='EBUSY' || code==='EACCES' || code==='ENOENT';
+        if(!transient || attempt===maxAttempts){
+          lastErr = linkErr;
+          break;
+        }
+        lastErr = linkErr;
+        const sleepMs = baseBackoff * Math.pow(2, attempt-1) + Math.floor(Math.random()*baseBackoff);
+        const start = Date.now();
+        while(Date.now()-start < sleepMs){ /* busy-wait tiny backoff */ }
+        continue;
+      }
+    } catch(writeErr){
+      const code = (writeErr as NodeJS.ErrnoException).code;
+      const transient = code==='EPERM' || code==='EBUSY' || code==='EACCES';
+      try { if(fs.existsSync(tmp)) fs.unlinkSync(tmp); } catch { /* ignore */ }
+      if(!transient || attempt===maxAttempts){
+        lastErr = writeErr;
+        break;
+      }
+      lastErr = writeErr;
+      const sleepMs = baseBackoff * Math.pow(2, attempt-1) + Math.floor(Math.random()*baseBackoff);
+      const start = Date.now();
+      while(Date.now()-start < sleepMs){ /* busy-wait */ }
+      continue;
+    }
+  }
+  const err = lastErr instanceof Error? lastErr: new Error('atomicCreateJson failed');
+  throw err;
+}

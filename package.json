@@ -1,6 +1,7 @@
 {
   "name": "@jagilber-org/index-server",
-  "version": "1.22.1",
+  "version": "1.24.0",
+  "mcpName": "io.github.jagilber-org/index-server",
   "description": "MCP instruction indexing server for AI assistant governance — search, CRUD, schema validation, usage tracking, and cross-repo knowledge promotion.",
   "publishConfig": {
     "registry": "https://registry.npmjs.org/",
@@ -17,6 +18,8 @@
     "templates/",
     "scripts/copy-dashboard-assets.mjs",
     "scripts/setup-hooks.cjs",
+    "scripts/setup-wizard.mjs",
+    "server.json",
     "README.md",
     "LICENSE",
     "CHANGELOG.md",
@@ -29,6 +32,7 @@
     "index-server": "dist/server/index-server.js"
   },
   "scripts": {
+    "setup": "node scripts/setup-wizard.mjs",
     "instructions:normalize": "node scripts/normalize-instructions.js",
     "build": "tsc -p tsconfig.json && node scripts/copy-dashboard-assets.mjs",
     "start": "node dist/server/index-server.js",
@@ -45,7 +49,8 @@
     "manifest:generate": "node scripts/generate-manifest.mjs",
     "contract:tools": "node scripts/generate-tools-snapshot.mjs",
     "verify:manifest": "node scripts/verify-manifest.mjs",
-    "test": "vitest run",
+    "test": "npm run test:fast",
+    "test:all": "vitest run",
     "test:watch": "vitest",
     "test:contracts": "vitest run src/tests/contractSchemas.spec.ts",
     "test:diag": "cross-env INDEX_SERVER_HEALTH_MIXED_DIAG=1 vitest run src/tests/handshakeFlakeRepro.spec.ts src/tests/healthMixedReproLoop.spec.ts src/tests/healthHangExploration.spec.ts",
@@ -58,8 +63,7 @@
     "format": "prettier --write .",
     "prepare": "node scripts/setup-hooks.cjs",
     "audit": "npm audit --omit=dev --audit-level=high",
-    "prepack": "npm run audit",
-    "prepublishOnly": "npm run build && npm run typecheck",
+    "prepublishOnly": "npm run build && npm run typecheck && npm run audit",
     "scan:security": "node scripts/security-scan.mjs",
     "release:patch": "node scripts/bump-version.mjs patch",
     "release:minor": "node scripts/bump-version.mjs minor",
@@ -115,6 +119,7 @@
   },
   "dependencies": {
     "@huggingface/transformers": "^3.8.1",
+    "@inquirer/prompts": "^8.4.2",
     "@mermaid-js/layout-elk": "^0.2.1",
     "@modelcontextprotocol/sdk": "^1.28.0",
     "adm-zip": "^0.5.17",
@@ -122,6 +127,7 @@
     "ajv-formats": "^2.1.1",
     "express": "^5.2.1",
     "express-rate-limit": "^8.3.2",
+    "sqlite-vec": "0.1.9",
     "ws": "^8.19.0",
     "zod": "^3.23.8"
   },

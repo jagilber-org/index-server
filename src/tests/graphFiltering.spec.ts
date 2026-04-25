@@ -18,9 +18,18 @@ describe('graph filtering (mermaid)', () => {
     const baseUrl = dash.url;
 
     async function getGraph(params: string) {
-      const res = await fetch(baseUrl + '/api/graph/mermaid?' + params);
-      expect(res.ok).toBe(true);
-      return res.json() as Promise<{ success: boolean; meta: any; mermaid: string }>;
+      let lastErr: unknown;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          const res = await fetch(baseUrl + '/api/graph/mermaid?' + params);
+          expect(res.ok).toBe(true);
+          return await res.json() as { success: boolean; meta: any; mermaid: string };
+        } catch (err) {
+          lastErr = err;
+          if (attempt < 2) await new Promise(r => setTimeout(r, 250));
+        }
+      }
+      throw lastErr instanceof Error ? lastErr : new Error('graph fetch failed');
     }
 
     // Get baseline full graph

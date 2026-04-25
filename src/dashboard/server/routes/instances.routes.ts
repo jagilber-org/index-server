@@ -5,6 +5,7 @@
 
 import { Router, Request, Response } from 'express';
 import { getActiveInstances } from '../InstanceManager.js';
+import { logError } from '../../../services/logger.js';
 
 export function createInstancesRoutes(): Router {
   const router = Router();
@@ -23,7 +24,7 @@ export function createInstancesRoutes(): Router {
         timestamp: Date.now(),
       });
     } catch (error) {
-      console.error('[API] Failed to list instances:', error);
+      logError('[API] Failed to list instances:', error);
       res.status(500).json({
         error: 'Failed to list instances',
         timestamp: Date.now(),

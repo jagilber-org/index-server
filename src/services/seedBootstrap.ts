@@ -112,7 +112,7 @@ Or add directly:
 
 - \`index_groom\` — clean duplicates and stale entries
 - \`index_governanceUpdate\` — deprecate outdated content (don't silently delete)
-- \`feedback_dispatch\` with action="submit" — report issues or request features
+- \`feedback_submit\` — report issues or request features
 - \`usage_track\` — signal when guidance was helpful or outdated
 
 ---

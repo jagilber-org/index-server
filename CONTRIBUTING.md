@@ -29,7 +29,7 @@ Use conventional style where practical (feat:, fix:, docs:, chore:).
 
 ## Tests
 
-Include unit tests for new logic. Run `npm test` and ensure coverage not reduced.
+Include unit tests for new logic. Run `npm test` for the default fast suite, and use `npm run test:slow` or `npm run test:all` when your change touches heavy integration/perf coverage.
 
 ### Repo Root Policy
 
@@ -50,7 +50,7 @@ All runtime and test tunables must flow through `src/config/runtimeConfig.ts`:
 
 1. If you need a new timing / wait value, extend `INDEX_SERVER_TIMING_JSON` key usage (e.g. `{"featureX.startupWait":5000}`) instead of adding `FEATUREX_STARTUP_WAIT_MS`.
 2. For logging verbosity, use `INDEX_SERVER_LOG_LEVEL` (levels: silent,error,warn,info,debug,trace) or add a trace token to `INDEX_SERVER_TRACE` (comma-separated) rather than a new boolean flag.
-3. For mutation gating, rely on `INDEX_SERVER_MUTATION` (legacy `INDEX_SERVER_MUTATION` is auto-mapped; do not reintroduce it).
+3. For mutation control, rely on `INDEX_SERVER_MUTATION` (`0` forces read-only mode; do not introduce alternate flags).
 4. Fast coverage paths use `INDEX_SERVER_TEST_MODE=coverage-fast`; legacy `FAST_COVERAGE` accepted but should not appear in new code.
 
 If an absolutely new capability requires configuration:

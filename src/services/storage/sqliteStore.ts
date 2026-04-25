@@ -179,8 +179,8 @@ export class SqliteStore implements IInstructionStore {
     return this.cache.get(id) ?? null;
   }
 
-  write(entry: InstructionEntry): void {
-    const sql = `INSERT OR REPLACE INTO instructions (
+  write(entry: InstructionEntry, opts?: { createOnly?: boolean }): void {
+    const sql = `${opts?.createOnly ? 'INSERT INTO' : 'INSERT OR REPLACE INTO'} instructions (
       id, title, body, rationale, priority, audience, requirement,
       categories, content_type, primary_category, source_hash,
       schema_version, deprecated_by, created_at, updated_at,

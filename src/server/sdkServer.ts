@@ -13,6 +13,7 @@ import '../services/toolHandlers';
 import { getHandler } from './registry';
 import { z } from 'zod';
 import { getRuntimeConfig } from '../config/runtimeConfig';
+import { registerMcpServer } from '../services/mcpLogBridge';
 import {
   isHandshakeFallbacksEnabled,
   SUPPORTED_PROTOCOL_VERSIONS,
@@ -31,6 +32,13 @@ import {
   wrapTransportSend,
   setupKeepalive,
 } from './transportFactory';
+import {
+  getReadOnlyPrompt,
+  getReadOnlySurfaceCapabilities,
+  listReadOnlyPrompts,
+  listReadOnlyResources,
+  readReadOnlyResource,
+} from './mcpReadOnlySurfaces';
 
 // ESM dynamic import used below for SDK modules.
 // We'll lazy-load ESM exports via dynamic import when starting.
@@ -57,8 +65,16 @@ export function createSdkServer(ServerClass: any) {
       }
     } catch { /* ignore */ }
   }
-  const server: any = new ServerClass({ name: 'index', version }, { capabilities: { tools: { listChanged: true } }});
+  const serverCapabilities = {
+    tools: { listChanged: true },
+    logging: {},
+    ...getReadOnlySurfaceCapabilities(),
+  };
+  const server: any = new ServerClass({ name: 'index', version }, { capabilities: serverCapabilities });
   (server as any).__declaredVersion = version;
+
+  // Register server with the MCP log bridge (activated later after ready)
+  registerMcpServer(server);
 
   // Never emit tools/list_changed before ready. Wrap sendToolListChanged to enforce ordering.
   try {
@@ -111,13 +127,13 @@ export function createSdkServer(ServerClass: any) {
       const result: any = {
         protocolVersion: negotiated,
         serverInfo: { name: 'index', version: versionDeclared },
-        capabilities: { tools: { listChanged: true } },
-        instructions: 'Use initialize -> tools/list -> tools/call { name, arguments }. Health: tools/call health_check. Metrics: tools/call metrics_snapshot. Ping: ping.'
+        capabilities: serverCapabilities,
+        instructions: 'Use initialize -> tools/list -> tools/call { name, arguments }. Prompts: prompts/list and prompts/get. Resources: resources/list and resources/read. Health: tools/call health_check. Metrics: tools/call metrics_snapshot. Ping: ping.'
       };
       initFrameLog('handler_return', { negotiated });
       return result;
     } catch {
-      return { protocolVersion: SUPPORTED_PROTOCOL_VERSIONS[0], serverInfo:{ name:'index', version:'0.0.0' }, capabilities:{ tools:{ listChanged:true } }, instructions:'init fallback' };
+      return { protocolVersion: SUPPORTED_PROTOCOL_VERSIONS[0], serverInfo:{ name:'index', version:'0.0.0' }, capabilities:serverCapabilities, instructions:'init fallback' };
     }
   });
 
@@ -131,7 +147,7 @@ export function createSdkServer(ServerClass: any) {
         const negotiated = negotiateProtocolVersion(request?.params?.protocolVersion);
         (result as any).protocolVersion = negotiated;
         if(result && typeof result === 'object' && !('instructions' in result)){
-          (result as any).instructions = 'Use initialize -> tools/list -> tools/call { name, arguments }. Health: tools/call health_check. Metrics: tools/call metrics_snapshot. Ping: ping.';
+          (result as any).instructions = 'Use initialize -> tools/list -> tools/call { name, arguments }. Prompts: prompts/list and prompts/get. Resources: resources/list and resources/read. Health: tools/call health_check. Metrics: tools/call metrics_snapshot. Ping: ping.';
         }
         (this as any).__sawInitializeRequest = true;
       } catch { /* ignore */ }
@@ -143,6 +159,47 @@ export function createSdkServer(ServerClass: any) {
     record('tools_list_request', { afterReady: !!(server as any).__readyNotified, sawInit: !!(server as any).__sawInitializeRequest });
     const registry = getToolRegistry();
     return { tools: registry.map(r => ({ name: r.name, description: r.description, inputSchema: r.inputSchema as Record<string,unknown> })) };
+  });
+
+  server.setRequestHandler(requestSchema('prompts/list'), async () => {
+    return { prompts: listReadOnlyPrompts() };
+  });
+
+  server.setRequestHandler(z.object({
+    jsonrpc: z.literal('2.0'),
+    id: z.union([z.string(), z.number()]).optional(),
+    method: z.literal('prompts/get'),
+    params: z.object({
+      _meta: z.any().optional(),
+      name: z.string(),
+      arguments: z.record(z.string()).optional(),
+    }),
+  }), async (req: { params: { name: string; arguments?: Record<string, string> } }) => {
+    const prompt = getReadOnlyPrompt(req.params.name, req.params.arguments);
+    if(!prompt){
+      throw { code: -32602, message: `Unknown prompt: ${req.params.name}`, data: { message: `Unknown prompt: ${req.params.name}`, method: 'prompts/get', name: req.params.name } };
+    }
+    return prompt;
+  });
+
+  server.setRequestHandler(requestSchema('resources/list'), async () => {
+    return { resources: listReadOnlyResources() };
+  });
+
+  server.setRequestHandler(z.object({
+    jsonrpc: z.literal('2.0'),
+    id: z.union([z.string(), z.number()]).optional(),
+    method: z.literal('resources/read'),
+    params: z.object({
+      _meta: z.any().optional(),
+      uri: z.string(),
+    }),
+  }), async (req: { params: { uri: string } }) => {
+    const resource = readReadOnlyResource(req.params.uri);
+    if(!resource){
+      throw { code: -32602, message: `Unknown resource: ${req.params.uri}`, data: { message: `Unknown resource: ${req.params.uri}`, method: 'resources/read', uri: req.params.uri } };
+    }
+    return resource;
   });
 
   // Raw handler for tools/call (MCP style) - returns content array

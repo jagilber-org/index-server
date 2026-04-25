@@ -12,13 +12,16 @@
  *   experimental  — HTTPS dashboard, SQLite storage, semantic search, debug logging
  *
  * Usage:
+ *   npx @jagilber-org/index-server --setup
+ *   npm run setup
  *   node scripts/setup-wizard.mjs
  *   node scripts/setup-wizard.mjs --non-interactive --profile enhanced --root C:/mcp/index-server
  */
 import fs from 'fs';
 import path from 'path';
-import readline from 'readline';
+import os from 'os';
 import { fileURLToPath } from 'url';
+import { select, input, confirm, checkbox } from '@inquirer/prompts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
@@ -34,47 +37,6 @@ function fwd(p) { return p.replace(/\\/g, '/'); }
 function resolveUnder(root, ...segments) { return fwd(path.resolve(root, ...segments)); }
 
 // --------------------------------------------------------------------------
-// Prompt helpers
-// --------------------------------------------------------------------------
-function createPrompt() {
-  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-  return {
-    ask(question, defaultVal) {
-      return new Promise(resolve => {
-        const suffix = defaultVal !== undefined ? ` [${defaultVal}]` : '';
-        rl.question(`${question}${suffix}: `, answer => {
-          resolve(answer.trim() || (defaultVal !== undefined ? String(defaultVal) : ''));
-        });
-      });
-    },
-    confirm(question, defaultVal = false) {
-      return new Promise(resolve => {
-        const hint = defaultVal ? '[Y/n]' : '[y/N]';
-        rl.question(`${question} ${hint}: `, answer => {
-          const a = answer.trim().toLowerCase();
-          if (!a) return resolve(defaultVal);
-          resolve(a === 'y' || a === 'yes');
-        });
-      });
-    },
-    choose(question, options, defaultIdx = 0) {
-      return new Promise(resolve => {
-        console.log(`\n${question}`);
-        options.forEach((opt, i) => {
-          const marker = i === defaultIdx ? ' (default)' : '';
-          console.log(`  ${i + 1}. ${opt}${marker}`);
-        });
-        rl.question(`Choice [${defaultIdx + 1}]: `, answer => {
-          const idx = parseInt(answer.trim(), 10) - 1;
-          resolve(idx >= 0 && idx < options.length ? idx : defaultIdx);
-        });
-      });
-    },
-    close() { rl.close(); },
-  };
-}
-
-// --------------------------------------------------------------------------
 // Profile definitions
 // --------------------------------------------------------------------------
 const PROFILES = {
@@ -85,7 +47,7 @@ const PROFILES = {
       '  Dashboard : HTTP on localhost:8787',
       '  Storage   : JSON files',
       '  Search    : keyword only',
-      '  Mutation  : off (read-only)',
+      '  Mutation  : on (read/write)',
       '  Logging   : info to stderr',
     ],
   },
@@ -150,10 +112,14 @@ function parseNonInteractiveArgs() {
     port: 8787,
     host: '127.0.0.1',
     tls: false,
-    mutation: false,
+    mutation: true,
     logLevel: 'info',
     generateCerts: false,
     serverName: 'index-server',
+    targets: ['vscode'],     // 'vscode', 'copilot-cli', 'claude'
+    scope: 'repo',           // 'global' or 'repo'
+    write: false,            // write to real config files
+    preview: true,           // show preview before writing
   };
 
   for (let i = 0; i < args.length; i++) {
@@ -166,6 +132,10 @@ function parseNonInteractiveArgs() {
     else if (args[i] === '--log-level' && args[i + 1]) config.logLevel = args[++i];
     else if (args[i] === '--generate-certs') config.generateCerts = true;
     else if (args[i] === '--server-name' && args[i + 1]) config.serverName = args[++i];
+    else if (args[i] === '--target' && args[i + 1]) config.targets = args[++i].split(',').map(t => t.trim());
+    else if (args[i] === '--scope' && args[i + 1]) config.scope = args[++i];
+    else if (args[i] === '--write') config.write = true;
+    else if (args[i] === '--no-preview') config.preview = false;
   }
 
   // Profile overrides
@@ -185,68 +155,105 @@ function parseNonInteractiveArgs() {
 // Interactive wizard
 // --------------------------------------------------------------------------
 async function runInteractiveWizard() {
-  const prompt = createPrompt();
-
   console.log('\n╔════════════════════════════════════════════════════════════════╗');
   console.log('║             Index Server — Configuration Wizard               ║');
   console.log('║      MCP instruction indexing for AI governance               ║');
   console.log('╚════════════════════════════════════════════════════════════════╝\n');
 
   // Step 1: Profile
-  console.log('Choose a configuration profile:\n');
   const profileKeys = Object.keys(PROFILES);
-  for (let i = 0; i < profileKeys.length; i++) {
-    const p = PROFILES[profileKeys[i]];
-    const marker = i === 0 ? ' (default)' : '';
-    console.log(`  ${i + 1}. ${p.label}${marker}`);
-    p.description.forEach(line => console.log(`     ${line}`));
-    console.log('');
-  }
-  const profileIdx = await prompt.choose('Select profile', profileKeys.map(k => PROFILES[k].label), 0);
-  const profile = profileKeys[profileIdx];
+  const profile = await select({
+    message: 'Choose a configuration profile',
+    choices: profileKeys.map(k => ({
+      name: PROFILES[k].label,
+      value: k,
+      description: PROFILES[k].description.join('\n'),
+    })),
+    default: 'default',
+  });
 
   // Step 2: Root directory
   const defaultRoot = IS_WINDOWS ? 'C:\\mcp\\index-server' : '/opt/index-server';
-  console.log('\nBase directory — all data paths resolve under this root.');
-  console.log('Use the repo directory for development, or a dedicated path for production.');
-  const root = path.resolve(await prompt.ask('Base directory', defaultRoot));
+  const root = path.resolve(await input({
+    message: 'Base directory (all data paths resolve under this root)',
+    default: defaultRoot,
+  }));
 
   // Step 3: Server name for mcp.json entry
-  const serverName = await prompt.ask('MCP server name (used in mcp.json)', 'index-server');
+  const serverName = await input({
+    message: 'MCP server name (used in mcp.json)',
+    default: 'index-server',
+  });
 
   // Step 4: Dashboard port
-  const port = parseInt(await prompt.ask('Dashboard port', 8787), 10);
+  const port = parseInt(await input({
+    message: 'Dashboard port',
+    default: '8787',
+    validate: (v) => /^\d+$/.test(v) && +v > 0 && +v < 65536 ? true : 'Enter a valid port (1-65535)',
+  }), 10);
 
   // Step 5: Dashboard host
-  const host = await prompt.ask(
-    'Dashboard host (127.0.0.1 = localhost only, 0.0.0.0 = all interfaces)',
-    '127.0.0.1'
-  );
+  const host = await select({
+    message: 'Dashboard host',
+    choices: [
+      { name: '127.0.0.1 — localhost only (recommended)', value: '127.0.0.1' },
+      { name: '0.0.0.0 — all network interfaces', value: '0.0.0.0' },
+    ],
+    default: '127.0.0.1',
+  });
 
   // Step 6: TLS certs (Enhanced/Experimental)
   let generateCerts = false;
   if (profile === 'enhanced' || profile === 'experimental') {
-    generateCerts = await prompt.confirm('Generate self-signed TLS certificates now?', true);
+    generateCerts = await confirm({
+      message: 'Generate self-signed TLS certificates now?',
+      default: true,
+    });
   }
 
   // Step 7: Mutation
-  let mutation = profile !== 'default';
+  let mutation = true;
   if (profile === 'default') {
-    mutation = await prompt.confirm('Enable mutation (write operations)?', false);
+    mutation = await confirm({
+      message: 'Enable mutation (write operations)?',
+      default: true,
+    });
   }
 
   // Step 8: Log level
   const defaultLogLevel = profile === 'experimental' ? 'debug' : 'info';
-  const logLevelIdx = await prompt.choose(
-    'Log level',
-    ['error', 'warn', 'info', 'debug', 'trace'],
-    ['error', 'warn', 'info', 'debug', 'trace'].indexOf(defaultLogLevel)
-  );
-  const logLevel = ['error', 'warn', 'info', 'debug', 'trace'][logLevelIdx];
+  const logLevel = await select({
+    message: 'Log level',
+    choices: ['error', 'warn', 'info', 'debug', 'trace'].map(l => ({
+      name: l,
+      value: l,
+    })),
+    default: defaultLogLevel,
+  });
 
-  prompt.close();
+  // Step 9: Target MCP clients
+  const targets = await checkbox({
+    message: 'Which MCP client configs should be generated?',
+    choices: [
+      { name: 'VS Code (.vscode/mcp.json)', value: 'vscode', checked: true },
+      { name: 'Copilot CLI (~/.copilot/mcp-config.json)', value: 'copilot-cli' },
+      { name: 'Claude Desktop (claude_desktop_config.json)', value: 'claude' },
+    ],
+  });
+  // Ensure at least one target
+  if (targets.length === 0) targets.push('vscode');
 
-  return { profile, root, serverName, port, host, mutation, logLevel, generateCerts };
+  // Step 10: Scope (global vs workspace/repo)
+  const scope = await select({
+    message: 'Configuration scope',
+    choices: [
+      { name: 'Workspace/repo — .vscode/mcp.json in current directory', value: 'repo' },
+      { name: 'Global — user-level config (applies to all workspaces)', value: 'global' },
+    ],
+    default: 'repo',
+  });
+
+  return { profile, root, serverName, port, host, mutation, logLevel, generateCerts, targets, scope, write: true, preview: true };
 }
 
 // --------------------------------------------------------------------------
@@ -396,6 +403,159 @@ function generateMcpJson(config, paths) {
 }
 
 // --------------------------------------------------------------------------
+// Generate Copilot CLI mcp-config.json format
+// --------------------------------------------------------------------------
+function generateCopilotCliJson(config, paths) {
+  const catalog = getEnvCatalog(config, paths);
+  const env = {};
+  for (const entry of catalog) {
+    if (entry.section) continue;
+    if (entry.active) env[entry.key] = entry.value;
+  }
+  const obj = {
+    mcpServers: {
+      [config.serverName]: {
+        command: 'node',
+        args: [path.join(fwd(config.root), 'dist/server/index-server.js')],
+        env,
+      },
+    },
+  };
+  return JSON.stringify(obj, null, 2);
+}
+
+// --------------------------------------------------------------------------
+// Generate Claude Desktop config JSON format
+// --------------------------------------------------------------------------
+function generateClaudeDesktopJson(config, paths) {
+  const catalog = getEnvCatalog(config, paths);
+  const env = {};
+  for (const entry of catalog) {
+    if (entry.section) continue;
+    if (entry.active) env[entry.key] = entry.value;
+  }
+  const obj = {
+    mcpServers: {
+      [config.serverName]: {
+        command: 'node',
+        args: [path.join(fwd(config.root), 'dist/server/index-server.js')],
+        env,
+      },
+    },
+  };
+  return JSON.stringify(obj, null, 2);
+}
+
+// --------------------------------------------------------------------------
+// Resolve target config file paths based on scope and OS
+// --------------------------------------------------------------------------
+function resolveConfigPaths(config) {
+  const home = os.homedir();
+  const results = [];
+  const isWin = process.platform === 'win32';
+
+  for (const target of (config.targets || ['vscode'])) {
+    if (target === 'vscode') {
+      if (config.scope === 'global') {
+        const dir = isWin
+          ? path.join(process.env.APPDATA || path.join(home, 'AppData', 'Roaming'), 'Code', 'User')
+          : path.join(home, '.config', 'Code', 'User');
+        results.push({ target, path: path.join(dir, 'settings.json'), format: 'vscode-global' });
+      } else {
+        results.push({ target, path: path.join(config.root, '.vscode', 'mcp.json'), format: 'vscode' });
+      }
+    } else if (target === 'copilot-cli') {
+      const dir = isWin
+        ? path.join(process.env.USERPROFILE || home, '.copilot')
+        : path.join(home, '.copilot');
+      results.push({ target, path: path.join(dir, 'mcp-config.json'), format: 'copilot-cli' });
+    } else if (target === 'claude') {
+      const dir = isWin
+        ? path.join(process.env.APPDATA || path.join(home, 'AppData', 'Roaming'), 'Claude')
+        : path.join(home, 'Library', 'Application Support', 'Claude');
+      results.push({ target, path: path.join(dir, 'claude_desktop_config.json'), format: 'claude' });
+    }
+  }
+  return results;
+}
+
+// --------------------------------------------------------------------------
+// Generate config content for a given format
+// --------------------------------------------------------------------------
+function generateConfigForTarget(format, config, paths) {
+  switch (format) {
+    case 'vscode':
+    case 'vscode-global':
+      return generateMcpJson(config, paths);
+    case 'copilot-cli':
+      return generateCopilotCliJson(config, paths);
+    case 'claude':
+      return generateClaudeDesktopJson(config, paths);
+    default:
+      return generateMcpJson(config, paths);
+  }
+}
+
+// --------------------------------------------------------------------------
+// Preview all generated configs
+// --------------------------------------------------------------------------
+function previewConfigs(configTargets, config, paths) {
+  console.log('\n┌─────────────────────────────────────────────────────────────────────┐');
+  console.log('│                     📋 Configuration Preview                        │');
+  console.log('└─────────────────────────────────────────────────────────────────────┘');
+  for (const ct of configTargets) {
+    const content = generateConfigForTarget(ct.format, config, paths);
+    console.log(`\n── ${ct.target} → ${ct.path} ──\n`);
+    console.log(content);
+  }
+  console.log('');
+}
+
+// --------------------------------------------------------------------------
+// Write config to real file (merge if existing)
+// --------------------------------------------------------------------------
+function writeConfigFile(targetInfo, content) {
+  const dir = path.dirname(targetInfo.path);
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+
+  if (targetInfo.format === 'vscode-global' && fs.existsSync(targetInfo.path)) {
+    // Write sidecar to avoid corrupting settings.json
+    const sidecarPath = targetInfo.path.replace('settings.json', 'mcp.json.generated');
+    fs.writeFileSync(sidecarPath, content, 'utf8');
+    console.log(`  ✅ Generated: ${sidecarPath}`);
+    console.log(`     ℹ️  Merge the "mcp" key into your settings.json manually.`);
+    return;
+  }
+
+  if (fs.existsSync(targetInfo.path)) {
+    // Backup existing file before overwriting
+    const backup = targetInfo.path + '.backup.' + Date.now();
+    fs.copyFileSync(targetInfo.path, backup);
+    console.log(`  📦 Backed up existing: ${backup}`);
+
+    // For JSON files, try to merge the mcpServers key
+    try {
+      const existing = JSON.parse(fs.readFileSync(targetInfo.path, 'utf8'));
+      const generated = JSON.parse(content);
+
+      if (targetInfo.format === 'copilot-cli' || targetInfo.format === 'claude') {
+        existing.mcpServers = { ...existing.mcpServers, ...generated.mcpServers };
+        fs.writeFileSync(targetInfo.path, JSON.stringify(existing, null, 2), 'utf8');
+        console.log(`  ✅ Merged into: ${targetInfo.path}`);
+        return;
+      }
+    } catch {
+      // Not valid JSON — fall through to overwrite
+    }
+  }
+
+  fs.writeFileSync(targetInfo.path, content, 'utf8');
+  console.log(`  ✅ Written: ${targetInfo.path}`);
+}
+
+// --------------------------------------------------------------------------
 // Generate .env file
 // --------------------------------------------------------------------------
 function generateEnvFile(config, paths) {
@@ -468,6 +628,8 @@ async function main() {
     console.log(`Usage: setup-wizard.mjs [options]
 
 Interactive mode:
+  npx @jagilber-org/index-server --setup
+  npm run setup
   node scripts/setup-wizard.mjs
 
 Non-interactive mode:
@@ -480,7 +642,11 @@ Non-interactive mode:
     --mutation          Enable write operations
     --log-level <lvl>   Log level: error|warn|info|debug|trace
     --generate-certs    Generate self-signed TLS certificates
-    --server-name <n>   MCP server name in mcp.json (default: index-server)`);
+    --server-name <n>   MCP server name in mcp.json (default: index-server)
+    --target <list>     Comma-separated targets: vscode,copilot-cli,claude
+    --scope <s>         global | repo (default: repo)
+    --write             Write directly to real config files (with backup)
+    --no-preview        Skip config preview in non-interactive mode`);
     process.exit(0);
   }
 
@@ -511,17 +677,46 @@ Non-interactive mode:
     console.log(`\n✅ .env written to: ${envPath}`);
   }
 
-  // ── Generate mcp.json snippet ───────────────────────────────────────
-  const mcpContent = generateMcpJson(config, paths);
-  const mcpDir = path.join(config.root, '.vscode');
-  const mcpPath = path.join(mcpDir, 'mcp.json.generated');
+  // ── Multi-target config generation ──────────────────────────────────
+  const configTargets = resolveConfigPaths(config);
 
-  try {
-    fs.mkdirSync(mcpDir, { recursive: true });
-  } catch { /* exists */ }
-  fs.writeFileSync(mcpPath, mcpContent, 'utf8');
-  console.log(`✅ mcp.json snippet written to: ${mcpPath}`);
-  console.log('   Copy its contents into your .vscode/mcp.json or VS Code user settings.');
+  // Preview
+  if (config.preview !== false) {
+    previewConfigs(configTargets, config, paths);
+  }
+
+  // Write to real files or sidecar
+  if (config.write) {
+    console.log('📁 Writing configuration files...\n');
+    for (const ct of configTargets) {
+      const content = generateConfigForTarget(ct.format, config, paths);
+      writeConfigFile(ct, content);
+    }
+  } else {
+    // Legacy sidecar behavior for backward compatibility
+    const mcpContent = generateMcpJson(config, paths);
+    const mcpDir = path.join(config.root, '.vscode');
+    const mcpPath = path.join(mcpDir, 'mcp.json.generated');
+
+    try {
+      fs.mkdirSync(mcpDir, { recursive: true });
+    } catch { /* exists */ }
+    fs.writeFileSync(mcpPath, mcpContent, 'utf8');
+    console.log(`✅ mcp.json snippet written to: ${mcpPath}`);
+    console.log('   Copy its contents into your .vscode/mcp.json or VS Code user settings.');
+
+    // Also generate Copilot CLI / Claude if requested
+    for (const ct of configTargets) {
+      if (ct.format !== 'vscode' && ct.format !== 'vscode-global') {
+        const content = generateConfigForTarget(ct.format, config, paths);
+        const genPath = ct.path + '.generated';
+        const dir = path.dirname(genPath);
+        try { fs.mkdirSync(dir, { recursive: true }); } catch { /* exists */ }
+        fs.writeFileSync(genPath, content, 'utf8');
+        console.log(`✅ ${ct.target} config written to: ${genPath}`);
+      }
+    }
+  }
 
   // ── Generate TLS certs ──────────────────────────────────────────────
   if (config.generateCerts) {
@@ -547,8 +742,20 @@ Non-interactive mode:
   console.log('╚════════════════════════════════════════════════════════════════╝\n');
   console.log('  1. Build the server:');
   console.log('     npm run build\n');
-  console.log('  2. Copy mcp.json config into your VS Code settings:');
-  console.log(`     ${mcpPath}\n`);
+
+  if (config.write) {
+    console.log('  2. Config files have been written. Restart your MCP client.\n');
+  } else {
+    console.log('  2. Copy generated config into your MCP client settings.');
+    for (const ct of configTargets) {
+      const genPath = ct.format === 'vscode' || ct.format === 'vscode-global'
+        ? path.join(config.root, '.vscode', 'mcp.json.generated')
+        : ct.path + '.generated';
+      console.log(`     ${ct.target}: ${genPath}`);
+    }
+    console.log('');
+  }
+
   console.log(`  3. Open the dashboard:`);
   console.log(`     ${proto}://localhost:${config.port}\n`);
 
@@ -563,6 +770,7 @@ Non-interactive mode:
     console.log(`     ${paths.sqliteDb}\n`);
   }
 
+  console.log(`  Targets: ${(config.targets || ['vscode']).join(', ')} | Scope: ${config.scope || 'repo'}`);
   console.log(`  Profile: ${config.profile} | Root: ${fwd(config.root)}`);
   console.log('');
 }

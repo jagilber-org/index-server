@@ -7,7 +7,7 @@
  */
 
 import express, { Router, Request, Response } from 'express';
-import expressRateLimit from 'express-rate-limit';
+import expressRateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import { getMetricsCollector } from './MetricsCollector.js';
 import { logHttpAudit } from '../../services/auditLog';
 import { getRuntimeConfig } from '../../config/runtimeConfig.js';
@@ -28,8 +28,10 @@ import {
   createScriptsRoutes,
   createMessagingRoutes,
   createSqliteRoutes,
+  createAdminFeedbackRoutes,
 } from './routes/index.js';
 import { ensureLoadedMiddleware } from './middleware/ensureLoadedMiddleware.js';
+import { logError } from '../../services/logger.js';
 
 export interface ApiRoutesOptions {
   enableCors?: boolean;
@@ -72,7 +74,10 @@ export function createApiRoutes(options: ApiRoutesOptions = {}): Router {
       legacyHeaders: true,
       validate: { ip: false },
       skip: (req: Request) => req.method === 'OPTIONS',
-      keyGenerator: (req: Request) => req.ip || req.socket.remoteAddress || 'unknown',
+      keyGenerator: (req: Request) => {
+        const clientIp = req.ip || req.socket.remoteAddress;
+        return clientIp ? ipKeyGenerator(clientIp) : 'unknown';
+      },
       handler: (_req: Request, res: Response) => {
         const retryAfter = Number(res.getHeader('Retry-After') || Math.ceil(rateLimitOpts.windowMs / 1000));
         res.status(429).json({
@@ -161,10 +166,11 @@ export function createApiRoutes(options: ApiRoutesOptions = {}): Router {
   router.use(createScriptsRoutes());
   router.use(createMessagingRoutes());
   router.use(createSqliteRoutes());
+  router.use(createAdminFeedbackRoutes());
 
   // Error handling middleware
   router.use((error: Error, _req: Request, res: Response, _next: () => void) => {
-    console.error('[API] Unhandled error:', error);
+    logError('[API] Unhandled error:', error);
     const exposeDetails = getRuntimeConfig().dashboard.http.verboseLogging;
     res.status(500).json({
       error: 'Internal server error',

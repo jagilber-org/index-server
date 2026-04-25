@@ -4,7 +4,7 @@ import crypto from 'crypto';
 import { IndexLoader } from './indexLoader';
 import { InstructionEntry } from '../models/instruction';
 import { hasFeature, incrementCounter } from './features';
-import { atomicWriteJson } from './atomicFs';
+import { atomicCreateJson, atomicWriteJson } from './atomicFs';
 import { ClassificationService } from './classificationService';
 import { resolveOwner } from './ownershipService';
 import { getBooleanEnv } from '../utils/envUtils';
@@ -12,6 +12,7 @@ import { getRuntimeConfig } from '../config/runtimeConfig';
 import { createStore } from './storage/factory';
 import type { IInstructionStore } from './storage/types';
 import { migrateJsonToSqlite } from './storage/migrationEngine';
+import { assertValidInstructionRecord } from './instructionRecordValidation';
 
 // Extended IndexState to retain loader diagnostics so we can expose precise rejection reasons
 // via a forthcoming index_diagnostics tool. Keeping optional properties so older code paths
@@ -273,6 +274,7 @@ export function getInstructionsDir(){
 }
 // Centralized tracing utilities
 import { emitTrace, traceEnabled } from './tracing';
+import { logError, logInfo, logWarn } from './logger.js';
 // Throttled file trace emission (avoid per-get amplification). We emit per-file decisions only
 // on true reloads AND if file signature changed OR time since last emission > threshold.
 // (legacy file-level trace removed in simplified loader)
@@ -327,10 +329,10 @@ export function ensureLoaded(): IndexState {
         const dbPath = getRuntimeConfig().storage?.sqlitePath ?? path.join(process.cwd(), 'data', 'index.db');
         const mr = migrateJsonToSqlite(baseDir, dbPath);
         if (mr.migrated > 0) {
-          console.log(`[storage] Auto-migrated ${mr.migrated} instruction(s) from JSON → SQLite`);
+          logInfo(`[storage] Auto-migrated ${mr.migrated} instruction(s) from JSON → SQLite`);
           result = store.load();
         }
-      } catch (err) { console.warn('[storage] Auto-migration failed:', err); }
+      } catch (err) { logWarn('[storage] Auto-migration failed:', err); }
     }
   }
   const byId = new Map<string, InstructionEntry>(); result.entries.forEach(e=>byId.set(e.id,e));
@@ -528,13 +530,28 @@ export function computeGovernanceHash(entries: InstructionEntry[]): string {
 }
 
 // Mutation helpers (import/add/remove/groom share)
-export function writeEntry(entry: InstructionEntry){
+export function isDuplicateInstructionWriteError(error: unknown): boolean {
+  const code = (error as NodeJS.ErrnoException | undefined)?.code;
+  if (code === 'EEXIST') return true;
+  if (!(error instanceof Error)) return false;
+  const message = error.message.toLowerCase();
+  return message.includes('unique constraint failed') || message.includes('duplicate key');
+}
+
+export function writeEntry(entry: InstructionEntry, opts?: { createOnly?: boolean }){
   const file = path.join(getInstructionsDir(), `${entry.id}.json`);
   const classifier = new ClassificationService();
-  const record = classifier.normalize(entry);
+  let record = classifier.normalize(entry);
   if(record.owner === 'unowned'){ const auto = resolveOwner(record.id); if(auto){ record.owner = auto; record.updatedAt = new Date().toISOString(); } }
+  record = assertValidInstructionRecord(record);
   const store = getStoreForDir(getInstructionsDir());
-  if (store) { store.write(record); } else { atomicWriteJson(file, record); }
+  if (store) {
+    store.write(record, opts);
+  } else if (opts?.createOnly) {
+    atomicCreateJson(file, record);
+  } else {
+    atomicWriteJson(file, record);
+  }
   // Revised mutation strategy (2025-09-14): Avoid setting dirty=true when we can
   // apply the change directly to the in-memory index. Previous implementation
   // marked the index dirty before an immediate getIndexState() call in tests,
@@ -697,8 +714,7 @@ export function incrementUsage(id:string, opts?: UsageTrackOptions){
     // Allow tests (or advanced operators) to disable the protective clamp logic for deterministic expectations.
     // Setting INDEX_SERVER_DISABLE_USAGE_CLAMP=1 will let the anomalous >1 initial count pass through for diagnostic visibility.
     if(!getRuntimeConfig().index.disableUsageClamp){
-      // eslint-disable-next-line no-console
-      console.error('[incrementUsage] anomalous initial usageCount', e.usageCount, 'id', id);
+      logError('[incrementUsage] anomalous initial usageCount', { usageCount: e.usageCount, id });
       // Clamp to 1 to enforce deterministic semantics for first observed increment. We intentionally
       // retain lastUsedAt/firstSeenTs. This guards rare race producing flaky test expectations while
       // preserving forward progress for subsequent increments (next call will yield 2).

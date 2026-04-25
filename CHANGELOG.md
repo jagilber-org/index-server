@@ -4,6 +4,58 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog and this project adheres to Semantic Versioning.
 
+## [Unreleased]
+
+## [1.24.0] - 2026-04-24
+
+### Added
+
+- `IEmbeddingStore` interface with pluggable embedding storage backends.
+- `SqliteEmbeddingStore` — sqlite-vec backed embedding storage with native KNN search via `vec0` virtual table.
+- `JsonEmbeddingStore` — file-based embedding storage adapter with brute-force cosine similarity search.
+- `INDEX_SERVER_SQLITE_VEC_ENABLED` env var — opt-in toggle for sqlite-vec embedding storage (default: off).
+- `INDEX_SERVER_SQLITE_VEC_PATH` env var — custom sqlite-vec native binary path override.
+- `createEmbeddingStore()` factory function with automatic JSON fallback when sqlite-vec is unavailable.
+- `resolveDevice()` — ONNX Runtime backend probe with injectable fallback chain (cuda → dml → cpu).
+- `checkModelReadiness()` — startup check that warns when embedding model is missing with LOCAL_ONLY enabled.
+- `checkNodeVersion()` — runtime version gate with clear error messages for feature-specific Node.js requirements.
+- Embedding migration support: `migrateJsonEmbeddingsToStore()` for JSON → SQLite migration.
+- 62 new embedding-related tests across 8 test files (contract, unit, integration, scenario).
+- Documentation for all new env vars in configuration.md, mcp_configuration.md, vscode_mcp.md, deployment.md, docker_deployment.md, docker-compose.yml, runtime_config_mapping.md.
+- Architecture docs updated with embedding store abstraction diagram and IEmbeddingStore interface reference.
+
+### Fixed
+
+- Fixed dual-write stderr that caused duplicate log entries in VS Code Output panel.
+- Fixed `.Count` on `$null` in `New-CleanRoomCopy.ps1` by wrapping collections in `@()`.
+- Fixed tag-wiping in `Publish-ToMirror.ps1` and `publish-direct-to-remote.cjs` — publish scripts no longer delete existing remote tags (template-repo#47).
+
+### Changed
+
+- Replaced 137 `console.*` calls with structured logger (`logError`/`logWarn`/`logInfo`/`logDebug`) across 27 server-side TypeScript files.
+- Fixed severity misassignment in `promptReviewService.ts` — `logError` → `logWarn`/`logInfo` for non-error messages.
+- Added embedding stress tests and `/api/embeddings/compute` route tests.
+- Fixed `logInfo('')` empty-string calls in `performanceBaseline.ts` — replaced with `logInfo('---')` separators.
+- Fixed `factory.ts` formatting defect (multi-statement single line in sqlite case block).
+- Docker deployment docs now note Alpine/musl limitation for sqlite-vec native binary.
+
+## [1.23.1] - 2026-04-23
+
+### Changed
+
+- Added MCP Registry metadata and aligned the package manifest for MCP-native distribution surfaces.
+- Reworked install and configuration guidance so the MCP-native `npx --setup` flow is primary.
+- Updated release automation for the migration handoff and tightened the private-repo release path so `jagilber-dev` releases do not attempt public npm or MCP Registry publication.
+- Added minimal read-only MCP prompts and resources for setup, configuration, and verification guidance.
+
+### Removed
+
+- Removed the legacy VS Code extension source tree, VSIX workflow, packaged VSIX artifacts, and extension-only release docs.
+
+### Migration Notes
+
+- Existing deployments that previously relied on the unset mutation flag as an implicit read-only default must audit their runtime configuration before upgrading. If a deployment should remain read-only after upgrade, set `INDEX_SERVER_MUTATION=0` explicitly.
+
 ## [1.21.0] - 2026-04-17
 
 ### Added
@@ -203,11 +255,9 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 
 ### Fixed
 
-- **VSIX extension**: Renamed all "Catalog" references to "Index"/"Index Server" in extension UI (commands, walkthrough, settings, README, icon).
 
 ### Added
 
-- **Azure DevOps pipeline**: `azure-pipelines.yml` for private VSIX publishing via ADO.
 
 ## [1.16.0] - 2026-04-01
 

@@ -47,7 +47,7 @@ export function guard<TParams, TResult>(name: string, fn: (p: TParams) => TResul
   return (p: TParams) => {
     const viaDispatcher = !!(p && typeof p === 'object' && (p as unknown as { _viaDispatcher?: boolean })._viaDispatcher);
     if (!isMutationEnabled() && !viaDispatcher) {
-      throw { code: -32601, message: `Mutation disabled. Use index_dispatch with action parameter instead of direct ${name} calls. Set INDEX_SERVER_MUTATION=1 to enable direct calls.`, data: { method: name, alternative: 'index_dispatch', reason: 'mutation_disabled' } };
+      throw { code: -32601, message: `Direct mutation calls are disabled by the current runtime override. Use index_dispatch with an action parameter instead of direct ${name} calls, or remove INDEX_SERVER_MUTATION=0 to re-enable direct calls.`, data: { method: name, alternative: 'index_dispatch', reason: 'mutation_disabled' } };
     }
     return fn(p);
   };

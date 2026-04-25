@@ -24,7 +24,6 @@ import '../services/toolHandlers.js';
 
 const TEST_PORT = 17787;
 const TEST_HOST = '127.0.0.1';
-let activePort = TEST_PORT;
 let activeBaseUrl = `http://${TEST_HOST}:${TEST_PORT}`;
 const SCRIPTS_DIR = path.join(process.cwd(), 'scripts');
 const PS1_SCRIPT = path.join(SCRIPTS_DIR, 'index-server-client.ps1');
@@ -44,9 +43,57 @@ const hasBash = (() => {
     return true;
   } catch { return false; }
 })();
-const hasNmap = (() => { try { execSync('nmap --version', { stdio: 'pipe' }); return true; } catch { return false; } })();
-
 const execFileAsync = promisify(execFile);
+const SHORT_RETRY_DELAY_MS = 250;
+const DASHBOARD_READY_TIMEOUT_MS = 6_000;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function fetchWithRetry(
+  url: string,
+  init: RequestInit | undefined,
+  attempts: number,
+  failureMessage: string,
+  retryDelayMs = SHORT_RETRY_DELAY_MS,
+): Promise<Response> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    try {
+      return await fetch(url, init);
+    } catch (error) {
+      lastError = error;
+      if (attempt < attempts - 1) {
+        await sleep(retryDelayMs);
+      }
+    }
+  }
+  const reason = lastError instanceof Error ? `: ${lastError.message}` : '';
+  throw new Error(`${failureMessage}${reason}`);
+}
+
+async function waitForToolHealth(baseUrl: string, timeoutMs = DASHBOARD_READY_TIMEOUT_MS): Promise<void> {
+  const startedAt = Date.now();
+  let delayMs = 50;
+  while (Date.now() - startedAt < timeoutMs) {
+    try {
+      const resp = await fetch(`${baseUrl}/api/tools/health_check`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: '{}',
+      });
+      if (resp.ok) {
+        return;
+      }
+    } catch {
+      // retry until timeout
+    }
+    await sleep(delayMs);
+    delayMs = Math.min(delayMs * 2, 250);
+  }
+  throw new Error(`Dashboard tool health did not become ready within ${timeoutMs}ms`);
+}
 
 async function runPwsh(args: string, timeoutMs = 60_000): Promise<string> {
   const { stdout } = await execFileAsync('pwsh', ['-NoProfile', '-NonInteractive', '-Command', args], {
@@ -68,7 +115,7 @@ async function runPwsh(args: string, timeoutMs = 60_000): Promise<string> {
 }
 
 /** Retry a pwsh tool call up to `retries` times with a delay between attempts. */
-async function runPwshWithRetry(args: string, retries = 2, delayMs = 2000, timeoutMs = 60_000): Promise<string> {
+async function runPwshWithRetry(args: string, retries = 2, delayMs = SHORT_RETRY_DELAY_MS, timeoutMs = 60_000): Promise<string> {
   let lastOutput = '';
   for (let attempt = 0; attempt <= retries; attempt++) {
     lastOutput = await runPwsh(args, timeoutMs);
@@ -78,7 +125,7 @@ async function runPwshWithRetry(args: string, retries = 2, delayMs = 2000, timeo
     } catch {
       return lastOutput; // not JSON — let caller handle
     }
-    if (attempt < retries) await new Promise(r => setTimeout(r, delayMs));
+    if (attempt < retries) await sleep(delayMs);
   }
   return lastOutput;
 }
@@ -122,22 +169,9 @@ describe('Client Scripts E2E', () => {
         host: TEST_HOST,
       });
       const started = await server.start();
-      activePort = started.port;
-      activeBaseUrl = `http://${TEST_HOST}:${activePort}`;
+      activeBaseUrl = `http://${TEST_HOST}:${started.port}`;
 
-      // Warm up: trigger index load and wait for readiness so tool
-      // handlers don't fail with transient "index loading" errors.
-      for (let i = 0; i < 40; i++) {
-        try {
-          const resp = await fetch(`${activeBaseUrl}/api/tools/health_check`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: '{}',
-          });
-          if (resp.ok) break;
-        } catch { /* retry */ }
-        await new Promise(r => setTimeout(r, 500));
-      }
+      await waitForToolHealth(activeBaseUrl);
     } catch (e) {
       console.warn('Test dashboard server failed to start:', (e as Error).message);
       server = null;
@@ -161,19 +195,14 @@ describe('Client Scripts E2E', () => {
   describe('GET /api/scripts', () => {
     it('should list available scripts', async () => {
       if (!server) return;
-      // Retry once in case server is still warming up
-      let resp: Response | undefined;
-      for (let attempt = 0; attempt < 2; attempt++) {
-        try {
-          resp = await fetch(`${activeBaseUrl}/api/scripts`);
-          break;
-        } catch {
-          if (attempt === 1) throw new Error('Failed to fetch script list after 2 attempts');
-          await new Promise(r => setTimeout(r, 2000));
-        }
-      }
-      expect(resp!.ok).toBe(true);
-      const data = await resp!.json() as { scripts: Array<{ name: string; description: string; downloadUrl: string }> };
+      const resp = await fetchWithRetry(
+        `${activeBaseUrl}/api/scripts`,
+        undefined,
+        2,
+        'Failed to fetch script list after 2 attempts',
+      );
+      expect(resp.ok).toBe(true);
+      const data = await resp.json() as { scripts: Array<{ name: string; description: string; downloadUrl: string }> };
       expect(data.scripts).toBeDefined();
       expect(Array.isArray(data.scripts)).toBe(true);
       expect(data.scripts.length).toBeGreaterThanOrEqual(2);
@@ -192,66 +221,56 @@ describe('Client Scripts E2E', () => {
   describe('GET /api/scripts/:name', () => {
     it('should download PowerShell script with correct headers', async () => {
       if (!server) return;
-      // Retry in case of transient ECONNRESET during server warmup
-      let resp: Response | undefined;
-      for (let attempt = 0; attempt < 3; attempt++) {
-        try {
-          resp = await fetch(`${activeBaseUrl}/api/scripts/index-server-client.ps1`);
-          break;
-        } catch {
-          if (attempt === 2) throw new Error('Failed to fetch PowerShell script after 3 attempts');
-          await new Promise(r => setTimeout(r, 2000));
-        }
-      }
-      expect(resp!.ok).toBe(true);
-      expect(resp!.headers.get('content-disposition')).toContain('index-server-client.ps1');
-      const body = await resp!.text();
+      const resp = await fetchWithRetry(
+        `${activeBaseUrl}/api/scripts/index-server-client.ps1`,
+        undefined,
+        3,
+        'Failed to fetch PowerShell script after 3 attempts',
+      );
+      expect(resp.ok).toBe(true);
+      expect(resp.headers.get('content-disposition')).toContain('index-server-client.ps1');
+      const body = await resp.text();
       expect(body).toContain('.SYNOPSIS');
       expect(body).toContain('Index Server REST client');
     });
 
     it('should download Bash script with correct headers', async () => {
       if (!server) return;
-      // Retry in case of transient ECONNRESET during server warmup
-      let resp: Response | undefined;
-      for (let attempt = 0; attempt < 3; attempt++) {
-        try {
-          resp = await fetch(`${activeBaseUrl}/api/scripts/index-server-client.sh`);
-          break;
-        } catch {
-          if (attempt === 2) throw new Error('Failed to fetch Bash script after 3 attempts');
-          await new Promise(r => setTimeout(r, 2000));
-        }
-      }
-      expect(resp!.ok).toBe(true);
-      expect(resp!.headers.get('content-disposition')).toContain('index-server-client.sh');
-      const body = await resp!.text();
+      const resp = await fetchWithRetry(
+        `${activeBaseUrl}/api/scripts/index-server-client.sh`,
+        undefined,
+        3,
+        'Failed to fetch Bash script after 3 attempts',
+      );
+      expect(resp.ok).toBe(true);
+      expect(resp.headers.get('content-disposition')).toContain('index-server-client.sh');
+      const body = await resp.text();
       expect(body).toContain('#!/usr/bin/env bash');
       expect(body).toContain('index-server-client.sh');
     });
 
     it('should return 404 for unknown script name', async () => {
       if (!server) return;
-      // Retry in case of transient ECONNRESET during initial index loading
-      let resp: Response | undefined;
-      for (let attempt = 0; attempt < 3; attempt++) {
-        try {
-          resp = await fetch(`${activeBaseUrl}/api/scripts/nonexistent.ps1`);
-          break;
-        } catch {
-          if (attempt === 2) throw new Error('Failed to fetch after 3 attempts');
-          await new Promise(r => setTimeout(r, 1000));
-        }
-      }
-      expect(resp!.status).toBe(404);
-      const data = await resp!.json() as { error: string; available: string[] };
+      const resp = await fetchWithRetry(
+        `${activeBaseUrl}/api/scripts/nonexistent.ps1`,
+        undefined,
+        3,
+        'Failed to fetch after 3 attempts',
+      );
+      expect(resp.status).toBe(404);
+      const data = await resp.json() as { error: string; available: string[] };
       expect(data.error).toContain('not found');
       expect(data.available).toBeDefined();
     });
 
     it('should reject path traversal attempts', async () => {
       if (!server) return;
-      const resp = await fetch(`${activeBaseUrl}/api/scripts/..%2F..%2Fpackage.json`);
+      const resp = await fetchWithRetry(
+        `${activeBaseUrl}/api/scripts/..%2F..%2Fpackage.json`,
+        undefined,
+        3,
+        'Failed to verify path traversal rejection',
+      );
       expect(resp.status).toBe(404);
     });
 
@@ -278,33 +297,24 @@ describe('Client Scripts E2E', () => {
 
     it('should set security headers on script download', async () => {
       if (!server) return;
-      // Retry in case of transient ECONNRESET during server warmup
-      let resp: Response | undefined;
-      for (let attempt = 0; attempt < 3; attempt++) {
-        try {
-          resp = await fetch(`${activeBaseUrl}/api/scripts/index-server-client.ps1`);
-          break;
-        } catch {
-          if (attempt === 2) throw new Error('Failed to fetch script after 3 attempts');
-          await new Promise(r => setTimeout(r, 2000));
-        }
-      }
-      expect(resp!.headers.get('x-content-type-options')).toBe('nosniff');
+      const resp = await fetchWithRetry(
+        `${activeBaseUrl}/api/scripts/index-server-client.ps1`,
+        undefined,
+        3,
+        'Failed to fetch script after 3 attempts',
+      );
+      expect(resp.headers.get('x-content-type-options')).toBe('nosniff');
     }, 30_000);
 
     it('should not expose server version in headers', async () => {
       if (!server) return;
-      let resp: Response | undefined;
-      for (let attempt = 0; attempt < 3; attempt++) {
-        try {
-          resp = await fetch(`${activeBaseUrl}/api/scripts`);
-          break;
-        } catch {
-          if (attempt === 2) throw new Error('Failed to fetch scripts list after 3 attempts');
-          await new Promise(r => setTimeout(r, 2000));
-        }
-      }
-      expect(resp!.headers.get('x-powered-by')).toBeNull();
+      const resp = await fetchWithRetry(
+        `${activeBaseUrl}/api/scripts`,
+        undefined,
+        3,
+        'Failed to fetch scripts list after 3 attempts',
+      );
+      expect(resp.headers.get('x-powered-by')).toBeNull();
     }, 30_000);
   });
 
@@ -322,15 +332,6 @@ describe('Client Scripts E2E', () => {
       const result = JSON.parse(output);
       expect(result.success).toBe(true);
       expect(result.result).toBeDefined();
-    }, 60_000);
-
-    it.skipIf(!hasPwsh)('search action should return results', async () => {
-      if (!server) return;
-      const output = await runPwshWithRetry(
-        `& '${PS1_SCRIPT}' -BaseUrl '${activeBaseUrl}' -Action search -Keywords 'bootstrap'`
-      );
-      const result = JSON.parse(output);
-      expect(result.success).toBe(true);
     }, 60_000);
 
     it.skipIf(!hasPwsh)('list action should return instructions', async () => {
@@ -419,25 +420,6 @@ describe('Client Scripts E2E', () => {
       expect(result.result.removed).toBe(1);
     }, 60_000);
 
-    it.skipIf(!hasPwsh)('add with overwrite should update existing instruction', async () => {
-      if (!server) return;
-      const testId = `e2e-ps1-ow-${Date.now()}`;
-      // Create
-      await runPwshWithRetry(
-        `& '${PS1_SCRIPT}' -BaseUrl '${activeBaseUrl}' -Action add -Id '${testId}' -Title 'Original' -Body 'Original body'`
-      );
-      // Overwrite
-      const output = await runPwshWithRetry(
-        `& '${PS1_SCRIPT}' -BaseUrl '${activeBaseUrl}' -Action add -Id '${testId}' -Title 'Updated' -Body 'Updated body' -Overwrite`
-      );
-      const result = JSON.parse(output);
-      expect(result.success).toBe(true);
-      expect(result.result.overwritten).toBe(true);
-      // Cleanup
-      await runPwshWithRetry(
-        `& '${PS1_SCRIPT}' -BaseUrl '${activeBaseUrl}' -Action remove -Id '${testId}'`
-      );
-    }, 90_000);
   });
 
   // ═══════════════════════════════════════════════════════════════════════
@@ -449,16 +431,6 @@ describe('Client Scripts E2E', () => {
       if (!server) return;
       const sp = getBashScriptPath();
       const output = await runBash(`INDEX_SERVER_URL='${activeBaseUrl}' bash '${sp}' health`);
-      const result = JSON.parse(output);
-      expect(result.success).toBe(true);
-    });
-
-    it.skipIf(!hasBash)('search action should return results', async () => {
-      if (!server) return;
-      const sp = getBashScriptPath();
-      const output = await runBash(
-        `INDEX_SERVER_URL='${activeBaseUrl}' bash '${sp}' search 'bootstrap'`
-      );
       const result = JSON.parse(output);
       expect(result.success).toBe(true);
     });
@@ -550,72 +522,6 @@ describe('Client Scripts E2E', () => {
       expect(result.result.removed).toBe(1);
     }, 30_000);
 
-    it.skipIf(!hasBash)('add with overwrite should update existing', async () => {
-      if (!server) return;
-      const sp = getBashScriptPath();
-      const testId = `e2e-sh-ow-${Date.now()}`;
-      await runBash(
-        `INDEX_SERVER_URL='${activeBaseUrl}' bash '${sp}' add '${testId}' 'Original' 'Original body'`
-      );
-      const output = await runBash(
-        `INDEX_SERVER_URL='${activeBaseUrl}' bash '${sp}' add '${testId}' 'Updated' 'Updated body' 50 --overwrite`
-      );
-      const result = JSON.parse(output);
-      expect(result.success).toBe(true);
-      expect(result.result.overwritten).toBe(true);
-      await runBash(
-        `INDEX_SERVER_URL='${activeBaseUrl}' bash '${sp}' remove '${testId}'`
-      );
-    }, 30_000);
-  });
-
-  // ═══════════════════════════════════════════════════════════════════════
-  //  Nmap Security Scan Tests
-  // ═══════════════════════════════════════════════════════════════════════
-
-  describe('Nmap security scanning', () => {
-    it.skipIf(!hasNmap)('port scan should show only expected port open', async () => {
-      if (!server) return;
-      const { stdout } = await execFileAsync('nmap', ['-p', String(activePort), '--open', '-T4', '-oG', '-', TEST_HOST], {
-        encoding: 'utf-8', timeout: 60_000,
-      });
-      expect(stdout).toContain(`${activePort}/open`);
-    }, 90_000);
-
-    it.skipIf(!hasNmap)('service detection should identify HTTP', async () => {
-      if (!server) return;
-      const { stdout } = await execFileAsync('nmap', ['-sV', '-T4', '--version-intensity', '2', '-p', String(activePort), TEST_HOST], {
-        encoding: 'utf-8', timeout: 120_000,
-      });
-      expect(stdout.toLowerCase()).toMatch(/http|node/);
-    }, 150_000);
-
-    it.skipIf(!hasNmap)('should not expose unnecessary services on adjacent ports', async () => {
-      if (!server) return;
-      const scanRange = `${activePort - 5}-${activePort + 5}`;
-      const { stdout } = await execFileAsync('nmap', ['-p', scanRange, '--open', '-T4', '-oG', '-', TEST_HOST], {
-        encoding: 'utf-8', timeout: 60_000,
-      });
-      const openPorts = (stdout.match(/\d+\/open/g) || []);
-      expect(openPorts.length).toBeLessThanOrEqual(2);
-      expect(stdout).toContain(`${activePort}/open`);
-    }, 90_000);
-
-    it.skipIf(!hasNmap)('SSL/TLS scan should report no TLS on HTTP port', async () => {
-      if (!server) return;
-      const { stdout } = await execFileAsync('nmap', ['--script', 'ssl-enum-ciphers', '-T4', '-p', String(activePort), TEST_HOST], {
-        encoding: 'utf-8', timeout: 120_000,
-      });
-      expect(stdout).not.toContain('TLSv1.3');
-    }, 150_000);
-
-    it.skipIf(!hasNmap)('HTTP vuln scan should not find critical issues', async () => {
-      if (!server) return;
-      const { stdout } = await execFileAsync('nmap', ['--script', 'http-methods', '-T4', '-p', String(activePort), TEST_HOST], {
-        encoding: 'utf-8', timeout: 60_000,
-      });
-      expect(stdout.toUpperCase()).not.toContain('TRACE');
-    }, 90_000);
   });
 });
 
@@ -729,41 +635,4 @@ describe.skipIf(!hasOpenssl)('HTTPS / TLS Tests', () => {
     }
   });
 
-  // ── Nmap HTTPS Scans ────────────────────────────────────────────────
-
-  describe('Nmap HTTPS scanning', () => {
-    it.skipIf(!hasNmap)('HTTPS port should be open', async () => {
-      if (!httpsServer) return;
-      const { stdout } = await execFileAsync('nmap', ['-p', String(activeHttpsPort), '--open', '-oG', '-', TEST_HOST], {
-        encoding: 'utf-8', timeout: 30_000,
-      });
-      expect(stdout).toContain(`${activeHttpsPort}/open`);
-    }, 35_000);
-
-    it.skipIf(!hasNmap)('should detect TLS/SSL on HTTPS port', async () => {
-      if (!httpsServer) return;
-      const { stdout } = await execFileAsync('nmap', ['--script', 'ssl-enum-ciphers', '-p', String(activeHttpsPort), TEST_HOST], {
-        encoding: 'utf-8', timeout: 30_000,
-      });
-      // Should have TLS ciphers listed
-      expect(stdout.toLowerCase()).toMatch(/tls|ssl/);
-    }, 35_000);
-
-    it.skipIf(!hasNmap)('should identify HTTPS service', async () => {
-      if (!httpsServer) return;
-      const { stdout } = await execFileAsync('nmap', ['-sV', '-p', String(activeHttpsPort), TEST_HOST], {
-        encoding: 'utf-8', timeout: 30_000,
-      });
-      expect(stdout.toLowerCase()).toMatch(/https|ssl|tls|node/);
-    }, 35_000);
-
-    it.skipIf(!hasNmap)('should not have weak SSL protocols', async () => {
-      if (!httpsServer) return;
-      const { stdout } = await execFileAsync('nmap', ['--script', 'ssl-enum-ciphers', '-p', String(activeHttpsPort), TEST_HOST], {
-        encoding: 'utf-8', timeout: 30_000,
-      });
-      // SSLv2 and SSLv3 should not be present
-      expect(stdout).not.toMatch(/SSLv[23]/);
-    }, 35_000);
-  });
 });

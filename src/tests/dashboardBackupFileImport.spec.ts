@@ -82,6 +82,16 @@ describe('Dashboard backup file import', () => {
 
     const started = await server.start();
     const baseUrl = started.url.replace(/\/$/, '');
+    const readyDeadline = Date.now() + 5000;
+    while (Date.now() < readyDeadline) {
+      try {
+        const statusResponse = await fetch(`${baseUrl}/api/status`);
+        if (statusResponse.ok) break;
+      } catch {
+        // wait for the dashboard HTTP stack to accept requests
+      }
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
 
     try {
       const importResponse = await fetch(`${baseUrl}/api/admin/maintenance/backup/import`, {

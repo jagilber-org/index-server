@@ -67,6 +67,14 @@ The canonical release flow is:
    - Confirm `origin` and `public` both contain `vX.Y.Z`.
    - Confirm the public GitHub release exists and the local repo is back on clean `main`.
 
+### MCP Registry auth note
+
+The release workflow in `jagilber-dev/index-server` executes from the **private** repo context, so MCP Registry publish should currently be treated as a **PAT-authenticated** step there via `MCP_GITHUB_TOKEN`.
+
+GitHub OIDC is only the expected path when the workflow itself runs from the **public mirror** (`jagilber-org/index-server`). Until that execution model changes, do not assume OIDC will activate for private-repo tag releases.
+
+When PAT fallback is required, keep `MCP_GITHUB_TOKEN` scoped only to the MCP Registry publish action rather than broader repository administration.
+
 ### Canonical Commands
 
 ```bash

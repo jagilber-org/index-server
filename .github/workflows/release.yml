@@ -1,8 +1,8 @@
 name: Release
 
 # Unified release workflow triggered by version tags (v*).
-# Runs release-scoped validation, builds all artifacts (npm, Docker, VSIX),
-# creates a GitHub Release with changelog, and publishes packages.
+# Runs release-scoped validation, builds release artifacts (npm, Docker),
+# creates a GitHub Release with changelog, and publishes packages plus MCP metadata.
 
 on:
   push:
@@ -155,59 +155,18 @@ jobs:
           exit-code: '0'
 
   # ──────────────────────────────────────────────────────────────────
-  # Stage 2c: Build VSIX extension
-  # ──────────────────────────────────────────────────────────────────
-  build-vsix:
-    name: Build VSIX Extension
-    runs-on: ubuntu-latest
-    needs: validate
-    steps:
-      - uses: actions/checkout@v6
-
-      - uses: actions/setup-node@v6
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-
-      - run: npm ci
-      - run: npm run build
-
-      - name: Install extension deps
-        working-directory: release/vscode-extension
-        run: npm install --ignore-scripts
-
-      - name: Sync version
-        working-directory: release/vscode-extension
-        run: |
-          SERVER_VERSION=$(node -e "console.log(require('../../package.json').version)")
-          node -e "
-            const fs = require('fs');
-            const p = JSON.parse(fs.readFileSync('package.json','utf8'));
-            p.version = '${SERVER_VERSION}';
-            fs.writeFileSync('package.json', JSON.stringify(p,null,2)+'\n');
-          "
-
-      - name: Compile & package VSIX
-        working-directory: release/vscode-extension
-        run: |
-          npx tsc -p tsconfig.json
-          npx @vscode/vsce package --no-dependencies --allow-missing-repository
-
-      - name: Upload VSIX
-        uses: actions/upload-artifact@v7
-        with:
-          name: vsix-package
-          path: release/vscode-extension/*.vsix
-          if-no-files-found: error
-
-  # ──────────────────────────────────────────────────────────────────
   # Stage 3: Publish — npm, GitHub Release
   # ──────────────────────────────────────────────────────────────────
   publish:
     name: Publish Release
     runs-on: ubuntu-latest
-    needs: [build-npm, build-docker, build-vsix]
+    needs: [build-npm, build-docker]
     if: startsWith(github.ref, 'refs/tags/') || github.event.inputs.dry_run == 'false'
+    env:
+      HAS_NPM_TOKEN: ${{ secrets.NPM_TOKEN != '' }}
+      ALLOW_EXTERNAL_PUBLISH: ${{ github.repository_owner == 'jagilber-org' }}
+      MCP_USE_GITHUB_OIDC: ${{ github.repository_owner == 'jagilber-org' }}
+      HAS_MCP_GITHUB_TOKEN: ${{ secrets.MCP_GITHUB_TOKEN != '' }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -223,13 +182,6 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: npm-package
-
-      - name: Download VSIX (if available)
-        uses: actions/download-artifact@v4
-        with:
-          name: vsix-package
-          path: vsix-artifacts
-        continue-on-error: true
 
       - name: Extract version
         id: version
@@ -260,6 +212,7 @@ jobs:
 
       - name: Check npmjs version status
         id: npm_status
+        if: env.ALLOW_EXTERNAL_PUBLISH == 'true'
         run: |
           PKG=$(node -p "require('./package.json').name")
           VERSION="${{ steps.version.outputs.version }}"
@@ -270,7 +223,7 @@ jobs:
           fi
 
       - name: Publish to npmjs
-        if: steps.npm_status.outputs.already_published != 'true'
+        if: env.ALLOW_EXTERNAL_PUBLISH == 'true' && steps.npm_status.outputs.already_published != 'true' && env.HAS_NPM_TOKEN == 'true'
         run: |
           TARBALL=$(ls *.tgz 2>/dev/null | head -1)
           if [ -n "$TARBALL" ]; then
@@ -282,16 +235,46 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Attest npm package
-        if: steps.npm_status.outputs.already_published != 'true'
+        if: env.ALLOW_EXTERNAL_PUBLISH == 'true' && steps.npm_status.outputs.already_published != 'true' && env.HAS_NPM_TOKEN == 'true' && github.event.repository.visibility == 'public'
         uses: actions/attest-build-provenance@v2
         with:
           subject-path: '*.tgz'
 
-      - name: Attest VSIX package
-        if: hashFiles('vsix-artifacts/*.vsix') != ''
-        uses: actions/attest-build-provenance@v2
-        with:
-          subject-path: 'vsix-artifacts/*.vsix'
+      - name: Install mcp-publisher
+        if: env.ALLOW_EXTERNAL_PUBLISH == 'true' && (env.MCP_USE_GITHUB_OIDC == 'true' || env.HAS_MCP_GITHUB_TOKEN == 'true')
+        run: |
+          curl -L "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" | tar xz mcp-publisher
+
+      - name: Select MCP Registry auth mode
+        id: mcp_auth
+        if: env.ALLOW_EXTERNAL_PUBLISH == 'true'
+        run: |
+          if [ "${{ env.MCP_USE_GITHUB_OIDC }}" = "true" ]; then
+            echo "mode=oidc" >> "$GITHUB_OUTPUT"
+          elif [ "${{ env.HAS_MCP_GITHUB_TOKEN }}" = "true" ]; then
+            echo "mode=pat" >> "$GITHUB_OUTPUT"
+          else
+            echo "mode=missing" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Require MCP Registry auth for release publish
+        if: env.ALLOW_EXTERNAL_PUBLISH == 'true' && steps.mcp_auth.outputs.mode == 'missing'
+        run: |
+          echo "MCP Registry publish is enabled in this workflow, but no usable auth mode was found." >&2
+          echo "Private repo releases must provide MCP_GITHUB_TOKEN; public mirror releases may use GitHub OIDC." >&2
+          exit 1
+
+      - name: Authenticate to MCP Registry via GitHub OIDC
+        if: env.ALLOW_EXTERNAL_PUBLISH == 'true' && steps.mcp_auth.outputs.mode == 'oidc'
+        run: ./mcp-publisher login github-oidc
+
+      - name: Authenticate to MCP Registry via PAT fallback
+        if: env.ALLOW_EXTERNAL_PUBLISH == 'true' && steps.mcp_auth.outputs.mode == 'pat'
+        run: ./mcp-publisher login github --token "${{ secrets.MCP_GITHUB_TOKEN }}"
+
+      - name: Publish to MCP Registry
+        if: env.ALLOW_EXTERNAL_PUBLISH == 'true' && (steps.mcp_auth.outputs.mode == 'oidc' || steps.mcp_auth.outputs.mode == 'pat')
+        run: ./mcp-publisher publish
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v3
@@ -308,11 +291,11 @@ jobs:
             ### Artifacts
             - **npm**: `@jagilber-org/index-server@${{ steps.version.outputs.version }}` ([npmjs](https://www.npmjs.com/package/@jagilber-org/index-server))
             - **Docker**: `ghcr.io/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}`
-            - **VSIX**: See attached (if available)
+            - **MCP Registry name**: `io.github.jagilber-org/index-server`
 
             ### Install
             ```bash
-            npx @jagilber-org/index-server@latest --dashboard
+            npx @jagilber-org/index-server@latest --setup
             ```
 
             ### Docker Quick Start
@@ -322,7 +305,6 @@ jobs:
             ```
           files: |
             *.tgz
-            vsix-artifacts/*.vsix
           draft: false
           prerelease: ${{ contains(steps.version.outputs.version, '-') }}
           generate_release_notes: false

@@ -6,8 +6,6 @@
 [![npm version](https://img.shields.io/github/v/tag/jagilber-org/index-server?label=GitHub%20Packages)](https://github.com/jagilber-org/index-server/packages)
 [![Node.js Version](https://img.shields.io/badge/node-%3E%3D22%20LTS-brightgreen)](package.json)
 [![codecov](https://codecov.io/gh/jagilber-org/index-server/graph/badge.svg)](https://codecov.io/gh/jagilber-org/index-server)
-[![VS Code Marketplace](https://img.shields.io/visual-studio-marketplace/v/jagilber-org.index-server?label=VS%20Code%20Marketplace)](https://marketplace.visualstudio.com/items?itemName=jagilber-org.index-server)
-[![Open VSX](https://img.shields.io/open-vsx/v/jagilber-org/index-server?label=Open%20VSX)](https://open-vsx.org/extension/jagilber-org/index-server)
 
 ---
 
@@ -21,19 +19,31 @@ Index Server is a central knowledge base that AI agents connect to via the [Mode
 
 ---
 
-## Quick Start
+## Quick Start Options
 
-### Path A: npx (zero install)
+### Option A: MCP-native via `npx` (recommended)
+
+Run the latest published package without cloning the repo. Choose this when you want the fastest local start and already have Node.js installed.
+
+Start with the setup wizard so it can generate the right MCP client config for VS Code, Copilot CLI, or Claude Desktop:
 
 ```bash
-npx @jagilber-org/index-server@latest --dashboard
+npx -y @jagilber-org/index-server@latest --setup
 ```
 
-### Path B: VS Code Extension
+To launch the server directly without the wizard:
 
-Install **Index Server** from the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=jagilber-org.index-server) or [Open VSX](https://open-vsx.org/extension/jagilber-org/index-server).
+```bash
+npx -y @jagilber-org/index-server@latest --dashboard
+```
 
-### Path C: Docker
+### Option B: VS Code MCP configuration
+
+Use VS Code's built-in MCP support with `.vscode/mcp.json` or your global `mcp.json`. You can add the server entry manually or run `npx -y @jagilber-org/index-server@latest --setup` to generate the config for you.
+
+### Option C: Docker
+
+Run the server in a container. Choose this when you want isolated runtime dependencies or you are preparing a container-based deployment.
 
 ```bash
 docker compose up        # HTTP on :8787
@@ -42,7 +52,9 @@ docker compose up tls    # HTTPS on :8787 with self-signed certs
 
 See [Docker Deployment Guide](docs/docker_deployment.md) for volumes, environment variables, and production configuration.
 
-### Path D: From source
+### Option D: From source
+
+Clone and build the repository yourself. Choose this when you want to modify the server, run tests locally, or work from the latest source.
 
 ```bash
 git clone https://github.com/jagilber-org/index-server.git
@@ -51,9 +63,12 @@ npm install
 npm run build
 ```
 
-### Configure your MCP client
+## Configure Your MCP Client
 
-Add to VS Code (`.vscode/mcp.json`):
+> **Best practice:** set `INDEX_SERVER_DIR` to a well-known data folder such as `C:/mcp/index-data/instructions` or `~/.index-server/instructions`. Keep it outside VS Code and MCP client config paths so backups and reinstalls do not move or overwrite your catalog.
+
+<details>
+<summary>VS Code (`.vscode/mcp.json`)</summary>
 
 ```jsonc
 {
@@ -62,15 +77,23 @@ Add to VS Code (`.vscode/mcp.json`):
       "type": "stdio",
       "command": "npx",
       "args": [
+        "-y",
         "@jagilber-org/index-server@latest",
         "--dashboard"
-      ]
+      ],
+      "env": {
+        "INDEX_SERVER_DIR": "C:/mcp/index-data/instructions",
+        "INDEX_SERVER_LOG_LEVEL": "info"
+      }
     }
   }
 }
 ```
 
-Copilot CLI (`~/.copilot/mcp-config.json`):
+</details>
+
+<details>
+<summary>Copilot CLI (`~/.copilot/mcp-config.json`)</summary>
 
 ```json
 {
@@ -78,14 +101,21 @@ Copilot CLI (`~/.copilot/mcp-config.json`):
     "index-server": {
       "type": "stdio",
       "command": "npx",
-      "args": ["@jagilber-org/index-server@latest", "--dashboard"],
+      "args": ["-y", "@jagilber-org/index-server@latest", "--dashboard"],
+      "env": {
+        "INDEX_SERVER_DIR": "C:/mcp/index-data/instructions",
+        "INDEX_SERVER_LOG_LEVEL": "info"
+      },
       "tools": ["*"]
     }
   }
 }
 ```
 
-Claude Desktop (`claude_desktop_config.json`):
+</details>
+
+<details>
+<summary>Claude Desktop (`claude_desktop_config.json`)</summary>
 
 ```json
 {
@@ -93,12 +123,18 @@ Claude Desktop (`claude_desktop_config.json`):
     "index-server": {
       "type": "stdio",
       "command": "npx",
-      "args": ["@jagilber-org/index-server@latest", "--dashboard"],
+      "args": ["-y", "@jagilber-org/index-server@latest", "--dashboard"],
+      "env": {
+        "INDEX_SERVER_DIR": "C:/mcp/index-data/instructions",
+        "INDEX_SERVER_LOG_LEVEL": "info"
+      },
       "tools": ["*"]
     }
   }
 }
 ```
+
+</details>
 
 See [MCP Configuration Guide](docs/mcp_configuration.md) for advanced patterns, environment variables, and TLS setup.
 
@@ -199,7 +235,7 @@ See [dashboard.md](docs/dashboard.md) for full details. REST client scripts (`sc
 
 ## Security
 
-Index Server makes **zero telemetry calls** and sends **no data to external services** during normal operation. The dashboard binds to **localhost only** by default. All mutations require explicit enablement and are audit-logged. Fresh installations gate mutations until human confirmation via the bootstrap workflow.
+Index Server makes **zero telemetry calls** and sends **no data to external services** during normal operation. The dashboard binds to **localhost only** by default. Mutations are audit-logged, can be forced read-only with `INDEX_SERVER_MUTATION=0`, and fresh installations gate writes until human confirmation via the bootstrap workflow.
 
 See [SECURITY.md](SECURITY.md) for vulnerability reporting and [Network Privacy Guide](docs/network-privacy.md) for offline deployment and verification.
 
@@ -210,7 +246,9 @@ See [SECURITY.md](SECURITY.md) for vulnerability reporting and [Network Privacy 
 ```bash
 npm install          # Install dependencies
 npm run build        # Build TypeScript
-npm test             # Run test suite
+npm test             # Run the fast default suite
+npm run test:slow    # Run heavy integration/perf tests
+npm run test:all     # Run the full Vitest suite
 npm run typecheck    # Type checking
 npm run lint         # Linting
 ```

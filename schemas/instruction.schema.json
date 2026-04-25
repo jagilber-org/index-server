@@ -30,6 +30,31 @@
           "description": "Human readable summary of change"
         }
       }
+    },
+    "extensionValue": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/extensionValue"
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/extensionValue"
+          }
+        }
+      ]
     }
   },
   "required": [
@@ -255,7 +280,9 @@
     "extensions": {
       "type": "object",
       "description": "Future-proof vendor / experimental fields",
-      "additionalProperties": true
+      "additionalProperties": {
+        "$ref": "#/definitions/extensionValue"
+      }
     }
   },
   "additionalProperties": false

@@ -12,7 +12,7 @@ export interface ToolRegistryEntry {
   name: string;                 // Fully qualified method name (JSON-RPC method)
   description: string;          // Human readable summary
   stable: boolean;              // Stable across sessions (deterministic side-effect free)
-  mutation: boolean;            // Performs mutation / requires INDEX_SERVER_MUTATION
+  mutation: boolean;            // Performs mutation / may be disabled when INDEX_SERVER_MUTATION=0
   tier: ToolTier;               // Visibility tier (core=always, extended=opt-in, admin=debug/ops)
   inputSchema: object;          // JSON Schema for params (always an object schema)
   outputSchema?: object;        // JSON Schema for successful result (subset of outputSchemas map)
@@ -24,6 +24,18 @@ export interface ToolRegistryEntry {
 
 // Input schema helpers (keep intentionally permissive if params optional)
 const stringReq = (name: string) => ({ type: 'object', additionalProperties: false, required: [name], properties: { [name]: { type: 'string' } } });
+const extensionsInputSchema = {
+  type: 'object',
+  additionalProperties: {
+    anyOf: [
+      { type: 'string' },
+      { type: 'number' },
+      { type: 'boolean' },
+      { type: 'array', items: {} },
+      { type: 'object', additionalProperties: true },
+    ],
+  },
+} as const;
 
 // Explicit param schemas derived from handlers in toolHandlers.ts
 const INPUT_SCHEMAS: Record<string, object> = {
@@ -60,7 +72,7 @@ const INPUT_SCHEMAS: Record<string, object> = {
     keywords: { type: 'array', items: { type: 'string' }, description: 'Explicit keyword array for search action when the caller wants direct token control.' },
     ids: { type: 'array', items: { type: 'string' }, description: 'Array of instruction IDs for remove or export actions.' },
     category: { type: 'string', description: 'Filter by category for list action.' },
-    contentType: { type: 'string', description: 'Filter by content type for list, search, or query actions.' },
+    contentType: { type: 'string', enum: ['instruction', 'template', 'chat-session', 'reference', 'example', 'agent'], description: 'Filter by content type for list, search, or query actions, or specify the entry content type for add action.' },
     text: { type: 'string', description: 'Full-text search within query action.' },
     includeCategories: { type: 'boolean', description: 'Search categories in addition to id/title/semanticSummary/body for search action.' },
     caseSensitive: { type: 'boolean', description: 'Enable case-sensitive matching for search action.' },
@@ -72,6 +84,15 @@ const INPUT_SCHEMAS: Record<string, object> = {
     offset: { type: 'number', description: 'Pagination offset (query action).' },
     // Mutation params for add action (flat-param support: agents can pass these at top level instead of nested entry wrapper)
     entry: { type: 'object', description: 'Instruction entry object for add action. Alternatively, pass id/body/title as top-level params.', additionalProperties: true, properties: { id: { type: 'string' }, title: { type: 'string' }, body: { type: 'string' } } },
+    priority: { type: 'number' },
+    audience: { type: 'string' },
+    requirement: { type: 'string' },
+    categories: { type: 'array', items: { type: 'string' } },
+    deprecatedBy: { type: 'string' },
+    riskScore: { type: 'number' },
+    version: { type: 'string' },
+    priorityTier: { type: 'string', enum: ['P1', 'P2', 'P3', 'P4'] },
+    classification: { type: 'string', enum: ['public', 'internal', 'restricted'] },
     overwrite: { type: 'boolean', description: 'Allow overwriting existing instruction (add action).' },
     lax: { type: 'boolean', description: 'Enable lax mode with default fills for missing optional fields (add action).' },
     // Import action params
@@ -79,8 +100,8 @@ const INPUT_SCHEMAS: Record<string, object> = {
     source: { type: 'string', description: 'Directory path containing .json instruction files to import (import action).' },
     mode: { description: 'Import conflict resolution mode (import action) or groom mode object (groom action).' },
     // Governance update params
-    owner: { type: 'string', description: 'Owner identifier for governanceUpdate action.' },
-    status: { type: 'string', description: 'Governance status for governanceUpdate action.', enum: ['approved','draft','deprecated'] },
+    owner: { type: 'string', description: 'Owner identifier for governanceUpdate action or add action.' },
+    status: { type: 'string', description: 'Governance status for governanceUpdate action or add action.', enum: ['approved','draft','review','deprecated'] },
     bump: { type: 'string', description: 'Version bump level for governanceUpdate action.', enum: ['patch','minor','major','none'] },
     lastReviewedAt: { type: 'string', description: 'Last review date (ISO 8601) for governanceUpdate action.' },
     nextReviewDue: { type: 'string', description: 'Next review due date (ISO 8601) for governanceUpdate action.' },
@@ -104,8 +125,8 @@ const INPUT_SCHEMAS: Record<string, object> = {
   // legacy read-only instruction method schemas removed in favor of dispatcher
   'index_import': { type: 'object', additionalProperties: false, properties: {
     entries: { oneOf: [
-      { type: 'array', minItems: 1, items: { type: 'object', required: ['id','title','body','priority','audience','requirement'], additionalProperties: true, properties: {
-        id: { type: 'string' }, title: { type: 'string' }, body: { type: 'string', maxLength: 1000000, description: 'Instruction body (default limit 20K chars, absolute max 1MB). Split oversized content into cross-linked instructions.' }, rationale: { type: 'string' }, priority: { type: 'number' }, audience: { type: 'string' }, requirement: { type: 'string' }, categories: { type: 'array', items: { type: 'string' } }, extensions: { type: 'object', additionalProperties: true }, mode: { type: 'string' }
+      { type: 'array', minItems: 1, items: { type: 'object', required: ['id','title','body','priority','audience','requirement'], additionalProperties: false, properties: {
+        id: { type: 'string' }, title: { type: 'string' }, body: { type: 'string', maxLength: 1000000, description: 'Instruction body (default limit 20K chars, absolute max 1MB). Split oversized content into cross-linked instructions.' }, rationale: { type: 'string' }, priority: { type: 'number' }, audience: { type: 'string' }, requirement: { type: 'string' }, categories: { type: 'array', items: { type: 'string' } }, version: { type: 'string' }, owner: { type: 'string' }, status: { type: 'string', enum: ['approved','draft','review','deprecated'] }, priorityTier: { type: 'string', enum: ['P1','P2','P3','P4'] }, classification: { type: 'string', enum: ['public','internal','restricted'] }, lastReviewedAt: { type: 'string' }, nextReviewDue: { type: 'string' }, semanticSummary: { type: 'string' }, changeLog: { type: 'array', items: { type: 'object', additionalProperties: true } }, contentType: { type: 'string', enum: ['instruction', 'template', 'chat-session', 'reference', 'example', 'agent'] }, extensions: extensionsInputSchema, mode: { type: 'string' }
       } } },
       { type: 'string', description: 'Stringified JSON array of instruction entries, or a file path to a JSON array of instruction entries' }
     ] },
@@ -113,9 +134,9 @@ const INPUT_SCHEMAS: Record<string, object> = {
     mode: { enum: ['skip','overwrite'] }
   } },
   'index_add': { type: 'object', additionalProperties: false, required: ['entry'], properties: {
-    entry: { type: 'object', required: ['id','body'], additionalProperties: true, properties: {
-      id: { type: 'string' }, title: { type: 'string' }, body: { type: 'string', maxLength: 1000000, description: 'Instruction body (default limit 20K chars, absolute max 1MB). If content exceeds the limit, split into multiple cross-linked instructions with shared categories.' }, rationale: { type: 'string' }, priority: { type: 'number' }, audience: { type: 'string' }, requirement: { type: 'string' }, categories: { type: 'array', items: { type: 'string' } }, deprecatedBy: { type: 'string' }, riskScore: { type: 'number' }, extensions: { type: 'object', additionalProperties: true }
-    } },
+    entry: { type: 'object', required: ['id','body'], additionalProperties: false, properties: {
+        id: { type: 'string' }, title: { type: 'string' }, body: { type: 'string', maxLength: 1000000, description: 'Instruction body (default limit 20K chars, absolute max 1MB). If content exceeds the limit, split into multiple cross-linked instructions with shared categories.' }, rationale: { type: 'string' }, priority: { type: 'number' }, audience: { type: 'string' }, requirement: { type: 'string' }, categories: { type: 'array', items: { type: 'string' } }, deprecatedBy: { type: 'string' }, riskScore: { type: 'number' }, version: { type: 'string' }, owner: { type: 'string' }, status: { type: 'string', enum: ['approved','draft','review','deprecated'] }, priorityTier: { type: 'string', enum: ['P1','P2','P3','P4'] }, classification: { type: 'string', enum: ['public','internal','restricted'] }, lastReviewedAt: { type: 'string' }, nextReviewDue: { type: 'string' }, semanticSummary: { type: 'string' }, changeLog: { type: 'array', items: { type: 'object', additionalProperties: true } }, contentType: { type: 'string', enum: ['instruction', 'template', 'chat-session', 'reference', 'example', 'agent'] }, extensions: extensionsInputSchema
+      } },
     overwrite: { type: 'boolean' },
     lax: { type: 'boolean' }
   } },
@@ -164,46 +185,6 @@ const INPUT_SCHEMAS: Record<string, object> = {
     } },
     metadata: { type: 'object', additionalProperties: true },
     tags: { type: 'array', maxItems: 10, items: { type: 'string' } }
-  } },
-  'feedback_list': { type: 'object', additionalProperties: false, properties: {
-    type: { type: 'string', enum: ['issue', 'status', 'security', 'feature-request', 'bug-report', 'performance', 'usability', 'other'] },
-    severity: { type: 'string', enum: ['low', 'medium', 'high', 'critical'] },
-    status: { type: 'string', enum: ['new', 'acknowledged', 'in-progress', 'resolved', 'closed'] },
-    limit: { type: 'number', minimum: 1, maximum: 200 },
-    offset: { type: 'number', minimum: 0 },
-    since: { type: 'string' },
-    tags: { type: 'array', items: { type: 'string' } }
-  } },
-  'feedback_get': { type: 'object', additionalProperties: false, required: ['id'], properties: {
-    id: { type: 'string' }
-  } },
-  'feedback_update': { type: 'object', additionalProperties: false, required: ['id'], properties: {
-    id: { type: 'string' },
-    status: { type: 'string', enum: ['new', 'acknowledged', 'in-progress', 'resolved', 'closed'] },
-    metadata: { type: 'object', additionalProperties: true }
-  } },
-  'feedback_stats': { type: 'object', additionalProperties: false, properties: {
-    since: { type: 'string' }
-  } },
-  'feedback_health': { type: 'object', additionalProperties: true },
-  // Unified feedback dispatch (002 Phase 2a)
-  'feedback_dispatch': { type: 'object', additionalProperties: true, required: ['action'], properties: {
-    action: { type: 'string', enum: ['submit', 'list', 'get', 'update', 'stats', 'health', 'rate'], description: 'Feedback action to perform.' },
-    instructionId: { type: 'string', description: 'Instruction ID to rate (rate action).' },
-    rating: { type: 'string', enum: ['useful', 'not-useful', 'outdated', 'incomplete'], description: 'Rating value (rate action).' },
-    comment: { type: 'string', maxLength: 1000, description: 'Optional comment with rating (rate action).' },
-    type: { type: 'string', enum: ['issue', 'status', 'security', 'feature-request', 'bug-report', 'performance', 'usability', 'other'] },
-    severity: { type: 'string', enum: ['low', 'medium', 'high', 'critical'] },
-    title: { type: 'string', maxLength: 200 },
-    description: { type: 'string', maxLength: 10000, description: 'Feedback description/body text (submit).' },
-    body: { type: 'string', maxLength: 10000, description: 'Alias for description (submit).' },
-    id: { type: 'string' },
-    status: { type: 'string', enum: ['new', 'acknowledged', 'in-progress', 'resolved', 'closed'] },
-    limit: { type: 'number', minimum: 1, maximum: 200 },
-    offset: { type: 'number', minimum: 0 },
-    since: { type: 'string' },
-    tags: { type: 'array', items: { type: 'string' } },
-    metadata: { type: 'object', additionalProperties: true }
   } },
   // instructions search tool - PRIMARY discovery mechanism
   'index_search': { type: 'object', additionalProperties: false, required: ['keywords'], properties: {
@@ -321,21 +302,20 @@ const INPUT_SCHEMAS: Record<string, object> = {
 } };
 
 // Stable & mutation classification lists (mirrors usage in toolHandlers; exported to remove duplication there).
-export const STABLE = new Set(['health_check','graph_export','index_dispatch','index_search','index_governanceHash','prompt_review','integrity_verify','usage_track','usage_hotset','metrics_snapshot','gates_evaluate','meta_tools','help_overview','index_schema','feedback_list','feedback_get','feedback_stats','feedback_health','manifest_status','index_diagnostics','meta_activation_guide','meta_check_activation','feedback_dispatch','bootstrap','bootstrap_status','feature_status','index_health','index_inspect','index_debug','integrity_manifest','diagnostics_block','diagnostics_microtaskFlood','diagnostics_memoryPressure','messaging_read','messaging_list_channels','messaging_stats','messaging_get','messaging_thread','trace_dump']);
-export const MUTATION = new Set(['index_add','index_import','index_repair','index_reload','index_remove','index_groom','index_enrich','index_governanceUpdate','index_normalize','usage_flush','feedback_submit','feedback_update','manifest_refresh','manifest_repair','promote_from_repo','bootstrap_request','bootstrap_confirmFinalize','messaging_send','messaging_ack','messaging_update','messaging_purge','messaging_reply']);
+export const STABLE = new Set(['health_check','graph_export','index_dispatch','index_search','index_governanceHash','prompt_review','integrity_verify','usage_track','usage_hotset','metrics_snapshot','gates_evaluate','meta_tools','help_overview','index_schema','manifest_status','index_diagnostics','meta_activation_guide','meta_check_activation','bootstrap','bootstrap_status','feature_status','index_health','index_inspect','index_debug','integrity_manifest','diagnostics_block','diagnostics_microtaskFlood','diagnostics_memoryPressure','messaging_read','messaging_list_channels','messaging_stats','messaging_get','messaging_thread','trace_dump']);
+export const MUTATION = new Set(['index_add','index_import','index_repair','index_reload','index_remove','index_groom','index_enrich','index_governanceUpdate','index_normalize','usage_flush','feedback_submit','manifest_refresh','manifest_repair','promote_from_repo','bootstrap_request','bootstrap_confirmFinalize','messaging_send','messaging_ack','messaging_update','messaging_purge','messaging_reply']);
 
 // Tool tier classification (002-tool-consolidation spec)
 // core: always visible, essential daily use
 // extended: opt-in via INDEX_SERVER_FLAG_TOOLS_EXTENDED=1 or flags.json tools_extended:true
 // admin: opt-in via INDEX_SERVER_FLAG_TOOLS_ADMIN=1, rarely needed ops/debug tools
 const TOOL_TIERS: Record<string, ToolTier> = {
-  // Core (7)
+  // Core (7 → 6 after feedback_dispatch removal)
   'health_check': 'core',
   'index_dispatch': 'core',
   'index_search': 'core',
   'prompt_review': 'core',
   'help_overview': 'core',
-  'feedback_dispatch': 'core',
   'bootstrap': 'core',
   // Extended (14)
   'graph_export': 'extended',
@@ -354,8 +334,6 @@ const TOOL_TIERS: Record<string, ToolTier> = {
   'index_schema': 'extended',
   // Admin (everything else)
   'feedback_submit': 'admin',
-  'feedback_list': 'admin',
-  'feedback_get': 'admin',
   'meta_tools': 'admin',
   'meta_activation_guide': 'admin',
   'meta_check_activation': 'admin',
@@ -367,9 +345,6 @@ const TOOL_TIERS: Record<string, ToolTier> = {
   'index_enrich': 'admin',
   'index_normalize': 'admin',
   'usage_flush': 'admin',
-  'feedback_update': 'admin',
-  'feedback_stats': 'admin',
-  'feedback_health': 'admin',
   'manifest_status': 'admin',
   'manifest_refresh': 'admin',
   'manifest_repair': 'admin',
@@ -464,12 +439,6 @@ function describeTool(name: string): string {
     case 'meta_tools': return 'Enumerate available tools & their metadata.';
   // feedback system descriptions
   case 'feedback_submit': return 'Submit feedback entry (issue, status report, security alert, feature request, etc.).';
-  case 'feedback_list': return 'List feedback entries with filtering options (type, severity, status, date range).';
-  case 'feedback_get': return 'Get specific feedback entry by ID with full details.';
-  case 'feedback_update': return 'Update feedback entry status and metadata (admin function).';
-  case 'feedback_stats': return 'Get feedback system statistics and metrics dashboard.';
-  case 'feedback_health': return 'Health check for feedback system storage and configuration.';
-  case 'feedback_dispatch': return 'Unified feedback dispatcher. Actions: submit, list, get, update, stats, health, rate.';
   case 'bootstrap': return 'Unified bootstrap dispatcher. Actions: request, confirm, status.';
   case 'manifest_status': return 'Report index manifest presence and drift summary.';
   case 'manifest_refresh': return 'Rewrite manifest from current index state.';

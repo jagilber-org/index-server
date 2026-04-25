@@ -13,6 +13,7 @@
  * before pushing but not needed on every build:verify cycle.
  */
 import { spawn } from 'child_process';
+import path from 'path';
 import { slowTests } from './slow-tests.mjs';
 
 // Quarantine support (previously used to exclude flaky suites).
@@ -34,5 +35,6 @@ if (process.env.INCLUDE_UNSTABLE_SLOW === '1' && unstable.length) {
 const vitestArgs = ['run', '--bail', '1', '--reporter', 'verbose', ...selected];
 
 const childEnv = { ...process.env, INDEX_SERVER_MUTATION: '1' };
-const child = spawn('npx', ['vitest', ...vitestArgs], { stdio: 'inherit', shell: process.platform === 'win32', env: childEnv });
+const vitestBin = path.resolve('node_modules', 'vitest', 'vitest.mjs');
+const child = spawn(process.execPath, [vitestBin, ...vitestArgs], { stdio: 'inherit', env: childEnv });
 child.on('exit', code => process.exit(code));

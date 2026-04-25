@@ -9,6 +9,7 @@ import { createApiRoutes } from '../ApiRoutes.js';
 import { MetricsCollector } from '../MetricsCollector.js';
 import { generateDashboardHtml, stripGraphTab } from '../legacyDashboardHtml.js';
 import { listRegisteredMethods } from '../../../server/registry.js';
+import { logError } from '../../../services/logger.js';
 
 export { createStatusRoutes } from './status.routes.js';
 export { createMetricsRoutes } from './metrics.routes.js';
@@ -26,6 +27,7 @@ export { createUsageRoutes } from './usage.routes.js';
 export { createScriptsRoutes } from './scripts.routes.js';
 export { createMessagingRoutes } from './messaging.routes.js';
 export { createSqliteRoutes } from './sqlite.routes.js';
+export { createAdminFeedbackRoutes } from './admin.feedback.routes.js';
 
 // ---------------------------------------------------------------------------
 // Dashboard-level route mounting (top-level routes, not /api sub-routes)
@@ -122,8 +124,7 @@ export function mountDashboardRoutes(app: Express, ctx: DashboardRoutesContext):
       adminHtml = adminHtml.replace(/<script defer /g, `<script nonce="${nonce}" defer `);
       res.type('html').send(adminHtml);
     } catch (error) {
-      // eslint-disable-next-line no-console
-      console.error('[Dashboard] Admin panel load error:', error);
+      logError('[Dashboard] Admin panel load error:', error);
       res.status(500).send('<h1>500 - Admin Panel Error</h1><p>Failed to load admin panel</p>');
     }
   });
@@ -195,8 +196,7 @@ export function mountDashboardRoutes(app: Express, ctx: DashboardRoutesContext):
       }));
       res.json({ tools: enrichedTools, totalTools: tools.length, timestamp: Date.now(), legacy: true });
     } catch (error) {
-      // eslint-disable-next-line no-console
-      console.error('[Dashboard] /tools.json route error:', error);
+      logError('[Dashboard] /tools.json route error:', error);
       res.status(500).json({ error: 'Failed to get tools list' });
     }
   });

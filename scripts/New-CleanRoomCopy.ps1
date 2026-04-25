@@ -252,7 +252,7 @@ if ($ForbiddenPaths) {
     $allForbidden += $ForbiddenPaths
 }
 
-$leaked = Get-LeakedPublishArtifacts -Path $tempDir -ForbiddenItems $allForbidden -PrivateRootDotItems $privateRootDotItems
+$leaked = @(Get-LeakedPublishArtifacts -Path $tempDir -ForbiddenItems $allForbidden -PrivateRootDotItems $privateRootDotItems)
 
 if ($leaked.Count -gt 0) {
     Write-Error "Leaked forbidden artifacts detected: $($leaked -join ', '). Aborting."
@@ -301,7 +301,7 @@ else {
 
 # --- Compute content hash for integrity verification ---
 Write-Host 'Computing content hash...'
-$allFiles = Get-ChildItem -Path $tempDir -Recurse -File | Sort-Object { $_.FullName.Substring($tempDir.Length) }
+$allFiles = @(Get-ChildItem -Path $tempDir -Recurse -File | Sort-Object { $_.FullName.Substring($tempDir.Length) })
 $sha256 = [System.Security.Cryptography.SHA256]::Create()
 $hashStream = [System.IO.MemoryStream]::new()
 

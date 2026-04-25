@@ -1,12 +1,17 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { validateParams, clearValidationCache } from '../../services/validationService';
 import { getToolRegistry } from '../../services/toolRegistry';
+import { reloadRuntimeConfig } from '../../config/runtimeConfig';
 
 // Force registry initialization (side effects may register schemas)
 getToolRegistry();
 
 describe('validationService (unit)', () => {
-  beforeEach(() => { clearValidationCache(); });
+  beforeEach(() => {
+    process.env.INDEX_SERVER_VALIDATION_MODE = 'zod';
+    reloadRuntimeConfig();
+    clearValidationCache();
+  });
 
   it('accepts valid feedback_submit params', () => {
     const ok = validateParams('feedback_submit', { type: 'issue', severity: 'low', title: 't', description: 'd' });
@@ -23,5 +28,66 @@ describe('validationService (unit)', () => {
   it('treats unknown tool as ok (no schema)', () => {
     const res = validateParams('nonexistent/tool', { any: 'value' });
     expect(res).toEqual({ ok: true });
+  });
+
+  it('rejects extra index_add entry properties', () => {
+    const res = validateParams('index_add', {
+      entry: {
+        id: 'extra-prop',
+        title: 'Extra prop',
+        body: 'body',
+        unexpected: true,
+      },
+    });
+    expect(res.ok).toBe(false);
+    if (res.ok === false) expect(Array.isArray(res.errors)).toBe(true);
+  });
+
+  it('rejects invalid extensions values in index_add params', () => {
+    const res = validateParams('index_add', {
+      entry: {
+        id: 'bad-extensions',
+        title: 'Bad extensions',
+        body: 'body',
+        extensions: { vendor: { note: null } },
+      },
+    });
+    expect(res.ok).toBe(false);
+    if (res.ok === false) expect(Array.isArray(res.errors)).toBe(true);
+  });
+
+  it('rejects invalid governance enum in index_add entry', () => {
+    const res = validateParams('index_add', {
+      entry: {
+        id: 'invalid-classification',
+        title: 'Invalid classification',
+        body: 'body',
+        priority: 50,
+        audience: 'all',
+        requirement: 'optional',
+        categories: ['test'],
+        classification: 'secret',
+      },
+      overwrite: true,
+      lax: true,
+    });
+    expect(res.ok).toBe(false);
+  });
+
+  it('rejects invalid add enum through index_dispatch flat params', () => {
+    const res = validateParams('index_dispatch', {
+      action: 'add',
+      id: 'invalid-dispatch-classification',
+      title: 'Invalid dispatch classification',
+      body: 'body',
+      priority: 50,
+      audience: 'all',
+      requirement: 'optional',
+      categories: ['test'],
+      classification: 'secret',
+      overwrite: true,
+      lax: true,
+    });
+    expect(res.ok).toBe(false);
   });
 });

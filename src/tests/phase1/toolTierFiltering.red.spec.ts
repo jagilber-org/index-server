@@ -7,13 +7,13 @@ import { describe, it, expect } from 'vitest';
 import { getToolRegistry } from '../../services/toolRegistry';
 
 // Expected core tools (always visible, essential daily use)
+// feedback_dispatch was removed in Phase 2b (002-tool-consolidation); only feedback_submit remains (admin tier)
 const CORE_TOOLS = new Set([
   'health_check',
   'index_dispatch',
   'index_search',
   'prompt_review',
   'help_overview',
-  'feedback_dispatch',
   'bootstrap',
 ]);
 

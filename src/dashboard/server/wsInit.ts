@@ -6,6 +6,7 @@
 import { Server as HttpServer } from 'http';
 import { WebSocketManager } from './WebSocketManager.js';
 import { MetricsCollector } from './MetricsCollector.js';
+import { logError } from '../../services/logger.js';
 
 /** Attaches the WebSocket server to an existing HTTP/HTTPS server instance. */
 export function initWebSocket(server: HttpServer, wsManager: WebSocketManager): void {
@@ -34,8 +35,7 @@ export function startMetricsBroadcast(
         data: snapshot,
       });
     } catch (e) {
-      // eslint-disable-next-line no-console
-      console.error('[Dashboard] metrics broadcast failed', e);
+      logError('[Dashboard] metrics broadcast failed', e);
     }
   }, safeInterval);
 }

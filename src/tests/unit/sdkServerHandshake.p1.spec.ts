@@ -21,7 +21,12 @@ describe('sdkServer handshake harness (P1)', () => {
     const launchCode = `const mod=require(${JSON.stringify(distServer)});(async()=>{if(mod&&typeof mod.startSdkServer==='function'){await mod.startSdkServer();}})();`;
     const child = spawn(process.execPath, ['-e', launchCode], {
       stdio: ['pipe','pipe','pipe'],
-      env: { ...process.env, INDEX_SERVER_INIT_FEATURES: 'initFallback', INDEX_SERVER_TRACE: 'healthMixed,initFrame' }
+      env: {
+        ...process.env,
+        INDEX_SERVER_DISABLE_STDERR_BRIDGE: '1',
+        INDEX_SERVER_INIT_FEATURES: 'initFallback',
+        INDEX_SERVER_TRACE: 'healthMixed,initFrame'
+      }
     });
 
     interface Frame { jsonrpc?:string; id?:number; method?:string; result?:any; error?:any; params?:any }

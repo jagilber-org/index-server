@@ -33,8 +33,12 @@ env:
 
 jobs:
   build:
-    name: Build Docker Image
+    name: Build Docker Image (${{ matrix.base-image }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        base-image: ['node:22-alpine', 'node:22-slim']
     outputs:
       image-tag: ${{ steps.meta.outputs.tags }}
     steps:
@@ -48,6 +52,8 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          flavor: |
+            suffix=${{ matrix.base-image == 'node:22-slim' && '-slim' || '' }}
           tags: |
             type=sha,prefix=
             type=ref,event=branch
@@ -60,6 +66,8 @@ jobs:
           push: false
           load: true
           tags: index-server:test
+          build-args: |
+            BASE_IMAGE=${{ matrix.base-image }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 

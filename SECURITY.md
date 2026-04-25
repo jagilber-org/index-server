@@ -42,7 +42,7 @@ We follow responsible disclosure practices:
 - **Bootstrap gating** — all mutation operations require explicit bootstrap confirmation
 - **Audit logging** — every Index mutation is logged with timestamp, action, and actor
 - **Content scanning** — automated checks before public publishing via dual-repo workflow
-- **Mutation controls** — `INDEX_SERVER_MUTATION` environment variable gates write operations
+- **Mutation controls** — `INDEX_SERVER_MUTATION=0` forces a read-only runtime when you need to disable write operations explicitly
 - **Auth key support** — optional `INDEX_SERVER_AUTH_KEY` for securing dashboard and API access
 
 ## Hardening Notes

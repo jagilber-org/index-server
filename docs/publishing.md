@@ -4,6 +4,17 @@ This project uses a dual-repo pattern: private dev repo (`jagilber-dev/index-ser
 
 Publication uses a **two-step safety workflow** to separate content preparation from remote delivery.
 
+## MCP Registry release auth
+
+The GitHub Actions release workflow in this repository normally runs from the **private dev repo** (`jagilber-dev/index-server`).
+
+- In that context, MCP Registry publish must use **`MCP_GITHUB_TOKEN` PAT fallback**
+- **GitHub OIDC** is only expected when the release workflow runs from the **public mirror** (`jagilber-org/index-server`)
+- The workflow now fails fast if neither auth path is available, rather than silently skipping MCP Registry publication
+- Scope `MCP_GITHUB_TOKEN` as narrowly as possible for MCP Registry publication; do not grant broader repository access than the publish step needs
+
+Treat PAT fallback as the current canonical path for private-repo-driven releases until the public mirror owns the release execution context end-to-end.
+
 ## Scripts Overview
 
 | Script | Role | Who Can Run |

@@ -123,7 +123,7 @@ bash scripts/index-server-client.sh health
 ./index-server-client.sh add new-inst "My Instruction" "Content here" 60
 ```
 
-**Note:** Requires `INDEX_SERVER_MUTATION=1` on the server.
+**Note:** Works with the default runtime. Set `INDEX_SERVER_MUTATION=0` on the server if you intentionally want these write operations disabled.
 
 ### remove — Delete Instruction
 
@@ -135,7 +135,7 @@ bash scripts/index-server-client.sh health
 ./index-server-client.sh remove old-inst
 ```
 
-**Note:** Requires `INDEX_SERVER_MUTATION=1` on the server.
+**Note:** Works with the default runtime. Set `INDEX_SERVER_MUTATION=0` on the server if you intentionally want these write operations disabled.
 
 ### track — Record Usage Signal
 

@@ -22,9 +22,19 @@
 .PARAMETER Parallel
   Max concurrent operations per phase (default: 5)
 
+.PARAMETER SemanticSearch
+  Include semantic search phase in each cycle (requires INDEX_SERVER_SEMANTIC_ENABLED=1)
+
+.PARAMETER EmbeddingsCompute
+  Trigger embedding compute via /api/embeddings/compute pre/post and after CREATE
+
+.PARAMETER SkipCertCheck
+  Skip TLS cert validation for dashboard HTTP endpoints
+
 .EXAMPLE
   .\stress-test-crud.ps1
-  .\stress-test-crud.ps1 -BaseUrl http://localhost:4600 -Count 100 -Cycles 5
+  .\stress-test-crud.ps1 -BaseUrl https://localhost:8687 -Count 100 -Cycles 5
+  .\stress-test-crud.ps1 -BaseUrl https://localhost:8687 -SemanticSearch -EmbeddingsCompute -SkipCertCheck
 #>
 [CmdletBinding()]
 param(
@@ -33,7 +43,10 @@ param(
     [int]$Count = 50,
     [int]$Cycles = 3,
     [int]$Parallel = 5,
-    [string]$AdminKey = $env:INDEX_SERVER_ADMIN_API_KEY
+    [string]$AdminKey = $env:INDEX_SERVER_ADMIN_API_KEY,
+    [switch]$SemanticSearch,
+    [switch]$EmbeddingsCompute,
+    [switch]$SkipCertCheck
 )
 
 $ErrorActionPreference = 'Stop'
@@ -52,6 +65,7 @@ function Invoke-Client {
     param([hashtable]$Params)
     $splat = @{ BaseUrl = $BaseUrl } + $Params
     if ($AdminKey) { $splat.AdminKey = $AdminKey }
+    if ($SkipCertCheck) { $splat.SkipCertCheck = $true }
     for ($attempt = 1; $attempt -le 3; $attempt++) {
         try {
             $raw = & $ClientScript @splat 2>&1
@@ -84,6 +98,25 @@ function Measure-Phase {
     $sw.Stop()
     Write-Host ("  {0,-20} {1,8:N0}ms" -f $Name, $sw.ElapsedMilliseconds) -ForegroundColor Cyan
     return $result
+}
+
+# ── Dashboard helper for embedding HTTP endpoints ────────────────────────
+$dashboardArgs = @{}
+if ($SkipCertCheck) { $dashboardArgs['SkipCertificateCheck'] = $true }
+
+function Invoke-Dashboard {
+    param([string]$Method, [string]$Path, [int]$TimeoutSec = 120)
+    $url = "$BaseUrl$Path"
+    $splat = @{ Uri = $url; Method = $Method; TimeoutSec = $TimeoutSec } + $script:dashboardArgs
+    if ($Method -eq 'POST') { $splat['ContentType'] = 'application/json' }
+    try {
+        $resp = Invoke-WebRequest @splat -ErrorAction Stop
+        return $resp.Content | ConvertFrom-Json
+    } catch {
+        $msg = $_.Exception.Message
+        try { $msg = $_.ErrorDetails.Message | ConvertFrom-Json | ForEach-Object { $_.error ?? $_.message ?? $msg } } catch {}
+        return [PSCustomObject]@{ success = $false; error = $msg }
+    }
 }
 
 # ── Stats ────────────────────────────────────────────────────────────────
@@ -147,6 +180,20 @@ Write-Host ""
 
 $totalSw = [System.Diagnostics.Stopwatch]::StartNew()
 
+# ── Pre-run embedding baseline ───────────────────────────────────────────
+if ($EmbeddingsCompute) {
+    Write-Host "── Embedding Compute (pre-run baseline) ──" -ForegroundColor Magenta
+    $sw = [System.Diagnostics.Stopwatch]::StartNew()
+    $emb = Invoke-Dashboard -Method POST -Path '/api/embeddings/compute'
+    $sw.Stop()
+    if ($emb.success) {
+        Write-Host ("  OK: {0} embeddings in {1}ms" -f $emb.count, $sw.ElapsedMilliseconds) -ForegroundColor Green
+    } else {
+        Write-Host ("  WARN: {0}" -f ($emb.error ?? 'Unknown error')) -ForegroundColor Yellow
+    }
+    Write-Host ""
+}
+
 # ── CRUD Cycles ──────────────────────────────────────────────────────────
 for ($cycle = 1; $cycle -le $Cycles; $cycle++) {
     Write-Host "── Cycle $cycle / $Cycles ──" -ForegroundColor Green
@@ -166,6 +213,7 @@ for ($cycle = 1; $cycle -le $Cycles; $cycle++) {
                 BaseUrl  = $using:BaseUrl
             }
             if ($using:AdminKey) { $params.AdminKey = $using:AdminKey }
+            if ($using:SkipCertCheck) { $params.SkipCertCheck = $true }
             try {
                 $raw = & $using:ClientScript @params 2>&1 | Out-String
                 $json = $raw | ConvertFrom-Json
@@ -204,6 +252,41 @@ for ($cycle = 1; $cycle -le $Cycles; $cycle++) {
         $result = Invoke-Client @{ Action = 'search'; Keywords = @('stress','test'); Limit = 100 }
         Record-Op 'SEARCH' $result 'keyword'
     } | Out-Null
+
+    # ── SEMANTIC SEARCH ──────────────────────────────────────────────────
+    if ($SemanticSearch) {
+        Measure-Phase "SEMANTIC SEARCH" {
+            $result = Invoke-Client @{ Action = 'search'; Keywords = @('stress test instructions for load testing'); Mode = 'semantic' }
+            Record-Op 'SEMANTIC' $result 'semantic-1'
+            $result2 = Invoke-Client @{ Action = 'search'; Keywords = @("instruction $prefix"); Mode = 'semantic' }
+            Record-Op 'SEMANTIC' $result2 'semantic-2'
+        } | Out-Null
+    }
+
+    # ── EMBEDDINGS COMPUTE (mid-cycle) ───────────────────────────────────
+    if ($EmbeddingsCompute) {
+        Measure-Phase "EMBEDDINGS COMPUTE" {
+            $emb = Invoke-Dashboard -Method POST -Path '/api/embeddings/compute'
+            if ($emb.success) {
+                Write-Host ("     {0} embeddings, model={1}, device={2}" -f $emb.count, $emb.model, $emb.device) -ForegroundColor DarkGray
+                $stats.TotalOps++; $stats.Succeeded++
+            } else {
+                $stats.TotalOps++; $stats.Failed++
+                [void]$stats.Errors.Add("[EMBEDDINGS] compute : $($emb.error ?? 'Unknown')")
+            }
+        } | Out-Null
+
+        Measure-Phase "EMBEDDINGS PROJECTION" {
+            $proj = Invoke-Dashboard -Method GET -Path '/api/embeddings/projection'
+            if ($proj.success) {
+                Write-Host ("     {0} points, dims={1}, avgCosSim={2:N4}" -f $proj.count, $proj.dimensions, $proj.stats.avgCosineSim) -ForegroundColor DarkGray
+                $stats.TotalOps++; $stats.Succeeded++
+            } else {
+                $stats.TotalOps++; $stats.Failed++
+                [void]$stats.Errors.Add("[EMBEDDINGS] projection : $($proj.error ?? 'Unknown')")
+            }
+        } | Out-Null
+    }
 
     # ── UPDATE (overwrite) ───────────────────────────────────────────────
     $updateIds = $ids | Get-Random -Count ([Math]::Min(10, $Count))
@@ -248,6 +331,29 @@ for ($cycle = 1; $cycle -le $Cycles; $cycle++) {
 }
 
 $totalSw.Stop()
+
+# ── Post-run embedding compute ───────────────────────────────────────────
+if ($EmbeddingsCompute) {
+    Write-Host "── Embedding Compute (post-run) ──" -ForegroundColor Magenta
+    $sw = [System.Diagnostics.Stopwatch]::StartNew()
+    $emb = Invoke-Dashboard -Method POST -Path '/api/embeddings/compute'
+    $sw.Stop()
+    if ($emb.success) {
+        Write-Host ("  OK: {0} embeddings in {1}ms" -f $emb.count, $sw.ElapsedMilliseconds) -ForegroundColor Green
+    } else {
+        Write-Host ("  FAIL: {0}" -f ($emb.error ?? 'Unknown error')) -ForegroundColor Red
+    }
+
+    $sw = [System.Diagnostics.Stopwatch]::StartNew()
+    $proj = Invoke-Dashboard -Method GET -Path '/api/embeddings/projection'
+    $sw.Stop()
+    if ($proj.success) {
+        Write-Host ("  Projection: {0} points, avgCosSim={1:N4} ({2}ms)" -f $proj.count, $proj.stats.avgCosineSim, $sw.ElapsedMilliseconds) -ForegroundColor Green
+    } else {
+        Write-Host ("  Projection FAIL: {0}" -f ($proj.error ?? 'Unknown error')) -ForegroundColor Red
+    }
+    Write-Host ""
+}
 
 # ── Final health check ──────────────────────────────────────────────────
 Write-Host "── Post-test health check ──" -ForegroundColor Green

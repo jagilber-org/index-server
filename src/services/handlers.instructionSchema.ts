@@ -210,7 +210,7 @@ registerHandler('index_schema', () => {
       '1. Review the minimalExample for required fields',
       '2. Study promotionWorkflow stages (P0 → P1 → P2+)',
       '3. Validate against validationRules before submission',
-      '4. Use index_dispatch {action: "add"} to create (requires INDEX_SERVER_MUTATION=1)',
+      '4. Use index_dispatch {action: "add"} to create (writes are enabled by default; set INDEX_SERVER_MUTATION=0 for read-only mode)',
       '5. Monitor index_health for recursionRisk and drift',
       '6. Track usage with usage_track',
       '7. Iterate via index_dispatch {action: "update"} as needed',

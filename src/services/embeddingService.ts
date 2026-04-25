@@ -15,6 +15,10 @@ import fs from 'fs';
 import path from 'path';
 import { logInfo, logWarn } from './logger';
 import { InstructionEntry } from '../models/instruction';
+import type { EmbeddingCacheData, IEmbeddingStore } from './storage/types';
+
+// Re-export for backwards compatibility
+export type { EmbeddingCacheData } from './storage/types';
 
 // Lazy model state — never loaded at import time
 let pipeline: unknown = null;
@@ -48,17 +52,6 @@ export function cosineSimilarity(a: Float32Array, b: Float32Array): number {
  */
 export function isStale(indexHash: string, embeddingHash: string): boolean {
   return indexHash !== embeddingHash;
-}
-
-/**
- * Persisted embedding cache format (backwards-compatible: entryHashes is optional).
- */
-export interface EmbeddingCacheData {
-  indexHash: string;
-  modelName?: string;
-  /** Per-entry content hashes for incremental invalidation (required for v2+). */
-  entryHashes?: Record<string, string>;
-  embeddings: Record<string, number[]>;
 }
 
 /**
@@ -147,11 +140,18 @@ async function ensureModel(modelName: string, cacheDir: string, device: string =
 /**
  * Check available ONNX Runtime execution providers and resolve the best device.
  * Falls back to dml → cpu if the requested provider is not available.
+ *
+ * @returns The resolved device string ('cpu', 'cuda', or 'dml').
  */
-async function resolveDevice(requested: string): Promise<string> {
+/** ORT module shape accepted by resolveDevice for testability. */
+export interface OrtModule {
+  listSupportedBackends?: () => Array<{ name: string; bundled: boolean }>;
+}
+
+export async function resolveDevice(requested: string, ortModule?: OrtModule): Promise<string> {
   if (requested === 'cpu') return 'cpu';
   try {
-    const ort = await dynamicImport('onnxruntime-node');
+    const ort: OrtModule = ortModule ?? await dynamicImport('onnxruntime-node');
     if (typeof ort.listSupportedBackends === 'function') {
       const backends: Array<{ name: string; bundled: boolean }> = ort.listSupportedBackends();
       const available = backends.map((b: { name: string }) => b.name);
@@ -165,11 +165,14 @@ async function resolveDevice(requested: string): Promise<string> {
       }
       logWarn(`[embeddingService] ${requested} provider not available. Available: [${available.join(', ')}]. Falling back to cpu.`);
       return 'cpu';
+    } else {
+      logWarn(`[embeddingService] onnxruntime-node does not expose listSupportedBackends(). Falling back to cpu.`);
+      return 'cpu';
     }
   } catch {
-    logWarn(`[embeddingService] Could not probe ONNX Runtime backends; using requested device '${requested}' as-is.`);
+    logWarn(`[embeddingService] Could not probe ONNX Runtime backends (onnxruntime-node not installed or import failed). Falling back to cpu.`);
   }
-  return requested;
+  return 'cpu';
 }
 
 /**
@@ -183,6 +186,43 @@ export async function embedText(text: string, modelName: string, cacheDir: strin
   const vec = new Float32Array(output.data);
   logInfo(`[embeddingService] embedText completed in ${(performance.now() - start).toFixed(1)}ms (${text.substring(0, 60)}${text.length > 60 ? '...' : ''})`);
   return vec;
+}
+
+/**
+ * Check if the embedding model is ready for use.
+ * When localOnly is true, verifies model files exist in the cache directory.
+ *
+ * @returns Object with `ready` flag and optional remediation `message`.
+ */
+export function checkModelReadiness(
+  modelName: string,
+  cacheDir: string,
+  localOnly: boolean,
+): { ready: boolean; message?: string } {
+  if (!localOnly) {
+    return { ready: true }; // Model can be downloaded on demand
+  }
+
+  // HuggingFace transformers caches models as: models--<org>--<name>
+  const modelDirName = `models--${modelName.replace(/\//g, '--')}`;
+  const modelPath = path.join(cacheDir, modelDirName);
+
+  try {
+    if (fs.existsSync(modelPath) && fs.readdirSync(modelPath).length > 0) {
+      return { ready: true };
+    }
+  } catch {
+    // Directory doesn't exist or can't be read
+  }
+
+  return {
+    ready: false,
+    message:
+      `Embedding model '${modelName}' not found in cache (${cacheDir}). ` +
+      `LOCAL_ONLY is enabled, so the model cannot be downloaded automatically. ` +
+      `To fix: set INDEX_SERVER_SEMANTIC_LOCAL_ONLY=0 to allow download, ` +
+      `or manually place the model in the cache directory.`,
+  };
 }
 
 /** Signature for the embed function (injectable for testing). */
@@ -209,10 +249,11 @@ export async function getInstructionEmbeddings(
   cacheDir: string,
   device: string = 'cpu',
   localOnly: boolean = false,
-  embedFn: EmbedFn = embedText
+  embedFn: EmbedFn = embedText,
+  store?: IEmbeddingStore,
 ): Promise<Record<string, Float32Array>> {
   // Full cache hit: same index hash and model — return immediately without locking.
-  const cached = loadCachedEmbeddings(embeddingPath);
+  const cached = store ? store.load() : loadCachedEmbeddings(embeddingPath);
   if (cached && !isStale(indexHash, cached.indexHash) && cached.modelName === modelName) {
     const entryCount = Object.keys(cached.embeddings).length;
     logInfo(`[embeddingService] Embedding cache HIT: ${entryCount} entries from ${embeddingPath} (model=${modelName})`);
@@ -269,7 +310,12 @@ export async function getInstructionEmbeddings(
 
       // Persist updated cache.
       try {
-        saveCachedEmbeddings(embeddingPath, { indexHash, modelName, entryHashes, embeddings });
+        const cacheData: EmbeddingCacheData = { indexHash, modelName, entryHashes, embeddings };
+        if (store) {
+          store.save(cacheData);
+        } else {
+          saveCachedEmbeddings(embeddingPath, cacheData);
+        }
         logInfo('[embeddingService] Embeddings cached to disk');
       } catch (err) {
         logWarn(`[embeddingService] Failed to cache embeddings: ${err instanceof Error ? err.message : 'unknown'}`);

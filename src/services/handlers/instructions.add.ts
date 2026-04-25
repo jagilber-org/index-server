@@ -3,7 +3,7 @@ import path from 'path';
 import crypto from 'crypto';
 import { InstructionEntry } from '../../models/instruction';
 import { registerHandler } from '../../server/registry';
-import { ensureLoaded, getInstructionsDir, invalidate, touchIndexVersion, writeEntry } from '../indexContext';
+import { ensureLoaded, getInstructionsDir, invalidate, isDuplicateInstructionWriteError, touchIndexVersion, writeEntry } from '../indexContext';
 import { incrementCounter } from '../features';
 import { SCHEMA_VERSION } from '../../versioning/schemaVersion';
 import { ClassificationService } from '../classificationService';
@@ -14,6 +14,8 @@ import { getRuntimeConfig } from '../../config/runtimeConfig';
 import { hashBody } from '../canonical';
 import { writeManifestFromIndex, attemptManifestUpdate } from '../manifestManager';
 import { emitTrace } from '../tracing';
+import { INSTRUCTION_INPUT_SCHEMA_REF, validateInstructionInputSurface, validateInstructionRecord } from '../instructionRecordValidation';
+import { isInstructionValidationError } from '../instructionRecordValidation';
 import { guard, ImportEntry, traceVisibility, traceInstructionVisibility, traceEnvSnapshot } from './instructions.shared';
 
 interface AddParams { entry: ImportEntry & { lax?: boolean }; overwrite?: boolean; lax?: boolean }
@@ -23,7 +25,7 @@ registerHandler('index_add', guard('index_add', (p: AddParams) => {
   const instructionsCfg = getRuntimeConfig().instructions;
   const SEMVER_REGEX = /^([0-9]+)\.([0-9]+)\.([0-9]+)(?:[-+].*)?$/;
   const ADD_INPUT_SCHEMA = getToolRegistry({ tier: 'admin' }).find(t => t.name === 'index_add')?.inputSchema;
-  const fail = (error: string, opts?: { id?: string; hash?: string }) => {
+  const fail = (error: string, opts?: { id?: string; hash?: string; message?: string; validationErrors?: string[]; hints?: string[] }) => {
     const id = opts?.id || (e && e.id) || 'unknown';
     const rawBody = e && typeof e.body === 'string' ? e.body : (e && e.body ? String(e.body) : '');
     const bodyPreview = rawBody.trim().slice(0, 200);
@@ -36,28 +38,30 @@ registerHandler('index_add', guard('index_add', (p: AddParams) => {
       bodyPreview
     } : { id };
     interface AddFailureResult {
-      id: string; created: boolean; overwritten: boolean; skipped: boolean; error: string; hash?: string; feedbackHint: string; reproEntry: Record<string, unknown>; schemaRef?: string; inputSchema?: unknown;
+      id: string; success: false; created: boolean; overwritten: boolean; skipped: boolean; error: string; hash?: string; message: string; feedbackHint: string; reproEntry: Record<string, unknown>; validationErrors?: string[]; hints?: string[]; schemaRef?: string; inputSchema?: unknown;
     }
     const base: AddFailureResult = {
       id,
+      success: false,
       created: false,
       overwritten: false,
       skipped: false,
       error,
       hash: opts?.hash,
-      feedbackHint: 'Creation failed. If unexpected, call feedback_submit with reproEntry.',
+      message: opts?.message || 'Instruction not added.',
+      feedbackHint: 'Instruction not added. Fix validationErrors or call feedback_submit with reproEntry.',
       reproEntry
     };
-    if (/^missing (entry|id|required fields)/.test(error) || error === 'missing required fields') {
-      if (ADD_INPUT_SCHEMA) {
-        base.schemaRef = "meta_tools[name='index_add'].inputSchema";
-        base.inputSchema = ADD_INPUT_SCHEMA;
-      } else {
-        base.schemaRef = 'meta_tools (lookup index_add)';
-      }
+    if (opts?.validationErrors?.length) base.validationErrors = opts.validationErrors;
+    if (opts?.hints?.length) base.hints = opts.hints;
+    if (/^missing (entry|id|required fields)/.test(error) || error === 'missing required fields' || error === 'invalid_instruction') {
+      base.schemaRef = INSTRUCTION_INPUT_SCHEMA_REF;
+      if (ADD_INPUT_SCHEMA) base.inputSchema = ADD_INPUT_SCHEMA;
     }
     return base as typeof base;
   };
+  const failValidation = (error: string, validationErrors: string[], hints: string[], opts?: { id?: string; hash?: string }) =>
+    fail(error, { ...opts, validationErrors, hints, message: 'Instruction not added.' });
   const metadataEquals = (left: unknown, right: unknown) => {
     if (left === right) return true;
     if (left == null || right == null) return left === right;
@@ -106,27 +110,25 @@ registerHandler('index_add', guard('index_add', (p: AddParams) => {
       }
     } catch { /* ignore hydration errors */ }
   }
-  if (!e.id || !e.title || !e.body) return fail('missing required fields');
+  const requiredFieldErrors = [
+    !e.id ? 'id: missing required field' : undefined,
+    e.title === undefined ? 'title: missing required field' : undefined,
+    e.body === undefined ? 'body: missing required field' : undefined,
+  ].filter((issue): issue is string => !!issue);
+  const surfaceValidation = validateInstructionInputSurface(e as unknown as Record<string, unknown>);
+  if (requiredFieldErrors.length || surfaceValidation.validationErrors.length) {
+    return failValidation(
+      requiredFieldErrors.length ? 'missing required fields' : 'invalid_instruction',
+      [...requiredFieldErrors, ...surfaceValidation.validationErrors],
+      surfaceValidation.hints,
+      { id: e.id },
+    );
+  }
   const dir = getInstructionsDir(); if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   const file = path.join(dir, `${e.id}.json`);
-  const existsInStore = ensureLoaded().byId.has(e.id);
-  const existsOnDisk = !existsInStore && fs.existsSync(file);
-  const exists = existsInStore || existsOnDisk;
-  const existedBeforeOriginal = exists;
   const overwrite = !!p.overwrite;
-  if (exists && !overwrite) {
-    let st0 = ensureLoaded(); let visible = st0.byId.has(e.id); let repaired = false; if (!visible) {
-      try { invalidate(); st0 = ensureLoaded(); visible = st0.byId.has(e.id); if (visible) repaired = true; } catch { /* ignore reload */ }
-    }
-    logAudit('add', e.id, { skipped: true, late_visible: visible, repaired });
-    if (traceVisibility()) { emitTrace('[trace:add:skip]', { id: e.id, visible, repaired }); }
-    if (traceVisibility()) {
-      traceInstructionVisibility(e.id, 'add-skip-pre-return', { visible, repaired });
-      if (!visible) traceEnvSnapshot('add-skip-anomalous', { repaired });
-    }
-    if (!visible) { return { id: e.id, skipped: true, created: false, overwritten: false, hash: st0.hash, visibilityWarning: 'skipped_file_not_in_index' }; }
-    return { id: e.id, skipped: true, created: false, overwritten: false, hash: st0.hash, repaired: repaired ? true : undefined };
-  }
+  const exists = overwrite ? (ensureLoaded().byId.has(e.id) || fs.existsSync(file)) : false;
+  const existedBeforeOriginal = exists;
   const now = new Date().toISOString();
   const rawBody = typeof e.body === 'string' ? e.body : String(e.body || '');
   const bodyTrimmed = rawBody.trim();
@@ -167,7 +169,7 @@ registerHandler('index_add', guard('index_add', (p: AddParams) => {
       const memEntry = stMerge.byId.get(e.id);
       if (memEntry) {
         existing = { ...memEntry };
-      } else if (existsOnDisk) {
+      } else if (fs.existsSync(file)) {
         existing = JSON.parse(fs.readFileSync(file, 'utf8')) as InstructionEntry;
       } else {
         throw new Error('entry not found in store or on disk');
@@ -303,7 +305,46 @@ registerHandler('index_add', guard('index_add', (p: AddParams) => {
   }
   const record = classifier.normalize(base);
   if (record.owner === 'unowned') { const auto = resolveOwner(record.id); if (auto) { record.owner = auto; record.updatedAt = new Date().toISOString(); } }
-  try { writeEntry(record); } catch (err) { return fail((err as Error).message || 'write-failed', { id: e.id }); }
+  const recordValidation = validateInstructionRecord(record);
+  if (recordValidation.validationErrors.length) {
+    return failValidation('invalid_instruction', recordValidation.validationErrors, recordValidation.hints, { id: e.id });
+  }
+  try { writeEntry(record, overwrite ? undefined : { createOnly: true }); } catch (err) {
+    if (isInstructionValidationError(err)) {
+      return failValidation('invalid_instruction', err.validationErrors, err.hints, { id: e.id });
+    }
+    if (!overwrite && isDuplicateInstructionWriteError(err)) {
+      let st0 = ensureLoaded(); let visible = st0.byId.has(e.id); let repaired = false; if (!visible) {
+        try { invalidate(); st0 = ensureLoaded(); visible = st0.byId.has(e.id); if (visible) repaired = true; } catch { /* ignore reload */ }
+      }
+      logAudit('add', e.id, { skipped: true, late_visible: visible, repaired, duplicateAtWrite: true });
+      if (traceVisibility()) { emitTrace('[trace:add:skip]', { id: e.id, visible, repaired, duplicateAtWrite: true }); }
+      if (traceVisibility()) {
+        traceInstructionVisibility(e.id, 'add-skip-post-write-conflict', { visible, repaired });
+        if (!visible) traceEnvSnapshot('add-skip-anomalous', { repaired });
+      }
+      if (!visible) {
+        const existingLoadError = st0.loadErrors?.find((issue) => {
+          const fileName = path.basename(issue.file);
+          return issue.file === `${e.id}.json` || fileName === `${e.id}.json` || issue.file.endsWith(`\\${e.id}.json`);
+        });
+        if (existingLoadError) {
+          return {
+            id: e.id,
+            skipped: false,
+            created: false,
+            overwritten: false,
+            hash: st0.hash,
+            error: 'existing_instruction_invalid',
+            validationErrors: [existingLoadError.error],
+          };
+        }
+        return { id: e.id, skipped: true, created: false, overwritten: false, hash: st0.hash, visibilityWarning: 'skipped_file_not_in_index' };
+      }
+      return { id: e.id, skipped: true, created: false, overwritten: false, hash: st0.hash, repaired: repaired ? true : undefined };
+    }
+    return fail((err as Error).message || 'write-failed', { id: e.id });
+  }
   try { touchIndexVersion(); } catch { /* ignore */ }
   let stReloaded;
   const strictMode = instructionsCfg.strictVisibility;

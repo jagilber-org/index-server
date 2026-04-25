@@ -81,7 +81,6 @@ export class ClassificationService {
     if(!entry.id) issues.push('missing id');
     if(!entry.title) issues.push('missing title');
     if(!entry.body) issues.push('missing body');
-    if(entry.requirement === 'deprecated' && !entry.deprecatedBy) issues.push('deprecated requires deprecatedBy');
     return issues;
   }
 

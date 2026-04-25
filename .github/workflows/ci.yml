@@ -39,7 +39,6 @@ jobs:
       - name: Test
         run: |
           npm run coverage:ci --if-present || npm test --if-present
-        continue-on-error: true
       - name: Upload coverage to Codecov
         if: always()
         uses: codecov/codecov-action@v6

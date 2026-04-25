@@ -399,16 +399,9 @@ try {
                 -Environment $publishEnv
         }
 
-        $existingTags = Get-RemoteRefs -RemoteName 'public' -RefKind 'tags' -WorkingDirectory $publishWorkspace
-        foreach ($tagName in $existingTags) {
-            if ($Tag -and -not $AllowTagOverwrite -and $tagName -eq $Tag) {
-                continue
-            }
-
-            Invoke-Git -Arguments @('push', 'public', ":refs/tags/$tagName") `
-                -WorkingDirectory $publishWorkspace `
-                -Environment $publishEnv
-        }
+        # Only remove the specific tag being published when -AllowTagOverwrite is set.
+        # Existing remote tags are preserved to avoid orphaning GitHub Releases.
+        # See: https://github.com/jagilber-dev/template-repo/issues/47
 
         if ($Tag) {
             $remoteTagRef = Invoke-Git -Arguments @('ls-remote', '--tags', 'public', "refs/tags/$Tag") `

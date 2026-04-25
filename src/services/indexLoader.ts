@@ -14,6 +14,7 @@ import schema from '../../schemas/instruction.schema.json';
 import { emitTrace, traceEnabled } from './tracing';
 import { getRuntimeConfig } from '../config/runtimeConfig';
 import { splitOversizedEntry } from './autoSplit';
+import { logError } from './logger.js';
 
 export interface IndexLoadResult {
   entries: InstructionEntry[];
@@ -571,7 +572,7 @@ export class IndexLoader {
           bump('schema');
           if(trace) trace.push({ file:f, accepted:false, reason });
           // Log schema rejections at info level for operational visibility
-          try { console.error(`[index:skip] ${f}: ${reason}`); } catch { /* ignore */ }
+          try { logError(`[index:skip] ${f}: ${reason}`); } catch { /* ignore */ }
           if(traceEnabled(1)){
             try { emitTrace('[trace:index:file-end]', { file: f, accepted: false, reason, scanned: scannedSoFar, acceptedSoFar }); } catch { /* ignore */ }
             try { emitTrace('[trace:index:file-progress]', { scanned: scannedSoFar, total: files.length, acceptedSoFar, rejectedSoFar: scannedSoFar - acceptedSoFar }); } catch { /* ignore */ }
@@ -585,7 +586,7 @@ export class IndexLoader {
           errors.push({ file: f, error: reason });
           bump('classification');
           if(trace) trace.push({ file:f, accepted:false, reason });
-          try { console.error(`[index:skip] ${f}: classification: ${reason}`); } catch { /* ignore */ }
+          try { logError(`[index:skip] ${f}: classification: ${reason}`); } catch { /* ignore */ }
           if(traceEnabled(1)){
             try { emitTrace('[trace:index:file-end]', { file: f, accepted: false, reason, scanned: scannedSoFar, acceptedSoFar }); } catch { /* ignore */ }
             try { emitTrace('[trace:index:file-progress]', { scanned: scannedSoFar, total: files.length, acceptedSoFar, rejectedSoFar: scannedSoFar - acceptedSoFar }); } catch { /* ignore */ }

@@ -42,10 +42,10 @@ The MCP server name is: `Index`
 ### Feedback System
 
 ```bash
-@Index feedback_list
 @Index feedback_submit type=issue severity=medium title="Test" description="Test feedback"
-@Index feedback_stats
 ```
+
+**Note**: Feedback submission is only available via MCP. Dashboard feedback browsing/editing is operator-only via the Feedback tab.
 
 ## 3. Connection Verification
 
@@ -119,7 +119,6 @@ Expected response: `{ "status": "ok", "version": "1.1.1", ... }`
 ```bash
 @Index health_check
 @Index metrics_snapshot  
-@Index feedback_stats
 ```
 
 ## 6. Environment Context
@@ -128,7 +127,7 @@ The server is configured with:
 
 - Instructions directory: `<root>/index-server/devinstructions`
 - Feedback directory: `<root>/index-server/feedback`  
-- Mutations enabled: Yes (`INDEX_SERVER_MUTATION=1`)
+- Mutations enabled: Yes (default runtime; `INDEX_SERVER_MUTATION` unset)
 - Always reload: Yes (dev mode)
 
 ## 7. Troubleshooting Commands
@@ -153,10 +152,10 @@ If GPT-5 still can't connect:
    @Index index_dispatch action=list limit=5
    ```
 
-4. **Test feedback system:**
+4. **Submit feedback:**
 
    ```bash
-   @Index feedback_health
+   @Index feedback_submit type=issue severity=low title="Test" description="Test feedback"
    ```
 
 ## 8. Expected Server Responses

@@ -454,14 +454,9 @@ Files: ${fileCount}`;
     }
   }
 
-  const existingTags = listRemoteRefs('public', 'tags', tmpDir);
-  if (existingTags.length > 0) {
-    console.log(`Removing ${existingTags.length} existing remote tag(s)...`);
-    for (const tagName of existingTags) {
-      console.log(`  - ${tagName}`);
-      runGitShow(['push', 'public', `:refs/tags/${tagName}`], { cwd: tmpDir, env: publishEnv });
-    }
-  }
+  // Existing remote tags are preserved to avoid orphaning GitHub Releases.
+  // The specific tag being published is handled in the tag step below.
+  // See: https://github.com/jagilber-dev/template-repo/issues/47
 
   try {
     runGitShow(['push', '--force', 'public', 'main'], { cwd: tmpDir, env: publishEnv });

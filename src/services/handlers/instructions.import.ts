@@ -8,6 +8,8 @@ import { incrementCounter } from '../features';
 import { SCHEMA_VERSION } from '../../versioning/schemaVersion';
 import { ClassificationService } from '../classificationService';
 import { resolveOwner } from '../ownershipService';
+import { validateInstructionInputSurface, validateInstructionRecord } from '../instructionRecordValidation';
+import { isInstructionValidationError } from '../instructionRecordValidation';
 
 import { logAudit } from '../auditLog';
 import { getRuntimeConfig } from '../../config/runtimeConfig';
@@ -79,8 +81,22 @@ registerHandler('index_import', guard('index_import', (p: { entries?: ImportEntr
   const dir = getInstructionsDir(); if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   const instructionsCfg = getRuntimeConfig().instructions;
   let imported = 0, skipped = 0, overwritten = 0; const errors: { id: string; error: string }[] = []; const classifier = new ClassificationService();
+  const formatImportValidationError = (validationErrors: string[]) => `invalid_instruction: ${validationErrors.join('; ')}`;
   for (const e of entries) {
-    if (!e || !e.id || !e.title || !e.body) { const id = (e as Partial<ImportEntry>)?.id || 'unknown'; errors.push({ id, error: 'missing required fields' }); continue; }
+    const id = (e as Partial<ImportEntry>)?.id || 'unknown';
+    const requiredFieldErrors = [
+      !e?.id ? 'id: missing required field' : undefined,
+      e?.title === undefined ? 'title: missing required field' : undefined,
+      e?.body === undefined ? 'body: missing required field' : undefined,
+      e?.priority === undefined ? 'priority: missing required field' : undefined,
+      e?.audience === undefined ? 'audience: missing required field' : undefined,
+      e?.requirement === undefined ? 'requirement: missing required field' : undefined,
+    ].filter((issue): issue is string => !!issue);
+    const surfaceValidation = e ? validateInstructionInputSurface(e as unknown as Record<string, unknown>) : { validationErrors: [], hints: [], schemaRef: 'index_add#input' };
+    if (!e || requiredFieldErrors.length || surfaceValidation.validationErrors.length) {
+      errors.push({ id, error: formatImportValidationError([...requiredFieldErrors, ...surfaceValidation.validationErrors]) });
+      continue;
+    }
     const bodyTrimmed = typeof e.body === 'string' ? e.body.trim() : String(e.body);
     const { bodyWarnLength: importBodyMax } = getRuntimeConfig().index;
     if (bodyTrimmed.length > importBodyMax) {
@@ -111,7 +127,6 @@ registerHandler('index_import', guard('index_import', (p: { entries?: ImportEntr
     if (e.priorityTier === 'P1' && (!categories.length || !e.owner)) { errors.push({ id: e.id, error: 'P1 requires category & owner' }); continue; }
     if ((e.requirement === 'mandatory' || e.requirement === 'critical') && !e.owner) { errors.push({ id: e.id, error: 'mandatory/critical require owner' }); continue; }
     if (fileExists && mode === 'skip') { skipped++; continue; }
-    if (fileExists && mode === 'overwrite') overwritten++; else if (!fileExists) imported++;
     const base: InstructionEntry = existing ? { ...existing, title: e.title, body: bodyTrimmed, rationale: e.rationale, priority: e.priority, audience: e.audience, requirement: e.requirement, categories, primaryCategory: effectivePrimary, updatedAt: now } as InstructionEntry : { id: e.id, title: e.title, body: bodyTrimmed, rationale: e.rationale, priority: e.priority, audience: e.audience, requirement: e.requirement, categories, primaryCategory: effectivePrimary, sourceHash: newBodyHash, schemaVersion: SCHEMA_VERSION, deprecatedBy: e.deprecatedBy, createdAt: now, updatedAt: now, riskScore: e.riskScore, createdByAgent: instructionsCfg.agentId, sourceWorkspace: instructionsCfg.workspaceId, extensions: e.extensions } as InstructionEntry;
     const govKeys: (keyof ImportEntry)[] = ['version', 'owner', 'status', 'priorityTier', 'classification', 'lastReviewedAt', 'nextReviewDue', 'changeLog', 'semanticSummary', 'contentType', 'extensions'];
     for (const k of govKeys) { const v = e[k]; if (v !== undefined) { (base as unknown as Record<string, unknown>)[k] = v as unknown; } }
@@ -119,7 +134,20 @@ registerHandler('index_import', guard('index_import', (p: { entries?: ImportEntr
     base.sourceHash = newBodyHash;
     const record = classifier.normalize(base);
     if (record.owner === 'unowned') { const auto = resolveOwner(record.id); if (auto) { record.owner = auto; record.updatedAt = new Date().toISOString(); } }
-    try { writeEntry(record); } catch { errors.push({ id: e.id, error: 'write-failed' }); }
+    const recordValidation = validateInstructionRecord(record);
+    if (recordValidation.validationErrors.length) {
+      errors.push({ id: e.id, error: formatImportValidationError(recordValidation.validationErrors) });
+      continue;
+    }
+    try { writeEntry(record); } catch (err) {
+      if (isInstructionValidationError(err)) {
+        errors.push({ id: e.id, error: formatImportValidationError(err.validationErrors) });
+        continue;
+      }
+      errors.push({ id: e.id, error: 'write-failed' });
+      continue;
+    }
+    if (fileExists && mode === 'overwrite') overwritten++; else if (!fileExists) imported++;
   }
   touchIndexVersion(); invalidate(); const st = ensureLoaded();
   const summary = { hash: st.hash, imported, skipped, overwritten, total: entries.length, errors };
