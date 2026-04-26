@@ -49,6 +49,11 @@
     Push to a publish/<tag> branch on the public remote and open a pull request
     against main via gh CLI. The user reviews and merges manually.
 
+    The branch is created from the public remote's main (shallow clone) so that
+    the PR shares ancestry with main and `gh pr create` can compute a diff. The
+    prepared snapshot from $SourcePath is then committed on top, replacing all
+    tracked files. The published commit is therefore a single diff against main.
+
 .PARAMETER PrBranch
     Branch name for the PR. Defaults to publish/<Tag> (or publish/latest if no tag).
 
@@ -376,13 +381,44 @@ if ($DryRun) {
 
 # --- Delivery ---
 $publishWorkspace = Join-Path ([System.IO.Path]::GetTempPath()) "publish-mirror-$([System.Guid]::NewGuid().ToString('n'))"
-New-Item -ItemType Directory -Path $publishWorkspace -Force | Out-Null
-Copy-PreparedContent -SourceRoot $SourcePath -CurrentSource $SourcePath -DestinationRoot $publishWorkspace
 
 try {
-    Invoke-Git -Arguments @('init') -WorkingDirectory $publishWorkspace
-    Invoke-Git -Arguments @('checkout', '-b', 'main') -WorkingDirectory $publishWorkspace
-    Invoke-Git -Arguments @('add', '-A') -WorkingDirectory $publishWorkspace
+    if ($CreatePR) {
+        # Clone main from the public remote so the publish branch shares ancestry
+        # with main. Without a common merge base, `gh pr create` fails with
+        # "No commits between main and <branch>" because GitHub cannot compute a diff.
+        # The remote is named 'public' to match the rest of the script.
+        $branchName = if ($PrBranch) { $PrBranch } elseif ($Tag) { "publish/$Tag" } else { 'publish/latest' }
+
+        & git clone --origin public --branch main --single-branch --depth 1 -- $RemoteUrl $publishWorkspace 2>&1 | Write-Host
+        if ($LASTEXITCODE -ne 0 -or -not (Test-Path (Join-Path $publishWorkspace '.git'))) {
+            Write-Error "Failed to clone '$RemoteUrl' (branch main). Verify the remote exists, 'main' is the default branch, and you have read access."
+            return
+        }
+
+        Invoke-Git -Arguments @('checkout', '-b', $branchName) -WorkingDirectory $publishWorkspace
+
+        # Replace tracked content with the prepared snapshot. Use --ignore-unmatch
+        # so an empty index does not fail the run, and clear stragglers from the
+        # working tree so the commit reflects exactly $SourcePath.
+        Invoke-Git -Arguments @('rm', '-rf', '--ignore-unmatch', '--quiet', '.') -WorkingDirectory $publishWorkspace
+        Get-ChildItem -LiteralPath $publishWorkspace -Force |
+            Where-Object { $_.Name -ne '.git' } |
+            Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+
+        Copy-PreparedContent -SourceRoot $SourcePath -CurrentSource $SourcePath -DestinationRoot $publishWorkspace
+        Invoke-Git -Arguments @('add', '-A') -WorkingDirectory $publishWorkspace
+    }
+    else {
+        # Orphan-init flow for DirectPublish and CreateReviewRepo: the published
+        # branch intentionally has no shared history (clean-room snapshot).
+        New-Item -ItemType Directory -Path $publishWorkspace -Force | Out-Null
+        Copy-PreparedContent -SourceRoot $SourcePath -CurrentSource $SourcePath -DestinationRoot $publishWorkspace
+        Invoke-Git -Arguments @('init') -WorkingDirectory $publishWorkspace
+        Invoke-Git -Arguments @('checkout', '-b', 'main') -WorkingDirectory $publishWorkspace
+        Invoke-Git -Arguments @('add', '-A') -WorkingDirectory $publishWorkspace
+    }
+
     $commitMsg = "Publish from $($manifest.sourceRepo)"
     if ($Tag) { $commitMsg += " ($Tag)" }
     $commitMsg += "`n`nContent-Hash: $($manifest.contentHash)"
@@ -467,7 +503,7 @@ try {
             return
         }
 
-        $branchName = if ($PrBranch) { $PrBranch } elseif ($Tag) { "publish/$Tag" } else { 'publish/latest' }
+        # $branchName was set above when the workspace was cloned from main.
 
         if (-not $PSCmdlet.ShouldProcess("$RemoteUrl (branch: $branchName)", 'Push branch and open PR')) {
             Write-Host 'Aborted.'
@@ -486,11 +522,15 @@ try {
             PUBLISH_TAG      = $publishTag
         }
 
+        # The 'public' remote was set up by `git clone --origin public` above.
+        # Reset it defensively in case anything mutated it.
         $existingRemote = Invoke-Git -Arguments @('remote') -WorkingDirectory $publishWorkspace -CaptureOutput
         if ($existingRemote -split "`r?`n" | Where-Object { $_ -eq 'public' }) {
-            Invoke-Git -Arguments @('remote', 'remove', 'public') -WorkingDirectory $publishWorkspace
+            Invoke-Git -Arguments @('remote', 'set-url', 'public', $RemoteUrl) -WorkingDirectory $publishWorkspace
         }
-        Invoke-Git -Arguments @('remote', 'add', 'public', $RemoteUrl) -WorkingDirectory $publishWorkspace
+        else {
+            Invoke-Git -Arguments @('remote', 'add', 'public', $RemoteUrl) -WorkingDirectory $publishWorkspace
+        }
 
         # Push to the PR branch (not main)
         Invoke-Git -Arguments @('push', 'public', "HEAD:refs/heads/$branchName", '--force') `
@@ -507,8 +547,16 @@ try {
 
         $prUrl = & gh pr create --repo $prRepo --base main --head $branchName --title $prTitle --body $prBody 2>&1
         if ($LASTEXITCODE -ne 0) {
-            Write-Warning "Branch pushed but PR creation failed: $prUrl"
-            Write-Host "Create the PR manually at: $normalizedPrUrl/compare/main...$($branchName)?expand=1" -ForegroundColor Yellow
+            Write-Warning "Branch pushed but PR creation via gh failed: $prUrl"
+            # Surface any existing PR for this branch so the operator does not duplicate it.
+            $existingPr = & gh pr list --repo $prRepo --head $branchName --state open --json url,number 2>$null
+            if ($LASTEXITCODE -eq 0 -and $existingPr -and $existingPr -ne '[]') {
+                Write-Host "An open PR already exists for branch '$branchName':" -ForegroundColor Yellow
+                Write-Host $existingPr -ForegroundColor Yellow
+            }
+            else {
+                Write-Host "Create the PR manually at: $normalizedPrUrl/compare/main...$($branchName)?expand=1" -ForegroundColor Yellow
+            }
         }
         else {
             Write-Host ''
