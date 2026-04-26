@@ -101,12 +101,22 @@ function runNpmAuditJson() {
   }
 }
 
-// 1. Dependency audit
+// 1. Dependency audit — only block on high/critical to match the workflow gate
+// (--audit-level=high). Moderate/low advisories are surfaced as info but do
+// not fail the scan; they are tracked separately for follow-up triage.
 console.log('Running security scan...');
 const audit = runNpmAuditJson();
 if (audit) {
-  const total = audit?.metadata?.vulnerabilities?.total ?? 0;
-  if (total > 0) issues.push(`Vulnerabilities found: ${total}`);
+  const vulnMeta = audit?.metadata?.vulnerabilities ?? {};
+  const blocking = (vulnMeta.high ?? 0) + (vulnMeta.critical ?? 0);
+  const moderate = vulnMeta.moderate ?? 0;
+  const low = vulnMeta.low ?? 0;
+  if (blocking > 0) {
+    issues.push(`Vulnerabilities (high/critical) found: ${blocking}`);
+  }
+  if (moderate > 0 || low > 0) {
+    console.log(`Info: ${moderate} moderate, ${low} low advisories present (non-blocking).`);
+  }
 }
 
 // 2. PII pattern scan aligned with pre-commit rules
