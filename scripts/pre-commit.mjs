@@ -215,7 +215,7 @@ for (const file of targets) {
   for (const [index, line] of lines.entries()) {
     const lineNumber = index + 1;
 
-    if (!PII_FILE_ALLOWLIST.has(basename) && !/#\s*pii-allowlist/.test(line)) {
+    if (!PII_FILE_ALLOWLIST.has(basename) && !/(#|\/\/)\s*pii-allowlist/.test(line)) {
       for (const pattern of PII_PATTERNS) {
         for (const match of getRegexMatches(line, pattern.pat)) {
           const value = match[0];

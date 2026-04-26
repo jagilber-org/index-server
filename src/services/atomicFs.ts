@@ -3,6 +3,22 @@ import path from 'path';
 import crypto from 'crypto';
 import { getRuntimeConfig } from '../config/runtimeConfig';
 
+const TRANSIENT_WRITE_CODES = new Set(['EPERM', 'EBUSY', 'EACCES']);
+const TRANSIENT_RENAME_CODES = new Set(['EPERM', 'EBUSY', 'EACCES', 'ENOENT']);
+
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function getBackoffMs(baseBackoff: number, attempt: number): number {
+  return baseBackoff * Math.pow(2, attempt - 1) + Math.floor(Math.random() * baseBackoff);
+}
+
+function isTransientError(error: unknown, codes: Set<string>): boolean {
+  const code = (error as NodeJS.ErrnoException).code;
+  return typeof code === 'string' && codes.has(code);
+}
+
 /**
  * Atomically write JSON to disk with robust retry semantics for shared index scenarios.
  *
@@ -30,19 +46,17 @@ export function atomicWriteJson(filePath: string, obj: unknown){
   const data = JSON.stringify(obj,null,2);
   const atomicConfig = getRuntimeConfig().atomicFs;
   const maxAttempts = Math.max(1, atomicConfig.retries);
-  const baseBackoff = Math.max(1, atomicConfig.backoffMs);
   let lastErr: unknown = null;
   for(let attempt=1; attempt<=maxAttempts; attempt++){
     const tmp = path.join(dir, `.${path.basename(filePath)}.${crypto.randomBytes(6).toString('hex')}.tmp`);
     try {
-      fs.writeFileSync(tmp, data, 'utf8');
+      fs.writeFileSync(tmp, data, 'utf8'); // lgtm[js/http-to-file-access] lgtm[js/insecure-temporary-file] — temp written to destination directory with crypto.randomBytes(6) suffix; not /tmp
       try {
         fs.renameSync(tmp, filePath);
         return; // success
       } catch(renameErr){
         // If rename failed, decide whether to retry
-        const code = (renameErr as NodeJS.ErrnoException).code;
-        const transient = code==='EPERM' || code==='EBUSY' || code==='EACCES' || code==='ENOENT';
+        const transient = isTransientError(renameErr, TRANSIENT_RENAME_CODES);
         if(!transient || attempt===maxAttempts){
           // On final attempt we do NOT fallback to direct write to preserve atomic semantics; propagate.
           lastErr = renameErr;
@@ -51,15 +65,10 @@ export function atomicWriteJson(filePath: string, obj: unknown){
         }
         lastErr = renameErr;
         try { if(fs.existsSync(tmp)) fs.unlinkSync(tmp); } catch { /* ignore */ }
-        // Backoff (exponential + jitter)
-        const sleepMs = baseBackoff * Math.pow(2, attempt-1) + Math.floor(Math.random()*baseBackoff);
-        const start = Date.now();
-        while(Date.now()-start < sleepMs){ /* busy-wait tiny backoff (short durations) */ }
         continue; // retry loop
       }
     } catch(writeErr){
-      const code = (writeErr as NodeJS.ErrnoException).code;
-      const transient = code==='EPERM' || code==='EBUSY' || code==='EACCES';
+      const transient = isTransientError(writeErr, TRANSIENT_WRITE_CODES);
       if(!transient || attempt===maxAttempts){
         lastErr = writeErr;
         try { if(fs.existsSync(tmp)) fs.unlinkSync(tmp); } catch { /* ignore */ }
@@ -67,13 +76,122 @@ export function atomicWriteJson(filePath: string, obj: unknown){
       }
       lastErr = writeErr;
       try { if(fs.existsSync(tmp)) fs.unlinkSync(tmp); } catch { /* ignore */ }
-      const sleepMs = baseBackoff * Math.pow(2, attempt-1) + Math.floor(Math.random()*baseBackoff);
-      const start = Date.now();
-      while(Date.now()-start < sleepMs){ /* busy-wait */ }
       continue;
     }
   }
   // Propagate final error after exhausting attempts
   const err = lastErr instanceof Error? lastErr: new Error('atomicWriteJson failed');
   throw err;
+}
+
+export function atomicCreateJson(filePath: string, obj: unknown){
+  const dir = path.dirname(filePath);
+  if(!fs.existsSync(dir)) fs.mkdirSync(dir,{recursive:true});
+  const data = JSON.stringify(obj,null,2);
+  const atomicConfig = getRuntimeConfig().atomicFs;
+  const maxAttempts = Math.max(1, atomicConfig.retries);
+  let lastErr: unknown = null;
+  for(let attempt=1; attempt<=maxAttempts; attempt++){
+    const tmp = path.join(dir, `.${path.basename(filePath)}.${crypto.randomBytes(6).toString('hex')}.tmp`);
+    try {
+      fs.writeFileSync(tmp, data, 'utf8'); // lgtm[js/http-to-file-access] lgtm[js/insecure-temporary-file] — temp written to destination directory with crypto.randomBytes(6) suffix; not /tmp
+      try {
+        fs.linkSync(tmp, filePath);
+        try { fs.unlinkSync(tmp); } catch { /* ignore */ }
+        return;
+      } catch(linkErr){
+        const code = (linkErr as NodeJS.ErrnoException).code;
+        try { if(fs.existsSync(tmp)) fs.unlinkSync(tmp); } catch { /* ignore */ }
+        if(code==='EEXIST'){
+          lastErr = linkErr;
+          break;
+        }
+        const transient = isTransientError(linkErr, TRANSIENT_RENAME_CODES);
+        if(!transient || attempt===maxAttempts){
+          lastErr = linkErr;
+          break;
+        }
+        lastErr = linkErr;
+        continue;
+      }
+    } catch(writeErr){
+      const transient = isTransientError(writeErr, TRANSIENT_WRITE_CODES);
+      try { if(fs.existsSync(tmp)) fs.unlinkSync(tmp); } catch { /* ignore */ }
+      if(!transient || attempt===maxAttempts){
+        lastErr = writeErr;
+        break;
+      }
+      lastErr = writeErr;
+      continue;
+    }
+  }
+  const err = lastErr instanceof Error? lastErr: new Error('atomicCreateJson failed');
+  throw err;
+}
+
+export async function atomicWriteJsonAsync(filePath: string, obj: unknown): Promise<void> {
+  const dir = path.dirname(filePath);
+  if(!fs.existsSync(dir)) fs.mkdirSync(dir,{recursive:true});
+  const data = JSON.stringify(obj,null,2);
+  const atomicConfig = getRuntimeConfig().atomicFs;
+  const maxAttempts = Math.max(1, atomicConfig.retries);
+  const baseBackoff = Math.max(1, atomicConfig.backoffMs);
+  let lastErr: unknown = null;
+  for(let attempt=1; attempt<=maxAttempts; attempt++){
+    const tmp = path.join(dir, `.${path.basename(filePath)}.${crypto.randomBytes(6).toString('hex')}.tmp`);
+    try {
+      fs.writeFileSync(tmp, data, 'utf8'); // lgtm[js/http-to-file-access] — temp written to destination directory with crypto.randomBytes(6) suffix; not /tmp
+      try {
+        fs.renameSync(tmp, filePath);
+        return;
+      } catch(renameErr){
+        const transient = isTransientError(renameErr, TRANSIENT_RENAME_CODES);
+        lastErr = renameErr;
+        try { if(fs.existsSync(tmp)) fs.unlinkSync(tmp); } catch { /* ignore */ }
+        if(!transient || attempt===maxAttempts) break;
+        await sleep(getBackoffMs(baseBackoff, attempt));
+      }
+    } catch(writeErr){
+      const transient = isTransientError(writeErr, TRANSIENT_WRITE_CODES);
+      lastErr = writeErr;
+      try { if(fs.existsSync(tmp)) fs.unlinkSync(tmp); } catch { /* ignore */ }
+      if(!transient || attempt===maxAttempts) break;
+      await sleep(getBackoffMs(baseBackoff, attempt));
+    }
+  }
+  throw lastErr instanceof Error ? lastErr : new Error('atomicWriteJsonAsync failed');
+}
+
+export async function atomicCreateJsonAsync(filePath: string, obj: unknown): Promise<void> {
+  const dir = path.dirname(filePath);
+  if(!fs.existsSync(dir)) fs.mkdirSync(dir,{recursive:true});
+  const data = JSON.stringify(obj,null,2);
+  const atomicConfig = getRuntimeConfig().atomicFs;
+  const maxAttempts = Math.max(1, atomicConfig.retries);
+  const baseBackoff = Math.max(1, atomicConfig.backoffMs);
+  let lastErr: unknown = null;
+  for(let attempt=1; attempt<=maxAttempts; attempt++){
+    const tmp = path.join(dir, `.${path.basename(filePath)}.${crypto.randomBytes(6).toString('hex')}.tmp`);
+    try {
+      fs.writeFileSync(tmp, data, 'utf8'); // lgtm[js/http-to-file-access] — temp written to destination directory with crypto.randomBytes(6) suffix; not /tmp
+      try {
+        fs.linkSync(tmp, filePath);
+        try { fs.unlinkSync(tmp); } catch { /* ignore */ }
+        return;
+      } catch(linkErr){
+        const code = (linkErr as NodeJS.ErrnoException).code;
+        lastErr = linkErr;
+        try { if(fs.existsSync(tmp)) fs.unlinkSync(tmp); } catch { /* ignore */ }
+        if(code === 'EEXIST') break;
+        if(!isTransientError(linkErr, TRANSIENT_RENAME_CODES) || attempt===maxAttempts) break;
+        await sleep(getBackoffMs(baseBackoff, attempt));
+      }
+    } catch(writeErr){
+      lastErr = writeErr;
+      try { if(fs.existsSync(tmp)) fs.unlinkSync(tmp); } catch { /* ignore */ }
+      if(!isTransientError(writeErr, TRANSIENT_WRITE_CODES) || attempt===maxAttempts) break;
+      await sleep(getBackoffMs(baseBackoff, attempt));
+    }
+  }
+  throw lastErr instanceof Error ? lastErr : new Error('atomicCreateJsonAsync failed');
 }

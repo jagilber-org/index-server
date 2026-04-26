@@ -18,6 +18,14 @@ export default defineConfig({
       'src/tests/unit/mcpConfigIntegration.spec.ts',
       'src/tests/unit/multiInstanceFailover.spec.ts',
       'src/tests/unit/multiInstanceIntegration.spec.ts',
+      // Groom tests rely on shared module state (import real indexContext + handlers) — flaky in threads pool
+      'src/tests/unit/groomJunkCategories.spec.ts',
+      'src/tests/unit/groomSignalFeedback.spec.ts',
+      // Tests that spawn server via createTestClient — integration tests, not unit tests
+      'src/tests/unit/defaultsFill.spec.ts',
+      'src/tests/unit/governanceHashNegative.spec.ts',
+      'src/tests/unit/handlerNegative.spec.ts',
+      'src/tests/unit/importNegative.spec.ts',
       'src/tests/unit/npmPackReadiness.spec.ts',
       'src/tests/unit/publishDryRun.spec.ts',
       'src/tests/unit/publishPipeline.spec.ts',

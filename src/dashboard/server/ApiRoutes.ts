@@ -7,7 +7,7 @@
  */
 
 import express, { Router, Request, Response } from 'express';
-import expressRateLimit from 'express-rate-limit';
+import expressRateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import { getMetricsCollector } from './MetricsCollector.js';
 import { logHttpAudit } from '../../services/auditLog';
 import { getRuntimeConfig } from '../../config/runtimeConfig.js';
@@ -28,8 +28,10 @@ import {
   createScriptsRoutes,
   createMessagingRoutes,
   createSqliteRoutes,
+  createAdminFeedbackRoutes,
 } from './routes/index.js';
 import { ensureLoadedMiddleware } from './middleware/ensureLoadedMiddleware.js';
+import { logError } from '../../services/logger.js';
 
 export interface ApiRoutesOptions {
   enableCors?: boolean;
@@ -42,7 +44,8 @@ export interface ApiRoutesOptions {
 export function createApiRoutes(options: ApiRoutesOptions = {}): Router {
   const router = Router();
   const metricsCollector = getMetricsCollector();
-  const rateLimitOpts = options.rateLimit ?? { windowMs: 60_000, max: 100 };
+  const httpCfg = getRuntimeConfig().dashboard.http;
+  const rateLimitOpts = options.rateLimit ?? { windowMs: httpCfg.rateLimitWindowMs, max: httpCfg.rateLimitMax };
 
   // CORS middleware (if enabled)
   // Security: only allow loopback origins (localhost, 127.0.0.1, [::1]) to prevent
@@ -52,7 +55,7 @@ export function createApiRoutes(options: ApiRoutesOptions = {}): Router {
       const origin = req.headers.origin;
       // nosemgrep: javascript.express.security.cors-misconfiguration.cors-misconfiguration -- origin is validated against loopback-only regex; not user-controlled
       if (origin && /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/.test(origin)) {
-        res.header('Access-Control-Allow-Origin', origin);
+        res.header('Access-Control-Allow-Origin', origin); // lgtm[js/cors-misconfiguration] — origin validated against loopback-only regex above
       }
       res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
       res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
@@ -63,8 +66,9 @@ export function createApiRoutes(options: ApiRoutesOptions = {}): Router {
   // JSON middleware
   router.use(express.json());
 
-  const rateLimitEnabled = getRuntimeConfig().dashboard.http.rateLimitEnabled;
+  const rateLimitEnabled = httpCfg.rateLimitEnabled;
   if (rateLimitEnabled && rateLimitOpts.max > 0 && rateLimitOpts.windowMs > 0) {
+    // Global rate limit for all routes (reads + mutations)
     router.use(expressRateLimit({
       windowMs: rateLimitOpts.windowMs,
       max: rateLimitOpts.max,
@@ -72,13 +76,44 @@ export function createApiRoutes(options: ApiRoutesOptions = {}): Router {
       legacyHeaders: true,
       validate: { ip: false },
       skip: (req: Request) => req.method === 'OPTIONS',
-      keyGenerator: (req: Request) => req.ip || req.socket.remoteAddress || 'unknown',
+      keyGenerator: (req: Request) => {
+        const clientIp = req.ip || req.socket.remoteAddress;
+        return clientIp ? ipKeyGenerator(clientIp) : 'unknown';
+      },
       handler: (_req: Request, res: Response) => {
         const retryAfter = Number(res.getHeader('Retry-After') || Math.ceil(rateLimitOpts.windowMs / 1000));
         res.status(429).json({
           error: 'Too Many Requests',
           message: `Rate limit exceeded. Try again in ${retryAfter} second(s).`,
           retryAfterSeconds: retryAfter,
+          tier: 'global',
+          timestamp: Date.now(),
+        });
+      },
+    }));
+
+    // Stricter rate limit for mutation endpoints (POST/PUT/PATCH/DELETE).
+    // Defaults to runtimeConfig httpCfg.rateLimitMutationMax (env-configurable),
+    // bounded by the global per-window cap so mutation-tier never exceeds global.
+    const mutationMax = Math.max(1, Math.min(httpCfg.rateLimitMutationMax, rateLimitOpts.max));
+    router.use(expressRateLimit({
+      windowMs: rateLimitOpts.windowMs,
+      max: mutationMax,
+      standardHeaders: true,
+      legacyHeaders: false,
+      validate: { ip: false },
+      skip: (req: Request) => req.method === 'OPTIONS' || req.method === 'GET' || req.method === 'HEAD',
+      keyGenerator: (req: Request) => {
+        const clientIp = req.ip || req.socket.remoteAddress;
+        return `mutation:${clientIp ? ipKeyGenerator(clientIp) : 'unknown'}`;
+      },
+      handler: (_req: Request, res: Response) => {
+        const retryAfter = Number(res.getHeader('Retry-After') || Math.ceil(rateLimitOpts.windowMs / 1000));
+        res.status(429).json({
+          error: 'Too Many Requests',
+          message: `Mutation rate limit exceeded. Try again in ${retryAfter} second(s).`,
+          retryAfterSeconds: retryAfter,
+          tier: 'mutation',
           timestamp: Date.now(),
         });
       },
@@ -161,10 +196,11 @@ export function createApiRoutes(options: ApiRoutesOptions = {}): Router {
   router.use(createScriptsRoutes());
   router.use(createMessagingRoutes());
   router.use(createSqliteRoutes());
+  router.use(createAdminFeedbackRoutes());
 
   // Error handling middleware
   router.use((error: Error, _req: Request, res: Response, _next: () => void) => {
-    console.error('[API] Unhandled error:', error);
+    logError('[API] Unhandled error:', error);
     const exposeDetails = getRuntimeConfig().dashboard.http.verboseLogging;
     res.status(500).json({
       error: 'Internal server error',

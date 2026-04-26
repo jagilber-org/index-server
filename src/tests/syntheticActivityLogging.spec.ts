@@ -42,14 +42,14 @@ describe('Dashboard synthetic activity logging', () => {
     proc = spawn(process.execPath, ['dist/server/index-server.js', '--dashboard-port=0', '--dashboard-host=127.0.0.1'], {
       cwd: process.cwd(),
       // INDEX_SERVER_LOG_SYNC forces fsync after each write so log polling becomes deterministic.
-      env: { ...process.env, INDEX_SERVER_LOG_FILE: logFile, INDEX_SERVER_DASHBOARD: '1', INDEX_SERVER_LOG_SYNC: '1' },
+      env: { ...process.env, INDEX_SERVER_LOG_FILE: logFile, INDEX_SERVER_DASHBOARD: '1', INDEX_SERVER_LOG_SYNC: '1', INDEX_SERVER_DISABLE_STDERR_BRIDGE: '1' },
       stdio: 'pipe'
     });
     let stdoutBuf='';
     proc.stdout?.setEncoding('utf8');
-    proc.stdout?.on('data', d=> { stdoutBuf += d.toString(); const m = /Server started on (https?:\/\/[^\s"]+)/.exec(stdoutBuf); if(m) baseUrl = m[1]; });
+    proc.stdout?.on('data', d=> { stdoutBuf += d.toString(); const m = /(?:Server started on|\[startup\] Dashboard URL:)\s+(https?:\/\/[^\s"]+)/.exec(stdoutBuf); if(m) baseUrl = m[1]; });
     proc.stderr?.setEncoding('utf8');
-    proc.stderr?.on('data', d=> { const s = d.toString(); const m = /Server started on (https?:\/\/[^\s"]+)/.exec(s); if(m) baseUrl = m[1]; });
+    proc.stderr?.on('data', d=> { const s = d.toString(); const m = /(?:Server started on|\[startup\] Dashboard URL:)\s+(https?:\/\/[^\s"]+)/.exec(s); if(m) baseUrl = m[1]; });
     proc.once('exit', (code, signal) => { if(!earlyExit) earlyExit = new Error(`server exited early code=${code} signal=${signal}`); });
     proc.once('error', err => { if(!earlyExit) earlyExit = err; });
     // Wait for server URL discovery (stdout indicates readiness)
@@ -95,7 +95,7 @@ describe('Dashboard synthetic activity logging', () => {
     let logSnapshot=''; let pollDelay=120; let found=false;
     while(Date.now() < deadline){
       logSnapshot = fs.existsSync(logFile) ? fs.readFileSync(logFile,'utf8') : '';
-      if(/\[registry\] →/.test(logSnapshot) && /\[registry\] ←/.test(logSnapshot)) { found = true; break; }
+      if(/\[registry\].*(?:→|ΓåÆ|->)/.test(logSnapshot) && /\[registry\].*(?:←|ΓåÉ|<-)/.test(logSnapshot)) { found = true; break; }
       await wait(pollDelay);
       pollDelay = Math.min(Math.floor(pollDelay*1.4)+10, 750);
     }
@@ -112,9 +112,9 @@ describe('Dashboard synthetic activity logging', () => {
         logSnapshot += `\n\n[metrics-endpoint-snippet]\n${metricsData.slice(0,500)}`;
       } catch { /* ignore metrics fetch errors */ }
     }
-  const startMatches = (logSnapshot.match(/\[registry\] →/g) || []).length;
-  const endMatches = (logSnapshot.match(/\[registry\] ←/g) || []).length;
-  expect(startMatches, `[registry] → not found in log tail:\n${logSnapshot.slice(-600)}`).toBeGreaterThan(0);
-  expect(endMatches, `[registry] ← not found in log tail:\n${logSnapshot.slice(-600)}`).toBeGreaterThan(0);
+  const startMatches = (logSnapshot.match(/\[registry\].*(?:→|ΓåÆ|->)/g) || []).length;
+  const endMatches = (logSnapshot.match(/\[registry\].*(?:←|ΓåÉ|<-)/g) || []).length;
+  expect(startMatches, `[registry] start not found in log tail:\n${logSnapshot.slice(-600)}`).toBeGreaterThan(0);
+  expect(endMatches, `[registry] end not found in log tail:\n${logSnapshot.slice(-600)}`).toBeGreaterThan(0);
   }, Math.max(45000, READY_TIMEOUT_MS + POLL_DEADLINE_MS + 8000));
 });

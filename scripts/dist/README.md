@@ -1,6 +1,6 @@
 # scripts/dist/
 
-User-facing utility scripts bundled into the VSIX extension package.
+User-facing utility scripts bundled into distributable runtime packages.
 
 These are copied from `scripts/` during the build. Edit the originals in `scripts/`, not here.
 

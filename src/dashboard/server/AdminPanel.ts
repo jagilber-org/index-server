@@ -19,6 +19,7 @@ import type { AdminConfig } from './AdminPanelConfig';
 import { AdminPanelState } from './AdminPanelState';
 import type { AdminSession, AdminSessionHistoryEntry } from './AdminPanelState';
 import { createZipBackupWithManifest, extractZipBackup, readZipManifest, listZipInstructionFiles, isZipBackup } from '../../services/backupZip';
+import { logAudit } from '../../services/auditLog';
 import AdmZip from 'adm-zip';
 
 // Re-export for consumers that import these types from AdminPanel
@@ -215,17 +216,19 @@ export class AdminPanel {
       process.stderr.write(`[admin] System backup completed: ${backupId}.zip (${fileCount} files)\n`);
       return { success: true, message: 'System backup completed successfully', backupId, files: fileCount };
     } catch (error) {
+      const errMsg = error instanceof Error ? error.message : String(error);
+      logAudit('admin/backup/perform_failed', undefined, { error: errMsg }, 'mutation');
       return {
         success: false,
-        message: `Backup failed: ${error instanceof Error ? error.message : String(error)}`
+        message: `Backup failed: ${errMsg}`
       };
     }
   }
 
-  listBackups(): { id: string; createdAt: string; instructionCount: number; schemaVersion?: string; sizeBytes: number }[] {
+  listBackups(): { id: string; createdAt: string; instructionCount: number; schemaVersion?: string; sizeBytes: number; warnings?: string[] }[] {
     const backupRoot = this.backupRoot;
     if (!fs.existsSync(backupRoot)) return [];
-    const results: { id: string; createdAt: string; instructionCount: number; schemaVersion?: string; sizeBytes: number }[] = [];
+    const results: { id: string; createdAt: string; instructionCount: number; schemaVersion?: string; sizeBytes: number; warnings?: string[] }[] = [];
     for (const entry of fs.readdirSync(backupRoot)) {
       const full = path.join(backupRoot, entry);
       try {
@@ -253,22 +256,36 @@ export class AdminPanel {
           let createdAt = new Date(stat.mtime).toISOString();
           let instructionCount = 0;
           let schemaVersion: string | undefined;
+          const entryWarnings: string[] = [];
           if (fs.existsSync(manifestPath)) {
             try {
               const mf = JSON.parse(fs.readFileSync(manifestPath, 'utf-8'));
               createdAt = mf.createdAt || createdAt;
               instructionCount = mf.instructionCount || 0;
               schemaVersion = mf.schemaVersion;
-            } catch {/* ignore */}
+            } catch (err) {
+              const errMsg = err instanceof Error ? err.message : String(err);
+              const msg = `Failed to parse manifest for backup '${entry}': ${errMsg}`;
+              process.stderr.write(`[admin] ${msg}\n`);
+              entryWarnings.push(msg);
+              logAudit('admin/backup/list_warning', [entry], { error: errMsg, phase: 'manifest_parse' }, 'read');
+            }
           } else {
             instructionCount = fs.readdirSync(full).filter(f => f.toLowerCase().endsWith('.json')).length;
           }
           const sizeBytes = fs.readdirSync(full).reduce((sum, f) => {
             try { return sum + fs.statSync(path.join(full, f)).size; } catch { return sum; }
           }, 0);
-          results.push({ id: entry, createdAt, instructionCount, schemaVersion, sizeBytes });
+          const result: { id: string; createdAt: string; instructionCount: number; schemaVersion?: string; sizeBytes: number; warnings?: string[] } = { id: entry, createdAt, instructionCount, schemaVersion, sizeBytes };
+          if (entryWarnings.length > 0) result.warnings = entryWarnings;
+          results.push(result);
         }
-      } catch {/* ignore individual entry errors */}
+      } catch (err) {
+        const errMsg = err instanceof Error ? err.message : String(err);
+        const msg = `Failed to read backup entry '${entry}': ${errMsg}`;
+        process.stderr.write(`[admin] ${msg}\n`);
+        logAudit('admin/backup/list_warning', [entry], { error: errMsg, phase: 'read_entry' }, 'read');
+      }
     }
     results.sort((a,b) => b.createdAt.localeCompare(a.createdAt));
     return results;
@@ -282,7 +299,11 @@ export class AdminPanel {
       const backupDir = path.join(backupRoot, safeId);
       const isZip = fs.existsSync(zipPath);
       const isDir = fs.existsSync(backupDir) && fs.statSync(backupDir).isDirectory();
-      if (!isZip && !isDir) return { success: false, message: `Backup not found: ${safeId}` };
+      if (!isZip && !isDir) {
+        const msg = `Backup not found: ${safeId}`;
+        logAudit('admin/backup/restore_failed', [safeId], { error: msg }, 'mutation');
+        return { success: false, message: msg };
+      }
 
       const instructionsDir = this.instructionsRoot;
       if (!fs.existsSync(instructionsDir)) fs.mkdirSync(instructionsDir, { recursive: true });
@@ -319,7 +340,9 @@ export class AdminPanel {
       process.stderr.write(`[admin] Restored backup ${safeId} (${restored} instruction files)\n`);
       return { success: true, message: `Backup ${safeId} restored`, restored };
     } catch (error) {
-      return { success: false, message: `Restore failed: ${error instanceof Error ? error.message : String(error)}` };
+      const errMsg = error instanceof Error ? error.message : String(error);
+      logAudit('admin/backup/restore_failed', backupId ? [String(backupId)] : undefined, { error: errMsg }, 'mutation');
+      return { success: false, message: `Restore failed: ${errMsg}` };
     }
   }
 
@@ -333,25 +356,38 @@ export class AdminPanel {
       const dirPath = path.join(backupRoot, safeId);
       const hasZip = fs.existsSync(zipPath);
       const hasDir = fs.existsSync(dirPath) && fs.statSync(dirPath).isDirectory();
-      if (!hasZip && !hasDir) return { success: false, message: `Backup not found: ${safeId}` };
+      if (!hasZip && !hasDir) {
+        const msg = `Backup not found: ${safeId}`;
+        logAudit('admin/backup/delete_failed', [safeId], { error: msg }, 'mutation');
+        return { success: false, message: msg };
+      }
       if (!/^backup_|^instructions-|^pre_restore_|^auto-backup-/.test(safeId)) {
-        return { success: false, message: 'Refusing to delete unexpected backup name' };
+        const msg = 'Refusing to delete unexpected backup name';
+        logAudit('admin/backup/delete_failed', [safeId], { error: msg }, 'mutation');
+        return { success: false, message: msg };
       }
       if (hasZip) fs.unlinkSync(zipPath);
       if (hasDir) fs.rmSync(dirPath, { recursive: true, force: true });
       process.stderr.write(`[admin] Deleted backup ${safeId}\n`);
       return { success: true, message: `Backup ${safeId} deleted`, removed: true };
     } catch (error) {
-      return { success: false, message: `Delete failed: ${error instanceof Error ? error.message : String(error)}` };
+      const errMsg = error instanceof Error ? error.message : String(error);
+      logAudit('admin/backup/delete_failed', backupId ? [String(backupId)] : undefined, { error: errMsg }, 'mutation');
+      return { success: false, message: `Delete failed: ${errMsg}` };
     }
   }
 
   /** Prune backups keeping newest N (by createdAt / mtime). Returns count pruned. */
-  pruneBackups(retain: number): { success: boolean; message: string; pruned?: number } {
+  pruneBackups(retain: number): { success: boolean; message: string; pruned?: number; errors?: string[] } {
     try {
-      if (retain < 0) return { success: false, message: 'retain must be >= 0' };
+      if (retain < 0) {
+        const msg = 'retain must be >= 0';
+        logAudit('admin/backup/prune_failed', undefined, { error: msg, retain }, 'mutation');
+        return { success: false, message: msg };
+      }
       const backupRoot = this.backupRoot;
       if (!fs.existsSync(backupRoot)) return { success: true, message: 'No backups to prune', pruned: 0 };
+      const pruneErrors: string[] = [];
       const entries = fs.readdirSync(backupRoot)
         .map(name => {
           const full = path.join(backupRoot, name);
@@ -378,10 +414,21 @@ export class AdminPanel {
             if (d.name.endsWith('.zip')) fs.unlinkSync(d.full);
             else fs.rmSync(d.full, { recursive: true, force: true });
             prunedAll++;
-          } catch { /* ignore */ }
+          } catch (err) {
+            const errMsg = err instanceof Error ? err.message : String(err);
+            const msg = `Failed to delete backup '${d.id}': ${errMsg}`;
+            process.stderr.write(`[admin] ${msg}\n`);
+            pruneErrors.push(msg);
+            logAudit('admin/backup/prune_warning', [d.id], { error: errMsg, phase: 'delete_all' }, 'mutation');
+          }
         }
         process.stderr.write(`[admin] Pruned all backups (${prunedAll})\n`);
-        return { success: true, message: `Pruned ${prunedAll} backups`, pruned: prunedAll };
+        const result: { success: boolean; message: string; pruned: number; errors?: string[] } = { success: true, message: `Pruned ${prunedAll} backups`, pruned: prunedAll };
+        if (pruneErrors.length > 0) {
+          result.message += ` (${pruneErrors.length} error(s))`;
+          result.errors = pruneErrors;
+        }
+        return result;
       }
       const toDelete = entries.slice(retain);
       let pruned = 0;
@@ -390,17 +437,30 @@ export class AdminPanel {
           if (d.name.endsWith('.zip')) fs.unlinkSync(d.full);
           else fs.rmSync(d.full, { recursive: true, force: true });
           pruned++;
-        } catch { /* ignore */ }
+        } catch (err) {
+          const errMsg = err instanceof Error ? err.message : String(err);
+          const msg = `Failed to delete backup '${d.id}': ${errMsg}`;
+          process.stderr.write(`[admin] ${msg}\n`);
+          pruneErrors.push(msg);
+          logAudit('admin/backup/prune_warning', [d.id], { error: errMsg, phase: 'delete_retain' }, 'mutation');
+        }
       }
       process.stderr.write(`[admin] Pruned ${pruned} backup(s); retained ${entries.length - pruned}\n`);
-      return { success: true, message: `Pruned ${pruned} backups (retained ${entries.length - pruned})`, pruned };
+      const result: { success: boolean; message: string; pruned: number; errors?: string[] } = { success: true, message: `Pruned ${pruned} backups (retained ${entries.length - pruned})`, pruned };
+      if (pruneErrors.length > 0) {
+        result.message += ` (${pruneErrors.length} error(s))`;
+        result.errors = pruneErrors;
+      }
+      return result;
     } catch (error) {
-      return { success: false, message: `Prune failed: ${error instanceof Error ? error.message : String(error)}` };
+      const errMsg = error instanceof Error ? error.message : String(error);
+      logAudit('admin/backup/prune_failed', undefined, { error: errMsg, retain }, 'mutation');
+      return { success: false, message: `Prune failed: ${errMsg}` };
     }
   }
 
   /** Export a backup — returns the zip file path for streaming, or falls back to JSON bundle for legacy dirs */
-  exportBackup(backupId: string): { success: boolean; message: string; zipPath?: string; bundle?: { manifest: Record<string, unknown>; files: Record<string, unknown> } } {
+  exportBackup(backupId: string): { success: boolean; message: string; zipPath?: string; bundle?: { manifest: Record<string, unknown>; files: Record<string, unknown> }; warnings?: string[] } {
     try {
       const safeId = this.validateBackupId(backupId);
       const zipPath = path.join(this.backupRoot, `${safeId}.zip`);
@@ -409,21 +469,45 @@ export class AdminPanel {
       }
       // Legacy directory fallback
       const backupDir = path.join(this.backupRoot, safeId);
-      if (!fs.existsSync(backupDir) || !fs.statSync(backupDir).isDirectory()) return { success: false, message: `Backup not found: ${safeId}` };
+      if (!fs.existsSync(backupDir) || !fs.statSync(backupDir).isDirectory()) {
+        const msg = `Backup not found: ${safeId}`;
+        logAudit('admin/backup/export_failed', [safeId], { error: msg }, 'read');
+        return { success: false, message: msg };
+      }
       let manifest: Record<string, unknown> = {};
+      const exportWarnings: string[] = [];
       const manifestPath = path.join(backupDir, 'manifest.json');
       if (fs.existsSync(manifestPath)) {
-        try { manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf-8')); } catch { /* ignore */ }
+        try { manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf-8')); } catch (err) {
+          const errMsg = err instanceof Error ? err.message : String(err);
+          const msg = `Failed to parse manifest.json for backup '${safeId}': ${errMsg}`;
+          process.stderr.write(`[admin] ${msg}\n`);
+          exportWarnings.push(msg);
+          logAudit('admin/backup/export_warning', [safeId], { error: errMsg, phase: 'manifest_parse' }, 'read');
+        }
       }
       const files: Record<string, unknown> = {};
       for (const f of fs.readdirSync(backupDir)) {
         if (f.toLowerCase().endsWith('.json') && f !== 'manifest.json') {
-          try { files[f] = JSON.parse(fs.readFileSync(path.join(backupDir, f), 'utf-8')); } catch { /* skip corrupt */ }
+          try { files[f] = JSON.parse(fs.readFileSync(path.join(backupDir, f), 'utf-8')); } catch (err) {
+            const errMsg = err instanceof Error ? err.message : String(err);
+            const msg = `Skipped corrupt file '${f}' in backup '${safeId}': ${errMsg}`;
+            process.stderr.write(`[admin] ${msg}\n`);
+            exportWarnings.push(msg);
+            logAudit('admin/backup/export_warning', [safeId], { error: errMsg, phase: 'file_parse', file: f }, 'read');
+          }
         }
       }
-      return { success: true, message: 'Export ready', bundle: { manifest, files } };
+      const result: { success: boolean; message: string; bundle: { manifest: Record<string, unknown>; files: Record<string, unknown> }; warnings?: string[] } = { success: true, message: 'Export ready', bundle: { manifest, files } };
+      if (exportWarnings.length > 0) {
+        result.warnings = exportWarnings;
+        result.message = `Export ready (${exportWarnings.length} warning(s))`;
+      }
+      return result;
     } catch (error) {
-      return { success: false, message: `Export failed: ${error instanceof Error ? error.message : String(error)}` };
+      const errMsg = error instanceof Error ? error.message : String(error);
+      logAudit('admin/backup/export_failed', backupId ? [String(backupId)] : undefined, { error: errMsg }, 'read');
+      return { success: false, message: `Export failed: ${errMsg}` };
     }
   }
 
@@ -431,7 +515,9 @@ export class AdminPanel {
   importBackup(bundle: { manifest?: Record<string, unknown>; files?: Record<string, unknown> }): { success: boolean; message: string; backupId?: string; files?: number } {
     try {
       if (!bundle || typeof bundle !== 'object' || !bundle.files || typeof bundle.files !== 'object') {
-        return { success: false, message: 'Invalid bundle: must contain a "files" object' };
+        const msg = 'Invalid bundle: must contain a "files" object';
+        logAudit('admin/backup/import_failed', undefined, { error: msg }, 'mutation');
+        return { success: false, message: msg };
       }
       const now = new Date();
       const baseTs = now.toISOString().replace(/[-:]/g, '').replace(/\..+/, '');
@@ -462,7 +548,9 @@ export class AdminPanel {
       process.stderr.write(`[admin] Imported backup from file: ${backupId}.zip (${written} files)\n`);
       return { success: true, message: `Imported ${written} files as ${backupId}`, backupId, files: written };
     } catch (error) {
-      return { success: false, message: `Import failed: ${error instanceof Error ? error.message : String(error)}` };
+      const errMsg = error instanceof Error ? error.message : String(error);
+      logAudit('admin/backup/import_failed', undefined, { error: errMsg, mode: 'json' }, 'mutation');
+      return { success: false, message: `Import failed: ${errMsg}` };
     }
   }
 
@@ -470,7 +558,9 @@ export class AdminPanel {
   importZipBackup(zipBuffer: Buffer, sourceName?: string): { success: boolean; message: string; backupId?: string; files?: number } {
     try {
       if (!Buffer.isBuffer(zipBuffer) || zipBuffer.length === 0) {
-        return { success: false, message: 'Invalid zip backup: upload was empty' };
+        const msg = 'Invalid zip backup: upload was empty';
+        logAudit('admin/backup/import_failed', undefined, { error: msg, mode: 'zip' }, 'mutation');
+        return { success: false, message: msg };
       }
 
       const zip = new AdmZip(zipBuffer);
@@ -479,7 +569,9 @@ export class AdminPanel {
         .filter(name => name.toLowerCase().endsWith('.json') && name === path.basename(name) && name !== 'manifest.json');
 
       if (!instructionFiles.length) {
-        return { success: false, message: 'Invalid zip backup: contains no instruction files' };
+        const msg = 'Invalid zip backup: contains no instruction files';
+        logAudit('admin/backup/import_failed', undefined, { error: msg, mode: 'zip' }, 'mutation');
+        return { success: false, message: msg };
       }
 
       const now = new Date();
@@ -489,7 +581,7 @@ export class AdminPanel {
       const zipPath = path.join(this.backupRoot, `${backupId}.zip`);
       if (!fs.existsSync(this.backupRoot)) fs.mkdirSync(this.backupRoot, { recursive: true });
 
-      fs.writeFileSync(zipPath, zipBuffer);
+      fs.writeFileSync(zipPath, zipBuffer); // lgtm[js/http-to-file-access] — zipPath is generated under controlled backupRoot; admin endpoint behind dashboardAdminAuth
 
       const safeSourceName = sourceName ? path.basename(sourceName) : undefined;
       process.stderr.write(
@@ -497,7 +589,9 @@ export class AdminPanel {
       );
       return { success: true, message: `Imported ${instructionFiles.length} files as ${backupId}`, backupId, files: instructionFiles.length };
     } catch (error) {
-      return { success: false, message: `Import failed: ${error instanceof Error ? error.message : String(error)}` };
+      const errMsg = error instanceof Error ? error.message : String(error);
+      logAudit('admin/backup/import_failed', undefined, { error: errMsg, mode: 'zip' }, 'mutation');
+      return { success: false, message: `Import failed: ${errMsg}` };
     }
   }
 
@@ -636,8 +730,8 @@ export class AdminPanel {
         scanned = st.loadDebug?.scanned ?? accepted;
         skipped = Math.max(0, scanned - accepted);
       }
-    } catch {
-      /* ignore */
+    } catch (err) {
+      process.stderr.write(`[admin] getAdminStats: failed to read index state: ${err instanceof Error ? err.message : String(err)}\n`);
     }
 
     // Count instructions from the store (raw count uses store, with disk fallback for transparency)
@@ -651,7 +745,9 @@ export class AdminPanel {
         if (fs.existsSync(indexDir)) {
           rawFileCount = fs.readdirSync(indexDir).filter(f => f.toLowerCase().endsWith('.json')).length;
         }
-      } catch { /* ignore */ }
+      } catch (err) {
+        process.stderr.write(`[admin] getAdminStats: failed to count instruction files on disk: ${err instanceof Error ? err.message : String(err)}\n`);
+      }
     }
 
     // Recompute schema version snapshot only when any of these counts change
@@ -673,10 +769,14 @@ export class AdminPanel {
                 const raw = fs.readFileSync(path.join(indexDir, f), 'utf-8');
                 const json = JSON.parse(raw);
                 if (typeof json.schemaVersion === 'string') schemaVersions.add(json.schemaVersion);
-              } catch { /* ignore parse */ }
+              } catch (err) {
+                process.stderr.write(`[admin] getAdminStats: failed to parse schema version from '${f}': ${err instanceof Error ? err.message : String(err)}\n`);
+              }
             }
           }
-        } catch { /* ignore */ }
+        } catch (err) {
+          process.stderr.write(`[admin] getAdminStats: failed to read instruction files for schema version: ${err instanceof Error ? err.message : String(err)}\n`);
+        }
       }
       const schemaVersion = schemaVersions.size === 0 ? 'unknown' : (schemaVersions.size === 1 ? Array.from(schemaVersions)[0] : `mixed(${Array.from(schemaVersions).join(',')})`);
       this.indexStatsCache = {

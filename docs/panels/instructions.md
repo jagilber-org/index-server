@@ -27,7 +27,7 @@ Each instruction entry displays:
 
 - **View** — expand to see the full instruction body
 - **Edit** — open the instruction editor with current values
-- **Delete** — remove the instruction (requires `INDEX_SERVER_MUTATION=1`)
+- **Delete** — remove the instruction (disabled only when `INDEX_SERVER_MUTATION=0`)
 
 ### Creating Instructions
 
@@ -60,4 +60,4 @@ The instructions panel uses these MCP tools:
 
 ---
 
-**Note:** Write operations require `INDEX_SERVER_MUTATION=1` to be set in the server environment.
+**Note:** Write operations are enabled by default. Set `INDEX_SERVER_MUTATION=0` in the server environment when you want an explicit read-only runtime.

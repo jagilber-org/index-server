@@ -6,6 +6,7 @@
  */
 
 import type { EndpointManager, APIAuthentication, RetryConfig, DataMapping } from './api.instructions.routes.js';
+import { logError, logWarn } from '../../../services/logger.js';
 
 // ── Type exports ─────────────────────────────────────────────────────────────────────
 
@@ -74,7 +75,7 @@ export class UsageManager {
       try {
         request.body = this.applySafeTransform(data, endpoint.dataMapping.requestTransform);
       } catch (error) {
-        console.error('Request transform error:', error);
+        logError('Request transform error:', error);
       }
     }
 
@@ -95,7 +96,7 @@ export class UsageManager {
       try {
         response.body = this.applySafeTransform(response.body, endpoint.dataMapping.responseTransform);
       } catch (error) {
-        console.error('Response transform error:', error);
+        logError('Response transform error:', error);
       }
     }
 
@@ -106,7 +107,7 @@ export class UsageManager {
     if (endpoint.validation.validateResponse && endpoint.validation.responseSchema) {
       const valid = this.validateData(response.body, endpoint.validation.responseSchema);
       if (!valid && endpoint.validation.strictMode) {
-        console.warn('Response validation failed for endpoint:', endpointId);
+        logWarn('Response validation failed for endpoint:', endpointId);
       }
     }
 
@@ -262,7 +263,7 @@ export class UsageManager {
         break;
       }
       case 'oauth2':
-        console.warn('OAuth2 authentication not fully implemented');
+        logWarn('OAuth2 authentication not fully implemented');
         break;
       case 'custom': {
         const customHeaders = auth.config.headers as Record<string, string>;
@@ -332,7 +333,7 @@ export class UsageManager {
         try {
           targetValue = this.applySafeFieldTransform(sourceValue, mapping.transform);
         } catch (error) {
-          console.error('Field mapping transform error:', error);
+          logError('Field mapping transform error:', error);
         }
       }
       this.setNestedValue(result, mapping.target, targetValue);
@@ -380,7 +381,7 @@ export class UsageManager {
       try {
         callback(event);
       } catch (error) {
-        console.error('API monitoring callback error:', error);
+        logError('API monitoring callback error:', error);
       }
     });
   }
@@ -401,7 +402,7 @@ export class UsageManager {
             headers: request.headers,
             timeout: request.timeout
           }).catch(error => {
-            console.error('Queued request execution error:', error);
+            logError('Queued request execution error:', error);
           });
         }
       }

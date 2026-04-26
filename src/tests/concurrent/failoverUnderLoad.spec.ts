@@ -113,6 +113,7 @@ describe('Failover Under Load', { timeout: 120_000 }, () => {
 		}
 		Object.assign(mergedEnv, {
 			INDEX_SERVER_DASHBOARD: '1',
+			INDEX_SERVER_DISABLE_STDERR_BRIDGE: '1',
 			INDEX_SERVER_MODE: 'auto',
 			INDEX_SERVER_LEADER_PORT: '0',
 			INDEX_SERVER_STATE_DIR: ctx.stateDir,
@@ -138,7 +139,7 @@ describe('Failover Under Load', { timeout: 120_000 }, () => {
 
 		// Wait for new leader's URL
 		let newDashUrl = '';
-		const pat = /Server started on (https?:\/\/[^\s"]+)/;
+		const pat = /(?:Server started on|\[startup\] Dashboard URL:)\s+(https?:\/\/[^\s"]+)/;
 		newProc.stdout!.setEncoding('utf8');
 		newProc.stderr!.setEncoding('utf8');
 		const capture = (data: string) => {

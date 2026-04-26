@@ -10,19 +10,13 @@ export interface InitFrameSummary {
   events: InitFrameEvent[];
   stages: Set<string>;
   hasHandlerReturn: boolean;
-  hasTransportDetect: boolean;
-  hasTransportResolved: boolean;
-  hasDispatcherBefore: boolean;
-  hasDispatcherResolved: boolean;
-  flushStageObserved: boolean; // dispatcher_send_resolved or transport_send_resolved
+  hasReadyScheduled: boolean;
+  completionStageObserved: boolean;
 }
 
 export const ALL_KNOWN_INIT_STAGES = [
   'handler_return',
-  'dispatcher_before_send',
-  'dispatcher_send_resolved',
-  'transport_detect_init_result',
-  'transport_send_resolved'
+  'ready_emit_scheduled'
 ];
 
 /** Parse stderr lines and extract init-frame JSON payloads */
@@ -43,12 +37,9 @@ export function parseInitFrameLines(lines: string[]): InitFrameEvent[] {
 export function summarizeInitFrames(events: InitFrameEvent[]): InitFrameSummary {
   const stages = new Set(events.map(e=> e.stage));
   const hasHandlerReturn = stages.has('handler_return');
-  const hasTransportDetect = stages.has('transport_detect_init_result');
-  const hasTransportResolved = stages.has('transport_send_resolved');
-  const hasDispatcherBefore = stages.has('dispatcher_before_send');
-  const hasDispatcherResolved = stages.has('dispatcher_send_resolved');
-  const flushStageObserved = hasDispatcherResolved || hasTransportResolved;
-  return { events, stages, hasHandlerReturn, hasTransportDetect, hasTransportResolved, hasDispatcherBefore, hasDispatcherResolved, flushStageObserved };
+  const hasReadyScheduled = stages.has('ready_emit_scheduled');
+  const completionStageObserved = hasReadyScheduled;
+  return { events, stages, hasHandlerReturn, hasReadyScheduled, completionStageObserved };
 }
 
 /**
@@ -58,9 +49,7 @@ export function summarizeInitFrames(events: InitFrameEvent[]): InitFrameSummary 
 export function validateInitFrameSequence(summary: InitFrameSummary): string[] {
   const issues: string[] = [];
   if(!summary.hasHandlerReturn) issues.push('missing handler_return');
-  if(!summary.flushStageObserved) issues.push('no flush stage observed (dispatcher_send_resolved or transport_send_resolved)');
-  if(!summary.hasTransportDetect) issues.push('missing transport_detect_init_result (dynamic path not exercised?)');
-  if(!summary.hasTransportResolved) issues.push('missing transport_send_resolved');
+  if(!summary.completionStageObserved) issues.push('missing ready_emit_scheduled');
   return issues;
 }
 

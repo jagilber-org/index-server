@@ -5,7 +5,7 @@
  * onboarding guidance so a naive / first-time agent can self-bootstrap:
  * - Discover tools & their purpose
  * - Understand local (P0) vs indexed (P1+) lifecycle & promotion workflow
- * - Learn safe mutation enabling pattern (INDEX_SERVER_MUTATION)
+ * - Learn safe mutation override pattern (INDEX_SERVER_MUTATION)
  * - Follow a deterministic promotion checklist
  * - Avoid governance/spec recursion (documents intentionally NOT ingested)
  */
@@ -68,7 +68,7 @@ function buildSections(): OverviewSection[] {
     {
       id: 'mutation-safety',
       title: 'Safe Mutation',
-      content: 'All write operations require INDEX_SERVER_MUTATION=1. Without it, mutation tools return disabled errors ensuring read-only safety by default.'
+      content: 'Write operations are enabled by default, but bootstrap confirmation and reference mode still gate risky changes. Set INDEX_SERVER_MUTATION=0 when you need an explicit read-only runtime.'
     },
     {
       id: 'recursion-safeguards',

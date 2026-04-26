@@ -9,6 +9,7 @@
 import { Router, Request, Response } from 'express';
 import { readFile } from 'fs/promises';
 import path from 'path';
+import { validatePathContainment } from '../utils/pathContainment.js';
 
 /** Allowed script files with metadata */
 const AVAILABLE_SCRIPTS: Record<string, { file: string; contentType: string; description: string }> = {
@@ -60,9 +61,10 @@ export function createScriptsRoutes(): Router {
       const scriptsDir = path.join(process.cwd(), 'scripts');
       const filePath = path.join(scriptsDir, meta.file); // nosemgrep: javascript.express.security.audit.express-path-join-resolve-traversal.express-path-join-resolve-traversal -- path validated below via startsWith check
 
-      // Verify resolved path is within scripts directory (defense in depth)
-      const resolved = path.resolve(filePath); // nosemgrep: javascript.express.security.audit.express-path-join-resolve-traversal.express-path-join-resolve-traversal -- resolved path checked against scriptsDir on next line
-      if (!resolved.startsWith(path.resolve(scriptsDir))) {
+      let resolved: string;
+      try {
+        resolved = validatePathContainment(path.resolve(filePath), scriptsDir); // nosemgrep: javascript.express.security.audit.express-path-join-resolve-traversal.express-path-join-resolve-traversal -- containment validated by shared helper
+      } catch {
         res.status(400).json({ error: 'Invalid script path' });
         return;
       }

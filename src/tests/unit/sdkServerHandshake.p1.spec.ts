@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseInitFrameLines, summarizeInitFrames, validateInitFrameSequence, formatSummary } from '../util/handshakeDiag';
+import { parseInitFrameLines, summarizeInitFrames, validateInitFrameSequence } from '../util/handshakeDiag';
 import { spawn } from 'child_process';
 import path from 'path';
 import fs from 'fs';
@@ -7,7 +7,7 @@ import fs from 'fs';
 // P1 coverage: exercise dynamic startSdkServer path in sdkServer.ts including:
 // - dynamic ESM imports
 // - initialize handler ordering guarantees (__initResponseSent gate)
-// - transport send hook (reason=transport-send-hook-dynamic)
+// - initialize handler scheduled ready emission
 // - emitReadyGlobal ordering (initialize result precedes server/ready notification)
 // - tools/list basic functionality post-ready
 
@@ -21,7 +21,12 @@ describe('sdkServer handshake harness (P1)', () => {
     const launchCode = `const mod=require(${JSON.stringify(distServer)});(async()=>{if(mod&&typeof mod.startSdkServer==='function'){await mod.startSdkServer();}})();`;
     const child = spawn(process.execPath, ['-e', launchCode], {
       stdio: ['pipe','pipe','pipe'],
-      env: { ...process.env, INDEX_SERVER_INIT_FEATURES: 'initFallback', INDEX_SERVER_TRACE: 'healthMixed,initFrame' }
+      env: {
+        ...process.env,
+        INDEX_SERVER_DISABLE_STDERR_BRIDGE: '1',
+        INDEX_SERVER_INIT_FEATURES: 'initFallback',
+        INDEX_SERVER_TRACE: 'initFrame'
+      }
     });
 
     interface Frame { jsonrpc?:string; id?:number; method?:string; result?:any; error?:any; params?:any }
@@ -84,7 +89,6 @@ describe('sdkServer handshake harness (P1)', () => {
         if(!started) await wait(25);
       }
       if(!started){
-        // eslint-disable-next-line no-console
         console.warn('[sdkServerHandshake.p1] startup sentinel not observed within 1s; proceeding');
       }
       // Minimal MCP framing: single Content-Length header, double CRLF, payload, trailing CRLF.
@@ -115,7 +119,6 @@ describe('sdkServer handshake harness (P1)', () => {
     }
     if(initIndex===-1){
   // Provide richer diagnostics then fail (we want true coverage of initialize path, not soft pass here anymore)
-  // eslint-disable-next-line no-console
   console.error('[sdkServerHandshake.p1] initialize result NOT observed. Raw stdout chunks count=', rawChunks.length, 'stderr first lines=', stderrLines.slice(0,8));
   // Attempt a late flush request (ping) to see if transport responds at all
   try { sendCL({ jsonrpc:'2.0', id:999, method:'ping', params:{} }); } catch { /* ignore */ }
@@ -141,7 +144,6 @@ describe('sdkServer handshake harness (P1)', () => {
 
     // Ordering: initialize SHOULD precede ready. If inversion occurs, record diagnostic but don't fail (covered strictly elsewhere).
     if(!(initIndex < readyIndex)){
-      // eslint-disable-next-line no-console
       console.warn('[sdkServerHandshake.p1] Ordering inversion observed (non-fatal for P1):', { initIndex, readyIndex });
     }
 
@@ -153,47 +155,29 @@ describe('sdkServer handshake harness (P1)', () => {
   // Assert exactly one ready notification (idempotent emission guarantee)
   expect(frames.filter(f=> f.method==='server/ready').length).toBe(1);
 
-  // Stderr should include ready emission reason for dynamic hook
-  const readyEmitLine = stderrLines.find(l=> /\[ready\] emit/.test(l));
+    // Stderr should include ready emission reason from the initialize handler path
+    const readyEmitLine = stderrLines.find(l=> /\[ready\] emit/.test(l));
     expect(readyEmitLine).toBeTruthy();
-    // Accept either transport-send-hook or transport-send-hook-dynamic depending on path taken
     if(readyEmitLine){
-      expect(/transport-send-hook/.test(readyEmitLine)).toBe(true);
+      expect(/initialize-handler/.test(readyEmitLine)).toBe(true);
     }
 
     // ---------------------------------------------------------------------
     // Initialize frame instrumentation validation (env gated)
     // We enabled INDEX_SERVER_TRACE=initFrame so stderr should contain ordered
     // [init-frame] JSON lines marking handshake progression.
-    // Stages we expect on dynamic path:
-    //   handler_return -> dispatcher_before_send -> dispatcher_send_resolved ->
-    //   transport_detect_init_result -> transport_send_resolved -> [ready]
-    // Some environments may elide dispatcher_* if SDK internal path differs;
-    // we enforce minimal guarantees + relative ordering when present.
+    // Stages we expect on the public-only path:
+    //   handler_return -> ready_emit_scheduled -> [ready]
     // ---------------------------------------------------------------------
     const initEvents = parseInitFrameLines(stderrLines);
     const summary = summarizeInitFrames(initEvents);
     // Core expectations (fail-fast)
     expect(summary.hasHandlerReturn).toBe(true);
-    expect(summary.flushStageObserved).toBe(true);
-    // Dynamic path evidence
-    expect(summary.hasTransportDetect).toBe(true);
-    expect(summary.hasTransportResolved).toBe(true);
-    // Allow dispatcher markers to be absent but if present maintain basic ordering (non-fatal otherwise)
+    expect(summary.completionStageObserved).toBe(true);
     const orderIndex = (stage: string)=> initEvents.findIndex(e=> e.stage===stage);
     const hIdx = orderIndex('handler_return');
-    const dbIdx = orderIndex('dispatcher_before_send');
-    const dsIdx = orderIndex('dispatcher_send_resolved');
-    const tdIdx = orderIndex('transport_detect_init_result');
-    const trIdx = orderIndex('transport_send_resolved');
-    if(hIdx !== -1 && dbIdx !== -1) expect(hIdx).toBeLessThan(dbIdx);
-    if(dbIdx !== -1 && dsIdx !== -1) expect(dbIdx).toBeLessThan(dsIdx);
-    if(tdIdx !== -1 && trIdx !== -1) expect(tdIdx).toBeLessThan(trIdx);
-    // Non-fatal ordering check for dispatcher_send_resolved vs transport_detect_init_result
-    if(dsIdx !== -1 && tdIdx !== -1 && !(dsIdx < tdIdx)){
-      // eslint-disable-next-line no-console
-      console.warn('[sdkServerHandshake.p1] non-fatal ordering inversion (dispatcher_send_resolved vs transport_detect_init_result)', { dsIdx, tdIdx, summary: formatSummary(summary) });
-    }
+    const rsIdx = orderIndex('ready_emit_scheduled');
+    if(hIdx !== -1 && rsIdx !== -1) expect(hIdx).toBeLessThan(rsIdx);
     // Ready after last init-frame
     if(initEvents.length){
       const lastStageIdx = stderrLines.findIndex(l=> l.startsWith('[init-frame]') && l.includes(initEvents[initEvents.length-1].stage));
@@ -203,7 +187,6 @@ describe('sdkServer handshake harness (P1)', () => {
     // Collect issues (diagnostic only)
     const issues = validateInitFrameSequence(summary);
     if(issues.length){
-      // eslint-disable-next-line no-console
       console.warn('[sdkServerHandshake.p1] init-frame issues (non-fatal):', issues);
     }
 

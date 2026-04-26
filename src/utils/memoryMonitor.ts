@@ -5,6 +5,7 @@
  * Use while attached to debugger for real-time memory analysis.
  */
 import { isDebugOrVerbose } from './envUtils';
+import { logError } from '../services/logger.js';
 
 interface MemorySnapshot {
   timestamp: number;
@@ -34,11 +35,11 @@ class MemoryMonitor {
    */
   startMonitoring(intervalMs = 5000): void {
     if (this.isMonitoring) {
-      console.error('[MemoryMonitor] Already monitoring');
+      logError('[MemoryMonitor] Already monitoring');
       return;
     }
 
-    console.error(`[MemoryMonitor] Starting memory monitoring (interval: ${intervalMs}ms)`);
+    logError(`[MemoryMonitor] Starting memory monitoring (interval: ${intervalMs}ms)`);
     this.isMonitoring = true;
 
     this.intervalId = setInterval(() => {
@@ -58,7 +59,7 @@ class MemoryMonitor {
       this.intervalId = undefined;
     }
     this.isMonitoring = false;
-    console.error('[MemoryMonitor] Stopped monitoring');
+    logError('[MemoryMonitor] Stopped monitoring');
   }
 
   /**
@@ -105,10 +106,10 @@ class MemoryMonitor {
         const wantStructured = isDebugOrVerbose();
         try {
           if (wantStructured) {
-            console.error(JSON.stringify(payload));
+            logError(JSON.stringify(payload));
           } else {
             // Fallback concise plain text (single line) to preserve readability and avoid multi-line noise.
-            console.error(`[MemoryMonitor] heapDelta=${this.formatBytes(heapGrowth)} heapUsed=${this.formatBytes(snapshot.heapUsed)} rssDelta=${this.formatBytes(rssGrowth)} rss=${this.formatBytes(snapshot.rss)}`);
+            logError(`[MemoryMonitor] heapDelta=${this.formatBytes(heapGrowth)} heapUsed=${this.formatBytes(snapshot.heapUsed)} rssDelta=${this.formatBytes(rssGrowth)} rss=${this.formatBytes(snapshot.rss)}`);
           }
         } catch {/* swallow */}
       }
@@ -207,7 +208,7 @@ Leak Detected: ${trend.leakDetected ? 'YES' : 'NO'}
     try {
       if (typeof global.gc === 'function') {
         global.gc();
-        console.error('[MemoryMonitor] Forced garbage collection');
+        logError('[MemoryMonitor] Forced garbage collection');
       }
 
       // Note: This would require v8 module for actual heap snapshots
@@ -259,7 +260,7 @@ export function getMemoryMonitor(): MemoryMonitor {
  * Quick memory status check
  */
 export function memStatus(): void {
-  console.error(getMemoryMonitor().getCurrentStatus());
+  logError(getMemoryMonitor().getCurrentStatus());
 }
 
 /**
@@ -280,7 +281,7 @@ export function stopMemWatch(): void {
  * Get memory report
  */
 export function memReport(): void {
-  console.error(getMemoryMonitor().getDetailedReport());
+  logError(getMemoryMonitor().getDetailedReport());
 }
 
 /**
@@ -288,14 +289,14 @@ export function memReport(): void {
  */
 export function forceGC(): void {
   const result = getMemoryMonitor().takeHeapSnapshot();
-  console.error(result);
+  logError(result ?? '');
 }
 
 /**
  * Check event listeners
  */
 export function checkListeners(): void {
-  console.error(getMemoryMonitor().checkEventListeners());
+  logError(getMemoryMonitor().checkEventListeners());
 }
 
 // Global exports for debugger console

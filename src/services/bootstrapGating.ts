@@ -9,7 +9,7 @@ import { getRuntimeConfig } from '../config/runtimeConfig';
  * States:
  *  - reference mode (INDEX_SERVER_REFERENCE_MODE=1): index is read-only, all mutation blocked permanently
  *  - new workspace: only bootstrap seed instructions present (000-bootstrapper / 001-lifecycle-bootstrap) → require confirmation
- *  - existing workspace: any non-bootstrap instruction present OR confirmation file exists -> mutation allowed (subject to INDEX_SERVER_MUTATION rules)
+ *  - existing workspace: any non-bootstrap instruction present OR confirmation file exists -> mutation allowed (unless explicitly forced read-only)
  *  - confirmed: confirmation file created after successful finalize → persists across restarts
  */
 

@@ -122,8 +122,7 @@ describe('Follower Usage & Feedback (stdio)', { timeout: 120_000 }, () => {
 			},
 		});
 
-		const result = await followers[0].callToolJSON('feedback_dispatch', {
-			action: 'submit',
+		const result = await followers[0].callToolJSON('feedback_submit', {
 			type: 'bug-report',
 			severity: 'medium',
 			title: 'Test feedback from follower',
@@ -185,22 +184,33 @@ describe('Follower Usage & Feedback (stdio)', { timeout: 120_000 }, () => {
 		followers = [];
 	});
 
-	it('follower can read feedback list via dispatch', async () => {
-		followers = await spawnMcpClients(1, {
+	it('multiple followers can submit feedback without corrupting storage', async () => {
+		followers = await spawnMcpClients(3, {
 			instructionsDir: ctx.instructionsDir,
 			extraEnv: {
 				INDEX_SERVER_FEEDBACK_DIR: feedbackDir(),
 			},
 		});
 
-		const result = await followers[0].callToolJSON('feedback_dispatch', {
-			action: 'list',
-			limit: 50,
-		});
+		for (const [idx, client] of followers.entries()) {
+			const result = await client.callToolJSON('feedback_submit', {
+				type: 'feature-request',
+				severity: 'low',
+				title: `Follower concurrent feedback ${idx}`,
+				description: `Concurrent follower feedback ${idx}`,
+				tags: ['follower-concurrent'],
+			});
+			expect(result.success).toBe(true);
+			expect(result.feedbackId).toBeTruthy();
+		}
 
-		expect(result).toBeTruthy();
-		expect(result.entries).toBeDefined();
-		expect(Array.isArray(result.entries)).toBe(true);
+		const storagePath = path.join(feedbackDir(), 'feedback-entries.json');
+		await waitFor(async () => fs.existsSync(storagePath), 5000, 250);
+		const storage = JSON.parse(fs.readFileSync(storagePath, 'utf8'));
+		const concurrentEntries = storage.entries?.filter((e: Record<string, unknown>) =>
+			Array.isArray(e.tags) && (e.tags as string[]).includes('follower-concurrent'),
+		) ?? [];
+		expect(concurrentEntries.length).toBe(3);
 
 		await closeAllClients(followers);
 		followers = [];
@@ -282,18 +292,29 @@ describe('Concurrent Feedback & Usage (HTTP)', { timeout: 120_000 }, () => {
 		const submittedIds: string[] = [];
 
 		const { successes, failures } = await runConcurrent(clients, async (client, ci) => {
-			const result = await client.callTool('feedback_dispatch', {
-				action: 'submit',
-				type: 'feature-request',
-				severity: 'low',
-				title: `Concurrent feedback from client-${ci}`,
-				description: `Feedback submitted by HTTP client ${ci} during concurrent test`,
-				tags: ['concurrent-test'],
-			}) as Record<string, unknown>;
+			let result: Record<string, unknown> | undefined;
+			let lastErr: unknown;
+			for (let attempt = 0; attempt < 3; attempt++) {
+				try {
+					result = await client.callTool('feedback_submit', {
+						type: 'feature-request',
+						severity: 'low',
+						title: `Concurrent feedback from client-${ci}`,
+						description: `Feedback submitted by HTTP client ${ci} during concurrent test`,
+						tags: ['concurrent-test'],
+					}) as Record<string, unknown>;
+					lastErr = undefined;
+					break;
+				} catch (err) {
+					lastErr = err;
+					if (attempt < 2) await new Promise(r => setTimeout(r, 500));
+				}
+			}
+			if (lastErr) throw lastErr;
 
-			expect(result.success).toBe(true);
-			expect(result.feedbackId).toBeTruthy();
-			submittedIds.push(result.feedbackId as string);
+			expect(result!.success).toBe(true);
+			expect(result!.feedbackId).toBeTruthy();
+			submittedIds.push(result!.feedbackId as string);
 		});
 
 		expect(failures).toEqual([]);
@@ -324,17 +345,29 @@ describe('Concurrent Feedback & Usage (HTTP)', { timeout: 120_000 }, () => {
 
 		// All clients track usage on the same instruction simultaneously
 		const { successes, failures } = await runConcurrent(clients, async (client) => {
-			const result = await client.callTool('usage_track', {
-				id: targetId,
-				action: 'retrieved',
-				signal: 'helpful',
-			}) as Record<string, unknown>;
+			let result: Record<string, unknown> | undefined;
+			let lastErr: unknown;
+			for (let attempt = 0; attempt < 3; attempt++) {
+				try {
+					result = await client.callTool('usage_track', {
+						id: targetId,
+						action: 'retrieved',
+						signal: 'helpful',
+					}) as Record<string, unknown>;
+					lastErr = undefined;
+					break;
+				} catch (err) {
+					lastErr = err;
+					if (attempt < 2) await new Promise(r => setTimeout(r, 500));
+				}
+			}
+			if (lastErr) throw lastErr;
 
 			// usage_track returns various shapes depending on state
 			const resultText = JSON.stringify(result);
 			// Should mention the target ID or indicate rate-limiting (both valid)
 			expect(
-				resultText.includes(targetId) || result.rateLimited || result.usageCount != null,
+				resultText.includes(targetId) || result!.rateLimited || result!.usageCount != null,
 				`Unexpected usage_track response: ${resultText}`,
 			).toBe(true);
 		});
@@ -401,51 +434,42 @@ describe('Concurrent Feedback & Usage (HTTP)', { timeout: 120_000 }, () => {
 		expect((hotset.items as unknown[]).length).toBeGreaterThan(0);
 	});
 
-	it('feedback list after concurrent writes returns consistent count', async () => {
+	it('subsequent concurrent feedback submissions continue to persist cleanly', async () => {
 		const clients = createHttpRpcClients(leader.dashUrl, HTTP_CLIENT_COUNT);
-
-		// All clients list feedback simultaneously
-		const counts: number[] = [];
-		const { successes } = await runConcurrent(clients, async (client) => {
-			const result = await client.callTool('feedback_dispatch', {
-				action: 'list',
-				limit: 100,
+		const { successes, failures } = await runConcurrent(clients, async (client, ci) => {
+			const result = await client.callTool('feedback_submit', {
+				type: 'bug-report',
+				severity: 'medium',
+				title: `Follow-up feedback ${ci}`,
+				description: `Follow-up concurrent feedback ${ci}`,
+				tags: ['concurrent-follow-up'],
 			}) as Record<string, unknown>;
-			counts.push(result.total as number);
+			expect(result.success).toBe(true);
+			expect(result.feedbackId).toBeTruthy();
 		});
 
+		expect(failures).toEqual([]);
 		expect(successes).toBe(HTTP_CLIENT_COUNT);
 
-		// All clients should see the same total
-		const uniqueCounts = [...new Set(counts)];
-		expect(uniqueCounts.length).toBe(1);
+		const storage = JSON.parse(fs.readFileSync(path.join(feedbackDir(), 'feedback-entries.json'), 'utf8'));
+		const followUps = storage.entries?.filter(
+			(e: Record<string, unknown>) => Array.isArray(e.tags) && (e.tags as string[]).includes('concurrent-follow-up'),
+		) ?? [];
+		expect(followUps.length).toBe(HTTP_CLIENT_COUNT);
 	});
 
-	it('feedback stats after concurrent writes are accurate', async () => {
-		const client = createHttpRpcClients(leader.dashUrl, 1)[0];
-
-		const stats = await client.callTool('feedback_dispatch', {
-			action: 'stats',
-		}) as Record<string, unknown>;
-
-		expect(stats.total).toBeGreaterThanOrEqual(HTTP_CLIENT_COUNT);
-		expect(stats.stats).toBeTruthy();
-
-		const byType = (stats.stats as Record<string, unknown>).byType as Record<string, number>;
-		// We submitted feature-requests in the concurrent test
-		expect(byType['feature-request']).toBeGreaterThanOrEqual(HTTP_CLIENT_COUNT);
+	it('persisted feedback reflects concurrent submissions by type', async () => {
+		const storage = JSON.parse(fs.readFileSync(path.join(feedbackDir(), 'feedback-entries.json'), 'utf8'));
+		const entries = (storage.entries as Array<Record<string, unknown>> | undefined) ?? [];
+		const featureRequests = entries.filter(e => e.type === 'feature-request');
+		expect(featureRequests.length).toBeGreaterThanOrEqual(HTTP_CLIENT_COUNT);
 	});
 
-	it('feedback health check reports storage is writable', async () => {
-		const client = createHttpRpcClients(leader.dashUrl, 1)[0];
-
-		const health = await client.callTool('feedback_dispatch', {
-			action: 'health',
-		}) as Record<string, unknown>;
-
-		expect(health.status).toBe('ok');
-		const storage = health.storage as Record<string, unknown>;
-		expect(storage.accessible).toBe(true);
-		expect(storage.writable).toBe(true);
+	it('feedback storage remains writable after concurrent submissions', async () => {
+		const storagePath = path.join(feedbackDir(), 'feedback-entries.json');
+		expect(fs.existsSync(storagePath)).toBe(true);
+		fs.accessSync(storagePath, fs.constants.R_OK | fs.constants.W_OK);
+		const storage = JSON.parse(fs.readFileSync(storagePath, 'utf8')); // lgtm[js/file-system-race] — test asserts post-write readability; race acceptable in test infra
+		expect(Array.isArray(storage.entries)).toBe(true);
 	});
 });

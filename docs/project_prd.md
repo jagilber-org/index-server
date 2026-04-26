@@ -51,7 +51,7 @@ These requirements are already implemented in code/tests but lacked explicit PRD
 
 ### 1. Feedback / Emit System (No Change This Cycle)
 
-**Tools:** `feedback_submit`, `feedback_list`, `feedback_get`, `feedback_update`, `feedback_stats`, `feedback_health` (all REQUIRED; removal is a breaking change).
+**Tools:** `feedback_submit` only; dashboard feedback CRUD via operator HTTP API (not MCP).
 
 #### Functional Requirements
 

@@ -16,6 +16,7 @@ import { registerHandler } from '../server/registry';
 import { ensureLoaded, computeGovernanceHash } from './indexContext';
 import type { InstructionEntry } from '../models/instruction';
 import { getRuntimeConfig } from '../config/runtimeConfig';
+import { logError } from './logger.js';
 
 type GraphConfigSnapshot = ReturnType<typeof getRuntimeConfig>['graph'];
 
@@ -252,8 +253,7 @@ registerHandler<GraphExportParams>('graph_export', (params) => {
   const graph = buildGraph(p, graphCfg);
   // Defensive: unexpected undefined safeguard (should never happen). Emit diagnostic once.
   if(!graph){
-    // eslint-disable-next-line no-console
-    console.error('[graph_export] buildGraph returned undefined - returning empty graph (diagnostic)');
+    logError('[graph_export] buildGraph returned undefined - returning empty graph (diagnostic)');
     return { meta:{ graphSchemaVersion:1, nodeCount:0, edgeCount:0 }, nodes:[], edges:[] } as GraphResult;
   }
   if(cacheEligible && !envExplicit){

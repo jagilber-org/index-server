@@ -16,7 +16,7 @@ import { writeEntry, incrementUsage, __testResetUsageState } from '../../service
 import { enableFeature } from '../../services/features';
 
 function makeEntry(id: string) {
-  return { id, title: `Title ${id}`, body: 'Sample body', version: '1.0.0', categories: ['scope:workspace:unit', 'type:test'] } as any;
+  return { id, title: `Title ${id}`, body: 'Sample body', version: '1.0.0', categories: ['workspace-unit', 'testing'] } as any;
 }
 
 describe('usage_track signal/comment/action fields', () => {

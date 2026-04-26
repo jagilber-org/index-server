@@ -13,6 +13,7 @@
 import { registerHandler } from '../server/registry';
 import * as fs from 'fs';
 import * as path from 'path';
+import { getRuntimeConfig } from '../config/runtimeConfig';
 
 const SCHEMA_VERSION = '1.0.0';
 
@@ -150,11 +151,12 @@ function definePromotionWorkflow() {
  * Define key validation rules
  */
 function defineValidationRules() {
+  const bodyWarnLength = getRuntimeConfig().index.bodyWarnLength.toLocaleString('en-US');
   return [
     { field: 'id', rule: 'Pattern', constraint: '^[a-z0-9](?:[a-z0-9-_]{0,118}[a-z0-9])?$ (120 chars max, lowercase, no leading/trailing hyphen/underscore)' },
     { field: 'id', rule: 'Uniqueness', constraint: 'Must be unique across the index' },
     { field: 'title', rule: 'Length', constraint: '1-200 characters, non-empty' },
-    { field: 'body', rule: 'Length', constraint: '1-20,000 characters, markdown supported' },
+    { field: 'body', rule: 'Length', constraint: `1-${bodyWarnLength} characters on add/import writes (INDEX_SERVER_BODY_WARN_LENGTH), markdown supported` },
     { field: 'priority', rule: 'Range', constraint: '1-100 (lower number = higher priority)' },
     { field: 'audience', rule: 'Enum', constraint: 'One of: individual, group, all' },
     { field: 'requirement', rule: 'Enum', constraint: 'One of: mandatory, critical, recommended, optional, deprecated' },
@@ -210,7 +212,7 @@ registerHandler('index_schema', () => {
       '1. Review the minimalExample for required fields',
       '2. Study promotionWorkflow stages (P0 → P1 → P2+)',
       '3. Validate against validationRules before submission',
-      '4. Use index_dispatch {action: "add"} to create (requires INDEX_SERVER_MUTATION=1)',
+      '4. Use index_dispatch {action: "add"} to create (writes are enabled by default; set INDEX_SERVER_MUTATION=0 for read-only mode)',
       '5. Monitor index_health for recursionRisk and drift',
       '6. Track usage with usage_track',
       '7. Iterate via index_dispatch {action: "update"} as needed',

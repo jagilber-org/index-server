@@ -45,7 +45,10 @@ This index distinguishes between **active** project documentation and **archived
 | Process | `FEEDBACK-DEFECT-LIFECYCLE.md` | Feedback-to-fix lifecycle process |
 | Graph | `GRAPH.md` | Graph subsystem documentation |
 | Deployment | `DEPLOYMENT.md` | Deployment & troubleshooting guide |
+| MCP Stdio Logging | `mcp_stdio_logging.md` | Fixing stderr warnings in VS Code; reusable for any MCP server |
 | Client Scripts | `CLIENT-SCRIPTS.md` | REST client scripts for agents without MCP access |
+| PR Review Policy | `pr_review_checklist.md` | Mandatory AI agent-generated code/test review checklist (#152) |
+| Migration Tracker | `mcp_migration_tracker.md` | MCP marketplace migration status and decisions (#107) |
 
 ### Recent Governance & Runtime Updates (1.4.x)
 

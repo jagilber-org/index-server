@@ -12,7 +12,7 @@ Current instruction schemaVersion: 2 (no change in this cycle)
 
 ## 2. Triage & Classification
 
-- AI / agent retrieves entry via `feedback_get` (or filters with `feedback_list`).
+- AI / agent submits feedback via `feedback_submit` (only MCP feedback tool).
 - Classify: (a) Alleged persistence failure, (b) Search mismatch, (c) Governance enforcement, etc.
 - Determine initial severity & scope (does it threaten durability guarantees? only discoverability? security?).
 - Decide required artifact set: analysis report + red tests.

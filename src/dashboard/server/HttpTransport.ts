@@ -15,6 +15,8 @@
 
 import express, { Request, Response, Router } from 'express';
 import { getLocalHandler } from '../../server/registry';
+import { log } from '../../services/logger';
+import { logAudit } from '../../services/auditLog';
 
 export interface HttpTransportOptions {
   /** Handler lookup function (defaults to registry getHandler) */
@@ -82,6 +84,10 @@ export function createMcpTransportRoutes(options: HttpTransportOptions = {}): Ro
       });
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Internal error';
+      const stack = error instanceof Error ? error.stack : undefined;
+      const errorType = error instanceof Error ? error.constructor.name : typeof error;
+      log('ERROR', `[HttpTransport] RPC handler error for method '${method}': ${message}`, { detail: stack });
+      logAudit('rpc_error', method, { error: message, errorType, stack: stack?.slice(0, 500), requestId: id ?? null }, 'http');
       res.status(500).json({
         jsonrpc: '2.0',
         error: { code: -32603, message },

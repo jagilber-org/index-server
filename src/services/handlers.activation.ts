@@ -11,6 +11,7 @@
  * Created: 2026-02-01 (in response to repeated multi-session activation pain)
  */
 import { registerHandler } from '../server/registry';
+import { dangerousDiagnosticsEnabled } from '../utils/envUtils';
 
 const ACTIVATION_GUIDE_VERSION = '1.0.0';
 
@@ -52,87 +53,89 @@ interface ActivationGuide {
 }
 
 registerHandler('meta_activation_guide', (): ActivationGuide => {
+  const diagnosticsEnabled = dangerousDiagnosticsEnabled();
+  const categories: ActivationGuide['categories'] = {
+    instructionManagement: {
+      function: 'activate_instruction_management_and_operations_tools()',
+      description: 'Core instruction index operations: add, search, dispatch, remove, repair, import, normalize, reload',
+      tools: [
+        'index_add',
+        'index_dispatch',
+        'index_search',
+        'index_remove',
+        'index_repair',
+        'index_import',
+        'index_health',
+        'index_normalize',
+        'index_reload',
+        'usage_track',
+        'usage_hotset',
+        'manifest_refresh'
+      ],
+      toolCount: 12
+    },
+    graphAndSchema: {
+      function: 'activate_instruction_graph_and_schema_tools()',
+      description: 'Instruction graph export and JSON schema retrieval',
+      tools: ['graph_export', 'index_schema'],
+      toolCount: 2
+    },
+    governance: {
+      function: 'activate_governance_management_tools()',
+      description: 'Governance operations: enrich placeholder fields, compute/update governance hash',
+      tools: [
+        'index_enrich',
+        'index_governanceHash',
+        'index_governanceUpdate'
+      ],
+      toolCount: 3
+    },
+    manifest: {
+      function: 'activate_manifest_management_tools()',
+      description: 'index manifest repair and status checks',
+      tools: ['manifest_repair', 'manifest_status'],
+      toolCount: 2
+    },
+    bootstrap: {
+      function: 'activate_bootstrap_management_tools()',
+      description: 'Bootstrap confirmation and finalization for guarded mutations',
+      tools: [
+        'bootstrap_request',
+        'bootstrap_confirmFinalize',
+        'bootstrap_status'
+      ],
+      toolCount: 3
+    },
+    health: {
+      function: 'activate_feedback_and_health_monitoring_tools()',
+      description: 'Feedback submission and system health monitoring',
+      tools: [
+        'feedback_submit',
+        'health_check'
+      ],
+      toolCount: 2
+    }
+  };
+  if (diagnosticsEnabled) {
+    categories.diagnostics = {
+      function: 'activate_diagnostic_stress_testing_tools()',
+      description: 'CPU/memory/microtask stress testing for performance analysis',
+      tools: [
+        'diagnostics_block',
+        'diagnostics_memoryPressure',
+        'diagnostics_microtaskFlood'
+      ],
+      toolCount: 3
+    };
+  }
+
   return {
     version: ACTIVATION_GUIDE_VERSION,
     generatedAt: new Date().toISOString(),
     problem: 'Index Server tools show as "disabled by the user" in VSCode even when properly configured in settings.json (chat.mcp.tools)',
     rootCause: 'Settings.json configuration provides permission framework but does NOT trigger actual tool enablement. Activation functions must be called explicitly.',
     solution: 'Call VSCode activation functions to enable tool categories. These functions are VSCode client-side features that must be invoked before using MCP tools.',
-    categories: {
-      instructionManagement: {
-        function: 'activate_instruction_management_and_operations_tools()',
-        description: 'Core instruction index operations: add, search, dispatch, remove, repair, import, normalize, reload',
-        tools: [
-          'index_add',
-          'index_dispatch',
-          'index_search',
-          'index_remove',
-          'index_repair',
-          'index_import',
-          'index_health',
-          'index_normalize',
-          'index_reload',
-          'usage_track',
-          'usage_hotset',
-          'manifest_refresh'
-        ],
-        toolCount: 12
-      },
-      graphAndSchema: {
-        function: 'activate_instruction_graph_and_schema_tools()',
-        description: 'Instruction graph export and JSON schema retrieval',
-        tools: ['graph_export', 'index_schema'],
-        toolCount: 2
-      },
-      governance: {
-        function: 'activate_governance_management_tools()',
-        description: 'Governance operations: enrich placeholder fields, compute/update governance hash',
-        tools: [
-          'index_enrich',
-          'index_governanceHash',
-          'index_governanceUpdate'
-        ],
-        toolCount: 3
-      },
-      manifest: {
-        function: 'activate_manifest_management_tools()',
-        description: 'index manifest repair and status checks',
-        tools: ['manifest_repair', 'manifest_status'],
-        toolCount: 2
-      },
-      bootstrap: {
-        function: 'activate_bootstrap_management_tools()',
-        description: 'Bootstrap confirmation and finalization for guarded mutations',
-        tools: [
-          'bootstrap_request',
-          'bootstrap_confirmFinalize',
-          'bootstrap_status'
-        ],
-        toolCount: 3
-      },
-      diagnostics: {
-        function: 'activate_diagnostic_stress_testing_tools()',
-        description: 'CPU/memory/microtask stress testing for performance analysis',
-        tools: [
-          'diagnostics_block',
-          'diagnostics_memoryPressure',
-          'diagnostics_microtaskFlood'
-        ],
-        toolCount: 3
-      },
-      health: {
-        function: 'activate_feedback_and_health_monitoring_tools()',
-        description: 'Feedback submission and system health monitoring',
-        tools: [
-          'feedback_submit',
-          'feedback_list',
-          'feedback_health',
-          'feedback_stats',
-          'health_check'
-        ],
-        toolCount: 5
-      }
-    },
+    categories,
     quickStart: {
       step1: 'Identify which tool you need (e.g., index_search)',
       step2: 'Find matching category in activation categories above (e.g., instructionManagement)',
@@ -197,6 +200,7 @@ registerHandler('meta_check_activation', (params: { toolName?: string }): Activa
   }
 
   // Map tool names to activation categories
+  const diagnosticsEnabled = dangerousDiagnosticsEnabled();
   const toolMapping: Record<string, { category: string; function: string }> = {
     'index_add': { category: 'instructionManagement', function: 'activate_instruction_management_and_operations_tools' },
     'index_dispatch': { category: 'instructionManagement', function: 'activate_instruction_management_and_operations_tools' },
@@ -220,15 +224,14 @@ registerHandler('meta_check_activation', (params: { toolName?: string }): Activa
     'bootstrap_request': { category: 'bootstrap', function: 'activate_bootstrap_management_tools' },
     'bootstrap_confirmFinalize': { category: 'bootstrap', function: 'activate_bootstrap_management_tools' },
     'bootstrap_status': { category: 'bootstrap', function: 'activate_bootstrap_management_tools' },
-    'diagnostics_block': { category: 'diagnostics', function: 'activate_diagnostic_stress_testing_tools' },
-    'diagnostics_memoryPressure': { category: 'diagnostics', function: 'activate_diagnostic_stress_testing_tools' },
-    'diagnostics_microtaskFlood': { category: 'diagnostics', function: 'activate_diagnostic_stress_testing_tools' },
     'feedback_submit': { category: 'health', function: 'activate_feedback_and_health_monitoring_tools' },
-    'feedback_list': { category: 'health', function: 'activate_feedback_and_health_monitoring_tools' },
-    'feedback_health': { category: 'health', function: 'activate_feedback_and_health_monitoring_tools' },
-    'feedback_stats': { category: 'health', function: 'activate_feedback_and_health_monitoring_tools' },
     'health_check': { category: 'health', function: 'activate_feedback_and_health_monitoring_tools' }
   };
+  if (diagnosticsEnabled) {
+    toolMapping['diagnostics_block'] = { category: 'diagnostics', function: 'activate_diagnostic_stress_testing_tools' };
+    toolMapping['diagnostics_memoryPressure'] = { category: 'diagnostics', function: 'activate_diagnostic_stress_testing_tools' };
+    toolMapping['diagnostics_microtaskFlood'] = { category: 'diagnostics', function: 'activate_diagnostic_stress_testing_tools' };
+  }
 
   const mapping = toolMapping[toolName];
 

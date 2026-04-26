@@ -5,9 +5,10 @@
 
 import { Router, Request, Response } from 'express';
 import { MetricsCollector } from '../MetricsCollector.js';
-import { listRegisteredMethods, getLocalHandler } from '../../../server/registry.js';
+import { listRegisteredMethods, getHandler } from '../../../server/registry.js';
 import { getWebSocketManager } from '../WebSocketManager.js';
 import { dashboardAdminAuth } from './adminAuth.js';
+import { logError } from '../../../services/logger.js';
 
 export function createSyntheticRoutes(_metricsCollector: MetricsCollector): Router {
   const router = Router();
@@ -78,7 +79,7 @@ export function createSyntheticRoutes(_metricsCollector: MetricsCollector): Rout
         const method = picked[0];
         if (!available.includes(method)) return;
         const payload = picked[1];
-        const handler = getLocalHandler(method);
+         const handler = getHandler(method);
         const started = Date.now();
         try {
           syntheticActiveRequests++;
@@ -163,7 +164,7 @@ export function createSyntheticRoutes(_metricsCollector: MetricsCollector): Rout
         timestamp: Date.now()
       });
     } catch (error) {
-      console.error('[API] Synthetic activity error:', error);
+      logError('[API] Synthetic activity error:', error);
       res.status(500).json({
         success: false,
         error: 'Failed to run synthetic activity',

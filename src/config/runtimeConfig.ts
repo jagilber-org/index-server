@@ -90,7 +90,7 @@ interface IndexConfig {
   govHash: IndexGovernanceConfig;
   maxFiles?: number; // Optional limit on index size for performance
   loadWarningThreshold?: number; // Warn if load time exceeds this (ms)
-  /** Configurable warn/truncate/reject threshold for instruction body length (default 100000). */
+  /** Configurable warn/truncate/reject threshold for instruction body length (default 50000). */
   bodyWarnLength: number;
   /** Hard maximum body character length — schema reject ceiling, always 1MB. Not configurable. */
   bodyMaxLength: number;
@@ -251,11 +251,9 @@ function parseBufferRing(): BufferRingConfig {
 }
 
 function parseMutation(): boolean {
-  if(process.env.INDEX_SERVER_MUTATION){
-    if(process.env.INDEX_SERVER_MUTATION === '1' || process.env.INDEX_SERVER_MUTATION === 'true') return true;
-    return false;
-  }
-  return false;
+  const raw = process.env.INDEX_SERVER_MUTATION;
+  if(raw === undefined) return true;
+  return parseBooleanEnv(raw, false);
 }
 
 function parseCoverage(): CoverageConfig {
@@ -318,7 +316,7 @@ function parseIndexConfig(): IndexConfig {
 
   // Warn about removed legacy env var
   if (process.env.INDEX_SERVER_BODY_MAX_LENGTH !== undefined) {
-    console.warn('[runtimeConfig] INDEX_SERVER_BODY_MAX_LENGTH is no longer recognized. Use INDEX_SERVER_BODY_WARN_LENGTH instead (default: 100000).');
+    try { process.stderr.write(JSON.stringify({ ts: new Date().toISOString(), level: 'WARN', msg: '[runtimeConfig] INDEX_SERVER_BODY_MAX_LENGTH is no longer recognized. Use INDEX_SERVER_BODY_WARN_LENGTH instead (default: 50000).', pid: process.pid }) + '\n'); } catch { /* ignore */ }
   }
   return {
     mode: deriveIndexMode(),
@@ -426,7 +424,6 @@ function applyProfileDefaults(profile: ProfileName): void {
     setDefault('INDEX_SERVER_SEMANTIC_ENABLED', '1');
     setDefault('INDEX_SERVER_SEMANTIC_LOCAL_ONLY', '0');
     setDefault('INDEX_SERVER_LOG_FILE', '1');
-    setDefault('INDEX_SERVER_MUTATION', '1');
     setDefault('INDEX_SERVER_DASHBOARD_TLS', '1');
     setDefault('INDEX_SERVER_METRICS_FILE_STORAGE', '1');
     setDefault('INDEX_SERVER_FEATURES', 'usage');
@@ -434,7 +431,6 @@ function applyProfileDefaults(profile: ProfileName): void {
     setDefault('INDEX_SERVER_SEMANTIC_ENABLED', '1');
     setDefault('INDEX_SERVER_SEMANTIC_LOCAL_ONLY', '0');
     setDefault('INDEX_SERVER_LOG_FILE', '1');
-    setDefault('INDEX_SERVER_MUTATION', '1');
     setDefault('INDEX_SERVER_DASHBOARD_TLS', '1');
     setDefault('INDEX_SERVER_METRICS_FILE_STORAGE', '1');
     setDefault('INDEX_SERVER_FEATURES', 'usage');

@@ -135,9 +135,9 @@ registerHandler('index_dispatch', async (params: DispatchParams) => {
   if(mutationMethods.has(target) && !isMutationEnabled()) {
     // Dispatcher design intent: allow mutation-style actions even when direct mutation tools
     // are disabled. The previous logic incorrectly blocked these calls, causing silent timeouts
-    // in tests expecting dispatcher add to succeed without INDEX_SERVER_MUTATION=1.
+    // in tests expecting dispatcher add to succeed even when direct mutation calls were forced off.
     // We now log (if verbose) and proceed instead of throwing a semantic error.
-    try { if(getRuntimeConfig().logging.verbose) process.stderr.write(`[dispatcher] mutation_allowed_via_dispatcher action=${action} target=${target} (INDEX_SERVER_MUTATION not set)\n`); } catch { /* ignore */ }
+    try { if(getRuntimeConfig().logging.verbose) process.stderr.write(`[dispatcher] mutation_allowed_via_dispatcher action=${action} target=${target} (direct mutation override disabled)\n`); } catch { /* ignore */ }
   }
   const handler = getHandler(target);
   if(!handler) {
@@ -155,7 +155,7 @@ registerHandler('index_dispatch', async (params: DispatchParams) => {
   // because the dispatch schema cannot express nested 'entry' wrappers.
   // When 'entry' is absent but 'id' is present, assemble the entry from flat params.
   if(action==='add' && !(rest as Record<string, unknown>).entry && typeof (rest as Record<string, unknown>).id === 'string'){
-    const entryFields = ['id','body','title','rationale','priority','audience','requirement','categories','deprecatedBy','riskScore','version','owner','status','priorityTier','classification','lastReviewedAt','nextReviewDue','semanticSummary','changeLog','extensions'];
+    const entryFields = ['id','body','title','rationale','priority','audience','requirement','categories','deprecatedBy','riskScore','version','owner','status','priorityTier','classification','lastReviewedAt','nextReviewDue','semanticSummary','changeLog','contentType','extensions'];
     const entry: Record<string, unknown> = {};
     for(const k of entryFields){
       if((rest as Record<string, unknown>)[k] !== undefined){ entry[k] = (rest as Record<string, unknown>)[k]; delete (rest as Record<string, unknown>)[k]; }
@@ -164,7 +164,7 @@ registerHandler('index_dispatch', async (params: DispatchParams) => {
   }
   void _ignoredAction; // explicitly ignore for lint
   // Mark invocation origin so guard() can allow dispatcher-mediated mutations even if
-  // INDEX_SERVER_MUTATION is not globally enabled.
+  // direct mutation tools were explicitly disabled via runtime override.
   (rest as Record<string, unknown>)._viaDispatcher = true;
   const hStart = timing? Date.now():0;
   // Gating: block mutation targets if bootstrap confirmation required or reference mode active.

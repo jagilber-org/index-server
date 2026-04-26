@@ -188,7 +188,7 @@ Instruction seed/templates (used for enrichment or scaffolding) must reside unde
 
 ### Body Size Limits
 
-Instruction body length is enforced at runtime via `INDEX_SERVER_BODY_WARN_LENGTH` (default: 100000 chars, range: 1000–1000000).
+Instruction body length is enforced at runtime via `INDEX_SERVER_BODY_WARN_LENGTH` (default: 50000 chars, range: 1000–1000000).
 
 **Write-time (index_add / index_import):** Bodies exceeding `bodyWarnLength` are **rejected** with a `body_too_large` error and actionable split/cross-link guidance.
 

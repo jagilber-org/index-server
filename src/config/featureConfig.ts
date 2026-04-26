@@ -166,18 +166,22 @@ export interface StorageConfig {
   sqlitePath: string;
   sqliteWal: boolean;
   sqliteMigrateOnStart: boolean;
+  sqliteVecEnabled: boolean;
+  sqliteVecPath: string;
 }
 
 export function parseStorageConfig(): StorageConfig {
   const raw = (process.env.INDEX_SERVER_STORAGE_BACKEND || 'json').toLowerCase();
   const backend = (raw === 'sqlite' ? 'sqlite' : 'json') as 'json' | 'sqlite';
   if (backend === 'sqlite') {
-    console.warn('[config] ⚠️  EXPERIMENTAL: SQLite storage backend selected. Limited testing has been performed. Use at your own risk.');
+    try { process.stderr.write(JSON.stringify({ ts: new Date().toISOString(), level: 'WARN', msg: '[config] EXPERIMENTAL: SQLite storage backend selected. Limited testing has been performed. Use at your own risk.', pid: process.pid }) + '\n'); } catch { /* ignore */ }
   }
   return {
     backend,
     sqlitePath: toAbsolute(process.env.INDEX_SERVER_SQLITE_PATH, path.join(CWD, DIR.DATA_SQLITE)),
     sqliteWal: parseBooleanEnv(process.env.INDEX_SERVER_SQLITE_WAL, true),
     sqliteMigrateOnStart: parseBooleanEnv(process.env.INDEX_SERVER_SQLITE_MIGRATE_ON_START, true),
+    sqliteVecEnabled: parseBooleanEnv(process.env.INDEX_SERVER_SQLITE_VEC_ENABLED, false),
+    sqliteVecPath: process.env.INDEX_SERVER_SQLITE_VEC_PATH || '',
   };
 }

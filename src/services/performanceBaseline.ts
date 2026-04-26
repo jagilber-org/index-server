@@ -5,6 +5,7 @@ import { spawn } from 'child_process';
 import { performance } from 'perf_hooks';
 import fs from 'fs';
 import path from 'path';
+import { logInfo } from './logger.js';
 
 interface PerformanceResults {
   listOperations: {
@@ -170,43 +171,43 @@ function calculateOverhead(withoutUsage: number[], withUsage: number[]): number 
 }
 
 export async function runPerformanceBaseline(): Promise<PerformanceResults> {
-  console.log('🚀 Starting Phase 1 Performance Baseline Measurement...');
-  console.log('Target: <5% overhead for usage tracking');
-  console.log();
+  logInfo('🚀 Starting Phase 1 Performance Baseline Measurement...');
+  logInfo('Target: <5% overhead for usage tracking');
+  logInfo('---');
 
   // List operations
-  console.log('📊 Measuring list operations...');
+  logInfo('📊 Measuring list operations...');
   const listWithoutUsage = await measureListOperations(false);
   const listWithUsage = await measureListOperations(true);
   const listOverhead = calculateOverhead(listWithoutUsage, listWithUsage);
 
-  console.log('✅ List operations measured');
-  console.log(`   Without usage: ${calculateStats(listWithoutUsage).p95.toFixed(2)}ms P95`);
-  console.log(`   With usage: ${calculateStats(listWithUsage).p95.toFixed(2)}ms P95`);
-  console.log(`   Overhead: ${listOverhead.toFixed(2)}%`);
-  console.log();
+  logInfo('✅ List operations measured');
+  logInfo(`   Without usage: ${calculateStats(listWithoutUsage).p95.toFixed(2)}ms P95`);
+  logInfo(`   With usage: ${calculateStats(listWithUsage).p95.toFixed(2)}ms P95`);
+  logInfo(`   Overhead: ${listOverhead.toFixed(2)}%`);
+  logInfo('---');
 
   // Mutation operations
-  console.log('📊 Measuring mutation operations...');
+  logInfo('📊 Measuring mutation operations...');
   const mutationWithoutUsage = await measureMutationOperations(false);
   const mutationWithUsage = await measureMutationOperations(true);
   const mutationOverhead = calculateOverhead(mutationWithoutUsage, mutationWithUsage);
 
-  console.log('✅ Mutation operations measured');
-  console.log(`   Without usage: ${calculateStats(mutationWithoutUsage).p95.toFixed(2)}ms P95`);
-  console.log(`   With usage: ${calculateStats(mutationWithUsage).p95.toFixed(2)}ms P95`);
-  console.log(`   Overhead: ${mutationOverhead.toFixed(2)}%`);
-  console.log();
+  logInfo('✅ Mutation operations measured');
+  logInfo(`   Without usage: ${calculateStats(mutationWithoutUsage).p95.toFixed(2)}ms P95`);
+  logInfo(`   With usage: ${calculateStats(mutationWithUsage).p95.toFixed(2)}ms P95`);
+  logInfo(`   Overhead: ${mutationOverhead.toFixed(2)}%`);
+  logInfo('---');
 
   // Summary
   const maxOverhead = Math.max(listOverhead, mutationOverhead);
   const meetsTarget = maxOverhead <= 5.0;
 
-  console.log('📈 Performance Baseline Summary:');
-  console.log(`   List operations overhead: ${listOverhead.toFixed(2)}%`);
-  console.log(`   Mutation operations overhead: ${mutationOverhead.toFixed(2)}%`);
-  console.log(`   Maximum overhead: ${maxOverhead.toFixed(2)}%`);
-  console.log(`   Target met (<5%): ${meetsTarget ? '✅ YES' : '❌ NO'}`);
+  logInfo('📈 Performance Baseline Summary:');
+  logInfo(`   List operations overhead: ${listOverhead.toFixed(2)}%`);
+  logInfo(`   Mutation operations overhead: ${mutationOverhead.toFixed(2)}%`);
+  logInfo(`   Maximum overhead: ${maxOverhead.toFixed(2)}%`);
+  logInfo(`   Target met (<5%): ${meetsTarget ? '✅ YES' : '❌ NO'}`);
 
   const results = {
     listOperations: {
@@ -242,8 +243,8 @@ export async function runPerformanceBaseline(): Promise<PerformanceResults> {
     results
   }, null, 2));
 
-  console.log();
-  console.log(`💾 Detailed results saved to: ${baselineFile}`);
+  logInfo('---');
+  logInfo(`💾 Detailed results saved to: ${baselineFile}`);
 
   return results;
 }

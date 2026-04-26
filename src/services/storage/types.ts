@@ -141,7 +141,7 @@ export interface IInstructionStore {
    * Write (create or update) an instruction.
    * @param entry - The instruction to persist.
    */
-  write(entry: InstructionEntry): void;
+  write(entry: InstructionEntry, opts?: { createOnly?: boolean }): void;
 
   /**
    * Remove an instruction by ID. No-op if not found.
@@ -198,4 +198,57 @@ export interface IInstructionStore {
    * Get the count of loaded instructions.
    */
   count(): number;
+}
+
+// ── Embedding Store Interface ────────────────────────────────────────────────
+
+/**
+ * Persisted embedding cache format (backwards-compatible: entryHashes is optional).
+ */
+export interface EmbeddingCacheData {
+  indexHash: string;
+  modelName?: string;
+  /** Per-entry content hashes for incremental invalidation (required for v2+). */
+  entryHashes?: Record<string, string>;
+  embeddings: Record<string, number[]>;
+}
+
+/** A single embedding search result with distance score. */
+export interface EmbeddingSearchResult {
+  id: string;
+  distance: number;
+}
+
+/**
+ * Storage backend interface for embedding vectors.
+ *
+ * Implementations:
+ * - JsonEmbeddingStore: Flat JSON file (default, current behavior)
+ * - SqliteEmbeddingStore: sqlite-vec vec0 virtual table
+ */
+export interface IEmbeddingStore {
+  /**
+   * Load cached embedding data from the backing store.
+   * @returns The cached data, or null if no data exists.
+   */
+  load(): EmbeddingCacheData | null;
+
+  /**
+   * Save embedding data to the backing store.
+   * @param data - The embedding cache data to persist.
+   */
+  save(data: EmbeddingCacheData): void;
+
+  /**
+   * Search for the nearest vectors to a query vector (KNN).
+   * @param queryVector - The query embedding vector.
+   * @param limit - Maximum number of results to return.
+   * @returns Array of { id, distance } sorted by distance ascending.
+   */
+  search(queryVector: Float32Array, limit: number): EmbeddingSearchResult[];
+
+  /**
+   * Close the store and release resources.
+   */
+  close(): void;
 }

@@ -5,10 +5,7 @@
 
   // Helper: safe global references (these live on page scope)
   const globals = window;
-
-  function escapeHtml(s) {
-    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
-  }
+  const escapeHtml = window.adminUtils.escapeHtml;
 
   function sanitizeHtmlFragment(html) {
     const template = document.createElement('template');
@@ -54,7 +51,21 @@
     if (!signal) return '';
     const colors = { 'outdated': '#f2495c', 'not-relevant': '#ff9830', 'helpful': '#73bf69', 'applied': '#5794f2' };
     const color = colors[signal] || '#888';
-    return '<span class="signal-badge" style="background:' + color + '22;color:' + color + ';border:1px solid ' + color + '44;padding:1px 6px;border-radius:3px;font-size:10px;font-weight:600;">' + signal + '</span>';
+    return '<span class="signal-badge" style="background:' + color + '22;color:' + color + ';border:1px solid ' + color + '44;padding:1px 6px;border-radius:3px;font-size:10px;font-weight:600;">' + escapeHtml(signal) + '</span>';
+  }
+
+  function wireInstructionListActions(listEl) {
+    if (!listEl) return;
+    listEl.querySelectorAll('[data-instruction-action]').forEach((button) => {
+      if (button.__instructionActionBound) return;
+      button.addEventListener('click', () => {
+        const action = button.getAttribute('data-instruction-action');
+        const instructionName = button.getAttribute('data-instruction-name') || '';
+        if (action === 'edit') editInstruction(instructionName);
+        if (action === 'delete') deleteInstruction(instructionName);
+      });
+      button.__instructionActionBound = true;
+    });
   }
 
   async function loadInstructionCategories() {
@@ -227,26 +238,29 @@
       const comment = usage.lastComment || '';
       const signalHtml = signal ? getSignalBadge(signal) : '<span style="opacity:.4;font-size:10px;">none</span>';
       const commentTip = comment ? ' title="Last comment: ' + escapeHtml(comment.slice(0, 200)) + '"' : '';
+      const safeSize = escapeHtml(String(instr.size ?? '0'));
+      const safeSizeCategory = escapeHtml(String(instr.sizeCategory || 'unknown'));
+      const safeModified = escapeHtml(new Date(instr.mtime).toLocaleString());
       return `
         <div class="instruction-item" data-instruction="${escapedName}">
           <div class="instruction-item-header">
             <div class="instruction-name">${highlightedName}</div>
             <div class="instruction-actions">
-              <button class="action-btn" onclick="editInstruction('${escapedName}')">✏ Edit</button>
-              <button class="action-btn danger" onclick="deleteInstruction('${escapedName}')">🗑 Delete</button>
+              <button class="action-btn" data-instruction-action="edit" data-instruction-name="${escapedName}">✏ Edit</button>
+              <button class="action-btn danger" data-instruction-action="delete" data-instruction-name="${escapedName}">🗑 Delete</button>
             </div>
           </div>
           <div class="instruction-meta">
             <div class="meta-chip" title="Category"><span class="chip-label">CAT</span><span class="chip-value">${safeCat}</span></div>
-            <div class="meta-chip" title="Size"><span class="chip-label">SIZE</span><span class="chip-value">${instr.size}</span><span class="chip-sub">(${escapeHtml(instr.sizeCategory)})</span></div>
-            <div class="meta-chip" title="Last Modified"><span class="chip-label">MTIME</span><span class="chip-value">${new Date(instr.mtime).toLocaleString()}</span></div>
+            <div class="meta-chip" title="Size"><span class="chip-label">SIZE</span><span class="chip-value">${safeSize}</span><span class="chip-sub">(${safeSizeCategory})</span></div>
+            <div class="meta-chip" title="Last Modified"><span class="chip-label">MTIME</span><span class="chip-value">${safeModified}</span></div>
             <div class="meta-chip" title="Usage Count"><span class="chip-label">USES</span><span class="chip-value">${usageCount}</span></div>
             <div class="meta-chip"${commentTip}><span class="chip-label">SIGNAL</span><span class="chip-value">${signalHtml}</span></div>
           </div>
           <div class="instruction-summary">${highlightedSummary || '<span class="summary-empty">No summary</span>'}</div>
         </div>`;
     }).join('');
-    const listEl = document.getElementById('instructions-list'); if(listEl) listEl.innerHTML = rows;
+    const listEl = document.getElementById('instructions-list'); if(listEl) { listEl.innerHTML = rows; wireInstructionListActions(listEl); }
     buildInstructionPaginationControls(totalFiltered);
     try { console.debug('[admin.instructions] renderInstructionList: rendered rows=', pageItems.length); } catch(e){}
     try { const dbg = document.getElementById('admin-debug'); if(dbg) dbg.textContent = JSON.stringify({ stage:'renderInstructionList', filtered: totalFiltered, rendered: pageItems.length, page: globals.instructionPage }, null, 2); } catch(e){}
@@ -487,11 +501,11 @@
         return;
       }
       const rows = results.results.map(r=>{
-        let safeName = (r.name||'').replace(/[&<>]/g, c=> ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
-        let safeSnippet = (r.snippet||'').replace(/[&<>]/g, c=> ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])).replace(/\*\*(.+?)\*\*/g,'<mark>$1</mark>');
+        let safeName = escapeHtml(r.name || '');
+        let safeSnippet = escapeHtml(r.snippet || '').replace(/\*\*(.+?)\*\*/g,'<mark>$1</mark>');
         safeName = highlightMatch(safeName, trimmed, isRegex);
         safeSnippet = highlightMatch(safeSnippet, trimmed, isRegex);
-        const cats = Array.isArray(r.categories) && r.categories.length? r.categories.slice(0,6).map(c => String(c).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]))).join(', ') : '—';
+        const cats = Array.isArray(r.categories) && r.categories.length ? r.categories.slice(0,6).map(c => escapeHtml(c)).join(', ') : '—';
         return `<div class="instruction-global-result" style="background:#1f2228; border:1px solid #2c3038; border-radius:4px; padding:6px 8px; margin-bottom:6px;">
           <div style="font-weight:600; font-size:12px;">${safeName} <span style="opacity:.55; font-weight:400;">(${cats})</span></div>
           <div style="font-size:11px; white-space:normal;">${safeSnippet}</div>

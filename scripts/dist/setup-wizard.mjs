@@ -85,7 +85,7 @@ const PROFILES = {
       '  Dashboard : HTTP on localhost:8787',
       '  Storage   : JSON files',
       '  Search    : keyword only',
-      '  Mutation  : off (read-only)',
+      '  Mutation  : on (read/write)',
       '  Logging   : info to stderr',
     ],
   },
@@ -149,7 +149,7 @@ function parseNonInteractiveArgs() {
     root: ROOT,
     port: 8787,
     host: '127.0.0.1',
-    mutation: false,
+    mutation: true,
     logLevel: 'info',
     generateCerts: false,
     serverName: 'index-server',
@@ -227,9 +227,9 @@ async function runInteractiveWizard() {
   }
 
   // Step 7: Mutation
-  let mutation = profile !== 'default';
+  let mutation = true;
   if (profile === 'default') {
-    mutation = await prompt.confirm('Enable mutation (write operations)?', false);
+    mutation = await prompt.confirm('Enable mutation (write operations)?', true);
   }
 
   // Step 8: Log level
@@ -503,7 +503,7 @@ Non-interactive mode:
     fs.writeFileSync(genPath, envContent, 'utf8');
     console.log(`\n⚠️  .env already exists. Written to: ${genPath}`);
   } else {
-    fs.writeFileSync(envPath, envContent, 'utf8');
+    fs.writeFileSync(envPath, envContent, 'utf8'); // lgtm[js/file-system-race] — setup wizard writes .env to user-supplied path; race acceptable in CLI tooling
     console.log(`\n✅ .env written to: ${envPath}`);
   }
 

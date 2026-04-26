@@ -6,11 +6,12 @@ import path from 'path';
 import * as atomic from '../services/atomicFs.js';
 
 describe('atomicWriteJson retry semantics', () => {
-  it('retries transient rename failures and eventually succeeds', () => {
+  it('retries transient rename failures and eventually succeeds without blocking timers', async () => {
     const dir = path.join(process.cwd(), 'tmp', 'atomic-retry-test');
     fs.mkdirSync(dir, { recursive: true });
     const target = path.join(dir, 'sample.json');
     let renameCalls = 0;
+    let timerFired = false;
     const realRename = fs.renameSync;
     (fs as any).renameSync = (oldPath: string, newPath: string) => {
       renameCalls++;
@@ -23,17 +24,26 @@ describe('atomicWriteJson retry semantics', () => {
     };
     try {
       process.env.INDEX_SERVER_ATOMIC_WRITE_RETRIES = '5';
-      process.env.INDEX_SERVER_ATOMIC_WRITE_BACKOFF_MS = '1';
-      atomic.atomicWriteJson(target, { ok: true, ts: Date.now() });
+      process.env.INDEX_SERVER_ATOMIC_WRITE_BACKOFF_MS = '10';
+      const timer = new Promise<void>(resolve => {
+        setTimeout(() => {
+          timerFired = true;
+          resolve();
+        }, 0);
+      });
+      const write = atomic.atomicWriteJsonAsync(target, { ok: true, ts: Date.now() });
+      await timer;
+      await write;
       const raw = JSON.parse(fs.readFileSync(target, 'utf8'));
       expect(raw.ok).toBe(true);
+      expect(timerFired).toBe(true);
       expect(renameCalls).toBeGreaterThanOrEqual(3);
     } finally {
       (fs as any).renameSync = realRename;
     }
   });
 
-  it('throws after exhausting retries on persistent failure', () => {
+  it('throws after exhausting retries on persistent failure', async () => {
     const dir = path.join(process.cwd(), 'tmp', 'atomic-retry-hard-fail');
     fs.mkdirSync(dir, { recursive: true });
     const target = path.join(dir, 'hard.json');
@@ -54,7 +64,7 @@ describe('atomicWriteJson retry semantics', () => {
     try {
       process.env.INDEX_SERVER_ATOMIC_WRITE_RETRIES = '3';
       process.env.INDEX_SERVER_ATOMIC_WRITE_BACKOFF_MS = '1';
-      expect(() => atomic.atomicWriteJson(target, { fail: true })).toThrow();
+      await expect(atomic.atomicWriteJsonAsync(target, { fail: true })).rejects.toThrow();
       expect(attempts).toBeGreaterThanOrEqual(3);
       expect(writeAttempts).toBeGreaterThanOrEqual(3); // one per attempt
     } finally {

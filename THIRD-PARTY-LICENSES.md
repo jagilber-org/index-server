@@ -199,12 +199,4 @@ All dependencies use licenses that are compatible with this project's MIT Licens
 | LGPL-3.0 | ⚠️ Conditionally | sharp native binaries/libvips (dynamically linked — OK per LGPL terms) |
 | (MPL-2.0 OR Apache-2.0) | ✅ Yes | dompurify (Apache-2.0 chosen) |
 
----
-
-## Bundled Extension Note
-
-If the VS Code extension is built with `-IncludeServer` (standalone mode), the production dependencies listed above are bundled into the `.vsix` file. In that case, this `THIRD-PARTY-LICENSES.md` file serves as the required attribution notice for Apache-2.0 licensed dependencies.
-
----
-
 *Last updated: 2026-04-09*

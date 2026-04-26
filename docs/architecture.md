@@ -1,6 +1,6 @@
 # ARCHITECTURE
 
-Updated for 1.12.0 (adds: pluggable storage abstraction layer with SQLite backend [experimental], FTS5 full-text search, bidirectional JSON↔SQLite migration engine, SQLite message & usage stores). Previous: 1.11.2 (`agent` content type, leader/follower multi-instance mode [experimental], security hardening, semantic search, auto-usage model upgrade, dashboard config panel redesign, git signing support).
+Updated for 1.24.0 (adds: `IEmbeddingStore` abstraction with sqlite-vec KNN backend, device probe fallback chain, model readiness checks, structured logging enforcement across 27 server-side files). Previous: 1.12.0 (pluggable storage abstraction layer with SQLite backend [experimental], FTS5 full-text search, bidirectional JSON↔SQLite migration engine, SQLite message & usage stores).
 
 ## High-Level Components
 
@@ -85,7 +85,7 @@ graph LR
 | IndexContext | Caching, mtime + signature invalidation, enrichment persistence, opportunistic materialization | Uses `.index-version` for cross‑process invalidation; in‑memory write path avoids reload race |
 | Governance Projection | Deterministic subset for governance hash | Fields: id,title,version,owner,priorityTier,nextReviewDue,semanticSummarySha256,changeLogLength |
 | Tool Registry | Central schemas + stable flags + dynamic listing (`meta_tools`) | Exposes machine-consumable tool metadata |
-| Tool Handlers | JSON-RPC implementation (instructions/*, feedback/*, governanceHash, usage, integrity, gates, metrics) | Write tools gated by INDEX_SERVER_MUTATION |
+| Tool Handlers | JSON-RPC implementation (instructions/*, feedback/*, governanceHash, usage, integrity, gates, metrics) | Write tools are enabled by default and can be forced read-only with INDEX_SERVER_MUTATION=0 |
 | MCP SDK Transport | Standard MCP over stdio | Emits `server/ready`, handles capabilities |
 | Usage Tracking | usage_track increments with firstSeenTs + debounced persistence | Optional gating via INDEX_SERVER_FEATURES='usage' |
 | Feedback / Emit System | feedback_submit,list,get,update,stats,health tools | Persistent JSON store + audit & security logging |
@@ -174,10 +174,10 @@ Results summarize counts, highest severity enabling fast gating flows.
 
 ## Security & Governance
 
-- Read-only by default; all mutations gated via `INDEX_SERVER_MUTATION`.
+- Mutations are enabled by default; use `INDEX_SERVER_MUTATION=0` when you need an explicit read-only runtime.
 - Feature gating via `INDEX_SERVER_FEATURES` (e.g. usage) guarded by `feature_status` introspection.
 - Governance projection enables reproducible policy diffing; hash reproducibility flag `GOV_HASH_TRAILING_NEWLINE` optional.
-- Prompt review regexes curated to avoid catastrophic patterns; lengths capped.
+- Prompt review and search regexes are screened to avoid catastrophic patterns; search also caps explicit regex patterns at 200 characters.
 - Integrity verification & diff support tamper detection.
 
 ### Path Traversal Defense
@@ -218,7 +218,7 @@ The `ensureLoadedMiddleware` (mounted in `ApiRoutes.ts`) calls `ensureLoaded()` 
 
 | Env Var | Purpose |
 |---------|---------|
-| INDEX_SERVER_MUTATION | Enable mutation tools (import/add/remove/groom, usage_flush) |
+| INDEX_SERVER_MUTATION | Optional read-only override for mutation tools (`0` disables direct writes) |
 | INDEX_SERVER_FEATURES=usage | Activate usage tracking feature counters & persistence |
 | INDEX_SERVER_VERBOSE_LOGGING / INDEX_SERVER_LOG_MUTATION | Diagnostic logging scopes |
 | GOV_HASH_TRAILING_NEWLINE=1 | Optional governance hash newline sentinel |
@@ -354,12 +354,81 @@ Backend selection (`src/services/storage/factory.ts`):
 
 ```
 createStore(backend?, dir?, sqlitePath?) → IInstructionStore
+createEmbeddingStore(backend?, embeddingPath?) → IEmbeddingStore
 ```
 
 Resolution priority:
 1. Function parameter (programmatic override)
 2. `INDEX_SERVER_STORAGE_BACKEND` environment variable
 3. Default: `json`
+
+### Embedding Store Abstraction
+
+Instruction embeddings (for semantic search) are stored behind the `IEmbeddingStore` interface, decoupled from instruction storage:
+
+```mermaid
+---
+config:
+    layout: elk
+---
+graph TD
+    EmbFactory["createEmbeddingStore()"] -->|vec disabled or json backend| JsonEmb["JsonEmbeddingStore"]
+    EmbFactory -->|vec enabled + sqlite backend| SqliteEmb["SqliteEmbeddingStore"]
+    JsonEmb --> IEmb["IEmbeddingStore"]
+    SqliteEmb --> IEmb
+    IEmb --> EmbService["EmbeddingService"]
+    SqliteEmb --> Vec0["vec0 Virtual Table (KNN)"]
+
+    style EmbFactory fill:#ff9800,stroke:#e65100,stroke-width:2px,color:#fff
+    style JsonEmb fill:#4caf50,stroke:#2e7d32,stroke-width:2px,color:#fff
+    style SqliteEmb fill:#2196f3,stroke:#0d47a1,stroke-width:2px,color:#fff
+    style IEmb fill:#9c27b0,stroke:#6a1b9a,stroke-width:2px,color:#fff
+    style Vec0 fill:#00bcd4,stroke:#006064,stroke-width:2px,color:#fff
+    style EmbService fill:#e91e63,stroke:#880e4f,stroke-width:2px,color:#fff
+```
+
+#### IEmbeddingStore Interface
+
+All embedding backends implement `IEmbeddingStore` (`src/services/storage/types.ts`):
+
+| Method | Purpose |
+|--------|---------|
+| `load(): EmbeddingData` | Load all embeddings and metadata |
+| `save(data): void` | Persist embeddings (transactional for SQLite) |
+| `search(query, k): SearchResult[]` | KNN vector similarity search |
+| `close(): void` | Release resources |
+
+#### JsonEmbeddingStore (Default)
+
+File-based embedding storage (`src/services/storage/jsonEmbeddingStore.ts`). Stores all embeddings in a single JSON file (default `data/embeddings.json`).
+
+- **Brute-force cosine similarity** search (adequate for small-to-medium indexes)
+- **No native dependencies** — pure JavaScript
+- **Automatic fallback** — used when sqlite-vec is unavailable or disabled
+
+#### SqliteEmbeddingStore (Experimental)
+
+sqlite-vec backed embedding storage (`src/services/storage/sqliteEmbeddingStore.ts`). Uses a `vec0` virtual table for native KNN search.
+
+- **Native KNN search** via sqlite-vec extension
+- **Separate database** — uses `data/embeddings.db` (not shared with instruction store)
+- **Configurable dimensions** — default 384 (MiniLM-L6-v2)
+- **Transaction-based save** — rollback on error
+- **Requires** Node.js ≥ 22.13.0 + `sqlite-vec` npm package
+- **Config**: `INDEX_SERVER_SQLITE_VEC_ENABLED=1`
+
+#### Embedding Device Probe
+
+`resolveDevice()` (`src/services/embeddingService.ts`) probes ONNX Runtime for available compute backends with an injectable fallback chain:
+
+1. Try requested backend (e.g., `cuda`)
+2. Fall back to `dml` (DirectML on Windows)
+3. Fall back to `cpu` (always available)
+4. Log warnings when falling back from a requested backend
+
+#### Model Readiness Check
+
+`checkModelReadiness()` (`src/services/embeddingService.ts`) validates that the embedding model is available in the local HuggingFace cache before first use. When `INDEX_SERVER_SEMANTIC_LOCAL_ONLY=true` (default), warns users if the model is missing and provides remediation steps.
 
 ### Backend Comparison
 
@@ -371,6 +440,7 @@ Resolution priority:
 | Write atomicity | Temp-file rename | SQLite transactions |
 | Concurrency | File-level locking | WAL mode (readers don't block writers) |
 | Message/usage stores | JSON file-based | Integrated SQLite tables |
+| Embedding storage | JSON file (cosine similarity) | sqlite-vec `vec0` KNN (opt-in, ≥ 22.13.0) |
 | Best for | Development, small indexes | Production, large indexes |
 
 ## Related Documents

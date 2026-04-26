@@ -7,8 +7,6 @@
  * Red/green: all tests written to fail before the fix, pass after.
  */
 import { describe, it, expect, afterEach, beforeEach } from 'vitest';
-import fs from 'fs';
-import path from 'path';
 import { reloadRuntimeConfig, getRuntimeConfig, VALID_PROFILES } from '../../config/runtimeConfig';
 import { DIR } from '../../config/dirConstants';
 
@@ -99,11 +97,11 @@ describe('runtimeConfig — auto-backup default', () => {
     expect(cfg.mutation.autoBackupEnabled).toBe(true);
   });
 
-  it('auto-backup should be false when mutation is disabled and AUTO_BACKUP is unset', () => {
+  it('auto-backup should be true when mutation uses the default enabled behavior and AUTO_BACKUP is unset', () => {
     clearEnv('INDEX_SERVER_MUTATION', 'INDEX_SERVER_AUTO_BACKUP', 'INDEX_SERVER_PROFILE');
     reloadRuntimeConfig();
     const cfg = getRuntimeConfig();
-    expect(cfg.mutation.autoBackupEnabled).toBe(false);
+    expect(cfg.mutation.autoBackupEnabled).toBe(true);
   });
 
   it('explicit AUTO_BACKUP=0 overrides even when mutation is enabled', () => {
@@ -115,7 +113,7 @@ describe('runtimeConfig — auto-backup default', () => {
   });
 
   it('explicit AUTO_BACKUP=1 works when mutation is disabled', () => {
-    clearEnv('INDEX_SERVER_MUTATION');
+    setEnv({ INDEX_SERVER_MUTATION: '0' });
     setEnv({ INDEX_SERVER_AUTO_BACKUP: '1' });
     clearEnv('INDEX_SERVER_PROFILE');
     reloadRuntimeConfig();
@@ -263,44 +261,5 @@ describe('runtimeConfig — profile system', () => {
       // so applyProfileDefaults won't overwrite it
       expect(getRuntimeConfig().mutationEnabled).toBe(false);
     });
-  });
-});
-
-// ══════════════════════════════════════════════════════════════════════════════
-// 5. Walkthrough media paths — must be file paths, not inline markdown
-// ══════════════════════════════════════════════════════════════════════════════
-describe('VSIX walkthrough media paths', () => {
-  const extPkgPath = path.resolve(__dirname, '../../../release/vscode-extension/package.json');
-  const extDir = path.dirname(extPkgPath);
-
-  it('package.json should exist in release/vscode-extension', () => {
-    expect(fs.existsSync(extPkgPath)).toBe(true);
-  });
-
-  it('all walkthrough media.markdown values should be file paths, not inline markdown', () => {
-    const pkg = JSON.parse(fs.readFileSync(extPkgPath, 'utf8'));
-    const walkthroughs = pkg.contributes?.walkthroughs ?? [];
-    for (const wt of walkthroughs) {
-      for (const step of wt.steps ?? []) {
-        const md = step.media?.markdown;
-        if (!md) continue;
-        // Must be a relative path ending in .md, not inline markdown starting with ## or #
-        expect(md, `step "${step.id}" has inline markdown instead of file path`).toMatch(/\.md$/);
-        expect(md, `step "${step.id}" starts with # (inline markdown)`).not.toMatch(/^#/);
-      }
-    }
-  });
-
-  it('all referenced walkthrough .md files should exist on disk', () => {
-    const pkg = JSON.parse(fs.readFileSync(extPkgPath, 'utf8'));
-    const walkthroughs = pkg.contributes?.walkthroughs ?? [];
-    for (const wt of walkthroughs) {
-      for (const step of wt.steps ?? []) {
-        const md = step.media?.markdown;
-        if (!md || !md.endsWith('.md')) continue;
-        const fullPath = path.resolve(extDir, md);
-        expect(fs.existsSync(fullPath), `missing walkthrough file: ${fullPath}`).toBe(true);
-      }
-    }
   });
 });

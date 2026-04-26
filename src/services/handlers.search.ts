@@ -26,6 +26,7 @@ import { ensureLoaded, incrementUsage } from './indexContext';
 import { semanticError } from './errors';
 import { getRuntimeConfig } from '../config/runtimeConfig';
 import { cosineSimilarity, embedText, getInstructionEmbeddings } from './embeddingService';
+import safeRegex from 'safe-regex2';
 
 const SEARCH_SCHEMA = {
   type: 'object',
@@ -91,6 +92,18 @@ interface KeywordSearchContext {
   keywordWeights: Map<string, number>;
   totalKeywordWeight: number;
 }
+
+interface CompiledRegexKeyword {
+  source: string;
+  testRegex: RegExp;
+  countRegex: RegExp;
+}
+
+interface InternalSearchParams extends SearchParams {
+  compiledRegexKeywords?: CompiledRegexKeyword[];
+}
+
+const MAX_REGEX_PATTERN_LENGTH = 200;
 
 function normalizeSearchText(text: string, caseSensitive: boolean): string {
   const normalized = text
@@ -202,7 +215,8 @@ function calculateRelevance(
   caseSensitive: boolean,
   includeCategories: boolean,
   mode: SearchMode = 'keyword',
-  keywordContext?: KeywordSearchContext
+  keywordContext?: KeywordSearchContext,
+  regexKeywords?: CompiledRegexKeyword[]
 ): KeywordScoreResult {
   let score = 0;
   const matchedFieldSet = new Set<SearchMatchedField>();
@@ -210,16 +224,31 @@ function calculateRelevance(
   const prepareText = (text: string) => caseSensitive ? text : text.toLowerCase();
   const preparedKeywords = keywords.map(k => mode === 'keyword' ? prepareText(k) : k);
   const regexFlags = caseSensitive ? 'g' : 'gi';
+  const compiledRegexKeywords = mode === 'regex'
+    ? (regexKeywords ?? keywords.map((keyword) => {
+      // Defense-in-depth: production callers route through compileRegexKeywords →
+      // validateRegexKeyword. Re-validate here in the fallback path so direct
+      // invocations (tests, future handlers) cannot bypass ReDoS / unsupported-
+      // construct rejection. Throws on invalid pattern.
+      validateRegexKeyword(keyword);
+      return {
+        source: keyword,
+        testRegex: new RegExp(keyword, caseSensitive ? '' : 'i'), // lgtm[js/regex-injection] — validated above by validateRegexKeyword
+        countRegex: new RegExp(keyword, regexFlags), // lgtm[js/regex-injection] — validated above by validateRegexKeyword
+      };
+    }))
+    : [];
 
   // Build matchers: regex mode uses raw patterns, keyword mode uses substring/escaped regex
-  const testMatch = (text: string, keyword: string): boolean => {
+  const testMatch = (text: string, keyword: string | CompiledRegexKeyword): boolean => {
     if (mode === 'regex') {
       try {
-        // Regex patterns are pre-validated in the handler; try-catch is defense-in-depth
-        return new RegExp(keyword, caseSensitive ? '' : 'i').test(text); // lgtm[js/regex-injection] — patterns pre-validated at handler entry
+        const compiled = keyword as CompiledRegexKeyword;
+        compiled.testRegex.lastIndex = 0;
+        return compiled.testRegex.test(text); // lgtm[js/regex-injection] — patterns pre-validated and pre-compiled at handler entry
       } catch { return false; }
     }
-    return prepareText(text).includes(prepareText(keyword));
+    return prepareText(text).includes(prepareText(keyword as string));
   };
 
   if (mode === 'keyword') {
@@ -313,17 +342,19 @@ function calculateRelevance(
     return { score, matchedFields: Array.from(matchedFieldSet) };
   }
 
-  const countMatches = (text: string, keyword: string): number => {
+  const countMatches = (text: string, keyword: string | CompiledRegexKeyword): number => {
     if (mode === 'regex') {
       try {
-        return (text.match(new RegExp(keyword, regexFlags)) || []).length; // lgtm[js/regex-injection] — patterns pre-validated at handler entry
+        const compiled = keyword as CompiledRegexKeyword;
+        compiled.countRegex.lastIndex = 0;
+        return (text.match(compiled.countRegex) || []).length; // lgtm[js/regex-injection] — patterns pre-validated and pre-compiled at handler entry
       } catch { return 0; }
     }
-    return (text.match(new RegExp(escapeRegex(keyword), regexFlags)) || []).length;
+    return (text.match(new RegExp(escapeRegex(keyword as string), regexFlags)) || []).length;
   };
 
   let idMatches = 0;
-  for (const keyword of preparedKeywords) {
+  for (const keyword of mode === 'regex' ? compiledRegexKeywords : preparedKeywords) {
     if (testMatch(instruction.id, keyword)) {
       idMatches += countMatches(instruction.id, keyword);
     }
@@ -334,7 +365,7 @@ function calculateRelevance(
   }
 
   let titleMatches = 0;
-  for (const keyword of preparedKeywords) {
+  for (const keyword of mode === 'regex' ? compiledRegexKeywords : preparedKeywords) {
     titleMatches += countMatches(instruction.title, keyword);
   }
   if (titleMatches > 0) {
@@ -343,7 +374,7 @@ function calculateRelevance(
   }
 
   let summaryMatches = 0;
-  for (const keyword of preparedKeywords) {
+  for (const keyword of mode === 'regex' ? compiledRegexKeywords : preparedKeywords) {
     summaryMatches += countMatches(instruction.semanticSummary || '', keyword);
   }
   if (summaryMatches > 0) {
@@ -352,7 +383,7 @@ function calculateRelevance(
   }
 
   let bodyMatches = 0;
-  for (const keyword of preparedKeywords) {
+  for (const keyword of mode === 'regex' ? compiledRegexKeywords : preparedKeywords) {
     bodyMatches += countMatches(instruction.body, keyword);
   }
   if (bodyMatches > 0) {
@@ -363,7 +394,7 @@ function calculateRelevance(
   if (includeCategories && instruction.categories?.length) {
     const categoryText = instruction.categories.join(' ');
     let categoryMatches = 0;
-    for (const keyword of preparedKeywords) {
+    for (const keyword of mode === 'regex' ? compiledRegexKeywords : preparedKeywords) {
       categoryMatches += countMatches(categoryText, keyword);
     }
     if (categoryMatches > 0) {
@@ -373,13 +404,14 @@ function calculateRelevance(
   }
 
   const uniqueMatches = new Set<string>();
-  for (const keyword of preparedKeywords) {
+  for (const keyword of mode === 'regex' ? compiledRegexKeywords : preparedKeywords) {
+    const keywordSource = mode === 'regex' ? (keyword as CompiledRegexKeyword).source : keyword as string;
     if (testMatch(instruction.id, keyword) ||
         testMatch(instruction.title, keyword) ||
         testMatch(instruction.semanticSummary || '', keyword) ||
         testMatch(instruction.body, keyword) ||
         (includeCategories && instruction.categories?.some((cat: string) => testMatch(cat, keyword)))) {
-      uniqueMatches.add(keyword);
+      uniqueMatches.add(keywordSource);
     }
   }
 
@@ -397,10 +429,57 @@ function escapeRegex(string: string): string {
   return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+function sanitizeKeywords(keywords: string[]): string[] {
+  return keywords
+    .filter(k => typeof k === 'string' && k.trim().length > 0)
+    .map(k => k.trim())
+    .slice(0, 10);
+}
+
+function validateRegexKeyword(keyword: string): void {
+  if (keyword.length > MAX_REGEX_PATTERN_LENGTH) {
+    throw new Error(`Regex patterns must not exceed ${MAX_REGEX_PATTERN_LENGTH} characters to prevent ReDoS`);
+  }
+  try {
+    new RegExp(keyword); // lgtm[js/regex-injection] — this IS the syntax validation step
+  } catch {
+    throw new Error(`Invalid regex pattern "${keyword}": check syntax and try again`);
+  }
+  if (/\(\?(?:[=!]|<[=!])/.test(keyword)) {
+    throw new Error('Regex pattern rejected: lookaround assertions are not supported in regex search mode');
+  }
+  if (/\\[1-9]/.test(keyword)) {
+    throw new Error('Regex pattern rejected: backreferences are not supported in regex search mode');
+  }
+  if (/\([^)]*[+*?}]\)[+*?{]/.test(keyword)) {
+    throw new Error('Regex pattern rejected: nested quantifiers can cause catastrophic backtracking');
+  }
+  if (/\)[+*?}][^(]*\)[+*?{]/.test(keyword)) {
+    throw new Error('Regex pattern rejected: nested quantifiers can cause catastrophic backtracking');
+  }
+  if (/\([^)]*\|[^)]*\)[+*?{]/.test(keyword)) {
+    throw new Error('Regex pattern rejected: alternation with quantifiers can cause catastrophic backtracking');
+  }
+  if (!safeRegex(keyword)) {
+    throw new Error('Regex pattern rejected: potentially catastrophic backtracking detected');
+  }
+}
+
+function compileRegexKeywords(keywords: string[], caseSensitive: boolean): CompiledRegexKeyword[] {
+  return keywords.map((keyword) => {
+    validateRegexKeyword(keyword);
+    return {
+      source: keyword,
+      testRegex: new RegExp(keyword, caseSensitive ? '' : 'i'), // lgtm[js/regex-injection] — pattern validated by validateRegexKeyword above
+      countRegex: new RegExp(keyword, caseSensitive ? 'g' : 'gi'), // lgtm[js/regex-injection] — pattern validated by validateRegexKeyword above
+    };
+  });
+}
+
 /**
  * Load and search instructions from the index
  */
-function performSearch(params: SearchParams): SearchResponse {
+function performSearch(params: InternalSearchParams): SearchResponse {
   const startTime = performance.now();
 
   // Load instruction index state
@@ -425,10 +504,7 @@ function performSearch(params: SearchParams): SearchResponse {
   }
 
   // Validate and sanitize keywords
-  const sanitizedKeywords = keywords
-    .filter(k => typeof k === 'string' && k.trim().length > 0)
-    .map(k => k.trim())
-    .slice(0, 10); // Enforce max 10 keywords
+  const sanitizedKeywords = sanitizeKeywords(keywords);
 
   if (sanitizedKeywords.length === 0) {
     throw new Error('At least one valid keyword is required');
@@ -460,7 +536,8 @@ function performSearch(params: SearchParams): SearchResponse {
       caseSensitive,
       includeCategories,
       mode,
-      keywordContext
+      keywordContext,
+      params.compiledRegexKeywords
     );
 
     if (score > 0) {
@@ -632,32 +709,11 @@ export async function handleInstructionsSearch(params: SearchParams): Promise<Se
 
     logInfo(`[search] Search request: mode=${mode}, keywords=[${params.keywords.join(', ')}], limit=${params.limit ?? 50}, contentType=${params.contentType ?? 'any'}`);
 
+    const sanitizedKeywords = sanitizeKeywords(params.keywords);
     // Regex mode validation: pattern safety checks
-    if (mode === 'regex') {
-      for (const keyword of params.keywords) {
-        if (keyword.length > 200) {
-          throw new Error('Regex patterns must not exceed 200 characters to prevent ReDoS');
-        }
-        // Reject patterns with nested quantifiers that cause catastrophic backtracking
-        if (/\([^)]*[+*}]\)[+*{]/.test(keyword)) {
-          throw new Error('Regex pattern rejected: nested quantifiers can cause catastrophic backtracking');
-        }
-        // Also catch double-nested quantified groups like ((a)+)+ where inner )+
-        // is followed by more chars and another )+
-        if (/\)[+*}][^(]*\)[+*{]/.test(keyword)) {
-          throw new Error('Regex pattern rejected: nested quantifiers can cause catastrophic backtracking');
-        }
-        // Reject overlapping alternations with quantifiers: (a|a)+
-        if (/\([^)]*\|[^)]*\)[+*]{1,}/.test(keyword)) {
-          throw new Error('Regex pattern rejected: alternation with quantifiers can cause catastrophic backtracking');
-        }
-        try {
-          new RegExp(keyword); // lgtm[js/regex-injection] — this IS the validation code
-        } catch {
-          throw new Error(`Invalid regex pattern "${keyword}": check syntax and try again`);
-        }
-      }
-    }
+    const compiledRegexKeywords = mode === 'regex'
+      ? compileRegexKeywords(sanitizedKeywords, params.caseSensitive ?? false)
+      : undefined;
 
     // Semantic mode: check feature flag
     if (mode === 'semantic') {
@@ -670,13 +726,14 @@ export async function handleInstructionsSearch(params: SearchParams): Promise<Se
     }
 
     // Ensure case-insensitive search by default
-    const searchParams: SearchParams = {
-      keywords: params.keywords,
+    const searchParams: InternalSearchParams = {
+      keywords: sanitizedKeywords,
       mode: mode as SearchMode,
       limit: params.limit,
       includeCategories: params.includeCategories,
       caseSensitive: params.caseSensitive ?? false, // Explicit default to false for case-insensitive search
-      contentType: params.contentType
+      contentType: params.contentType,
+      compiledRegexKeywords,
     };
 
     // Semantic mode: embedding-based similarity search

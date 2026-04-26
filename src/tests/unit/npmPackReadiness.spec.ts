@@ -93,7 +93,7 @@ describe('npm publish readiness', () => {
     });
 
     it('files array does NOT include scripts/ build helpers (except allowed helpers)', () => {
-      const allowedScripts = ['scripts/copy-dashboard-assets.mjs', 'scripts/setup-hooks.cjs'];
+      const allowedScripts = ['scripts/copy-dashboard-assets.mjs', 'scripts/setup-hooks.cjs', 'scripts/setup-wizard.mjs'];
       const hasDisallowedScripts = pkg.files.some(
         (f: string) => f.startsWith('scripts/') && !allowedScripts.includes(f)
       );

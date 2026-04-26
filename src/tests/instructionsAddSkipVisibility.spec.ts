@@ -8,48 +8,53 @@ import { performHandshake } from './util/handshakeHelper.js';
 const runGate = process.env.INDEX_SERVER_RUN_SKIP_VISIBILITY_RELIABILITY || '';
 const enabled = /^(1|true|yes|on)$/i.test(runGate);
 
-(!enabled ? describe.skip : describe)('index_add skip visibility reliability', () => {
-  if (!enabled) {
-    it('SKIPPED (set INDEX_SERVER_RUN_SKIP_VISIBILITY_RELIABILITY=1 to enable)', () => {
-      expect(true).toBe(true);
-    });
-    return; // safety
-  }
-
-  it('duplicate add (skip) preserves immediate visibility', async () => {
+describe('index_add skip visibility reliability', () => {
+  it.skipIf(!enabled)('duplicate add (skip) preserves immediate visibility', async () => {
     const DEV_DIR = process.cwd();
     const id = 'skip-visibility-' + Date.now();
     const body = 'Test body for skip visibility reliability patch';
 
     const { server, parser } = await performHandshake({ cwd: DEV_DIR, protocolVersion: '2025-06-18' });
-    const send = (m: Record<string, unknown>) => server.stdin.write(buildContentLengthFrame(m));
-    const wait = (reqId: number, ms = 12000) => parser.waitForId(reqId, ms, 40);
+    try {
+      const send = (m: Record<string, unknown>) => server.stdin.write(buildContentLengthFrame(m));
+      const wait = (reqId: number, ms = 12000) => parser.waitForId(reqId, ms, 40);
 
-    // First add (overwrite:true to ensure deterministic create)
-    send({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'index_dispatch', arguments: { action: 'add', entry: { id, title: id, body, priority: 50, audience: 'all', requirement: 'optional', categories: [] }, overwrite: true, lax: true } } });
-    const add1 = await wait(2);
-    expect(add1.error).toBeFalsy();
+      // First add (overwrite:true to ensure deterministic create)
+      send({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'index_dispatch', arguments: { action: 'add', entry: { id, title: id, body, priority: 50, audience: 'all', requirement: 'optional', categories: [] }, overwrite: true, lax: true } } });
+      const add1 = await wait(2);
+      expect(add1.error).toBeFalsy();
+      const add1Txt = (add1 as any).result?.content?.[0]?.text as string | undefined;
+      const add1Obj = add1Txt ? JSON.parse(add1Txt) : {};
+      expect(add1Obj.id).toBe(id);
+      expect(add1Obj.created).toBe(true);
 
-    // Duplicate add without overwrite should skip
-    send({ jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'index_dispatch', arguments: { action: 'add', entry: { id, title: id, body, priority: 50, audience: 'all', requirement: 'optional', categories: [] }, overwrite: false, lax: true } } });
-    const add2 = await wait(3);
-    expect(add2.error).toBeFalsy();
+      // Duplicate add without overwrite should skip
+      send({ jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'index_dispatch', arguments: { action: 'add', entry: { id, title: id, body, priority: 50, audience: 'all', requirement: 'optional', categories: [] }, overwrite: false, lax: true } } });
+      const add2 = await wait(3);
+      expect(add2.error).toBeFalsy();
+      const add2Txt = (add2 as any).result?.content?.[0]?.text as string | undefined;
+      const add2Obj = add2Txt ? JSON.parse(add2Txt) : {};
+      expect(add2Obj.id).toBe(id);
+      expect(add2Obj.created).toBe(false);
+      expect(add2Obj.verified).toBe(true);
 
-    // List (request minimal diff list)
-    send({ jsonrpc: '2.0', id: 4, method: 'tools/call', params: { name: 'index_dispatch', arguments: { action: 'list', expectId: id } } });
-    const list = await wait(4);
-    const listTxt = (list as any).result?.content?.[0]?.text;
-    const listObj = listTxt ? JSON.parse(listTxt) : {};
-    const found = !!listObj.items?.find((e: any) => e.id === id);
-    expect(found).toBe(true);
+      // List (request minimal diff list)
+      send({ jsonrpc: '2.0', id: 4, method: 'tools/call', params: { name: 'index_dispatch', arguments: { action: 'list', expectId: id } } });
+      const list = await wait(4);
+      const listTxt = (list as any).result?.content?.[0]?.text;
+      const listObj = listTxt ? JSON.parse(listTxt) : {};
+      const found = !!listObj.items?.find((e: any) => e.id === id);
+      expect(found).toBe(true);
 
-    // Get entry
-    send({ jsonrpc: '2.0', id: 5, method: 'tools/call', params: { name: 'index_dispatch', arguments: { action: 'get', id } } });
-    const get = await wait(5);
-    const getTxt = (get as any).result?.content?.[0]?.text;
-    const getObj = getTxt ? JSON.parse(getTxt) : {};
-    expect(getObj.notFound).not.toBe(true);
-
-    server.kill();
+      // Get entry
+      send({ jsonrpc: '2.0', id: 5, method: 'tools/call', params: { name: 'index_dispatch', arguments: { action: 'get', id } } });
+      const get = await wait(5);
+      const getTxt = (get as any).result?.content?.[0]?.text;
+      const getObj = getTxt ? JSON.parse(getTxt) : {};
+      expect(getObj.item?.id).toBe(id);
+      expect(getObj.item?.body).toBe(body);
+    } finally {
+      server.kill();
+    }
   }, 35000);
 });

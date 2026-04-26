@@ -39,7 +39,7 @@ original raw value is intentionally not persisted back to disk automatically (av
 
 ## Hard Limits & Warnings
 
-Body size enforcement is configurable via `INDEX_SERVER_BODY_WARN_LENGTH` (default: 100000, range: 1000–1000000).
+Body size enforcement is configurable via `INDEX_SERVER_BODY_WARN_LENGTH` (default: 50000, range: 1000–1000000).
 The JSON schema hard ceiling is 1MB (`bodyMaxLength`); `bodyWarnLength` controls the effective enforcement limit.
 
 | Path | Limit | Enforcement | Counter |
@@ -71,7 +71,7 @@ The regression tests in `src/tests/IndexQuality.spec.ts` assert:
 
 1. Ensure `audience` in {individual, group, all} (missing values are auto-salvaged to `all`)
 2. Ensure `requirement` in {mandatory, critical, recommended, optional, deprecated} (missing values are auto-salvaged to `recommended`)
-3. Keep `body` under 90% of configured limit ideally (default: <90k, absolute max configurable via `INDEX_SERVER_BODY_WARN_LENGTH`)
+3. Keep `body` under 90% of configured limit ideally (default: <45k, absolute max configurable via `INDEX_SERVER_BODY_WARN_LENGTH`)
 4. Provide `priority` 1–100 (lower = more important)
 5. Avoid adding governance bootstrap files into runtime Index directory
 

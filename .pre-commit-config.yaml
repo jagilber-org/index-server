@@ -78,6 +78,18 @@ repos:
         language: system
         pass_filenames: false
         stages: [pre-push]
+
+      # Template v1.25.0: mandatory ESLint pre-push gate (CD-1 / GW-1 / TS-4).
+      # JS/TS-aware (no-op without ESLint config + `lint` script). Honors only
+      # explicit TEMPLATE_SKIP_LINT=1 emergency override (separate from any
+      # slow-suite skip flag so it cannot be bypassed unintentionally).
+      - id: eslint-pre-push
+        name: Run ESLint before push (JS/TS adopters)
+        entry: pwsh -NoProfile -NonInteractive -File hooks/eslint-pre-push.ps1
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
   - repo: https://github.com/GitGuardian/ggshield
     rev: v1.49.0
     hooks:

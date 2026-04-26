@@ -16,6 +16,17 @@ jobs:
         shell: pwsh
         run: scripts/sync-constitution.ps1 -Check
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install JS dependencies
+        # Required so the eslint-pre-push hook (template v1.25.0) can
+        # invoke `npm run lint` against locally installed eslint during
+        # the pre-push policy replay below.
+        run: npm ci --no-audit --no-fund
+
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'

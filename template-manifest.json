@@ -1,11 +1,11 @@
 {
-  "templateVersion": "1.24.0",
+  "templateVersion": "1.25.0",
   "schemaVersion": 2,
   "templateName": "layered-hook-security-template",
   "hookStandardInstruction": "repository-hook-security-standard",
   "hookStandardVersion": "1.4.0",
   "canonicalTemplateInstruction": "canonical-starter-template-repo",
-  "updatedAt": "2026-04-19T00:00:00.000Z",
+  "updatedAt": "2026-04-26T00:00:00.000Z",
   "managedFiles": {
     ".template-adoption.example.json": { "strategy": "AdoptionMarker" },
     ".pre-commit-config.yaml": { "strategy": "ExactMatch" },
@@ -35,6 +35,7 @@
     "hooks/run-semgrep-pre-push.ps1": { "strategy": "ExactMatch" },
     "hooks/check-prompt-injection.ps1": { "strategy": "ExactMatch" },
     "hooks/check-hallucinations.ps1": { "strategy": "ExactMatch" },
+    "hooks/eslint-pre-push.ps1": { "strategy": "ExactMatch" },
     "hooks/validate-agent-trailers.ps1": { "strategy": "ExactMatch" },
     ".prompt-injection-allowlist": { "strategy": "MergeReview" },
     ".hallucination-allowlist": { "strategy": "MergeReview" },
@@ -110,6 +111,7 @@
     "Template version 1.21.0 extends PII scanner with multi-language inline allowlist markers (# // /* <!--), file-level .pii-file-allowlist for glob-based skip, well-known numeric constant exclusions (FNV-1a, INT32_MAX, UINT32_MAX, Fibonacci), and vendor/minified file skip in Publish-ToPublicRepo.ps1. Adds manifest schemaVersion 1→2 migration script with .bak backup and CI-compatible exit codes.",
     "Template version 1.22.0 adds language-ecosystem-patterns.md covering 7 ecosystems (Node.js, Python, Go, .NET/C#, Java, Rust, PowerShell) with per-language dependency graph files, Dependabot keys, audit commands, CodeQL keys, and Semgrep rulesets. Adds constitution rule IP-5 (optional profile for dependency graph visibility, Dependabot, and SAST tuning).",
     "Template version 1.23.0 splits Publish-ToPublicRepo.ps1 into New-CleanRoomCopy.ps1 (safe agent-invokable content preparation with SHA-256 manifest) and Publish-ToMirror.ps1 (human-supervised delivery with content-hash verification, sanctioned-remote enforcement via .publish-config.json, and ConfirmImpact=High). Pre-push guard now reads .publish-config.json and fails closed for sanctioned remotes when gh CLI is missing. PUBLISH_OVERRIDE env var deprecated. Original script preserved as thin deprecated wrapper.",
-    "Template version 1.24.0 adds constitution-driven CI validation (PR #40), prompt-injection scanning hook with NFKC normalization and multi-pattern detection (PR #41, SH-10), hallucination quality gates for fabricated dependencies and phantom imports (PR #42), agent attestation framework with trust levels, provenance trailers, and commit-msg validation (PR #43, AG-1..AG-4), and expanded env-leak scanner coverage for identity vars, vault URLs, and tool paths (PR #45). Deleted deprecated Publish-ToPublicRepo.ps1."
+    "Template version 1.24.0 adds constitution-driven CI validation (PR #40), prompt-injection scanning hook with NFKC normalization and multi-pattern detection (PR #41, SH-10), hallucination quality gates for fabricated dependencies and phantom imports (PR #42), agent attestation framework with trust levels, provenance trailers, and commit-msg validation (PR #43, AG-1..AG-4), and expanded env-leak scanner coverage for identity vars, vault URLs, and tool paths (PR #45). Deleted deprecated Publish-ToPublicRepo.ps1.",
+    "Template version 1.25.0 adds a mandatory ESLint pre-push gate (hooks/eslint-pre-push.ps1) wired through .pre-commit-config.yaml so JS/TS adopters' local pushes mirror CI npm run lint. JS/TS-aware (no-op without an ESLint config and lint script). Honors only an explicit TEMPLATE_SKIP_LINT=1 emergency override that is intentionally separate from existing slow-suite skip flags. Severity is delegated to the adopter's lint script (use eslint --max-warnings=0 to fail on warnings). Breaking change for adopters whose CI lint passes but local lint fails. Closes template-repo issue #48."
   ]
 }

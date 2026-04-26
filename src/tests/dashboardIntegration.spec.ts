@@ -16,20 +16,21 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 
-const DASH_PORT = 16787;
 const DASH_HOST = '127.0.0.1';
-const BASE_URL = `http://${DASH_HOST}:${DASH_PORT}`;
 
 describe('Dashboard API Integration', () => {
   let server: DashboardServer | null = null;
+  let baseUrl = '';
 
   beforeAll(async () => {
     try {
       server = createDashboardServer({
-        port: DASH_PORT,
+        port: 0,
         host: DASH_HOST,
+        maxPortTries: 5,
       });
-      await server.start();
+      const started = await server.start();
+      baseUrl = started.url.replace(/\/$/, '');
     } catch (e) {
       console.warn('Dashboard server failed to start:', (e as Error).message);
     }
@@ -45,7 +46,7 @@ describe('Dashboard API Integration', () => {
 
   it('GET /api/status should return server status', async () => {
     if (!server) return;
-    const resp = await fetch(`${BASE_URL}/api/status`);
+    const resp = await fetch(`${baseUrl}/api/status`);
     expect(resp.ok).toBe(true);
     const data = await resp.json();
     expect(data).toBeDefined();
@@ -54,7 +55,7 @@ describe('Dashboard API Integration', () => {
 
   it('GET /api/status should include version information', async () => {
     if (!server) return;
-    const resp = await fetch(`${BASE_URL}/api/status`);
+    const resp = await fetch(`${baseUrl}/api/status`);
     const data = await resp.json() as Record<string, unknown>;
     // Version should be present somewhere in the response
     expect(data.version || data.serverVersion || data.status).toBeDefined();
@@ -64,7 +65,7 @@ describe('Dashboard API Integration', () => {
 
   it('GET /api/tools should return registered tools', async () => {
     if (!server) return;
-    const resp = await fetch(`${BASE_URL}/api/tools`);
+    const resp = await fetch(`${baseUrl}/api/tools`);
     expect(resp.ok).toBe(true);
     const data = await resp.json();
     expect(Array.isArray(data) || (typeof data === 'object' && data !== null)).toBe(true);
@@ -74,7 +75,7 @@ describe('Dashboard API Integration', () => {
 
   it('GET /api/instructions should return instruction list', async () => {
     if (!server) return;
-    const resp = await fetch(`${BASE_URL}/api/instructions`);
+    const resp = await fetch(`${baseUrl}/api/instructions`);
     expect(resp.ok).toBe(true);
     const data = await resp.json();
     expect(data).toBeDefined();
@@ -84,25 +85,25 @@ describe('Dashboard API Integration', () => {
 
   it('should set X-Content-Type-Options: nosniff', async () => {
     if (!server) return;
-    const resp = await fetch(`${BASE_URL}/api/status`);
+    const resp = await fetch(`${baseUrl}/api/status`);
     expect(resp.headers.get('x-content-type-options')).toBe('nosniff');
   });
 
   it('should set X-Frame-Options: DENY', async () => {
     if (!server) return;
-    const resp = await fetch(`${BASE_URL}/api/status`);
+    const resp = await fetch(`${baseUrl}/api/status`);
     expect(resp.headers.get('x-frame-options')).toBe('DENY');
   });
 
   it('should NOT expose X-Powered-By header', async () => {
     if (!server) return;
-    const resp = await fetch(`${BASE_URL}/api/status`);
+    const resp = await fetch(`${baseUrl}/api/status`);
     expect(resp.headers.get('x-powered-by')).toBeNull();
   });
 
   it('should set Content-Security-Policy header', async () => {
     if (!server) return;
-    const resp = await fetch(`${BASE_URL}/admin`);
+    const resp = await fetch(`${baseUrl}/admin`);
     const csp = resp.headers.get('content-security-policy');
     expect(csp).toBeDefined();
     expect(csp).toContain("default-src 'self'");
@@ -110,7 +111,7 @@ describe('Dashboard API Integration', () => {
 
   it('should set Referrer-Policy header', async () => {
     if (!server) return;
-    const resp = await fetch(`${BASE_URL}/api/status`);
+    const resp = await fetch(`${baseUrl}/api/status`);
     expect(resp.headers.get('referrer-policy')).toBeDefined();
   });
 
@@ -118,13 +119,13 @@ describe('Dashboard API Integration', () => {
 
   it('should return 404 for unknown routes', async () => {
     if (!server) return;
-    const resp = await fetch(`${BASE_URL}/api/nonexistent-endpoint-xyz`);
+    const resp = await fetch(`${baseUrl}/api/nonexistent-endpoint-xyz`);
     expect(resp.status).toBe(404);
   });
 
   it('should handle malformed JSON in POST body gracefully', async () => {
     if (!server) return;
-    const resp = await fetch(`${BASE_URL}/api/instructions`, {
+    const resp = await fetch(`${baseUrl}/api/instructions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: '{ this is not valid json }',
@@ -138,7 +139,7 @@ describe('Dashboard API Integration', () => {
 
   it('GET /admin should serve dashboard HTML', async () => {
     if (!server) return;
-    const resp = await fetch(`${BASE_URL}/admin`);
+    const resp = await fetch(`${baseUrl}/admin`);
     expect(resp.ok).toBe(true);
     const html = await resp.text();
     expect(html).toContain('<html');
@@ -147,7 +148,7 @@ describe('Dashboard API Integration', () => {
 
   it('dashboard HTML should have CSP nonce on scripts', async () => {
     if (!server) return;
-    const resp = await fetch(`${BASE_URL}/admin`);
+    const resp = await fetch(`${baseUrl}/admin`);
     const html = await resp.text();
     const csp = resp.headers.get('content-security-policy') || '';
     // Extract nonce from CSP
@@ -161,7 +162,7 @@ describe('Dashboard API Integration', () => {
 
   it('GET /api/metrics should return metrics data', async () => {
     if (!server) return;
-    const resp = await fetch(`${BASE_URL}/api/metrics`);
+    const resp = await fetch(`${baseUrl}/api/metrics`);
     // Metrics might be empty but endpoint should respond
     expect(resp.status).toBeLessThan(500);
   });
@@ -172,7 +173,7 @@ describe('Dashboard API Integration', () => {
     if (!server) return;
     const results: number[] = [];
     for (let i = 0; i < 50; i++) {
-      const resp = await fetch(`${BASE_URL}/api/status`);
+      const resp = await fetch(`${baseUrl}/api/status`);
       results.push(resp.status);
     }
     // Should not have any 500 errors
@@ -202,7 +203,7 @@ describe('Dashboard TLS Integration', () => {
 
     // Write a minimal config to avoid system config issues (Windows compat)
     const cnfPath = path.join(certDir, 'openssl.cnf');
-    fs.writeFileSync(cnfPath, '[req]\ndistinguished_name=req_dn\nprompt=no\n[req_dn]\nCN=localhost\n');
+    fs.writeFileSync(cnfPath, '[req]\ndistinguished_name=req_dn\nprompt=no\n[req_dn]\nCN=localhost\n'); // lgtm[js/insecure-temporary-file] — test writes openssl config inside per-test certDir created with Date.now() suffix
     const cnfEnv = { ...process.env, OPENSSL_CONF: cnfPath };
     execSync(
       `openssl req -x509 -newkey rsa:2048 -keyout "${path.join(certDir, 'server.key')}" ` +

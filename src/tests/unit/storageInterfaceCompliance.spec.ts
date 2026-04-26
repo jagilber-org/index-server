@@ -13,6 +13,10 @@ import { InstructionEntry } from '../../models/instruction';
 import { getHandler } from '../../server/registry';
 import { forceBootstrapConfirmForTests } from '../../services/bootstrapGating';
 
+let hasSqlite = false;
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+try { require('node:sqlite'); hasSqlite = true; } catch { /* node:sqlite not available */ }
+
 const TMP_ROOT = path.join(os.tmpdir(), `storage-compliance-${Date.now()}`);
 const INST_DIR = path.join(TMP_ROOT, 'instructions');
 const DB_PATH = path.join(TMP_ROOT, 'test.db');
@@ -47,7 +51,7 @@ function call(name: string, params: unknown): unknown {
   return handler(params);
 }
 
-describe('Storage Interface Compliance - SQLite', () => {
+describe.skipIf(!hasSqlite)('Storage Interface Compliance - SQLite', () => {
   beforeAll(async () => {
     fs.mkdirSync(INST_DIR, { recursive: true });
     process.env.INDEX_SERVER_MUTATION = '1';
@@ -90,10 +94,11 @@ describe('Storage Interface Compliance - SQLite', () => {
   it('index_import persists to SQLite store', async () => {
     const id = `compliance-import-${Date.now()}`;
     const result = await call('index_import', {
-      entries: [{ id, title: `Import ${id}`, body: `Imported body ${id}` }],
+      entries: [{ id, title: `Import ${id}`, body: `Imported body ${id}`, priority: 50, audience: 'all', requirement: 'optional', categories: ['test'] }],
       mode: 'overwrite',
     });
     expect(result).toBeDefined();
+    expect((result as { imported?: number; overwritten?: number }).imported ?? (result as { overwritten?: number }).overwritten).toBeGreaterThan(0);
     const store = getStore();
     const entry = store.get(id);
     expect(entry).not.toBeNull();

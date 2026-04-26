@@ -32,13 +32,34 @@ function nmapAvailable(): boolean {
   }
 }
 
+function opensslAvailable(): boolean {
+  try {
+    execSync('openssl version', { stdio: 'pipe', timeout: 3_000 });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function nmapScriptAvailable(scriptName: string): boolean {
+  try {
+    const output = execSync(`nmap --script-help ${scriptName}`, { stdio: 'pipe', timeout: 10_000 }).toString();
+    return output.trim().length > 0;
+  } catch {
+    return false;
+  }
+}
+
 async function runNmap(args: string, timeoutMs = 60_000): Promise<string> {
   const { stdout } = await execFileAsync('nmap', args.split(/\s+/), { timeout: timeoutMs });
   return stdout;
 }
 
-describe('Nmap Security Scanning', () => {
-  const hasNmap = nmapAvailable();
+const hasNmap = nmapAvailable();
+
+describe.skipIf(!hasNmap)('Nmap Security Scanning', () => {
+  const hasVulnScript = nmapScriptAvailable('vuln') && process.platform !== 'win32';
+  const hasHttpEnumScript = nmapScriptAvailable('http-enum');
   let server: DashboardServer | null = null;
   let activePort = NMAP_PORT;
 
@@ -70,16 +91,6 @@ describe('Nmap Security Scanning', () => {
     }
   });
 
-  it('should skip if nmap is not available', () => {
-    if (!hasNmap) {
-      console.log('nmap not available — skipping nmap security tests');
-      console.log('Install nmap: https://nmap.org/download.html');
-      expect(true).toBe(true);
-      return;
-    }
-    expect(hasNmap).toBe(true);
-  });
-
   it('should expose only the expected port', async () => {
     if (!hasNmap) return;
     // Scan a narrow range around our port instead of all 65535
@@ -107,43 +118,27 @@ describe('Nmap Security Scanning', () => {
     expect(output).not.toMatch(/Node\.js \d+/);
   }, 200_000);
 
-  it('should not have known vulnerabilities (vuln scan)', async () => {
+  it.skipIf(!hasVulnScript)('should not have known vulnerabilities (vuln scan)', async () => {
     if (!hasNmap) return;
-    try {
-      const output = await runNmap(`--script vuln -p ${activePort} ${NMAP_HOST}`);
-      // Check for VULNERABLE keyword
-      const vulnLines = output.split('\n').filter(l => l.includes('VULNERABLE'));
-      expect(vulnLines).toHaveLength(0);
-    } catch {
-      // vuln scripts might not be installed
-      expect(true).toBe(true);
-    }
+    const output = await runNmap(`--script vuln -p ${activePort} ${NMAP_HOST}`);
+    const vulnLines = output.split('\n').filter(l => l.includes('VULNERABLE'));
+    expect(vulnLines).toHaveLength(0);
   }, 90_000);
 
   it('should have secure HTTP headers', async () => {
     if (!hasNmap) return;
-    try {
-      const output = await runNmap(`--script http-headers -p ${activePort} ${NMAP_HOST}`);
-      const lower = output.toLowerCase();
-      expect(lower).toContain('x-content-type-options');
-      expect(lower).toContain('x-frame-options');
-    } catch {
-      // http-headers script might fail on some setups
-      expect(true).toBe(true);
-    }
+    const response = await fetch(`http://${NMAP_HOST}:${activePort}/api/status`);
+    expect(response.headers.get('x-content-type-options')).toBe('nosniff');
+    expect(response.headers.get('x-frame-options')).toBe('DENY');
   }, 90_000);
 
-  it('should not expose directory listing', async () => {
+  it.skipIf(!hasHttpEnumScript)('should not expose directory listing', async () => {
     if (!hasNmap) return;
-    try {
-      const output = await runNmap(`--script http-enum -p ${activePort} ${NMAP_HOST}`);
-      const lower = output.toLowerCase();
-      expect(lower).not.toContain('.env');
-      expect(lower).not.toContain('.git');
-      expect(lower).not.toContain('node_modules');
-    } catch {
-      expect(true).toBe(true);
-    }
+    const output = await runNmap(`--script http-enum -p ${activePort} ${NMAP_HOST}`);
+    const lower = output.toLowerCase();
+    expect(lower).not.toContain('.env');
+    expect(lower).not.toContain('.git');
+    expect(lower).not.toContain('node_modules');
   }, 90_000);
 
   it('should handle SYN flood gracefully (rate limiting)', async () => {
@@ -171,20 +166,16 @@ describe('Nmap Security Scanning', () => {
   }, 120_000);
 });
 
-describe('Nmap TLS Security', () => {
-  const hasNmap = nmapAvailable();
+const hasOpenssl = opensslAvailable();
+
+describe.skipIf(!hasNmap || !hasOpenssl)('Nmap TLS Security', () => {
+  const hasSslEnumCiphersScript = nmapScriptAvailable('ssl-enum-ciphers');
   let server: DashboardServer | null = null;
   const tlsPort = 19788;
   let activeTlsPort = tlsPort;
   let certDir: string;
 
   beforeAll(async () => {
-    if (!hasNmap) return;
-    // Check if openssl is available for cert generation
-    let hasOpenssl = false;
-    try { execSync('openssl version', { stdio: 'pipe' }); hasOpenssl = true; } catch { /* ok */ }
-    if (!hasOpenssl) return;
-
     // Generate test certs
     certDir = path.join(__dirname, '..', '..', 'tmp', 'nmap-tls-test');
     fs.mkdirSync(certDir, { recursive: true });
@@ -222,41 +213,33 @@ describe('Nmap TLS Security', () => {
     expect(output.toLowerCase()).toMatch(/ssl|https|tls/);
   });
 
-  it('should not support SSLv3 or TLS 1.0/1.1 (weak protocols)', async () => {
+  it.skipIf(!hasSslEnumCiphersScript)('should not support SSLv3 or TLS 1.0/1.1 (weak protocols)', async () => {
     if (!hasNmap || !server) return;
-    try {
-      const output = await runNmap(`--script ssl-enum-ciphers -p ${activeTlsPort} ${NMAP_HOST}`);
-      const lower = output.toLowerCase();
-      // SSLv3, TLSv1.0, TLSv1.1 should not appear or should show as rejected
-      expect(lower).not.toMatch(/sslv3.*accepted/);
-      expect(lower).not.toMatch(/tlsv1\.0.*accepted/);
-    } catch {
-      // ssl-enum-ciphers script might not be installed
-      expect(true).toBe(true);
-    }
+    const output = await runNmap(`--script ssl-enum-ciphers -p ${activeTlsPort} ${NMAP_HOST}`);
+    const lower = output.toLowerCase();
+    expect(lower).not.toMatch(/sslv3.*accepted/);
+    expect(lower).not.toMatch(/tlsv1\.0.*accepted/);
   });
 
-  it('should not have weak ciphers enabled', async () => {
+  it.skipIf(!hasSslEnumCiphersScript)('should not have weak ciphers enabled', async () => {
     if (!hasNmap || !server) return;
-    try {
-      const output = await runNmap(`--script ssl-enum-ciphers -p ${activeTlsPort} ${NMAP_HOST}`);
-      const lower = output.toLowerCase();
-      // Check for weak ciphers
-      expect(lower).not.toContain('rc4');
-      expect(lower).not.toContain('des-cbc3');
-      expect(lower).not.toContain('null');
-    } catch {
-      expect(true).toBe(true);
-    }
+    const output = await runNmap(`--script ssl-enum-ciphers -p ${activeTlsPort} ${NMAP_HOST}`);
+    const lower = output.toLowerCase();
+    expect(lower).not.toContain('rc4');
+    expect(lower).not.toContain('des-cbc3');
+    expect(lower).not.toContain('null');
   });
 
   it('should have HSTS header when TLS is enabled', async () => {
     if (!hasNmap || !server) return;
+    const orig = process.env.NODE_TLS_REJECT_UNAUTHORIZED;
+    process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'; // lgtm[js/disabling-certificate-validation] — test: self-signed cert
     try {
-      const output = await runNmap(`--script http-headers -p ${activeTlsPort} ${NMAP_HOST}`);
-      expect(output.toLowerCase()).toContain('strict-transport-security');
-    } catch {
-      expect(true).toBe(true);
+      const response = await fetch(`https://${NMAP_HOST}:${activeTlsPort}/api/status`);
+      expect(response.headers.get('strict-transport-security')).toBeDefined();
+    } finally {
+      if (orig === undefined) delete process.env.NODE_TLS_REJECT_UNAUTHORIZED;
+      else process.env.NODE_TLS_REJECT_UNAUTHORIZED = orig;
     }
   });
 });

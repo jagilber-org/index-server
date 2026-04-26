@@ -1,12 +1,12 @@
 name: Multi-Agent Concurrency Tests
 
+# Tier 3: manual / scheduled only — these tests cost ~40 minutes per PR run
+# (4 long tests × 2 OS matrix). Run via workflow_dispatch before release, or
+# on the weekly schedule. PR validation is handled by ci.yml + faster suites.
+
 on:
-  pull_request:
-    branches: [master, main]
-    paths:
-      - 'src/**'
-      - 'tests/**'
-      - '.github/workflows/multi-agent-concurrency.yml'
+  schedule:
+    - cron: '0 7 * * 1'  # Weekly Monday 07:00 UTC
   workflow_dispatch:
     inputs:
       client_count:
@@ -23,7 +23,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
-        node: [20]
+        node: [22]
 
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15

@@ -1,14 +1,19 @@
 ## VS Code MCP Integration
 
+Configure Index Server as an MCP server in VS Code using native MCP support.
+
 Configure a custom MCP server in VS Code (or compatible client) by adding an entry like:
 
 ```jsonc
 {
   "servers": {
     "instructionIndex": {
-      "command": "node",
-      "args": ["dist/server/index-server.js", "--dashboard"],
-      "transport": "stdio"
+      "command": "npx",
+      "args": ["-y", "@jagilber-org/index-server@latest", "--dashboard"],
+      "transport": "stdio",
+      "env": {
+        "INDEX_SERVER_DIR": "C:/mcp/index-data/instructions"
+      }
     }
   }
 }
@@ -27,7 +32,7 @@ VS Code uses the `servers` key. Copilot CLI and Claude Desktop use the `mcpServe
 
 VS Code can auto-discover Copilot CLI servers when `chat.mcp.discovery.enabled` is set to `true`.
 
-Use the VS Code extension's **Index Server: Configure MCP Client** command to generate the correct format for your target client.
+Use `npx -y @jagilber-org/index-server@latest --setup` to generate the correct format for your target client.
 
 See [MCP Configuration Guide](mcp_configuration.md#config-file-formats) for full format comparison and detailed examples.
 
@@ -52,8 +57,8 @@ Flags (pass in `args`):
 ### Security Considerations
 
 - Dashboard is local-only by default (bind changes via `--dashboard-host`).
-- Mutation tools are gated; enable with `INDEX_SERVER_MUTATION=1` only in trusted contexts.
-- Prefer leaving gating off in multi-tenant or shared environments.
+- Mutation tools are enabled by default, but bootstrap confirmation still gates fresh installs.
+- Set `INDEX_SERVER_MUTATION=0` when you want an explicit read-only runtime in shared or tightly controlled environments.
 
 ### Environment Flags Example
 
@@ -61,11 +66,11 @@ Flags (pass in `args`):
 {
   "servers": {
     "instructionIndex": {
-      "command": "node",
-      "args": ["dist/server/index-server.js", "--dashboard"],
+      "command": "npx",
+      "args": ["-y", "@jagilber-org/index-server@latest", "--dashboard"],
       "transport": "stdio",
       "env": {
-        "INDEX_SERVER_MUTATION": "1",
+        "INDEX_SERVER_DIR": "C:/mcp/index-data/instructions",
         "INDEX_SERVER_VERBOSE_LOGGING": "1"
       }
     }
@@ -73,13 +78,39 @@ Flags (pass in `args`):
 }
 ```
 
-Omit the `env` block for read-only default.
+### SQLite with Vector Embeddings Example
+
+```jsonc
+{
+  "servers": {
+    "instructionIndex": {
+      "command": "npx",
+      "args": ["-y", "@jagilber-org/index-server@latest", "--dashboard"],
+      "transport": "stdio",
+      "env": {
+        "INDEX_SERVER_DIR": "C:/mcp/index-data/instructions",
+        "INDEX_SERVER_STORAGE_BACKEND": "sqlite",
+        "INDEX_SERVER_SQLITE_VEC_ENABLED": "1",
+        "INDEX_SERVER_SEMANTIC_ENABLED": "1"
+      }
+    }
+  }
+}
+```
+
+> **Note:** sqlite-vec requires Node.js ≥ 22.13.0. If the native binary cannot load, embeddings fall back to JSON storage automatically.
+
+Use a stable `INDEX_SERVER_DIR` outside VS Code config/install paths so your catalog is easy to back up and survives reinstalls.
 
 ### Troubleshooting
 
-- Ensure build: run `npm run build` before launching.
-- Remove any leading slash in the entrypoint path (`dist/server/index-server.js`, not `/dist/server/index-server.js`).
+- Use `npx -y @jagilber-org/index-server@latest --setup` if you want the CLI to generate `mcp.json` for you.
 - Set `INDEX_SERVER_VERBOSE_LOGGING=1` for detailed stderr diagnostics.
 - Port conflicts: server auto-increments; check stderr for chosen port.
+
+### Troubleshooting from a local checkout
+
+- Ensure the repo is built before launching from source: run `npm run build`.
+- Use a relative entrypoint path such as `dist/server/index-server.js`, not `/dist/server/index-server.js`.
 
 Generated schemas are in `src/schemas/index.ts`; enforce via `npm run test:contracts`.

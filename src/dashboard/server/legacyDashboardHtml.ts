@@ -14,7 +14,7 @@ import { LEGACY_DASHBOARD_CSS } from "./legacyDashboardStyles.js";
 export function stripGraphTab(html: string): string {
   html = html.replace(/<button[^>]*data-section="graph"[^>]*>Graph<\/button>\s*/i, ""); // lgtm[js/incomplete-multi-character-sanitization] — stripping graph tab, not sanitization
   html = html.replace(/<!--\s*Graph Section\s*-->[\s\S]*?(?=<!--\s*Configuration Section\s*-->)/i, "");
-  html = html.replace(/<script[^>]*src="js\/admin\.graph\.js[^"]*"[^>]*><\/script>\s*/i, "");
+  html = html.replace(/<script[^>]*src="js\/admin\.graph\.js[^"]*"[^>]*><\/script>\s*/i, ""); // lgtm[js/incomplete-multi-character-sanitization] — stripping graph script tag, not sanitization
   return html;
 }
 

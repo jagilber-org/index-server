@@ -9,9 +9,9 @@
 
 import fs from 'fs';
 import path from 'path';
-import crypto from 'crypto';
 import { InstructionEntry } from '../../models/instruction.js';
 import { computeGovernanceHashFromEntries } from './hashUtils.js';
+import { atomicCreateJson, atomicWriteJson } from '../atomicFs.js';
 import type {
   IInstructionStore,
   ListOptions,
@@ -107,12 +107,13 @@ export class JsonFileStore implements IInstructionStore {
     return this.cache.get(id) ?? null;
   }
 
-  write(entry: InstructionEntry): void {
-    // Write to disk
+  write(entry: InstructionEntry, opts?: { createOnly?: boolean }): void {
     const filePath = path.join(this.dir, `${entry.id}.json`);
-    const tmpPath = `${filePath}.${crypto.randomBytes(4).toString('hex')}.tmp`;
-    fs.writeFileSync(tmpPath, JSON.stringify(entry, null, 2), 'utf-8');
-    fs.renameSync(tmpPath, filePath);
+    if (opts?.createOnly) {
+      atomicCreateJson(filePath, entry);
+    } else {
+      atomicWriteJson(filePath, entry);
+    }
 
     // Update in-memory cache
     this.cache.set(entry.id, entry);

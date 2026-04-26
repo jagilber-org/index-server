@@ -9,6 +9,7 @@ import path from 'path';
 import v8 from 'v8';
 import { MetricsCollector } from '../MetricsCollector.js';
 import { getRuntimeConfig } from '../../../config/runtimeConfig.js';
+import { logError } from '../../../services/logger.js';
 
 /** Derive short git commit (best-effort; never throws) */
 function getGitCommit(): string | null {
@@ -83,7 +84,7 @@ export function createStatusRoutes(metricsCollector: MetricsCollector): Router {
         timestamp: Date.now(),
       });
     } catch (error) {
-      console.error('[API] Status error:', error);
+      logError('[API] Status error:', error);
       res.status(500).json({
         error: 'Failed to get server status',
       });
@@ -142,7 +143,7 @@ export function createStatusRoutes(metricsCollector: MetricsCollector): Router {
         timestamp: Date.now(),
       });
     } catch (error) {
-      console.error('[API] Health check error:', error);
+      logError('[API] Health check error:', error);
       res.status(500).json({
         status: 'error',
         error: 'Health check failed',
@@ -163,7 +164,7 @@ export function createStatusRoutes(metricsCollector: MetricsCollector): Router {
         timestamp: Date.now()
       });
     } catch (error) {
-      console.error('[API] System health error:', error);
+      logError('[API] System health error:', error);
       res.status(500).json({
         error: 'Failed to get system health',
       });
@@ -186,7 +187,7 @@ export function createStatusRoutes(metricsCollector: MetricsCollector): Router {
         timestamp: Date.now()
       });
     } catch (error) {
-      console.error('[API] System resources error:', error);
+      logError('[API] System resources error:', error);
       res.status(500).json({
         success: false,
         error: 'Failed to get system resource history',

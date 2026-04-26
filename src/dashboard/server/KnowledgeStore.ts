@@ -9,6 +9,7 @@
 import fs from 'fs';
 import path from 'path';
 import { getRuntimeConfig } from '../../config/runtimeConfig';
+import { logWarn } from '../../services/logger.js';
 
 export interface KnowledgeEntry {
   key: string;
@@ -38,7 +39,9 @@ class KnowledgeStore {
           }
         }
       }
-    } catch { /* ignore corrupt/missing file */ }
+    } catch (error) {
+      logWarn('[KnowledgeStore] Failed to load persisted knowledge store', error);
+    }
   }
 
   private saveToDisk(): void {
@@ -46,7 +49,9 @@ class KnowledgeStore {
       const dir = path.dirname(this.filePath);
       if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
       fs.writeFileSync(this.filePath, JSON.stringify(Array.from(this.entries.values()), null, 2));
-    } catch { /* ignore write errors */ }
+    } catch (error) {
+      logWarn('[KnowledgeStore] Failed to persist knowledge store', error);
+    }
   }
 
   upsert(key: string, content: string, metadata: Record<string, unknown> = {}): KnowledgeEntry {

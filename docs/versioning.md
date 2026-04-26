@@ -67,6 +67,14 @@ The canonical release flow is:
    - Confirm `origin` and `public` both contain `vX.Y.Z`.
    - Confirm the public GitHub release exists and the local repo is back on clean `main`.
 
+### MCP Registry auth note
+
+The release workflow in `jagilber-dev/index-server` executes from the **private** repo context, so MCP Registry publish should currently be treated as a **PAT-authenticated** step there via `MCP_GITHUB_TOKEN`.
+
+GitHub OIDC is only the expected path when the workflow itself runs from the **public mirror** (`jagilber-org/index-server`). Until that execution model changes, do not assume OIDC will activate for private-repo tag releases.
+
+When PAT fallback is required, keep `MCP_GITHUB_TOKEN` scoped only to the MCP Registry publish action rather than broader repository administration.
+
 ### Canonical Commands
 
 ```bash
@@ -99,6 +107,19 @@ Use this PowerShell path when you explicitly need a manual review or review-repo
 ### Scope Note
 
 The canonical release process documented here covers the private GitHub repo and the public mirror repo. If npm package publication is added as part of release, document that flow separately with its required credentials, validation gates, and rollback steps.
+
+### MCP marketplace migration tracking
+
+Marketplace migration remains a staged release-governance effort rather than a one-shot cutover:
+
+1. **Stage 1 (current baseline)** — publishable npm package, MCP Registry metadata, MCP-native-first docs, release workflow support, and a clearly deprecated VSIX fallback.
+2. **Stage 2 (follow-up)** — only remove the VSIX path after registry installation, release flow, and any required parity work are validated.
+
+Current guidance:
+
+- Assume private-repo releases use `MCP_GITHUB_TOKEN` PAT fallback for MCP Registry publication.
+- Keep the legacy VSIX path documented only as a fallback, not as the default release/install story.
+- Track remaining migration follow-ups in issue #108 (prompts/resources) and issue #109 (pre-existing `build:verify` failures).
 
 ## Automation Roadmap
 

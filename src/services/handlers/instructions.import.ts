@@ -3,16 +3,18 @@ import path from 'path';
 import crypto from 'crypto';
 import { InstructionEntry } from '../../models/instruction';
 import { registerHandler } from '../../server/registry';
-import { ensureLoaded, getInstructionsDir, invalidate, touchIndexVersion, writeEntry } from '../indexContext';
+import { ensureLoadedAsync, getInstructionsDir, invalidate, touchIndexVersion, writeEntryAsync } from '../indexContext';
 import { incrementCounter } from '../features';
 import { SCHEMA_VERSION } from '../../versioning/schemaVersion';
 import { ClassificationService } from '../classificationService';
 import { resolveOwner } from '../ownershipService';
+import { validateInstructionInputSurface, validateInstructionRecord } from '../instructionRecordValidation';
+import { isInstructionValidationError } from '../instructionRecordValidation';
 
 import { logAudit } from '../auditLog';
 import { getRuntimeConfig } from '../../config/runtimeConfig';
 import { attemptManifestUpdate } from '../manifestManager';
-import { guard, ImportEntry } from './instructions.shared';
+import { guard, ImportEntry, normalizeInputCategories, IMPORT_GOVERNANCE_KEYS, applyGovernanceKeys } from './instructions.shared';
 
 /** Validate that a resolved path falls within allowed base directories (cwd or configured data dir). */
 function isPathAllowed(resolved: string): boolean {
@@ -36,7 +38,7 @@ function parseInlineEntries(rawEntries: string): { entries?: ImportEntry[]; erro
   }
 }
 
-registerHandler('index_import', guard('index_import', (p: { entries?: ImportEntry[] | string; source?: string; mode?: 'skip' | 'overwrite' }) => {
+registerHandler('index_import', guard('index_import', async (p: { entries?: ImportEntry[] | string; source?: string; mode?: 'skip' | 'overwrite' }) => {
   let entries: ImportEntry[];
   const mode = p.mode || 'skip';
   if (Array.isArray(p.entries)) {
@@ -79,8 +81,23 @@ registerHandler('index_import', guard('index_import', (p: { entries?: ImportEntr
   const dir = getInstructionsDir(); if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   const instructionsCfg = getRuntimeConfig().instructions;
   let imported = 0, skipped = 0, overwritten = 0; const errors: { id: string; error: string }[] = []; const classifier = new ClassificationService();
+  const skippedIds = new Set<string>();
+  const formatImportValidationError = (validationErrors: string[]) => `invalid_instruction: ${validationErrors.join('; ')}`;
   for (const e of entries) {
-    if (!e || !e.id || !e.title || !e.body) { const id = (e as Partial<ImportEntry>)?.id || 'unknown'; errors.push({ id, error: 'missing required fields' }); continue; }
+    const id = (e as Partial<ImportEntry>)?.id || 'unknown';
+    const requiredFieldErrors = [
+      !e?.id ? 'id: missing required field' : undefined,
+      e?.title === undefined ? 'title: missing required field' : undefined,
+      e?.body === undefined ? 'body: missing required field' : undefined,
+      e?.priority === undefined ? 'priority: missing required field' : undefined,
+      e?.audience === undefined ? 'audience: missing required field' : undefined,
+      e?.requirement === undefined ? 'requirement: missing required field' : undefined,
+    ].filter((issue): issue is string => !!issue);
+    const surfaceValidation = e ? validateInstructionInputSurface(e as unknown as Record<string, unknown>) : { validationErrors: [], hints: [], schemaRef: 'index_add#input' };
+    if (!e || requiredFieldErrors.length || surfaceValidation.validationErrors.length) {
+      errors.push({ id, error: formatImportValidationError([...requiredFieldErrors, ...surfaceValidation.validationErrors]) });
+      continue;
+    }
     const bodyTrimmed = typeof e.body === 'string' ? e.body.trim() : String(e.body);
     const { bodyWarnLength: importBodyMax } = getRuntimeConfig().index;
     if (bodyTrimmed.length > importBodyMax) {
@@ -88,11 +105,11 @@ registerHandler('index_import', guard('index_import', (p: { entries?: ImportEntr
       continue;
     }
     const file = path.join(dir, `${e.id}.json`);
-    const stImport = ensureLoaded();
+    const stImport = await ensureLoadedAsync();
     const storeHas = stImport.byId.has(e.id);
     const fileExists = storeHas || fs.existsSync(file);
     const now = new Date().toISOString();
-    let categories = Array.from(new Set((Array.isArray(e.categories) ? e.categories : []).filter((c): c is string => typeof c === 'string' && c.trim().length > 0).map(c => c.toLowerCase()))).sort();
+    let categories = normalizeInputCategories(e.categories);
     const primaryCategoryRaw = (e as unknown as Record<string, unknown>).primaryCategory as string | undefined;
     if (!categories.length) {
       if (instructionsCfg.requireCategory) { errors.push({ id: e.id, error: 'category_required' }); continue; }
@@ -110,20 +127,46 @@ registerHandler('index_import', guard('index_import', (p: { entries?: ImportEntr
     }
     if (e.priorityTier === 'P1' && (!categories.length || !e.owner)) { errors.push({ id: e.id, error: 'P1 requires category & owner' }); continue; }
     if ((e.requirement === 'mandatory' || e.requirement === 'critical') && !e.owner) { errors.push({ id: e.id, error: 'mandatory/critical require owner' }); continue; }
-    if (fileExists && mode === 'skip') { skipped++; continue; }
-    if (fileExists && mode === 'overwrite') overwritten++; else if (!fileExists) imported++;
+    if (fileExists && mode === 'skip') { skipped++; skippedIds.add(e.id); continue; }
     const base: InstructionEntry = existing ? { ...existing, title: e.title, body: bodyTrimmed, rationale: e.rationale, priority: e.priority, audience: e.audience, requirement: e.requirement, categories, primaryCategory: effectivePrimary, updatedAt: now } as InstructionEntry : { id: e.id, title: e.title, body: bodyTrimmed, rationale: e.rationale, priority: e.priority, audience: e.audience, requirement: e.requirement, categories, primaryCategory: effectivePrimary, sourceHash: newBodyHash, schemaVersion: SCHEMA_VERSION, deprecatedBy: e.deprecatedBy, createdAt: now, updatedAt: now, riskScore: e.riskScore, createdByAgent: instructionsCfg.agentId, sourceWorkspace: instructionsCfg.workspaceId, extensions: e.extensions } as InstructionEntry;
-    const govKeys: (keyof ImportEntry)[] = ['version', 'owner', 'status', 'priorityTier', 'classification', 'lastReviewedAt', 'nextReviewDue', 'changeLog', 'semanticSummary', 'contentType', 'extensions'];
-    for (const k of govKeys) { const v = e[k]; if (v !== undefined) { (base as unknown as Record<string, unknown>)[k] = v as unknown; } }
+    applyGovernanceKeys(base, e, IMPORT_GOVERNANCE_KEYS);
     if (!base.sourceWorkspace) base.sourceWorkspace = instructionsCfg.workspaceId;
     base.sourceHash = newBodyHash;
     const record = classifier.normalize(base);
     if (record.owner === 'unowned') { const auto = resolveOwner(record.id); if (auto) { record.owner = auto; record.updatedAt = new Date().toISOString(); } }
-    try { writeEntry(record); } catch { errors.push({ id: e.id, error: 'write-failed' }); }
+    const recordValidation = validateInstructionRecord(record);
+    if (recordValidation.validationErrors.length) {
+      errors.push({ id: e.id, error: formatImportValidationError(recordValidation.validationErrors) });
+      continue;
+    }
+     try { await writeEntryAsync(record); } catch (err) {
+      if (isInstructionValidationError(err)) {
+        errors.push({ id: e.id, error: formatImportValidationError(err.validationErrors) });
+        continue;
+      }
+      errors.push({ id: e.id, error: `write-failed: ${(err as Error).message || 'unknown'}` });
+      continue;
+    }
+    if (fileExists && mode === 'overwrite') overwritten++; else if (!fileExists) imported++;
   }
-  touchIndexVersion(); invalidate(); const st = ensureLoaded();
-  const summary = { hash: st.hash, imported, skipped, overwritten, total: entries.length, errors };
-  logAudit('import', entries.map(e => e.id), { imported, skipped, overwritten, errors: errors.length });
+  touchIndexVersion(); invalidate(); const st = await ensureLoadedAsync();
+  // Read-back verification: confirm each written entry is visible in the reloaded index
+  const verificationErrors: { id: string; error: string }[] = [];
+  const writtenIds = entries
+    .filter(e => e.id && !errors.some(err => err.id === e.id) && !skippedIds.has(e.id))
+    .map(e => e.id);
+  for (const id of writtenIds) {
+    if (!st.byId.has(id)) {
+      verificationErrors.push({ id, error: 'not-in-index-after-reload' });
+    }
+  }
+  if (verificationErrors.length) {
+    errors.push(...verificationErrors);
+    logAudit('import_verification', verificationErrors.map(v => v.id), { missingAfterReload: verificationErrors.length });
+  }
+  const verifiedCount = writtenIds.length - verificationErrors.length;
+  const summary = { hash: st.hash, imported, skipped, overwritten, total: entries.length, errors, verified: verificationErrors.length === 0, verifiedCount, verificationErrorCount: verificationErrors.length };
+  logAudit('import', entries.map(e => e.id), { imported, skipped, overwritten, errors: errors.length, verified: verificationErrors.length === 0 });
   attemptManifestUpdate();
   return summary;
 }));

@@ -22,6 +22,31 @@ function httpGet(url: string): Promise<{ status: number; body: string }> {
   });
 }
 
+function httpJson(
+  method: 'POST' | 'PUT',
+  url: string,
+  payload: Record<string, unknown>
+): Promise<{ status: number; body: string }> {
+  return new Promise((resolve, reject) => {
+    const data = JSON.stringify(payload);
+    const req = http.request(url, {
+      method,
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(data),
+      }
+    }, (res) => {
+      let body = '';
+      res.on('data', (chunk: Buffer) => { body += chunk.toString(); });
+      res.on('end', () => resolve({ status: res.statusCode ?? 0, body }));
+    });
+    req.on('error', reject);
+    req.setTimeout(5000, () => req.destroy(new Error('timeout')));
+    req.write(data);
+    req.end();
+  });
+}
+
 function writeInstruction(dir: string, entry: Record<string, unknown>): void {
   fs.writeFileSync(path.join(dir, `${entry.id}.json`), JSON.stringify(entry, null, 2));
 }
@@ -75,6 +100,7 @@ describe('instructions search route', () => {
     });
 
     const app = express();
+    app.use(express.json());
     app.use(ensureLoadedMiddleware);
     app.use('/api', createInstructionsRoutes());
     await new Promise<void>((resolve) => {
@@ -126,5 +152,47 @@ describe('instructions search route', () => {
     expect(json.success).toBe(true);
     expect(json.count).toBeGreaterThan(0);
     expect(json.results[0]?.name).toBe('opaque-cert-guide');
+  });
+
+  it('returns verified from the computed read-back result for dashboard instruction create and update routes', async () => {
+    const createRes = await httpJson('POST', `http://127.0.0.1:${port}/api/instructions`, {
+      name: 'dashboard-route-verified',
+      content: {
+        title: 'Dashboard Route Verified',
+        body: 'Route verification response should reflect read-back state.',
+        categories: ['dashboard']
+      }
+    });
+    const created = JSON.parse(createRes.body) as { success: boolean; name: string; verified: boolean };
+
+    expect(createRes.status).toBe(200);
+    expect(created).toMatchObject({
+      success: true,
+      name: 'dashboard-route-verified',
+      verified: true
+    });
+
+    const updateRes = await httpJson('PUT', `http://127.0.0.1:${port}/api/instructions/dashboard-route-verified`, {
+      content: {
+        body: 'Updated dashboard route body'
+      }
+    });
+    const updated = JSON.parse(updateRes.body) as { success: boolean; verified: boolean };
+
+    expect(updateRes.status).toBe(200);
+    expect(updated).toMatchObject({
+      success: true,
+      verified: true
+    });
+  });
+
+  it('uses computed verified variables in dashboard instruction route success responses', () => {
+    const src = fs.readFileSync(path.resolve(__dirname, '..', 'dashboard', 'server', 'routes', 'instructions.routes.ts'), 'utf8');
+
+    expect(src).toContain('const verified = reloaded.byId.has(id);');
+    expect(src).toContain("res.json({ success: true, message: 'Instruction created', name: id, verified, timestamp: Date.now() });");
+    expect(src).toContain("res.json({ success: true, message: 'Instruction updated', verified, timestamp: Date.now() });");
+    expect(src).not.toContain("message: 'Instruction created', name: id, verified: true");
+    expect(src).not.toContain("message: 'Instruction updated', verified: true");
   });
 });

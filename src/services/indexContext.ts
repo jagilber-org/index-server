@@ -4,7 +4,7 @@ import crypto from 'crypto';
 import { IndexLoader } from './indexLoader';
 import { InstructionEntry } from '../models/instruction';
 import { hasFeature, incrementCounter } from './features';
-import { atomicWriteJson } from './atomicFs';
+import { atomicCreateJson, atomicCreateJsonAsync, atomicWriteJson, atomicWriteJsonAsync } from './atomicFs';
 import { ClassificationService } from './classificationService';
 import { resolveOwner } from './ownershipService';
 import { getBooleanEnv } from '../utils/envUtils';
@@ -12,6 +12,9 @@ import { getRuntimeConfig } from '../config/runtimeConfig';
 import { createStore } from './storage/factory';
 import type { IInstructionStore } from './storage/types';
 import { migrateJsonToSqlite } from './storage/migrationEngine';
+import { assertValidInstructionRecord } from './instructionRecordValidation';
+import { validateForDisk } from './loaderSchemaValidator';
+import { migrateInstructionRecord } from '../versioning/schemaVersion';
 
 // Extended IndexState to retain loader diagnostics so we can expose precise rejection reasons
 // via a forthcoming index_diagnostics tool. Keeping optional properties so older code paths
@@ -64,19 +67,33 @@ const usageAuthority: Record<string, number> = {};
 // Authoritative lastUsedAt map for resilience between reload + snapshot overlay timing.
 const lastUsedAuthority: Record<string, string> = {};
 
+// ── Invariant repair tracking (#131) ─────────────────────────────
+// Accumulates repair events so they can be surfaced via health checks.
+const invariantRepairLog: { ts: string; id: string; field: string; source: string }[] = [];
+const MAX_REPAIR_LOG = 200;
+function trackInvariantRepair(id: string, field: string, source: string) {
+  invariantRepairLog.push({ ts: new Date().toISOString(), id, field, source });
+  if (invariantRepairLog.length > MAX_REPAIR_LOG) invariantRepairLog.shift();
+}
+
+/** Returns a summary of invariant repairs for health check visibility. */
+export function getInvariantRepairSummary(): { totalRepairs: number; recentRepairs: typeof invariantRepairLog } {
+  return { totalRepairs: invariantRepairLog.length, recentRepairs: invariantRepairLog.slice(-20) };
+}
+
 // Defensive invariant repair: if any code path ever observes an InstructionEntry with a missing
 // firstSeenTs after it was previously established (should not happen, but flake indicates a very
 // rare timing or cross-test interaction), we repair it from ephemeral cache or lastGood snapshot.
 function restoreFirstSeenInvariant(e: InstructionEntry){
   if(e.firstSeenTs) return;
   const auth = firstSeenAuthority[e.id];
-  if(auth){ e.firstSeenTs = auth; incrementCounter('usage:firstSeenAuthorityRepair'); return; }
+  if(auth){ e.firstSeenTs = auth; incrementCounter('usage:firstSeenAuthorityRepair'); trackInvariantRepair(e.id, 'firstSeenTs', 'authority'); logWarn(`[invariant-repair] firstSeenTs restored from authority for ${e.id}`); return; }
   const ep = ephemeralFirstSeen[e.id];
-  if(ep){ e.firstSeenTs = ep; incrementCounter('usage:firstSeenInvariantRepair'); return; }
+  if(ep){ e.firstSeenTs = ep; incrementCounter('usage:firstSeenInvariantRepair'); trackInvariantRepair(e.id, 'firstSeenTs', 'ephemeral'); logWarn(`[invariant-repair] firstSeenTs restored from ephemeral cache for ${e.id}`); return; }
   const snap = (lastGoodUsageSnapshot as Record<string, UsagePersistRecord>)[e.id];
-  if(snap?.firstSeenTs){ e.firstSeenTs = snap.firstSeenTs; incrementCounter('usage:firstSeenInvariantRepair'); }
+  if(snap?.firstSeenTs){ e.firstSeenTs = snap.firstSeenTs; incrementCounter('usage:firstSeenInvariantRepair'); trackInvariantRepair(e.id, 'firstSeenTs', 'snapshot'); logWarn(`[invariant-repair] firstSeenTs restored from snapshot for ${e.id}`); }
   // If still missing after all repair sources, track an exhausted repair attempt (extremely rare diagnostic)
-  if(!e.firstSeenTs){ incrementCounter('usage:firstSeenRepairExhausted'); }
+  if(!e.firstSeenTs){ incrementCounter('usage:firstSeenRepairExhausted'); trackInvariantRepair(e.id, 'firstSeenTs', 'exhausted'); logWarn(`[invariant-repair] firstSeenTs repair exhausted — no source found for ${e.id}`); }
 }
 
 // Usage invariant repair (mirrors firstSeen invariant strategy). Extremely rare reload races in CI produced
@@ -86,35 +103,42 @@ function restoreFirstSeenInvariant(e: InstructionEntry){
 // count (never regressing) – eliminating flakiness without impacting production semantics.
 function restoreUsageInvariant(e: InstructionEntry){
   if(e.usageCount != null) return;
-  // Prefer authoritative value, then observed, then persisted snapshot, else default 0.
   if(usageAuthority[e.id] != null){
     e.usageCount = usageAuthority[e.id];
     incrementCounter('usage:usageInvariantAuthorityRepair');
+    trackInvariantRepair(e.id, 'usageCount', 'authority');
+    logWarn(`[invariant-repair] usageCount restored from authority for ${e.id} (value=${usageAuthority[e.id]})`);
     return;
   }
   if(observedUsage[e.id] != null){
     e.usageCount = observedUsage[e.id];
     incrementCounter('usage:usageInvariantObservedRepair');
+    trackInvariantRepair(e.id, 'usageCount', 'observed');
+    logWarn(`[invariant-repair] usageCount restored from observed for ${e.id} (value=${observedUsage[e.id]})`);
     return;
   }
   const snap = (lastGoodUsageSnapshot as Record<string, UsagePersistRecord>)[e.id];
   if(snap?.usageCount != null){
     e.usageCount = snap.usageCount;
     incrementCounter('usage:usageInvariantSnapshotRepair');
+    trackInvariantRepair(e.id, 'usageCount', 'snapshot');
+    logWarn(`[invariant-repair] usageCount restored from snapshot for ${e.id} (value=${snap.usageCount})`);
     return;
   }
   // Fall back to 0 – deterministic floor; next increment will advance.
   e.usageCount = 0;
   incrementCounter('usage:usageInvariantZeroRepair');
+  trackInvariantRepair(e.id, 'usageCount', 'zero-default');
+  logWarn(`[invariant-repair] usageCount defaulted to 0 for ${e.id} — no repair source found`);
 }
 
 // Repair missing lastUsedAt for entries with usage.
 function restoreLastUsedInvariant(e: InstructionEntry){
   if(e.lastUsedAt) return;
-  if(lastUsedAuthority[e.id]){ e.lastUsedAt = lastUsedAuthority[e.id]; incrementCounter('usage:lastUsedAuthorityRepair'); return; }
+  if(lastUsedAuthority[e.id]){ e.lastUsedAt = lastUsedAuthority[e.id]; incrementCounter('usage:lastUsedAuthorityRepair'); trackInvariantRepair(e.id, 'lastUsedAt', 'authority'); logWarn(`[invariant-repair] lastUsedAt restored from authority for ${e.id}`); return; }
   const snap = (lastGoodUsageSnapshot as Record<string, UsagePersistRecord>)[e.id];
-  if(snap?.lastUsedAt){ e.lastUsedAt = snap.lastUsedAt; incrementCounter('usage:lastUsedSnapshotRepair'); return; }
-  if((e.usageCount ?? 0) > 0 && e.firstSeenTs){ e.lastUsedAt = e.firstSeenTs; incrementCounter('usage:lastUsedFirstSeenRepair'); }
+  if(snap?.lastUsedAt){ e.lastUsedAt = snap.lastUsedAt; incrementCounter('usage:lastUsedSnapshotRepair'); trackInvariantRepair(e.id, 'lastUsedAt', 'snapshot'); logWarn(`[invariant-repair] lastUsedAt restored from snapshot for ${e.id}`); return; }
+  if((e.usageCount ?? 0) > 0 && e.firstSeenTs){ e.lastUsedAt = e.firstSeenTs; incrementCounter('usage:lastUsedFirstSeenRepair'); trackInvariantRepair(e.id, 'lastUsedAt', 'firstSeen-approx'); logWarn(`[invariant-repair] lastUsedAt approximated from firstSeenTs for ${e.id}`); }
 }
 
 // Rate limiting for usage increments (Phase 1 requirement)
@@ -175,8 +199,9 @@ export function loadUsageSnapshot(){
         return parsed;
       }
       break; // file not present – exit attempts
-    } catch {
-      // swallow and retry (tight loop – extremely rare path)
+    } catch (err) {
+      // Log parse/read error and retry (tight loop – extremely rare path)
+      logWarn(`[invariant-repair] loadUsageSnapshot attempt ${attempt} failed: ${(err as Error).message || String(err)}`);
     }
   }
   // Fallback to last good snapshot (prevents loss of firstSeenTs on rare parse race)
@@ -199,7 +224,7 @@ function flushUsageSnapshot(){
       const obj: Record<string, UsagePersistRecord> = {};
       for(const e of state.list){
         const authoritative = e.firstSeenTs || firstSeenAuthority[e.id];
-        if(authoritative && !firstSeenAuthority[e.id]) firstSeenAuthority[e.id] = authoritative;
+        if(authoritative && !firstSeenAuthority[e.id]) firstSeenAuthority[e.id] = authoritative; // lgtm[js/remote-property-injection] — id is regex-validated by instruction schema (^[a-z0-9](?:[a-z0-9-_]{0,118}[a-z0-9])?$) before reaching index
         if(e.usageCount || e.lastUsedAt || authoritative){
           const rec: UsagePersistRecord = { usageCount: e.usageCount, firstSeenTs: authoritative, lastUsedAt: e.lastUsedAt };
           // Merge signal/comment/action from in-memory cache (last-write-wins from incrementUsage calls)
@@ -209,14 +234,14 @@ function flushUsageSnapshot(){
             if (cached.lastSignal) rec.lastSignal = cached.lastSignal;
             if (cached.lastComment) rec.lastComment = cached.lastComment;
           }
-          obj[e.id] = rec;
+          obj[e.id] = rec; // lgtm[js/remote-property-injection] — id is schema-validated before reaching index
         }
       }
       // Atomic write: write to temp then rename to avoid readers seeing partial JSON
       const snapPath = getUsageSnapshotPath();
       const tmp = snapPath + '.tmp';
-      fs.writeFileSync(tmp, JSON.stringify(obj,null,2));
-      try { fs.renameSync(tmp, snapPath); } catch { /* fallback to direct write if rename fails */ fs.writeFileSync(snapPath, JSON.stringify(obj,null,2)); }
+      fs.writeFileSync(tmp, JSON.stringify(obj,null,2)); // lgtm[js/http-to-file-access] — snapPath is config-controlled usage snapshot path
+      try { fs.renameSync(tmp, snapPath); } catch { /* fallback to direct write if rename fails */ fs.writeFileSync(snapPath, JSON.stringify(obj,null,2)); /* lgtm[js/http-to-file-access] — snapPath is config-controlled usage snapshot path */ }
       lastGoodUsageSnapshot = obj; // update cache
     }
   } catch { /* ignore */ }
@@ -225,7 +250,7 @@ function flushUsageSnapshot(){
 // The guard ensures cleanup runs exactly once even if multiple signals race.
 try {
   // Import directly from shutdownGuard module (no circular dependency)
-  // eslint-disable-next-line @typescript-eslint/no-var-requires, @typescript-eslint/no-require-imports
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { createShutdownGuard: _createShutdownGuard } = require('../server/shutdownGuard');
   // Get or create a process-wide singleton via a global symbol
   const key = Symbol.for('mcp-shutdown-guard');
@@ -273,6 +298,7 @@ export function getInstructionsDir(){
 }
 // Centralized tracing utilities
 import { emitTrace, traceEnabled } from './tracing';
+import { logError, logInfo, logWarn } from './logger.js';
 // Throttled file trace emission (avoid per-get amplification). We emit per-file decisions only
 // on true reloads AND if file signature changed OR time since last emission > threshold.
 // (legacy file-level trace removed in simplified loader)
@@ -305,6 +331,36 @@ export function touchIndexVersion(){
 function readVersionMTime(): number { try { const vf=getVersionFile(); if(fs.existsSync(vf)){ const st = fs.statSync(vf); return st.mtimeMs || 0; } } catch { /* ignore */ } return 0; }
 function readVersionToken(): string { try { const vf=getVersionFile(); if(fs.existsSync(vf)){ return fs.readFileSync(vf,'utf8').trim(); } } catch { /* ignore */ } return ''; }
 export function markindexDirty(){ dirty = true; }
+function syncTouchedVersionIntoState(){
+  try {
+    touchIndexVersion();
+    const vfMTime = (function(){ try { const vf = path.join(getInstructionsDir(), '.index-version'); if(fs.existsSync(vf)){ return fs.statSync(vf).mtimeMs || 0; } } catch { /* ignore */ } return 0; })();
+    const vfToken = (function(){ try { const vf = path.join(getInstructionsDir(), '.index-version'); if(fs.existsSync(vf)){ return fs.readFileSync(vf,'utf8').trim(); } } catch { /* ignore */ } return ''; })();
+    if(state){
+      if(vfMTime && state.versionMTime !== vfMTime){ state.versionMTime = vfMTime; }
+      if(vfToken && state.versionToken !== vfToken){ state.versionToken = vfToken; }
+    }
+  } catch { /* ignore */ }
+}
+
+function materializeWrittenEntry(record: InstructionEntry){
+  if(state){
+    const existing = state.byId.get(record.id);
+    if(existing){
+      Object.assign(existing, record);
+      try { incrementCounter('index:inMemoryUpdate'); } catch { /* ignore */ }
+    } else {
+      state.list.push(record);
+      state.byId.set(record.id, record);
+      try { incrementCounter('index:inMemoryMaterialize'); } catch { /* ignore */ }
+    }
+    syncTouchedVersionIntoState();
+    return;
+  }
+  markindexDirty();
+  syncTouchedVersionIntoState();
+}
+
 export function ensureLoaded(): IndexState {
   const baseDir = getInstructionsDir();
   // Always reload if no state or dirty or version file changed.
@@ -327,10 +383,10 @@ export function ensureLoaded(): IndexState {
         const dbPath = getRuntimeConfig().storage?.sqlitePath ?? path.join(process.cwd(), 'data', 'index.db');
         const mr = migrateJsonToSqlite(baseDir, dbPath);
         if (mr.migrated > 0) {
-          console.log(`[storage] Auto-migrated ${mr.migrated} instruction(s) from JSON → SQLite`);
+          logInfo(`[storage] Auto-migrated ${mr.migrated} instruction(s) from JSON → SQLite`);
           result = store.load();
         }
-      } catch (err) { console.warn('[storage] Auto-migration failed:', err); }
+      } catch (err) { logWarn('[storage] Auto-migration failed:', err); }
     }
   }
   const byId = new Map<string, InstructionEntry>(); result.entries.forEach(e=>byId.set(e.id,e));
@@ -347,7 +403,44 @@ export function ensureLoaded(): IndexState {
         const rec = (snap as Record<string, { usageCount?: number; firstSeenTs?: string; lastUsedAt?: string }>)[e.id];
         if(rec){
           if(e.usageCount == null && rec.usageCount != null) e.usageCount = rec.usageCount;
-          if(!e.firstSeenTs && rec.firstSeenTs){ e.firstSeenTs = rec.firstSeenTs; if(!firstSeenAuthority[e.id]) firstSeenAuthority[e.id] = rec.firstSeenTs; }
+          if(!e.firstSeenTs && rec.firstSeenTs){ e.firstSeenTs = rec.firstSeenTs; if(!firstSeenAuthority[e.id]) firstSeenAuthority[e.id] = rec.firstSeenTs; } // lgtm[js/remote-property-injection] — id is schema-validated before reaching index
+          if(!e.lastUsedAt && rec.lastUsedAt) e.lastUsedAt = rec.lastUsedAt;
+        }
+      }
+    }
+  } catch { /* ignore */ }
+  if(traceEnabled(1)){
+    try { emitTrace('[trace:ensureLoaded:simple-reload]', { dir: baseDir, count: state.list.length }); } catch { /* ignore */ }
+  }
+  return state;
+}
+
+export async function ensureLoadedAsync(): Promise<IndexState> {
+  const baseDir = getInstructionsDir();
+  const currentVersionMTime = readVersionMTime();
+  const currentVersionToken = readVersionToken();
+  if(state && !dirty){
+    if(currentVersionMTime && currentVersionMTime === state.versionMTime && currentVersionToken === state.versionToken){
+      return state;
+    }
+  }
+  const backend = getRuntimeConfig().storage?.backend ?? 'json';
+  if(backend === 'sqlite'){
+    return ensureLoaded();
+  }
+  const result = await new IndexLoader(baseDir).loadAsync();
+  const byId = new Map<string, InstructionEntry>(); result.entries.forEach(e=>byId.set(e.id,e));
+  const deduplicatedList = Array.from(byId.values());
+  state = { loadedAt: new Date().toISOString(), hash: result.hash, byId, list: deduplicatedList, fileCount: deduplicatedList.length, versionMTime: currentVersionMTime, versionToken: currentVersionToken, loadErrors: result.errors, loadDebug: result.debug, loadSummary: result.summary };
+  dirty = false;
+  try {
+    const snap = loadUsageSnapshot();
+    if(snap){
+      for(const e of state.list){
+        const rec = (snap as Record<string, { usageCount?: number; firstSeenTs?: string; lastUsedAt?: string }>)[e.id];
+        if(rec){
+          if(e.usageCount == null && rec.usageCount != null) e.usageCount = rec.usageCount;
+          if(!e.firstSeenTs && rec.firstSeenTs){ e.firstSeenTs = rec.firstSeenTs; if(!firstSeenAuthority[e.id]) firstSeenAuthority[e.id] = rec.firstSeenTs; } // lgtm[js/remote-property-injection] — id is schema-validated before reaching index
           if(!e.lastUsedAt && rec.lastUsedAt) e.lastUsedAt = rec.lastUsedAt;
         }
       }
@@ -434,6 +527,16 @@ export function getIndexState(){
     if(!e.firstSeenTs){ restoreFirstSeenInvariant(e); }
   if(e.usageCount == null){ restoreUsageInvariant(e); }
   if(e.lastUsedAt == null){ restoreLastUsedInvariant(e); }
+  }
+  return st;
+}
+
+export async function getIndexStateAsync(){
+  const st = await ensureLoadedAsync();
+  for(const e of st.list){
+    if(!e.firstSeenTs){ restoreFirstSeenInvariant(e); }
+    if(e.usageCount == null){ restoreUsageInvariant(e); }
+    if(e.lastUsedAt == null){ restoreLastUsedInvariant(e); }
   }
   return st;
 }
@@ -528,49 +631,98 @@ export function computeGovernanceHash(entries: InstructionEntry[]): string {
 }
 
 // Mutation helpers (import/add/remove/groom share)
-export function writeEntry(entry: InstructionEntry){
+export function isDuplicateInstructionWriteError(error: unknown): boolean {
+  const code = (error as NodeJS.ErrnoException | undefined)?.code;
+  if (code === 'EEXIST') return true;
+  if (!(error instanceof Error)) return false;
+  const message = error.message.toLowerCase();
+  return message.includes('unique constraint failed') || message.includes('duplicate key');
+}
+
+export function writeEntry(entry: InstructionEntry, opts?: { createOnly?: boolean }){
   const file = path.join(getInstructionsDir(), `${entry.id}.json`);
   const classifier = new ClassificationService();
-  const record = classifier.normalize(entry);
+  let record = classifier.normalize(entry);
   if(record.owner === 'unowned'){ const auto = resolveOwner(record.id); if(auto){ record.owner = auto; record.updatedAt = new Date().toISOString(); } }
-  const store = getStoreForDir(getInstructionsDir());
-  if (store) { store.write(record); } else { atomicWriteJson(file, record); }
-  // Revised mutation strategy (2025-09-14): Avoid setting dirty=true when we can
-  // apply the change directly to the in-memory index. Previous implementation
-  // marked the index dirty before an immediate getIndexState() call in tests,
-  // forcing a reload that sometimes raced the Windows filesystem directory
-  // visibility of the new file. That produced a flake where the opportunistic
-  // materialization guarantee was lost. We now:
-  //  1. Opportunistically materialize (add or update) the entry in-memory.
-  //  2. Touch the version file so other processes/pollers observe the change.
-  //  3. Only mark dirty if no state is currently loaded (so first subsequent
-  //     access triggers a load). Otherwise we keep the current state hot.
-  if(state){
-    const existing = state.byId.get(record.id);
-    if(existing){
-      // Update in-place so references (including any cached projections) see new fields.
-      Object.assign(existing, record);
-      try { incrementCounter('index:inMemoryUpdate'); } catch { /* ignore */ }
-    } else {
-      state.list.push(record);
-      state.byId.set(record.id, record);
-      try { incrementCounter('index:inMemoryMaterialize'); } catch { /* ignore */ }
-    }
-    // Signal externally. Then optimistically update in-memory version snapshot so getIndexState()
-    // does NOT trigger an immediate reload (which can race directory enumeration on Windows).
-    try {
-      touchIndexVersion();
-      // After touching, read back token + mtime to align with ensureLoaded's cache validation logic.
-      const vfMTime = (function(){ try { const vf = path.join(getInstructionsDir(), '.index-version'); if(fs.existsSync(vf)){ return fs.statSync(vf).mtimeMs || 0; } } catch { /* ignore */ } return 0; })();
-      const vfToken = (function(){ try { const vf = path.join(getInstructionsDir(), '.index-version'); if(fs.existsSync(vf)){ return fs.readFileSync(vf,'utf8').trim(); } } catch { /* ignore */ } return ''; })();
-      if(vfMTime && state.versionMTime !== vfMTime){ state.versionMTime = vfMTime; }
-      if(vfToken && state.versionToken !== vfToken){ state.versionToken = vfToken; }
-    } catch { /* ignore */ }
-  } else {
-    // No in-memory state yet; next ensureLoaded should pick up new file.
-    markindexDirty();
-    try { touchIndexVersion(); } catch { /* ignore */ }
+  record = assertValidInstructionRecord(record);
+  // Run the SAME migration the loader runs on read so the write path is
+  // symmetric with the read path. This brings legacy in-memory records
+  // (carrying old schemaVersion or missing v3+ defaults) up to current
+  // schema BEFORE validateForDisk gates them against the loader schema.
+  // Without this, callers passing legacy records would be silently rejected
+  // by the loader-symmetric validator even though the loader itself would
+  // have migrated them transparently.
+  migrateInstructionRecord(record as unknown as Record<string, unknown>);
+  // Validate against the SAME JSON schema the loader uses at reload time.
+  // This prevents schema drift from silently dropping entries on reload.
+  const diskCheck = validateForDisk(record);
+  if (!diskCheck.valid) {
+    const err = new Error(`Pre-write loader-schema validation failed for '${entry.id}': ${diskCheck.errors?.join('; ')}`);
+    (err as unknown as Record<string, unknown>).validationErrors = diskCheck.errors;
+    (err as unknown as Record<string, unknown>).isInstructionValidation = true;
+    throw err;
   }
+  const store = getStoreForDir(getInstructionsDir());
+  if (store) {
+    store.write(record, opts);
+  } else if (opts?.createOnly) {
+    atomicCreateJson(file, record);
+  } else {
+    atomicWriteJson(file, record);
+  }
+  // Post-write read-back: verify the file on disk passes the loader schema
+  if (!store) {
+    try {
+      const diskRaw = JSON.parse(fs.readFileSync(file, 'utf8')) as unknown;
+      const postCheck = validateForDisk(diskRaw);
+      if (!postCheck.valid) {
+        logWarn(`[writeEntry] Post-write validation FAILED for '${entry.id}': ${postCheck.errors?.join('; ')}`);
+      }
+    } catch (readErr) {
+      logWarn(`[writeEntry] Post-write read-back failed for '${entry.id}': ${(readErr as Error).message}`);
+    }
+  }
+  materializeWrittenEntry(record);
+}
+
+export async function writeEntryAsync(entry: InstructionEntry, opts?: { createOnly?: boolean }){
+  const file = path.join(getInstructionsDir(), `${entry.id}.json`);
+  const classifier = new ClassificationService();
+  let record = classifier.normalize(entry);
+  if(record.owner === 'unowned'){ const auto = resolveOwner(record.id); if(auto){ record.owner = auto; record.updatedAt = new Date().toISOString(); } }
+  record = assertValidInstructionRecord(record);
+  // Mirror the loader's migration step before validating against the loader
+  // schema. See writeEntry for full rationale.
+  migrateInstructionRecord(record as unknown as Record<string, unknown>);
+  // Validate against the SAME JSON schema the loader uses at reload time.
+  const diskCheck = validateForDisk(record);
+  if (!diskCheck.valid) {
+    const err = new Error(`Pre-write loader-schema validation failed for '${entry.id}': ${diskCheck.errors?.join('; ')}`);
+    (err as unknown as Record<string, unknown>).validationErrors = diskCheck.errors;
+    (err as unknown as Record<string, unknown>).isInstructionValidation = true;
+    throw err;
+  }
+  const store = getStoreForDir(getInstructionsDir());
+  if (store) {
+    store.write(record, opts);
+  } else if (opts?.createOnly) {
+    await atomicCreateJsonAsync(file, record);
+  } else {
+    await atomicWriteJsonAsync(file, record);
+  }
+  // Post-write read-back: verify the file on disk passes the loader schema
+  if (!store) {
+    try {
+      const diskRaw = JSON.parse(fs.readFileSync(file, 'utf8')) as unknown;
+      const postCheck = validateForDisk(diskRaw);
+      if (!postCheck.valid) {
+        logWarn(`[writeEntryAsync] Post-write validation FAILED for '${entry.id}': ${postCheck.errors?.join('; ')}`);
+      }
+    } catch (readErr) {
+      logWarn(`[writeEntryAsync] Post-write read-back failed for '${entry.id}': ${(readErr as Error).message}`);
+    }
+  }
+  materializeWrittenEntry(record);
 }
 export function removeEntry(id:string){
   const store = getStoreForDir(getInstructionsDir());
@@ -676,11 +828,11 @@ export function incrementUsage(id:string, opts?: UsageTrackOptions){
   // Atomically establish firstSeenTs if missing (avoid any window where undefined persists after increment)
   if(!e.firstSeenTs){
     e.firstSeenTs = nowIso;
-    ephemeralFirstSeen[e.id] = e.firstSeenTs; // track immediately for reload resilience
-    firstSeenAuthority[e.id] = e.firstSeenTs; incrementCounter('usage:firstSeenAuthoritySet');
+    ephemeralFirstSeen[e.id] = e.firstSeenTs; // track immediately for reload resilience  // lgtm[js/remote-property-injection] — id is schema-validated before reaching index
+    firstSeenAuthority[e.id] = e.firstSeenTs; incrementCounter('usage:firstSeenAuthoritySet'); // lgtm[js/remote-property-injection] — id is schema-validated before reaching index
   }
   e.lastUsedAt = nowIso; // always advance lastUsedAt on any increment
-  lastUsedAuthority[e.id] = e.lastUsedAt;
+  lastUsedAuthority[e.id] = e.lastUsedAt; // lgtm[js/remote-property-injection] — id is schema-validated before reaching index
 
   // For the first usage we force a synchronous flush to guarantee persistence of firstSeenTs quickly;
   // subsequent usages can rely on the debounce timer to coalesce writes.
@@ -697,8 +849,7 @@ export function incrementUsage(id:string, opts?: UsageTrackOptions){
     // Allow tests (or advanced operators) to disable the protective clamp logic for deterministic expectations.
     // Setting INDEX_SERVER_DISABLE_USAGE_CLAMP=1 will let the anomalous >1 initial count pass through for diagnostic visibility.
     if(!getRuntimeConfig().index.disableUsageClamp){
-      // eslint-disable-next-line no-console
-      console.error('[incrementUsage] anomalous initial usageCount', e.usageCount, 'id', id);
+      logError('[incrementUsage] anomalous initial usageCount', { usageCount: e.usageCount, id });
       // Clamp to 1 to enforce deterministic semantics for first observed increment. We intentionally
       // retain lastUsedAt/firstSeenTs. This guards rare race producing flaky test expectations while
       // preserving forward progress for subsequent increments (next call will yield 2).
@@ -755,10 +906,10 @@ export function __testResetUsageState(){
   if(usageWriteTimer){ clearTimeout(usageWriteTimer); usageWriteTimer = null; }
   usageRateLimiter.clear();
   lastGoodUsageSnapshot = {};
-  for(const k of Object.keys(ephemeralFirstSeen)) delete (ephemeralFirstSeen as Record<string,string>)[k];
-  for(const k of Object.keys(firstSeenAuthority)) delete (firstSeenAuthority as Record<string,string>)[k];
-  for(const k of Object.keys(usageAuthority)) delete (usageAuthority as Record<string,number>)[k];
-  for(const k of Object.keys(lastUsedAuthority)) delete (lastUsedAuthority as Record<string,string>)[k];
+  for(const k of Object.keys(ephemeralFirstSeen)) delete (ephemeralFirstSeen as Record<string,string>)[k]; // lgtm[js/remote-property-injection] — k is own-key from internal object reset (test helper)
+  for(const k of Object.keys(firstSeenAuthority)) delete (firstSeenAuthority as Record<string,string>)[k]; // lgtm[js/remote-property-injection] — k is own-key from internal object reset (test helper)
+  for(const k of Object.keys(usageAuthority)) delete (usageAuthority as Record<string,number>)[k]; // lgtm[js/remote-property-injection] — k is own-key from internal object reset (test helper)
+  for(const k of Object.keys(lastUsedAuthority)) delete (lastUsedAuthority as Record<string,string>)[k]; // lgtm[js/remote-property-injection] — k is own-key from internal object reset (test helper)
   if(state){
     for(const e of state.list){
       // Reset optional usage-related fields; preserve object identity.

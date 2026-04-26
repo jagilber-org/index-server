@@ -4,8 +4,8 @@
 
 .DESCRIPTION
     Takes a directory prepared by New-CleanRoomCopy.ps1 and delivers it to a
-    remote Git repository via force-push (DirectPublish) or private review repo
-    (CreateReviewRepo).
+    remote Git repository via force-push (DirectPublish), private review repo
+    (CreateReviewRepo), or pull request (CreatePR).
 
     SAFETY CONTROLS:
     - Validates .publish-manifest.json exists and content hash matches
@@ -45,9 +45,19 @@
     Skip content hash verification. NOT RECOMMENDED ΓÇö use only when you have
     intentionally modified the prepared content after clean-room creation.
 
+.PARAMETER CreatePR
+    Push to a publish/<tag> branch on the public remote and open a pull request
+    against main via gh CLI. The user reviews and merges manually.
+
+.PARAMETER PrBranch
+    Branch name for the PR. Defaults to publish/<Tag> (or publish/latest if no tag).
+
 .PARAMETER AllowTagOverwrite
     Break-glass switch that allows overwriting an existing local or remote tag.
     By default, existing tags are treated as immutable and publish aborts.
+
+.EXAMPLE
+    .\Publish-ToMirror.ps1 -SourcePath ..\org\repo -RemoteUrl 'https://github.com/org/repo.git' -CreatePR -Tag v1.0.0
 
 .EXAMPLE
     .\Publish-ToMirror.ps1 -SourcePath ..\org\repo -RemoteUrl 'https://github.com/org/repo.git' -DirectPublish
@@ -73,6 +83,12 @@ param(
 
     [Parameter(ParameterSetName = 'CreateReviewRepo')]
     [string]$ReviewOrg,
+
+    [Parameter(ParameterSetName = 'CreatePR')]
+    [switch]$CreatePR,
+
+    [Parameter(ParameterSetName = 'CreatePR')]
+    [string]$PrBranch,
 
     [switch]$Force,
 
@@ -338,8 +354,8 @@ if (-not $ReviewOrg -and $RemoteUrl -match 'github\.com[/:]([^/]+)/') {
 }
 
 # --- Require at least one delivery mode ---
-if (-not $DirectPublish -and -not $CreateReviewRepo) {
-    Write-Error 'Specify -DirectPublish or -CreateReviewRepo to choose a delivery mode.'
+if (-not $DirectPublish -and -not $CreateReviewRepo -and -not $CreatePR) {
+    Write-Error 'Specify -DirectPublish, -CreateReviewRepo, or -CreatePR to choose a delivery mode.'
     return
 }
 
@@ -347,6 +363,10 @@ if (-not $DirectPublish -and -not $CreateReviewRepo) {
 if ($DryRun) {
     if ($DirectPublish) {
         Write-Host "[DRY RUN] Would force-push to $RemoteUrl"
+    }
+    elseif ($CreatePR) {
+        $dryBranch = if ($PrBranch) { $PrBranch } elseif ($Tag) { "publish/$Tag" } else { 'publish/latest' }
+        Write-Host "[DRY RUN] Would push branch '$dryBranch' to $RemoteUrl and open a PR"
     }
     else {
         Write-Host "[DRY RUN] Would create private review repo under $ReviewOrg"
@@ -399,16 +419,9 @@ try {
                 -Environment $publishEnv
         }
 
-        $existingTags = Get-RemoteRefs -RemoteName 'public' -RefKind 'tags' -WorkingDirectory $publishWorkspace
-        foreach ($tagName in $existingTags) {
-            if ($Tag -and -not $AllowTagOverwrite -and $tagName -eq $Tag) {
-                continue
-            }
-
-            Invoke-Git -Arguments @('push', 'public', ":refs/tags/$tagName") `
-                -WorkingDirectory $publishWorkspace `
-                -Environment $publishEnv
-        }
+        # Only remove the specific tag being published when -AllowTagOverwrite is set.
+        # Existing remote tags are preserved to avoid orphaning GitHub Releases.
+        # See: https://github.com/jagilber-dev/template-repo/issues/47
 
         if ($Tag) {
             $remoteTagRef = Invoke-Git -Arguments @('ls-remote', '--tags', 'public', "refs/tags/$Tag") `
@@ -446,6 +459,68 @@ try {
                 -Environment $publishEnv
         }
         Write-Host "Published directly to $RemoteUrl" -ForegroundColor Green
+    }
+    elseif ($CreatePR) {
+        # CreatePR mode
+        if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
+            Write-Error 'GitHub CLI (gh) is required for -CreatePR. Install from https://cli.github.com.'
+            return
+        }
+
+        $branchName = if ($PrBranch) { $PrBranch } elseif ($Tag) { "publish/$Tag" } else { 'publish/latest' }
+
+        if (-not $PSCmdlet.ShouldProcess("$RemoteUrl (branch: $branchName)", 'Push branch and open PR')) {
+            Write-Host 'Aborted.'
+            return
+        }
+
+        # Compute SHA-256 bypass token matching pre-push-public-guard.cjs expectations
+        $publishTag = if ($Tag) { $Tag } else { 'untagged' }
+        $today = (Get-Date).ToUniversalTime().ToString('yyyy-MM-dd')
+        $tokenInput = "publish-$publishTag-$today"
+        $sha256 = [System.Security.Cryptography.SHA256]::Create()
+        $hashBytes = $sha256.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($tokenInput))
+        $publishToken = ($hashBytes | ForEach-Object { $_.ToString('x2') }) -join ''
+        $publishEnv = @{
+            PUBLISH_OVERRIDE = $publishToken
+            PUBLISH_TAG      = $publishTag
+        }
+
+        $existingRemote = Invoke-Git -Arguments @('remote') -WorkingDirectory $publishWorkspace -CaptureOutput
+        if ($existingRemote -split "`r?`n" | Where-Object { $_ -eq 'public' }) {
+            Invoke-Git -Arguments @('remote', 'remove', 'public') -WorkingDirectory $publishWorkspace
+        }
+        Invoke-Git -Arguments @('remote', 'add', 'public', $RemoteUrl) -WorkingDirectory $publishWorkspace
+
+        # Push to the PR branch (not main)
+        Invoke-Git -Arguments @('push', 'public', "HEAD:refs/heads/$branchName", '--force') `
+            -WorkingDirectory $publishWorkspace `
+            -Environment $publishEnv
+
+        # Extract org/repo from RemoteUrl for gh pr create
+        $normalizedPrUrl = Normalize-GitUrl $RemoteUrl
+        $prRepo = $normalizedPrUrl -replace '^https://github\.com/', ''
+
+        $prTitle = "Publish from $($manifest.sourceRepo)"
+        if ($Tag) { $prTitle += " ($Tag)" }
+        $prBody = "Content-Hash: $($manifest.contentHash)`nSource: $($manifest.sourceRepo)`nPrepared: $($manifest.preparedAt)"
+
+        $prUrl = & gh pr create --repo $prRepo --base main --head $branchName --title $prTitle --body $prBody 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            Write-Warning "Branch pushed but PR creation failed: $prUrl"
+            Write-Host "Create the PR manually at: $normalizedPrUrl/compare/main...$($branchName)?expand=1" -ForegroundColor Yellow
+        }
+        else {
+            Write-Host ''
+            Write-Host '============================================================' -ForegroundColor Cyan
+            Write-Host ' PULL REQUEST CREATED' -ForegroundColor Cyan
+            Write-Host '============================================================' -ForegroundColor Cyan
+            Write-Host "  PR     : $prUrl" -ForegroundColor Yellow
+            Write-Host "  Branch : $branchName" -ForegroundColor Yellow
+            Write-Host '  Review the PR, then merge via GitHub web UI.' -ForegroundColor White
+            Write-Host '============================================================' -ForegroundColor Cyan
+            Write-Host ''
+        }
     }
     else {
         # CreateReviewRepo mode

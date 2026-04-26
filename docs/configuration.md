@@ -79,7 +79,7 @@ The bootstrap instruction establishes a **local-first, promote-when-proven** wor
 **Phase 3: Promotion** (Optional)
 1. Agent determines pattern applies organization-wide
 2. Uses `index_add` to promote to shared index
-3. Requires `INDEX_SERVER_MUTATION=1` on production server
+3. Leave writes enabled for governed production workflows, or set `INDEX_SERVER_MUTATION=0` when you need an explicit read-only production runtime
 4. Other teams immediately benefit
 
 **Phase 4: Amplification**
@@ -152,13 +152,14 @@ Agents should periodically re-query the bootstrap instruction to get latest guid
       "args": ["C:/github/index-server/dist/server/index-server.js"],
       "env": {
         "INDEX_SERVER_DIR": "./instructions",
-        "INDEX_SERVER_MUTATION": "1",
         "INDEX_SERVER_AUTO_SEED": "1"
       }
     }
   }
 }
 ```
+
+Use `INDEX_SERVER_DIR` for a stable data path outside editor or MCP client config/install folders so backups and reinstalls do not disturb your catalog.
 
 ### Related Documentation
 
@@ -370,7 +371,7 @@ To enforce generated artifacts consistency in CI, add `npm run check:dist` befor
 #### Add / Remove Instructions (Mutation Examples)
 
 ```bash
-env INDEX_SERVER_MUTATION=1 node dist/server/index-server.js # ensure mutation enabled
+node dist/server/index-server.js
 # Remove via MCP tools/call:
 # method: index_remove
 # params: { "ids": ["obsolete-id-1", "deprecated-foo"] }
@@ -531,7 +532,7 @@ Process lifecycle: See `docs/feedback_defect_lifecycle.md` for the end-to-end fe
 
 ## Security & Mutation Control
 
-* **INDEX_SERVER_MUTATION=1**: Enables write operations (import, repair, reload, flush)
+* **INDEX_SERVER_MUTATION=0**: Forces read-only mode when you need to disable write operations explicitly
 * **INDEX_SERVER_MAX_BULK_DELETE=N**: Caps bulk deletion at N IDs (default 5); exceeding requires `force: true` and triggers auto-backup
 * **INDEX_SERVER_BACKUP_BEFORE_BULK_DELETE=1**: Auto-snapshots instructions before forced bulk deletes (default on)
 * **INDEX_SERVER_AUTO_BACKUP=1**: Enables automatic periodic backup of the instruction index (default on). Backups are written to `backups/auto-backup-{timestamp}/` and old snapshots are pruned to `INDEX_SERVER_AUTO_BACKUP_MAX_COUNT`.
@@ -579,7 +580,7 @@ Rationale: a single execution pathway (tools/call) eliminates duplicate validati
 
 `node scripts/validate-governance.mjs` ensures all instruction JSON files include required governance + semantic fields. Added to bootstrap guard workflow.
 
-* **Gated mutations**: Write operations require explicit environment flag
+* **Gated mutations**: Write operations are enabled by default, but bootstrap confirmation and reference mode still gate mutation flows
 * **Process isolation**: MCP clients communicate via stdio only (no network access)
 
 ### Environment Flags
@@ -603,7 +604,7 @@ Rationale: a single execution pathway (tools/call) eliminates duplicate validati
 
 | Flag | Default | Scope | Description |
 |------|---------|-------|-------------|
-| `INDEX_SERVER_MUTATION` | off | runtime | Enable mutating tools (add/import/remove/enrich/governanceUpdate/repair/reload/flush). Leave off for read-only. |
+| `INDEX_SERVER_MUTATION` | on | runtime | Mutating tools are enabled by default. Set `0` to force read-only mode. |
 | `INDEX_SERVER_STRICT_CREATE` | off | runtime | Require atomic visibility after create operations. |
 | `INDEX_SERVER_STRICT_REMOVE` | off | runtime | Require atomic visibility after remove operations. |
 | `INDEX_SERVER_REQUIRE_CATEGORY` | off | runtime | Require category field on new entries. |
@@ -611,7 +612,7 @@ Rationale: a single execution pathway (tools/call) eliminates duplicate validati
 | `INDEX_SERVER_MAX_BULK_DELETE` | 5 | runtime | Maximum number of IDs `index_remove` deletes without `force: true`. |
 | `INDEX_SERVER_BACKUP_BEFORE_BULK_DELETE` | on | runtime | Snapshot instruction files before forced bulk delete. Set `0` to disable. |
 | `INDEX_SERVER_AUTO_SPLIT_OVERSIZED` | off | runtime | Auto-split oversized entries on startup instead of truncating. |
-| `INDEX_SERVER_BODY_WARN_LENGTH` | 100000 | runtime | Body warn/truncate threshold for instruction entries. Range: 1000-1000000. |
+| `INDEX_SERVER_BODY_WARN_LENGTH` | 50000 | runtime | Body warn/truncate threshold for instruction entries. Range: 1000-1000000. |
 
 #### Backup
 
@@ -793,6 +794,8 @@ Rationale: a single execution pathway (tools/call) eliminates duplicate validati
 | `INDEX_SERVER_SQLITE_PATH` | `data/index.db` | runtime | Path to SQLite database file (relative to CWD or absolute). |
 | `INDEX_SERVER_SQLITE_WAL` | on | runtime | Enable WAL (Write-Ahead Logging) mode for concurrent read performance. |
 | `INDEX_SERVER_SQLITE_MIGRATE_ON_START` | on | runtime | Auto-migrate JSON instructions into SQLite on startup when backend is `sqlite`. |
+| `INDEX_SERVER_SQLITE_VEC_ENABLED` | off | runtime | Enable sqlite-vec extension for vector embedding storage. When enabled, embeddings are stored in a `vec0` virtual table with native KNN search. Requires Node.js ≥ 22.13.0 and `sqlite-vec` npm package. Falls back to JSON if initialization fails. |
+| `INDEX_SERVER_SQLITE_VEC_PATH` | (empty) | runtime | Custom path to the sqlite-vec native binary. When empty (default), the path is auto-resolved from the `sqlite-vec` npm package via `getLoadablePath()`. Only set this if the auto-detection fails or you need a non-standard binary location. |
 
 **Backend selection example:**
 
@@ -814,10 +817,32 @@ Rationale: a single execution pathway (tools/call) eliminates duplicate validati
 }
 ```
 
+**SQLite with vector embeddings example:**
+
+```jsonc
+{
+  "mcpServers": {
+    "Index": {
+      "command": "node",
+      "args": ["C:/mcp/index-server/dist/server/index-server.js"],
+      "env": {
+        "INDEX_SERVER_STORAGE_BACKEND": "sqlite",
+        "INDEX_SERVER_SQLITE_PATH": "C:/mcp/data/index.db",
+        "INDEX_SERVER_SQLITE_VEC_ENABLED": "1",
+        "INDEX_SERVER_SEMANTIC_ENABLED": "1",
+        "INDEX_SERVER_DIR": "C:/mcp/instructions"
+      }
+    }
+  }
+}
+```
+
 **Notes:**
 
 * The `json` backend is the default and requires no additional configuration.
 * The `sqlite` backend requires Node.js ≥ 22.5.0 (uses the built-in `node:sqlite` module).
+* The `sqlite-vec` extension requires Node.js ≥ 22.13.0 (uses `DatabaseSync.loadExtension()`).
+* When `INDEX_SERVER_SQLITE_VEC_ENABLED=1`, embeddings are stored in a separate SQLite database (`data/embeddings.db`) using a `vec0` virtual table for native KNN search. If sqlite-vec fails to load, embeddings fall back to JSON storage automatically.
 * When `INDEX_SERVER_SQLITE_MIGRATE_ON_START=1` (default), existing JSON instructions from `INDEX_SERVER_DIR` are automatically imported into the SQLite database on first startup.
 * SQLite backend stores instructions, messages, and usage data in a single `.db` file.
 * WAL mode creates two companion files (`*.db-wal` and `*.db-shm`) alongside the database — include all three in backups.
@@ -847,7 +872,6 @@ Rationale: a single execution pathway (tools/call) eliminates duplicate validati
 | `INDEX_SERVER_TEST_MODE` | (none) | test | Test mode: `coverage-fast`, `coverage-strict`, etc. |
 | `INDEX_SERVER_TEST_STRICT_VISIBILITY` | off | test | Strict visibility checks in tests. |
 | `INDEX_SERVER_ADD_TIMING` | off | test | Log timing for add operations. |
-| `INDEX_SERVER_SHORTCIRCUIT` | off | test | Short-circuit test mode. |
 | `INDEX_SERVER_EVENT_SILENT` | off | runtime | Suppress Index event notifications. |
 | `INDEX_SERVER_LOAD_WARN_MS` | (none) | runtime | Warn if index load exceeds this duration (ms). |
 | `INDEX_SERVER_MAX_FILES` | (none) | runtime | Maximum Index files (performance limit). |
@@ -919,7 +943,7 @@ Focus just on the gated stress specs:
 npm run test:stress:focus
 ```
 
-Minimal diagnostic reproduction (legacy specific pair):
+Minimal diagnostic reproduction:
 
 ```pwsh
 npm run test:diag
@@ -956,7 +980,7 @@ Design Rationale:
 
 ### Handshake Reliability (1.1.1)
 
-As of 1.1.1 the legacy short-circuit handshake flag (`INDEX_SERVER_SHORTCIRCUIT`) was removed. All tests and clients MUST use the canonical MCP SDK initialize sequence:
+All tests and clients MUST use the canonical MCP SDK initialize sequence:
 
 1. Client spawns server process.
 2. Server buffers early stdin until SDK ready (guards against dropped initialize in fast clients).

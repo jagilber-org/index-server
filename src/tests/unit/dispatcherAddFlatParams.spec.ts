@@ -190,9 +190,11 @@ describe('dispatcher: flat params & schema completeness (feedback #0d4d73a6)', (
     expect(props.missingOk).toBeDefined();
   });
 
-  // ── Feedback dispatch: body→description alias ─────────────────────────────
+  // ── Feedback submit: body→description alias ──────────────────────────────
+  // feedback_dispatch was removed in Phase 2b (002-tool-consolidation); feedback_submit is now the
+  // sole feedback MCP tool and accepts 'description' directly (no body alias needed at MCP level).
 
-  it('feedback: submit accepts "body" as alias for "description"', async () => {
+  it('feedback: submit accepts "description" directly via feedback_submit', async () => {
     // Side-effect import to register feedback handlers
     // @ts-expect-error dynamic side-effect import
     await import('../../services/handlers.feedback');
@@ -201,14 +203,13 @@ describe('dispatcher: flat params & schema completeness (feedback #0d4d73a6)', (
     process.env.INDEX_SERVER_FEEDBACK_DIR = FEEDBACK_TMP;
     fs.mkdirSync(FEEDBACK_TMP, { recursive: true });
     try {
-      const dispatch = getHandler('feedback_dispatch')!;
-      expect(dispatch).toBeDefined();
-      const result = await dispatch({
-        action: 'submit',
+      const submit = getHandler('feedback_submit')!;
+      expect(submit).toBeDefined();
+      const result = await submit({
         type: 'bug-report',
         severity: 'medium',
-        title: 'Body alias test',
-        body: 'Agent sends body instead of description',
+        title: 'Description param test',
+        description: 'Agent sends description directly to feedback_submit',
       }) as Record<string, unknown>;
       expect(result.success).toBe(true);
       expect(result.feedbackId).toBeDefined();
@@ -219,15 +220,14 @@ describe('dispatcher: flat params & schema completeness (feedback #0d4d73a6)', (
     }
   });
 
-  it('feedback: submit still accepts "description" directly', async () => {
+  it('feedback: submit still accepts "description" directly (regression guard)', async () => {
     const FEEDBACK_TMP = path.join(process.cwd(), 'tmp', 'feedback-desc-test');
     const origDir = process.env.INDEX_SERVER_FEEDBACK_DIR;
     process.env.INDEX_SERVER_FEEDBACK_DIR = FEEDBACK_TMP;
     fs.mkdirSync(FEEDBACK_TMP, { recursive: true });
     try {
-      const dispatch = getHandler('feedback_dispatch')!;
-      const result = await dispatch({
-        action: 'submit',
+      const submit = getHandler('feedback_submit')!;
+      const result = await submit({
         type: 'issue',
         severity: 'low',
         title: 'Description direct test',
@@ -242,13 +242,15 @@ describe('dispatcher: flat params & schema completeness (feedback #0d4d73a6)', (
     }
   });
 
-  it('schema: feedback_dispatch exposes body alias', async () => {
+  it('schema: feedback_submit exposes description field (feedback_dispatch removed)', async () => {
     const { getToolRegistry } = await import('../../services/toolRegistry.js');
-    const tools = getToolRegistry();
-    const fbDispatch = tools.find((t: { name: string }) => t.name === 'feedback_dispatch')!;
-    expect(fbDispatch).toBeDefined();
-    const props = (fbDispatch.inputSchema as { properties: Record<string, unknown> }).properties;
-    expect(props.body).toBeDefined();
+    const tools = getToolRegistry({ tier: 'admin' });
+    const fbSubmit = tools.find((t: { name: string }) => t.name === 'feedback_submit')!;
+    expect(fbSubmit).toBeDefined();
+    const props = (fbSubmit.inputSchema as { properties: Record<string, unknown> }).properties;
     expect(props.description).toBeDefined();
+    // feedback_dispatch is no longer exposed — confirm it is absent from admin registry
+    const fbDispatch = tools.find((t: { name: string }) => t.name === 'feedback_dispatch');
+    expect(fbDispatch).toBeUndefined();
   });
 });

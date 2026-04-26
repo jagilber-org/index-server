@@ -36,7 +36,7 @@ if (modernExists) {
   if (!legacyExists) {
     console.log('[pretest] Creating legacy dist/server/index-server.js shim -> src/server/index-server.js');
     mkdirSync(legacyDir, { recursive: true });
-    writeFileSync(legacyEntry, "// auto-generated shim for backward compatibility\nmodule.exports = require('../src/server/index-server.js');\n", 'utf8');
+    writeFileSync(legacyEntry, "// auto-generated shim for backward compatibility\nmodule.exports = require('../src/server/index-server.js');\n", 'utf8'); // lgtm[js/file-system-race] — pretest creates legacy build shim; CI build script
   } else {
     console.log('[pretest] Legacy shim already present');
   }

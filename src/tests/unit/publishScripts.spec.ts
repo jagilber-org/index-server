@@ -282,10 +282,12 @@ describe('publish script hardening', () => {
       expect(src).toMatch(/Tag '\$Tag' already exists on the remote\./);
     });
 
-    it('Publish-ToMirror.ps1 removes existing remote tags during reset publish', () => {
+    it('Publish-ToMirror.ps1 only removes the target remote tag during explicit overwrite', () => {
       const src = fs.readFileSync(path.join(REPO_ROOT, 'scripts', 'Publish-ToMirror.ps1'), 'utf8');
-      expect(src).toContain("Get-RemoteRefs -RemoteName 'public' -RefKind 'tags'");
-      expect(src).toContain(`@('push', 'public', ":refs/tags/$tagName")`);
+      expect(src).toContain("Invoke-Git -Arguments @('ls-remote', '--tags', 'public', \"refs/tags/$Tag\")");
+      expect(src).toContain("if ($AllowTagOverwrite) {");
+      expect(src).toContain(`@('push', 'public', ":refs/tags/$Tag")`);
+      expect(src).toContain('Existing remote tags are preserved to avoid orphaning GitHub Releases.');
     });
 
     it('Publish-ToMirror.ps1 stages into a temporary git workspace instead of mutating SourcePath', () => {

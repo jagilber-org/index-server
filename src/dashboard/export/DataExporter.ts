@@ -32,6 +32,7 @@ export type {
 import { exportJSON } from './exporters/jsonExporter.js';
 import { exportCSV, exportExcel } from './exporters/csvExporter.js';
 import { exportXML, exportPDF } from './exporters/xmlExporter.js';
+import { logError } from '../../services/logger.js';
 
 export class DataExporter {
   private exportConfigs: Map<string, ExportConfig> = new Map();
@@ -691,7 +692,7 @@ export class DataExporter {
       try {
         callback(job);
       } catch (error) {
-        console.error('Error in export job callback:', error);
+        logError('Error in export job callback:', error);
       }
     });
   }

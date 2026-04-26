@@ -8,6 +8,7 @@
 
 import type { UsageManager, APIResponse } from './api.usage.routes.js';
 import type { APIAuthentication, RetryConfig } from './api.instructions.routes.js';
+import { logError } from '../../../services/logger.js';
 
 // ── Type exports ─────────────────────────────────────────────────────────────────────
 
@@ -148,7 +149,7 @@ export class FeedbackManager {
       const response = await this.executeWebhookRequest(webhook, payload);
       return response.status >= 200 && response.status < 300;
     } catch (error) {
-      console.error('Webhook execution error:', error);
+      logError('Webhook execution error:', error);
       return false;
     }
   }

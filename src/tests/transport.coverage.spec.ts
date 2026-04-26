@@ -20,6 +20,7 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { PassThrough } from 'stream';
 import { startTransport, registerHandler } from '../server/transport';
+import { getHandler as getRegistryHandler, getMetricsRaw } from '../server/registry';
 
 // -------------------------------------------------------------------------
 // Helpers
@@ -200,6 +201,32 @@ describe('transport - handler dispatch', () => {
 
     const raw = JSON.stringify(resp!.result);
     expect(raw).toContain('42');
+  });
+
+  it('transport registration is visible in the canonical registry and records canonical metrics', async () => {
+    const method = `transport_registry_${Date.now()}`;
+    registerHandler(method, (p: unknown) => {
+      const params = p as { value?: number };
+      return { value: params?.value ?? 0 };
+    });
+
+    expect(getRegistryHandler(method), 'transport handler should be registered in canonical registry').toBeDefined();
+
+    const { input, lines } = makeTransport();
+    send(input, { jsonrpc: '2.0', id: 1, method: 'initialize' });
+    await waitForLines(lines, 1, 200);
+
+    send(input, { jsonrpc: '2.0', id: 91, method, params: { value: 7 } });
+    await waitForLines(lines, 4, 400);
+
+    const frames = parseJsonLines(lines);
+    const resp = frames.find(f => f.id === 91 && 'result' in f);
+    expect(resp, 'registry-backed transport result must exist').toBeDefined();
+    expect(JSON.stringify(resp!.result)).toContain('7');
+
+    const metrics = getMetricsRaw();
+    expect(metrics[method], 'canonical metrics should include transport-registered handler').toBeDefined();
+    expect(metrics[method].count).toBeGreaterThanOrEqual(1);
   });
 
   it('handler that throws returns -32603 internal error', async () => {

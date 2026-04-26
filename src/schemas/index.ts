@@ -4,9 +4,20 @@
 export const instructionEntry = {
   type: 'object',
   additionalProperties: false,
+  $defs: {
+    extensionValue: {
+      anyOf: [
+        { type: 'string' },
+        { type: 'number' },
+        { type: 'boolean' },
+        { type: 'array', items: { $ref: '#/$defs/extensionValue' } },
+        { type: 'object', additionalProperties: { $ref: '#/$defs/extensionValue' } }
+      ]
+    }
+  },
   required: [
     'id','title','body','priority','audience','requirement','categories','sourceHash','schemaVersion','createdAt','updatedAt',
-    'version','status','owner','priorityTier','classification','lastReviewedAt','nextReviewDue','changeLog','semanticSummary'
+    'version','status','owner','priorityTier','classification','lastReviewedAt','nextReviewDue','changeLog','semanticSummary','contentType'
   ],
   properties: {
     id: { type: 'string', minLength: 1 },
@@ -17,6 +28,7 @@ export const instructionEntry = {
     audience: { enum: ['individual','group','all'] },
     requirement: { enum: ['mandatory','critical','recommended','optional','deprecated'] },
     categories: { type: 'array', items: { type: 'string' } },
+    primaryCategory: { type: 'string' },
     sourceHash: { type: 'string' },
     schemaVersion: { type: 'string' },
     deprecatedBy: { type: 'string' },
@@ -26,9 +38,11 @@ export const instructionEntry = {
   firstSeenTs: { type: 'string' },
     lastUsedAt: { type: 'string' },
     riskScore: { type: 'number' }
+  ,reviewIntervalDays: { type: 'number' }
   ,workspaceId: { type: 'string' }
   ,userId: { type: 'string' }
   ,teamIds: { type: 'array', items: { type: 'string' } }
+  ,contentType: { enum: ['instruction','template','chat-session','reference','example','agent'] }
   ,version: { type: 'string' }
   ,status: { enum: ['draft','review','approved','deprecated'] }
   ,owner: { type: 'string' }
@@ -38,10 +52,11 @@ export const instructionEntry = {
   ,nextReviewDue: { type: 'string' }
   ,changeLog: { type: 'array', items: { type: 'object', required: ['version','changedAt','summary'], additionalProperties: false, properties: { version: { type: 'string' }, changedAt: { type: 'string' }, summary: { type: 'string' } } } }
   ,supersedes: { type: 'string' }
+  ,archivedAt: { type: 'string' }
   ,semanticSummary: { type: 'string' }
   ,createdByAgent: { type: 'string' }
   ,sourceWorkspace: { type: 'string' }
-  ,extensions: { type: 'object', additionalProperties: true }
+  ,extensions: { type: 'object', additionalProperties: { $ref: '#/$defs/extensionValue' } }
   }
 } as const;
 
@@ -309,7 +324,16 @@ export const schemas: Record<string, unknown> = {
   } },
   'index_add': {
     anyOf: [
-      { type: 'object', required: ['error'], properties: { error: { type: 'string' }, id: { type: 'string' } }, additionalProperties: true },
+      { type: 'object', required: ['error'], properties: {
+        error: { type: 'string' },
+        id: { type: 'string' },
+        success: { const: false },
+        message: { type: 'string' },
+        validationErrors: { type: 'array', items: { type: 'string' } },
+        hints: { type: 'array', items: { type: 'string' } },
+        schemaRef: { type: 'string' },
+        inputSchema: { type: 'object' }
+      }, additionalProperties: true },
       { type: 'object', required: ['id','hash','skipped','created','overwritten'], additionalProperties: false, properties: {
         id: { type: 'string' }, hash: { type: 'string' }, skipped: { type: 'boolean' }, created: { type: 'boolean' }, overwritten: { type: 'boolean' }
       } }

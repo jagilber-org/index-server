@@ -14,6 +14,8 @@ describe('RED: Tool tier flags (002-tool-consolidation Phase 1)', () => {
     // Save env state
     savedEnv['INDEX_SERVER_FLAG_TOOLS_EXTENDED'] = process.env.INDEX_SERVER_FLAG_TOOLS_EXTENDED;
     savedEnv['INDEX_SERVER_FLAG_TOOLS_ADMIN'] = process.env.INDEX_SERVER_FLAG_TOOLS_ADMIN;
+    savedEnv['INDEX_SERVER_DEBUG'] = process.env.INDEX_SERVER_DEBUG;
+    savedEnv['INDEX_SERVER_STRESS_DIAG'] = process.env.INDEX_SERVER_STRESS_DIAG;
   });
 
   afterEach(() => {
@@ -22,6 +24,10 @@ describe('RED: Tool tier flags (002-tool-consolidation Phase 1)', () => {
     else process.env.INDEX_SERVER_FLAG_TOOLS_EXTENDED = savedEnv['INDEX_SERVER_FLAG_TOOLS_EXTENDED'];
     if (savedEnv['INDEX_SERVER_FLAG_TOOLS_ADMIN'] === undefined) delete process.env.INDEX_SERVER_FLAG_TOOLS_ADMIN;
     else process.env.INDEX_SERVER_FLAG_TOOLS_ADMIN = savedEnv['INDEX_SERVER_FLAG_TOOLS_ADMIN'];
+    if (savedEnv['INDEX_SERVER_DEBUG'] === undefined) delete process.env.INDEX_SERVER_DEBUG;
+    else process.env.INDEX_SERVER_DEBUG = savedEnv['INDEX_SERVER_DEBUG'];
+    if (savedEnv['INDEX_SERVER_STRESS_DIAG'] === undefined) delete process.env.INDEX_SERVER_STRESS_DIAG;
+    else process.env.INDEX_SERVER_STRESS_DIAG = savedEnv['INDEX_SERVER_STRESS_DIAG'];
     reloadRuntimeConfig();
   });
 
@@ -32,14 +38,14 @@ describe('RED: Tool tier flags (002-tool-consolidation Phase 1)', () => {
 
     const registry = getToolRegistry();
     const names = registry.map(t => t.name);
-    // Should have exactly 7 core tools (5 original + feedback_dispatch + bootstrap)
-    expect(names.length).toBe(7);
+    // Should have exactly 6 core tools (feedback_dispatch removed in Phase 2b — feedback_submit is admin-tier only)
+    expect(names.length).toBe(6);
     expect(names).toContain('health_check');
     expect(names).toContain('index_dispatch');
     expect(names).toContain('index_search');
     expect(names).toContain('prompt_review');
     expect(names).toContain('help_overview');
-    expect(names).toContain('feedback_dispatch');
+    expect(names).not.toContain('feedback_dispatch');
     expect(names).toContain('bootstrap');
   });
 
@@ -60,18 +66,32 @@ describe('RED: Tool tier flags (002-tool-consolidation Phase 1)', () => {
     expect(names.has('bootstrap_request')).toBe(false);
   });
 
-  it('INDEX_SERVER_FLAG_TOOLS_ADMIN=1 includes all tools', () => {
+  it('INDEX_SERVER_FLAG_TOOLS_ADMIN=1 keeps dangerous diagnostics hidden by default', () => {
     process.env.INDEX_SERVER_FLAG_TOOLS_ADMIN = '1';
+    delete process.env.INDEX_SERVER_DEBUG;
+    delete process.env.INDEX_SERVER_STRESS_DIAG;
     reloadRuntimeConfig();
 
     const registry = getToolRegistry();
     const names = new Set(registry.map(t => t.name));
-    // Admin-only tools present
-    expect(names.has('diagnostics_block')).toBe(true);
+    // Admin-only tools present, but dangerous diagnostics still require explicit opt-in
+    expect(names.has('diagnostics_block')).toBe(false);
+    expect(names.has('diagnostics_microtaskFlood')).toBe(false);
+    expect(names.has('diagnostics_memoryPressure')).toBe(false);
     expect(names.has('bootstrap_request')).toBe(true);
     expect(names.has('meta_tools')).toBe(true);
-    // All tools present (should be 44)
-    expect(registry.length).toBeGreaterThanOrEqual(40);
+  });
+
+  it('INDEX_SERVER_FLAG_TOOLS_ADMIN=1 with INDEX_SERVER_DEBUG=1 exposes diagnostics tools', () => {
+    process.env.INDEX_SERVER_FLAG_TOOLS_ADMIN = '1';
+    process.env.INDEX_SERVER_DEBUG = '1';
+    reloadRuntimeConfig();
+
+    const registry = getToolRegistry();
+    const names = new Set(registry.map(t => t.name));
+    expect(names.has('diagnostics_block')).toBe(true);
+    expect(names.has('diagnostics_microtaskFlood')).toBe(true);
+    expect(names.has('diagnostics_memoryPressure')).toBe(true);
   });
 
   it('INDEX_SERVER_FLAG_TOOLS_EXTENDED=1 without admin still hides admin tools', () => {

@@ -23,7 +23,7 @@ Optional:
 1. Stop any running prior server instance.
 2. Pull / install new code, run build: `npm ci && npm run build`.
 3. (Optional) Back up your `instructions/` and `data/usage-snapshot.json`.
-4. Start server once with `INDEX_SERVER_MUTATION=1` to allow enrichment rewrite pass.
+4. Start server once (writes are enabled by default) to allow the enrichment rewrite pass.
 5. Observe stderr logs for any enrichment rewrites (only first run should rewrite; subsequent runs should show stable governance hash).
 6. (If you previously depended on a trailing newline in hash input) set `GOV_HASH_TRAILING_NEWLINE=1` consistently across all validating processes.
 
@@ -175,7 +175,7 @@ Because 0.7.0 only adds fields / tools and performs additive enrichment, rollbac
 
 | Variable | Purpose | Default |
 |----------|---------|---------|
-| INDEX_SERVER_MUTATION | Enable mutation tools | unset (disabled) |
+| INDEX_SERVER_MUTATION | Force read-only mode | unset (`true`) |
 | INDEX_SERVER_VERBOSE_LOGGING | Verbose logging | unset |
 | INDEX_SERVER_LOG_MUTATION | Mutation-only logs | unset |
 | GOV_HASH_TRAILING_NEWLINE | Add trailing newline sentinel before hash | unset (off) |

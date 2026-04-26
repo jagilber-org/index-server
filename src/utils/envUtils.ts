@@ -76,3 +76,10 @@ export function parseBooleanEnv(envVar: string | undefined, defaultValue = false
 export function getBooleanEnv(name: string, defaultValue = false): boolean {
   return parseBooleanEnv(process.env[name], defaultValue);
 }
+
+/**
+ * Dangerous diagnostics are only available in explicit debug / stress sessions.
+ */
+export function dangerousDiagnosticsEnabled(): boolean {
+  return getBooleanEnv('INDEX_SERVER_STRESS_DIAG') || getBooleanEnv('INDEX_SERVER_DEBUG');
+}

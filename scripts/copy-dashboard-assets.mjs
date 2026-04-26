@@ -54,7 +54,7 @@ function copyAssets() {
       try {
         const srcStat = statSync(srcPath);
         let needsCopy = true;
-        let reason = 'new';
+        let reason;
         try {
           const destStat = statSync(destPath);
           if (destStat.size === srcStat.size) {

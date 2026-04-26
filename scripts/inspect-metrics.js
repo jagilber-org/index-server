@@ -114,7 +114,7 @@ function inspectMetricsCollector() {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars -- exported utility for manual diagnostics
-function disableMetricsCollection() {
+function disableMetricsCollection() { // lgtm[js/unused-local-variable] — exported diagnostic helper retained for manual REPL use
     console.log('\n🛑 DISABLING METRICS COLLECTION...');
     try {
         const collector = require('../dashboard/server/MetricsCollector.js').getMetricsCollector();

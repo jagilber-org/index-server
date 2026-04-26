@@ -21,6 +21,10 @@ import type { InstructionEntry } from '../../../models/instruction.js';
 import { getHandler } from '../../../server/registry.js';
 import { forceBootstrapConfirmForTests } from '../../../services/bootstrapGating.js';
 
+let hasSqlite = false;
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+try { require('node:sqlite'); hasSqlite = true; } catch { /* node:sqlite not available */ }
+
 // ── Infrastructure file allowlist (not instruction data) ─────────────────────
 const INFRA_FILES = new Set([
   'bootstrap.confirmed.json',
@@ -63,7 +67,7 @@ function call(name: string, params: unknown): unknown {
 // SUITE 1: SQLite mode — NO instruction .json files on disk
 // ═══════════════════════════════════════════════════════════════════════════════
 
-describe('Backend Isolation — SQLite mode (no instruction .json on disk)', () => {
+describe.skipIf(!hasSqlite)('Backend Isolation — SQLite mode (no instruction .json on disk)', () => {
   const TMP_ROOT = path.join(os.tmpdir(), `iso-sqlite-${Date.now()}`);
   const INST_DIR = path.join(TMP_ROOT, 'instructions');
   const DB_PATH = path.join(TMP_ROOT, 'isolation-test.db');
@@ -143,7 +147,7 @@ describe('Backend Isolation — SQLite mode (no instruction .json on disk)', () 
   it('index_import does not create instruction .json files', async () => {
     const id = `iso-import-${Date.now()}`;
     await call('index_import', {
-      entries: [{ id, title: `Import ${id}`, body: `Body ${id}` }],
+      entries: [{ id, title: `Import ${id}`, body: `Body ${id}`, priority: 50, audience: 'all', requirement: 'optional', categories: ['test'] }],
       mode: 'overwrite',
     });
     const leaked = instructionJsonFiles(INST_DIR);
@@ -252,7 +256,7 @@ describe('Backend Isolation — SQLite mode (no instruction .json on disk)', () 
     await call('index_add', { entry: { id: `iso-multi-add-${ts}`, title: 'Multi add', body: 'Multi body' } });
     // import
     await call('index_import', {
-      entries: [{ id: `iso-multi-import-${ts}`, title: 'Multi import', body: 'Multi import body' }],
+      entries: [{ id: `iso-multi-import-${ts}`, title: 'Multi import', body: 'Multi import body', priority: 50, audience: 'all', requirement: 'optional', categories: ['test'] }],
       mode: 'overwrite',
     });
     // governanceUpdate
@@ -289,7 +293,7 @@ describe('Backend Isolation — JSON mode (no .db files on disk)', () => {
   beforeAll(async () => {
     fs.mkdirSync(INST_DIR, { recursive: true });
     // Write .index-version so JsonFileStore.load() works
-    fs.writeFileSync(path.join(INST_DIR, '.index-version'), '0', 'utf-8');
+    fs.writeFileSync(path.join(INST_DIR, '.index-version'), '0', 'utf-8'); // lgtm[js/insecure-temporary-file] — test fixture inside per-test TMP_ROOT directory
     process.env.INDEX_SERVER_MUTATION = '1';
     process.env.INDEX_SERVER_DIR = INST_DIR;
     process.env.INDEX_SERVER_STORAGE_BACKEND = 'json';
@@ -336,7 +340,7 @@ describe('Backend Isolation — JSON mode (no .db files on disk)', () => {
   it('index_import creates .json but no .db file', async () => {
     const id = `iso-json-import-${Date.now()}`;
     await call('index_import', {
-      entries: [{ id, title: `Import ${id}`, body: `Body ${id}` }],
+      entries: [{ id, title: `Import ${id}`, body: `Body ${id}`, priority: 50, audience: 'all', requirement: 'optional', categories: ['test'] }],
       mode: 'overwrite',
     });
     expect(dbFiles(TMP_ROOT)).toEqual([]);

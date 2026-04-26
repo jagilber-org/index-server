@@ -1,8 +1,8 @@
 {
   "templateName": "layered-hook-security-template",
-  "templateVersion": "1.23.0",
+  "templateVersion": "1.25.0",
   "hookStandardInstruction": "repository-hook-security-standard",
-  "hookStandardVersion": "1.3.0",
+  "hookStandardVersion": "1.4.0",
   "adoptedAt": "YYYY-MM-DDTHH:MM:SS.000Z",
   "notes": [
     "Document adoption notes and version transition history here."

@@ -215,7 +215,7 @@ registerHandler('messaging_purge', (params: {
 } = {}) => {
   const mailbox = getMailbox();
   let removed: number;
-  let action = 'purge_all';
+  let action: string;
 
   if (params.all) {
     removed = mailbox.purgeAll();

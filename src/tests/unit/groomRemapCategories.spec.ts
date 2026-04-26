@@ -110,7 +110,7 @@ describe('index_groom — remapCategories mode', () => {
     expect(kustoEntry.primaryCategory).toBe('kusto');
 
     const sfEntry = readInstruction('sf-deploy-guide');
-    expect(sfEntry.primaryCategory).toBe('service fabric');
+    expect(sfEntry.primaryCategory).toBe('service-fabric');
 
     const mcpEntry = readInstruction('mcp-tool-reference');
     expect(mcpEntry.primaryCategory).toBe('mcp');

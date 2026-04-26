@@ -76,8 +76,9 @@ test.describe('Instruction CRUD Lifecycle @baseline', () => {
         title: TEST_TITLE,
         body: TEST_BODY,
         priority: 50,
-        audience: 'test',
+        audience: 'all',
         requirement: 'optional',
+        categories: ['test'],
       }),
     });
     expect(createResp.status).toBeLessThan(400);
@@ -100,8 +101,9 @@ test.describe('Instruction CRUD Lifecycle @baseline', () => {
         title: TEST_TITLE,
         body: TEST_BODY,
         priority: 50,
-        audience: 'test',
+        audience: 'all',
         requirement: 'optional',
+        categories: ['test'],
       }),
     });
     expect(createResp.status).toBeLessThan(400);
@@ -125,8 +127,9 @@ test.describe('Instruction CRUD Lifecycle @baseline', () => {
         title: TEST_TITLE,
         body: UPDATED_BODY,
         priority: 50,
-        audience: 'test',
+        audience: 'all',
         requirement: 'optional',
+        categories: ['test'],
       }),
     });
     expect(updateResp.status).toBeLessThan(400);
@@ -162,5 +165,33 @@ test.describe('Instruction CRUD Lifecycle @baseline', () => {
 
     // Verify list container is visible
     await expect(page.locator('#instructions-list')).toBeVisible();
+  });
+
+  test('reject invalid instruction via API and keep it out of the dashboard list', async ({ page }) => {
+    const invalidId = `${TEST_ID}-invalid`;
+    const createResp = await apiRequest(page, 'POST', '/api/instructions', {
+      name: invalidId,
+      content: {
+        id: invalidId,
+        title: 'Invalid CRUD Lifecycle Test Instruction',
+        body: 'This payload should be rejected.',
+        priority: 50,
+        audience: 'all',
+        requirement: 'optional',
+        categories: ['test'],
+        classification: 'secret',
+      },
+    });
+    expect(createResp.status).toBe(400);
+    const createData = createResp.json as Record<string, unknown>;
+    expect(createData.error).toBe('invalid_instruction');
+
+    const readResp = await apiRequest(page, 'GET', `/api/instructions/${invalidId}`);
+    expect(readResp.status).toBe(404);
+
+    await navigateToInstructions(page);
+    await waitForListLoad(page);
+    const listText = await page.locator('#instructions-list').textContent();
+    expect(listText).not.toContain(invalidId);
   });
 });

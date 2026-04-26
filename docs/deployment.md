@@ -8,10 +8,10 @@
 
 | Profile | Goal | Characteristics | Typical Settings |
 |---------|------|-----------------|------------------|
-| Dev (workbench) | Rapid iteration & feature validation | Local filesystem, verbose logs, mutation enabled | `INDEX_SERVER_MUTATION=1`, `INDEX_SERVER_VERBOSE_LOGGING=1`, `INDEX_SERVER_DEBUG=1`, `INDEX_SERVER_DASHBOARD=1` |
+| Dev (workbench) | Rapid iteration & feature validation | Local filesystem, verbose logs, mutation enabled | `INDEX_SERVER_VERBOSE_LOGGING=1`, `INDEX_SERVER_DEBUG=1`, `INDEX_SERVER_DASHBOARD=1` |
 | Shared Dev / Integration | Cross-developer validation & test harness | Stable path, persistent metrics, controlled mutation | `INDEX_SERVER_METRICS_FILE_STORAGE=1`, optional `INDEX_SERVER_BOOTSTRAP_AUTOCONFIRM=1` (tests) |
 | Staging / Pre-Prod | Release candidate soak | Mirrors prod paths & policies, seeded baseline | Same as prod + extra diagnostics `INDEX_SERVER_LOG_DIAG=1` if needed |
-| Production | Stable Index serving & governance | Locked paths, minimal verbosity, audit logging | `INDEX_SERVER_MUTATION=1` (if governed), no verbose/diag unless incident |
+| Production | Stable Index serving & governance | Locked paths, minimal verbosity, audit logging | Default writes + bootstrap gating, no verbose/diag unless incident |
 | Reference / Read-Only | Immutable published snapshot | All mutation permanently disabled | `INDEX_SERVER_REFERENCE_MODE=1` |
 
 ---
@@ -82,8 +82,7 @@ Test harness shortcut: `INDEX_SERVER_BOOTSTRAP_AUTOCONFIRM=1` (never use in prod
 | Variable | Purpose | Typical Prod | Typical Dev | Migration Notes |
 |----------|---------|--------------|-------------|----------------|
 | `INDEX_SERVER_DIR` | Index root | Stable prod path | `devinstructions/` | (Will be normalized to `INDEX_SERVER_DIR` alias internally) |
-| `INDEX_SERVER_MUTATION` | Enable/disable write ops | `enabled` (if governed) | `enabled` | Replaces `INDEX_SERVER_MUTATION` (still accepted) |
-| `INDEX_SERVER_MUTATION` | Legacy mutation flag | 1 | 1 | Deprecated (mapped to `INDEX_SERVER_MUTATION`) |
+| `INDEX_SERVER_MUTATION` | Force read-only override | unset / `1` | unset / `1` | Set `0` when a deployment must be explicitly read-only |
 | `INDEX_SERVER_REFERENCE_MODE` | Force read-only | 0 | 0 or 1 (testing) | Unchanged |
 | `INDEX_SERVER_AUTO_SEED` | Auto-create baseline seeds | 1 | 1 | Unchanged |
 | `INDEX_SERVER_SEED_VERBOSE` | Extra stderr seed log | 0 | 1 | Unchanged |
@@ -127,10 +126,11 @@ Fast coverage path migration:
 - Old: `FAST_COVERAGE=1`
 - New: `INDEX_SERVER_TEST_MODE=coverage-fast`
 
-Mutation gating migration:
+Mutation control migration:
 
-- Old: `INDEX_SERVER_MUTATION=1`
-- New: `INDEX_SERVER_MUTATION=enabled`
+- Old habit: `INDEX_SERVER_MUTATION=1`
+- New default: leave `INDEX_SERVER_MUTATION` unset for normal writes
+- Read-only override: `INDEX_SERVER_MUTATION=0`
 
 ---
  
@@ -175,6 +175,36 @@ $env:INDEX_SERVER_SEMANTIC_ENABLED = '1'
 ```
 
 The first search request downloads a ~90MB embedding model (one-time). Subsequent requests use the cached model.
+
+#### Vector Embedding Storage (sqlite-vec)
+
+When using the SQLite storage backend, embeddings can optionally be stored in a sqlite-vec `vec0` virtual table for native KNN search instead of the default JSON file:
+
+```bash
+export INDEX_SERVER_STORAGE_BACKEND=sqlite
+export INDEX_SERVER_SQLITE_VEC_ENABLED=1
+export INDEX_SERVER_SEMANTIC_ENABLED=1
+```
+
+```powershell
+$env:INDEX_SERVER_STORAGE_BACKEND = 'sqlite'
+$env:INDEX_SERVER_SQLITE_VEC_ENABLED = '1'
+$env:INDEX_SERVER_SEMANTIC_ENABLED = '1'
+```
+
+**Requirements:**
+- Node.js ≥ 22.13.0 (for `DatabaseSync.loadExtension()`)
+- `sqlite-vec` npm package (bundled in production dependencies)
+
+If sqlite-vec fails to load (e.g., missing native binary on Alpine Linux), embeddings fall back to JSON storage automatically.
+
+#### Node.js Version Matrix
+
+| Feature | Minimum Node.js | Reason |
+|---------|----------------|--------|
+| JSON backend | ≥ 20 | Standard Node.js APIs |
+| SQLite backend | ≥ 22.5.0 | Built-in `node:sqlite` module |
+| sqlite-vec embeddings | ≥ 22.13.0 | `DatabaseSync.loadExtension()` API |
 
 ### 5.3 First Start (Prod)
 
@@ -222,6 +252,11 @@ If you *only* copied some files and lost a seed, auto-seed reintroduces it—thi
 
 | Symptom | Likely Cause | Action |
 |---------|--------------|-------|
+| All logs show `[warning] [server stderr]` | MCP log bridge not activating | Verify `mcpLogBridge` is the first import in `index-server.ts`. Check handshake completion: look for `activateMcpLogBridge()` call in logs. See [mcp_stdio_logging.md](mcp_stdio_logging.md). |
+| No log output in VS Code Output panel | Output channel not selected or server not started | Open **View → Output**, select the index-server channel from the dropdown. Verify server is running (check status bar). |
+| Logs show wrong severity levels | Custom `inferLevel` or NDJSON format mismatch | Check that log lines are valid NDJSON with a `"level"` field. The `defaultInferLevel()` function reads the `"level"` field first, then falls back to keyword matching. |
+| `INDEX_SERVER_LOG_FILE` not producing output | Path doesn't exist or no write permission | Set `INDEX_SERVER_LOG_FILE=1` for default path (`logs/mcp-server.log`), or set to absolute path. Ensure `logs/` directory exists or is auto-created. |
+| Startup logs missing (only post-handshake visible) | Buffer overflow or early crash | Increase `maxBufferSize` (default 500 lines). Check for early exceptions in stderr before bridge activates. |
 | Mutation blocked unexpectedly | Missing confirmation or reference mode | Call `bootstrap_status`; if `requireConfirmation=true`, complete token flow. Check `INDEX_SERVER_REFERENCE_MODE`. |
 | Seeds recreated on existing workspace | Seeds deleted manually | Accept recreation; investigate deletion; enable `INDEX_SERVER_SEED_VERBOSE=1` for audit timing. |
 | No `seed_summary` line | Logging misconfigured or very early crash | Ensure `INDEX_SERVER_LOG_FILE=1`; confirm `autoSeedBootstrap()` runs before Index usage; inspect stderr for stack traces. |

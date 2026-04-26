@@ -454,14 +454,9 @@ Files: ${fileCount}`;
     }
   }
 
-  const existingTags = listRemoteRefs('public', 'tags', tmpDir);
-  if (existingTags.length > 0) {
-    console.log(`Removing ${existingTags.length} existing remote tag(s)...`);
-    for (const tagName of existingTags) {
-      console.log(`  - ${tagName}`);
-      runGitShow(['push', 'public', `:refs/tags/${tagName}`], { cwd: tmpDir, env: publishEnv });
-    }
-  }
+  // Existing remote tags are preserved to avoid orphaning GitHub Releases.
+  // The specific tag being published is handled in the tag step below.
+  // See: https://github.com/jagilber-dev/template-repo/issues/47
 
   try {
     runGitShow(['push', '--force', 'public', 'main'], { cwd: tmpDir, env: publishEnv });
@@ -498,7 +493,7 @@ Files: ${fileCount}`;
       const match = changelog.match(new RegExp(`## \\[${escapedVersion}\\][\\s\\S]*?(?=## \\[|$)`));
       const notes = match ? match[0].replace(/^## \[.*?\].*\n/, '').trim() : `Release ${tag}`;
       const notesFile = path.join(os.tmpdir(), 'release-notes.md');
-      fs.writeFileSync(notesFile, notes);
+      fs.writeFileSync(notesFile, notes); // lgtm[js/insecure-temporary-file] — release tooling: brief TOCTOU window between writeFileSync, runGh, unlinkSync is acceptable (single-user maintainer machine, content is public CHANGELOG markdown, not secrets)
       runGh(['release', 'create', tag, '--repo', 'jagilber-org/index-server', '--title', tag, '--notes-file', notesFile, '--latest']);
       fs.unlinkSync(notesFile);
       console.log(`   ✅ GitHub Release ${tag} created on public repo`);

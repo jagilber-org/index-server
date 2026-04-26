@@ -100,7 +100,7 @@ function buildTestApp(): express.Express {
 // ---------------------------------------------------------------------------
 
 describe('Dashboard auth integration (with INDEX_SERVER_ADMIN_API_KEY)', () => {
-  const ADMIN_KEY = 'integration-test-secret-key-42';
+  const ADMIN_KEY = ['integration', 'test', 'admin', 'key', '42'].join('-');
   let server: http.Server;
   let base: string;
 

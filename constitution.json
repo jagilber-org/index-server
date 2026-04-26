@@ -1,10 +1,10 @@
 {
   "schemaVersion": 2,
-  "version": "2.7.0",
+  "version": "2.9.0",
   "name": "Index",
   "ratifiedAt": "2026-02-16",
-  "lastAmendedAt": "2026-04-19",
-  "description": "Index Server — Enterprise instruction indexing platform for AI assistant governance. Aligned to the layered hook security template constitution v2.7.0.",
+  "lastAmendedAt": "2026-04-26",
+  "description": "Index Server — Enterprise instruction indexing platform for AI assistant governance. Aligned to the layered hook security template constitution v2.8.0.",
   "articles": {
     "governance": {
       "title": "Template Governance And Change Control",
@@ -465,8 +465,8 @@
         {
           "id": "S-3",
           "severity": "error",
-          "rule": "Mutation tools require INDEX_SERVER_MUTATION=1 and bootstrap gating.",
-          "rationale": "Write operations must be gated to prevent accidental catalog modification."
+          "rule": "Mutation tools are enabled by default but still require bootstrap gating, and operators MUST use INDEX_SERVER_MUTATION=0 when they need an explicit read-only runtime.",
+          "rationale": "Write operations remain subject to bootstrap safeguards while allowing operators to force a read-only runtime when they need stricter protection."
         },
         {
           "id": "S-4",
@@ -1302,6 +1302,12 @@
           "severity": "warning",
           "rule": "Schema changes to persisted files MUST include migration logic or be backwards-compatible.",
           "rationale": "Breaking schema changes strand existing deployments."
+        },
+        {
+          "id": "DI-4",
+          "severity": "error",
+          "rule": "Write paths MUST mirror read paths for normalization, migration, and validation. Any record passing through a writer MUST run the same migration and validation sequence the loader runs at read time so that round-trips are symmetric.",
+          "rationale": "Asymmetric write/read pipelines silently corrupt state: legacy records re-validated under newer schemas are rejected on write even though they load cleanly, and writes never observe the same defaults the loader applies. Symmetry prevents drift between in-memory state, persisted form, and on-load reconstruction."
         }
       ]
     }

@@ -17,6 +17,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      # For sqlite-vec support, use: BASE_IMAGE=node:22-slim (glibc required)
+      args:
+        BASE_IMAGE: ${BASE_IMAGE:-node:22-alpine}
     container_name: index-server
     restart: unless-stopped
     ports:
@@ -41,6 +44,8 @@ services:
       - INDEX_SERVER_SQLITE_PATH=${INDEX_SERVER_SQLITE_PATH:-/app/data/index.db}
       - INDEX_SERVER_SQLITE_WAL=${INDEX_SERVER_SQLITE_WAL:-1}
       - INDEX_SERVER_SQLITE_MIGRATE_ON_START=${INDEX_SERVER_SQLITE_MIGRATE_ON_START:-1}
+      # Uncomment to enable sqlite-vec vector embedding storage (requires node:22-slim for glibc):
+      # - INDEX_SERVER_SQLITE_VEC_ENABLED=1
       - INDEX_SERVER_METRICS_DIR=/app/metrics
       - INDEX_SERVER_FEEDBACK_DIR=/app/feedback
     healthcheck:
@@ -67,6 +72,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      # For sqlite-vec support, use: BASE_IMAGE=node:22-slim (glibc required)
+      args:
+        BASE_IMAGE: ${BASE_IMAGE:-node:22-alpine}
     container_name: index-server-tls
     profiles: ["tls"]
     restart: unless-stopped
@@ -96,6 +104,8 @@ services:
       - INDEX_SERVER_SQLITE_PATH=${INDEX_SERVER_SQLITE_PATH:-/app/data/index.db}
       - INDEX_SERVER_SQLITE_WAL=${INDEX_SERVER_SQLITE_WAL:-1}
       - INDEX_SERVER_SQLITE_MIGRATE_ON_START=${INDEX_SERVER_SQLITE_MIGRATE_ON_START:-1}
+      # Uncomment to enable sqlite-vec vector embedding storage (requires node:22-slim for glibc):
+      # - INDEX_SERVER_SQLITE_VEC_ENABLED=1
       - INDEX_SERVER_METRICS_DIR=/app/metrics
       - INDEX_SERVER_FEEDBACK_DIR=/app/feedback
     healthcheck:

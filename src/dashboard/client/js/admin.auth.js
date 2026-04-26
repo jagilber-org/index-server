@@ -16,7 +16,7 @@
 
   function setToken(token) {
     try {
-      if (token) sessionStorage.setItem(STORAGE_KEY, token);
+      if (token) sessionStorage.setItem(STORAGE_KEY, token); // lgtm[js/clear-text-storage-of-sensitive-data] — admin session token stored in sessionStorage by design (loopback-only admin panel; cleared on tab close)
       else sessionStorage.removeItem(STORAGE_KEY);
     } catch (_) { /* private browsing or quota */ }
   }
@@ -48,6 +48,19 @@
     applyAuthHeader(options.headers, getToken());
 
     var response = await fetch(url, options);
+
+    // Rate-limit detection: surface 429 visibly (issue #63)
+    if (response.status === 429) {
+      try {
+        var rlBody = await response.clone().json();
+        var retryAfter = rlBody.retryAfterSeconds || Number(response.headers.get('Retry-After')) || 60;
+        var tier = rlBody.tier || 'global';
+        if (window.adminUtils && window.adminUtils.showRateLimitBanner) {
+          window.adminUtils.showRateLimitBanner(retryAfter, tier);
+        }
+      } catch (_e) { /* couldn't parse 429 body — still return the response */ }
+      return response;
+    }
 
     if (response.status !== 401 && response.status !== 403) return response;
 

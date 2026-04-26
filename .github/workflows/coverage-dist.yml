@@ -1,6 +1,9 @@
 name: Coverage & Dist Freshness
 on:
-  pull_request:
+  # Coverage on push to main only — PRs use ci.yml's fast suite (test:fast)
+  # to conserve Actions minutes. Trigger manually via workflow_dispatch for
+  # PR coverage when needed.
+  push:
     branches: [ main ]
   workflow_dispatch: {}
 

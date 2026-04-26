@@ -40,7 +40,6 @@ describe('manifest edge cases', () => {
   });
 
   const FAST_COVERAGE = process.env.INDEX_SERVER_COVERAGE_FAST === '1';
-  const maybeIt = FAST_COVERAGE ? it.skip : it;
   // Centralized timing via runtimeConfig (with legacy env fallback captured in loader)
   const cfg = getRuntimeConfig();
   const WAIT_DISABLED_MS = cfg.timing('manifest.waitDisabled', 18000)!;
@@ -48,13 +47,7 @@ describe('manifest edge cases', () => {
   const POST_KILL_FLUSH_MS = cfg.timing('manifest.postKill', 250)!;
   const DIST_INDEX = path.join(process.cwd(),'dist','server', 'index-server.js');
   const DEPLOY_PRESENT = fs.existsSync(DIST_INDEX);
-  if(!DEPLOY_PRESENT){
-    // If build artifacts missing (e.g. running in a minimal environment) skip gracefully.
-    // Returning here keeps the suite green while signaling intent.
-    // SKIP_OK: conditional infrastructure-dependent test; allowed to skip when dist build absent in minimal contexts.
-    it.skip('skip manifest edge cases (dist build missing)', () => {}); // SKIP_OK
-    return;
-  }
+  const maybeIt = FAST_COVERAGE || !DEPLOY_PRESENT ? it.skip : it;
 
   maybeIt('respects INDEX_SERVER_MANIFEST_WRITE=0 (no file produced)', async () => {
     const start = readManifest(WORKSPACE_DIR);

@@ -9,6 +9,9 @@ import { createApiRoutes } from '../ApiRoutes.js';
 import { MetricsCollector } from '../MetricsCollector.js';
 import { generateDashboardHtml, stripGraphTab } from '../legacyDashboardHtml.js';
 import { listRegisteredMethods } from '../../../server/registry.js';
+import { logError } from '../../../services/logger.js';
+import { escapeHtml } from '../utils/escapeHtml.js';
+import { validatePathContainment } from '../utils/pathContainment.js';
 
 export { createStatusRoutes } from './status.routes.js';
 export { createMetricsRoutes } from './metrics.routes.js';
@@ -26,6 +29,7 @@ export { createUsageRoutes } from './usage.routes.js';
 export { createScriptsRoutes } from './scripts.routes.js';
 export { createMessagingRoutes } from './messaging.routes.js';
 export { createSqliteRoutes } from './sqlite.routes.js';
+export { createAdminFeedbackRoutes } from './admin.feedback.routes.js';
 
 // ---------------------------------------------------------------------------
 // Dashboard-level route mounting (top-level routes, not /api sub-routes)
@@ -38,15 +42,6 @@ export interface DashboardRoutesContext {
   graphEnabled: boolean;
   wsProtocol: 'wss' | 'ws';
   getServerInfo: () => { port: number; host: string; url: string } | null;
-}
-
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
 }
 
 function sanitizeDocUrl(rawUrl: string, allowDataImage = false): string {
@@ -122,8 +117,7 @@ export function mountDashboardRoutes(app: Express, ctx: DashboardRoutesContext):
       adminHtml = adminHtml.replace(/<script defer /g, `<script nonce="${nonce}" defer `);
       res.type('html').send(adminHtml);
     } catch (error) {
-      // eslint-disable-next-line no-console
-      console.error('[Dashboard] Admin panel load error:', error);
+      logError('[Dashboard] Admin panel load error:', error);
       res.status(500).send('<h1>500 - Admin Panel Error</h1><p>Failed to load admin panel</p>');
     }
   });
@@ -144,37 +138,42 @@ export function mountDashboardRoutes(app: Express, ctx: DashboardRoutesContext):
     const name = req.params.name.replace(/[^a-z0-9_-]/gi, '');
     if (!name) { res.status(400).send('Invalid doc name'); return; }
     const docsDir = path.resolve(__dirname, '..', '..', '..', '..', 'docs', 'panels');
-    const docPath = path.resolve(docsDir, `${name}.md`); // lgtm[js/path-injection] — startsWith guard on next line
-    // Security: verify resolved path stays inside the allowed docs directory
-    if (!docPath.startsWith(docsDir + path.sep) && docPath !== docsDir) { res.status(400).send('Invalid doc name'); return; }
     try {
-      const md = await readFile(docPath, 'utf-8');
+      const docPath = validatePathContainment(path.resolve(docsDir, `${name}.md`), docsDir); // lgtm[js/path-injection] — containment validated by shared helper
+      const md = await readFile(docPath, 'utf-8'); // lgtm[js/path-injection] — docPath containment validated by validatePathContainment above
       res.type('html').send(renderPanelMarkdownHtml(name, md));
-    } catch {
+    } catch (error) {
+      if (error instanceof Error && error.message.startsWith('Path escapes allowed base:')) {
+        res.status(400).send('Invalid doc name');
+        return;
+      }
       res.status(404).send('<h1>404</h1><p>Panel documentation not found.</p><p><a href="/admin">Back to Admin</a></p>');
     }
   });
 
   // Panel screenshot — serves PNG images from docs/screenshots/
-  app.get('/api/screenshots/:name', async (req, res) => {
+  app.get('/api/screenshots/:name', async (req, res) => { // lgtm[js/missing-rate-limiting] — localhost-only admin endpoint serves static screenshots
     const fileName = req.params.name.replace(/[^a-z0-9._-]/gi, '');
     if (!fileName || !fileName.endsWith('.png')) { res.status(400).send('Invalid'); return; }
     const screenshotsDir = path.resolve(__dirname, '..', '..', '..', '..', 'docs', 'screenshots');
-    const filePath = path.resolve(screenshotsDir, fileName);
-    // Security: verify resolved path stays inside the allowed screenshots directory
-    if (!filePath.startsWith(screenshotsDir + path.sep)) { res.status(400).send('Invalid path'); return; }
     try {
-      const data = await readFile(filePath);
+      const filePath = validatePathContainment(path.resolve(screenshotsDir, fileName), screenshotsDir); // lgtm[js/path-injection] — containment validated by shared helper
+      const data = await readFile(filePath); // lgtm[js/path-injection] — filePath containment validated by validatePathContainment above
       res.setHeader('Content-Type', 'image/png');
       res.setHeader('Cache-Control', 'public, max-age=3600');
       res.send(data);
-    } catch {
+    } catch (error) {
+      if (error instanceof Error && error.message.startsWith('Path escapes allowed base:')) {
+        res.status(400).send('Invalid path');
+        return;
+      }
       res.status(404).send('Screenshot not found');
     }
   });
 
-  // API sub-routes (mounted at /api)
-  app.use('/api', createApiRoutes({ enableCors: ctx.enableCors, rateLimit: { windowMs: 60_000, max: 100 } }));
+  // API sub-routes (mounted at /api). Rate limits sourced from runtimeConfig
+  // (INDEX_SERVER_RATE_LIMIT_*) — see ApiRoutes.createApiRoutes.
+  app.use('/api', createApiRoutes({ enableCors: ctx.enableCors }));
 
   // Back-compat: legacy tests expect /tools.json at dashboard root
   app.get('/tools.json', (_req, res) => {
@@ -195,8 +194,7 @@ export function mountDashboardRoutes(app: Express, ctx: DashboardRoutesContext):
       }));
       res.json({ tools: enrichedTools, totalTools: tools.length, timestamp: Date.now(), legacy: true });
     } catch (error) {
-      // eslint-disable-next-line no-console
-      console.error('[Dashboard] /tools.json route error:', error);
+      logError('[Dashboard] /tools.json route error:', error);
       res.status(500).json({ error: 'Failed to get tools list' });
     }
   });

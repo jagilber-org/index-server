@@ -91,6 +91,16 @@ import type {
 } from './metricsAggregation.js';
 
 export class MetricsCollector {
+  private persistenceHealth = {
+    degraded: false,
+    totalFailures: 0,
+    appendFailures: 0,
+    snapshotFailures: 0,
+    truncateFailures: 0,
+    lastError: undefined as string | undefined,
+    lastFailureAt: undefined as number | undefined,
+    lastRecoveredAt: undefined as number | undefined,
+  };
   private tools: Map<string, ToolMetrics> = new Map();
   // Resource usage samples (CPU/Memory) for leak/trend analysis
   private resourceSamples: BufferRing<{ timestamp: number; cpuPercent: number; heapUsed: number; rss: number }>;
@@ -216,7 +226,7 @@ export class MetricsCollector {
               try {
                 const stat = fs.statSync(this.appendLogPath);
                 if (stat.size < 25 * 1024 * 1024) { // safety cap 25MB
-                  const raw = fs.readFileSync(this.appendLogPath, 'utf8');
+                  const raw = fs.readFileSync(this.appendLogPath, 'utf8'); // lgtm[js/file-system-race] — appendLogPath is config-controlled metrics path; statSync above bounds size
                   const lines = raw.split(/\r?\n/).filter(l => l.trim().length > 0);
                   for (const line of lines) {
                     try {
@@ -251,6 +261,64 @@ export class MetricsCollector {
 
     // Start periodic collection
     this.startCollection();
+  }
+
+  private formatPersistenceError(error: unknown): string {
+    if (error instanceof Error) {
+      return error.stack ?? error.message;
+    }
+    return String(error);
+  }
+
+  private recordPersistenceFailure(
+    operation: 'append' | 'snapshot' | 'truncate',
+    error: unknown,
+  ): void {
+    this.persistenceHealth.degraded = true;
+    this.persistenceHealth.totalFailures += 1;
+    this.persistenceHealth.lastError = this.formatPersistenceError(error);
+    this.persistenceHealth.lastFailureAt = Date.now();
+
+    if (operation === 'append') {
+      this.persistenceHealth.appendFailures += 1;
+    } else if (operation === 'truncate') {
+      this.persistenceHealth.truncateFailures += 1;
+    } else {
+      this.persistenceHealth.snapshotFailures += 1;
+    }
+
+    if (this.persistenceHealth.totalFailures === 1 || this.persistenceHealth.lastRecoveredAt !== undefined) {
+      logWarn('[MetricsCollector] Metrics persistence degraded; in-memory buffers will retry writes', {
+        operation,
+        error: this.persistenceHealth.lastError,
+        totalFailures: this.persistenceHealth.totalFailures,
+      });
+      this.persistenceHealth.lastRecoveredAt = undefined;
+    }
+  }
+
+  private recordPersistenceRecovery(operation: 'append' | 'snapshot' | 'truncate'): void {
+    if (!this.persistenceHealth.degraded) return;
+    this.persistenceHealth.degraded = false;
+    this.persistenceHealth.lastError = undefined;
+    this.persistenceHealth.lastRecoveredAt = Date.now();
+    logInfo('[MetricsCollector] Metrics persistence recovered', {
+      operation,
+      totalFailures: this.persistenceHealth.totalFailures,
+    });
+  }
+
+  getPersistenceHealth(): {
+    degraded: boolean;
+    totalFailures: number;
+    appendFailures: number;
+    snapshotFailures: number;
+    truncateFailures: number;
+    lastError?: string;
+    lastFailureAt?: number;
+    lastRecoveredAt?: number;
+  } {
+    return { ...this.persistenceHealth };
   }
 
   /**
@@ -301,10 +369,18 @@ export class MetricsCollector {
         this._pendingToolPersist++;
         const dueTime = now - this._lastToolPersist > this.appendFlushMs;
         if (this._pendingToolPersist >= this.appendChunkSize || dueTime) {
+          const pendingAtSchedule = this._pendingToolPersist;
           setTimeout(() => {
-            this.toolCallEvents.saveToDisk().catch(()=>{});
-            this._lastToolPersist = Date.now();
-            this._pendingToolPersist = 0;
+            this.toolCallEvents.saveToDisk()
+              .then(() => {
+                this._lastToolPersist = Date.now();
+                this._pendingToolPersist = Math.max(0, this._pendingToolPersist - pendingAtSchedule);
+                this.recordPersistenceRecovery('snapshot');
+              })
+              .catch((error) => {
+                this._pendingToolPersist = Math.max(this._pendingToolPersist, pendingAtSchedule);
+                this.recordPersistenceFailure('snapshot', error);
+              });
           }, 0).unref?.();
         }
       }
@@ -341,22 +417,51 @@ export class MetricsCollector {
       if (!this.appendLogPath || this.pendingAppendEvents.length === 0) return;
       const toWrite = this.pendingAppendEvents.splice(0, this.pendingAppendEvents.length);
       const lines = toWrite.map(e => JSON.stringify(e)).join('\n') + '\n';
-      fs.promises.appendFile(this.appendLogPath, lines).catch(()=>{});
-      this.lastAppendFlush = now;
+      const shouldCompact = (now - this.lastAppendCompact) >= this.appendCompactMs || force;
+      void fs.promises.appendFile(this.appendLogPath, lines)
+        .then(async () => {
+          this.lastAppendFlush = now;
+          if (!shouldCompact) {
+            this.recordPersistenceRecovery('append');
+            return;
+          }
+          try {
+            await this.toolCallEvents.saveToDisk();
+            this.lastAppendCompact = now;
+          } catch (error) {
+            this.recordPersistenceFailure('snapshot', error);
+            return;
+          }
+          if (this.appendLogPath) {
+            try {
+              await fs.promises.writeFile(this.appendLogPath, '');
+            } catch (error) {
+              this.recordPersistenceFailure('truncate', error);
+              return;
+            }
+          }
+          this.recordPersistenceRecovery('append');
+        })
+        .catch((error) => {
+          this.pendingAppendEvents.unshift(...toWrite);
+          this.lastAppendFlush = 0;
+          this.recordPersistenceFailure('append', error);
+        });
       // Periodic compaction: write full snapshot & truncate log
-      if ((now - this.lastAppendCompact) >= this.appendCompactMs || force) {
-        this.toolCallEvents.saveToDisk().catch(()=>{});
-        this.lastAppendCompact = now;
-        if (this.appendLogPath) {
-          fs.promises.writeFile(this.appendLogPath, '').catch(()=>{}); // truncate
-        }
-      }
     } else {
       // snapshot mode manual force
       if (force) {
-        this.toolCallEvents.saveToDisk().catch(()=>{});
-        this._lastToolPersist = now;
-        this._pendingToolPersist = 0;
+        const pendingAtForce = Math.max(this._pendingToolPersist, 1);
+        void this.toolCallEvents.saveToDisk()
+          .then(() => {
+            this._lastToolPersist = now;
+            this._pendingToolPersist = Math.max(0, this._pendingToolPersist - pendingAtForce);
+            this.recordPersistenceRecovery('snapshot');
+          })
+          .catch((error) => {
+            this._pendingToolPersist = Math.max(this._pendingToolPersist, pendingAtForce);
+            this.recordPersistenceFailure('snapshot', error);
+          });
       }
     }
   }
@@ -512,12 +617,14 @@ export class MetricsCollector {
     oldestTimestamp?: number;
     newestTimestamp?: number;
     memorySnapshots: number;
+    persistence: ReturnType<MetricsCollector['getPersistenceHealth']>;
   }> {
     if (!this.fileStorage) {
       return {
         fileCount: 0,
         totalSizeKB: 0,
         memorySnapshots: this.snapshots.length,
+        persistence: this.getPersistenceHealth(),
       };
     }
 
@@ -525,6 +632,7 @@ export class MetricsCollector {
     return {
       ...fileStats,
       memorySnapshots: this.snapshots.length,
+      persistence: this.getPersistenceHealth(),
     };
   }
 
@@ -718,6 +826,7 @@ export class MetricsCollector {
   getSystemHealth(): SystemHealth {
     const cpu    = estimateCPUUsage(this.snapshots.slice(-5));
     const memory = estimateMemoryUsage(this.connections.size, this.snapshots.length);
+    const baseStatus = getOverallHealthStatus(cpu, memory, getErrorRate(this.tools));
     return {
       cpuUsage: cpu,
       memoryUsage: memory,
@@ -725,7 +834,7 @@ export class MetricsCollector {
       networkLatency: getAverageResponseTime(this.tools),
       uptime: Date.now() - this.startTime,
       lastHealthCheck: new Date(),
-      status: getOverallHealthStatus(cpu, memory, getErrorRate(this.tools)),
+      status: this.persistenceHealth.degraded && baseStatus === 'healthy' ? 'warning' : baseStatus,
     };
   }
 
@@ -904,6 +1013,7 @@ export class MetricsCollector {
       toolCallEvents: BufferRingStats;
       performanceMetrics: BufferRingStats;
     };
+    persistence: ReturnType<MetricsCollector['getPersistenceHealth']>;
     historicalSnapshots?: MetricsTimeSeriesEntry[];
     toolCallEvents?: ToolCallEvent[];
     performanceMetrics?: Array<{ timestamp: number; responseTime: number; throughput: number; errorRate: number; }>;
@@ -911,7 +1021,8 @@ export class MetricsCollector {
     const data = {
       timestamp: Date.now(),
       currentSnapshot: this.getCurrentSnapshot(),
-      bufferStats: this.getBufferRingStats()
+      bufferStats: this.getBufferRingStats(),
+      persistence: this.getPersistenceHealth(),
     };
 
     const result: typeof data & {
