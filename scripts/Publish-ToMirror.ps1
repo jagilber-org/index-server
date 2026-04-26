@@ -390,7 +390,8 @@ try {
         # The remote is named 'public' to match the rest of the script.
         $branchName = if ($PrBranch) { $PrBranch } elseif ($Tag) { "publish/$Tag" } else { 'publish/latest' }
 
-        & git clone --origin public --branch main --single-branch --depth 1 -- $RemoteUrl $publishWorkspace 2>&1 | Write-Host
+        & git clone --origin public --branch main --single-branch --depth 1 -- $RemoteUrl $publishWorkspace 2>&1 |
+            ForEach-Object { Write-Host $_ }
         if ($LASTEXITCODE -ne 0 -or -not (Test-Path (Join-Path $publishWorkspace '.git'))) {
             Write-Error "Failed to clone '$RemoteUrl' (branch main). Verify the remote exists, 'main' is the default branch, and you have read access."
             return
@@ -552,7 +553,16 @@ try {
             $existingPr = & gh pr list --repo $prRepo --head $branchName --state open --json url,number 2>$null
             if ($LASTEXITCODE -eq 0 -and $existingPr -and $existingPr -ne '[]') {
                 Write-Host "An open PR already exists for branch '$branchName':" -ForegroundColor Yellow
-                Write-Host $existingPr -ForegroundColor Yellow
+                try {
+                    $parsedPrs = $existingPr | ConvertFrom-Json
+                    foreach ($pr in $parsedPrs) {
+                        Write-Host "  PR #$($pr.number): $($pr.url)" -ForegroundColor Yellow
+                    }
+                }
+                catch {
+                    # Fall back to raw output if parsing ever fails so operators still see something useful.
+                    Write-Host $existingPr -ForegroundColor Yellow
+                }
             }
             else {
                 Write-Host "Create the PR manually at: $normalizedPrUrl/compare/main...$($branchName)?expand=1" -ForegroundColor Yellow
