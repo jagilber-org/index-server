@@ -48,7 +48,9 @@ RUN if command -v apk >/dev/null 2>&1; then \
       apk add --no-cache tini openssl && apk upgrade --no-cache; \
     else \
       apt-get update && apt-get install -y --no-install-recommends tini openssl && \
-      rm -rf /var/lib/apt/lists/*; \
+      rm -rf /var/lib/apt/lists/* && \
+      # Debian installs tini to /usr/bin/tini; symlink to /sbin/tini for parity with Alpine so ENTRYPOINT path is portable.
+      [ -e /sbin/tini ] || ln -s /usr/bin/tini /sbin/tini; \
     fi
 
 # OCI labels
