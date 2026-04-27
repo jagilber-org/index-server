@@ -205,6 +205,7 @@ export interface RuntimeConfig {
 | `utils/BufferRing.ts` | ~~`BUFFER_RING_APPEND`~~, ~~`BUFFER_RING_APPEND_PRELOAD`~~ → `INDEX_SERVER_BUFFER_RING_APPEND`, `INDEX_SERVER_BUFFER_RING_PRELOAD` | `bufferRing.append`, `bufferRing.preload` | boolean | ✅ DONE — Uses `getRuntimeConfig().bufferRing.*`. |
 | `utils/memoryMonitor.ts` | `INDEX_SERVER_DEBUG`, `INDEX_SERVER_VERBOSE_LOGGING` | `logging.verbose` | boolean | Maintain parity with other logging consumers. |
 | `utils/envUtils.ts`, `dashboard/integration/APIIntegration.ts`, `handlers.dashboardConfig.ts` | dynamic string lookups | `dynamic.dashboardConfig`, `dynamic.apiIntegration` (string-to-string map) | object | Provide controlled map populated from explicit allowlists to retain flexibility without raw env access. |
+| `server/certInit.ts` (`--init-cert` family) | **none added in v1** | n/a | n/a | The `--init-cert` switch and its sub-flags (`--cert-dir`, `--cert-file`, `--key-file`, `--cn`, `--san`, `--days`, `--key-bits`, `--force`, `--print-env`, `--start`) are CLI-only. No new `INDEX_SERVER_*` env vars are introduced. The switch reuses the existing `INDEX_SERVER_DASHBOARD_TLS*` env surface when the operator pastes the `--print-env` output. Any future env additions must go through `runtimeConfig.ts` per S-4. See [`cert_init.md`](cert_init.md). |
 
 ## Handling dynamic access patterns
 

@@ -1627,7 +1627,7 @@ For subagents or environments that cannot load MCP tools, two REST client script
 # Run groom (dry run)
 .\scripts\index-server-client.ps1 -Action groom -DryRun
 
-# HTTPS with self-signed cert
+# HTTPS with self-signed cert (generate one via `index-server --init-cert`; see docs/cert_init.md)
 .\scripts\index-server-client.ps1 -BaseUrl https://localhost:8787 -Action health -SkipCertCheck
 ```
 

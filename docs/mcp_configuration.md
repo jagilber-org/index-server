@@ -468,7 +468,8 @@ Use this profile when production must remain explicitly read-only. Governed prod
         "All logging enabled",
         "Logs to both stderr and ./logs/mcp-server.log",
         "Cache disabled for testing",
-        "Relative paths for local development"
+        "Relative paths for local development",
+        "To bootstrap HTTPS for the dashboard, run `index-server --init-cert --start --dashboard` separately first; see docs/cert_init.md"
       ]
     }
   }

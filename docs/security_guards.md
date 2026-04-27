@@ -36,6 +36,31 @@
 - Integrate trufflehog for deeper secret scanning.
 - Add dependency review / license allow list.
 
+## Runtime Guards
+
+### `--init-cert` (Certificate Bootstrap)
+
+The `--init-cert` CLI switch on `index-server` generates a self-signed TLS
+cert+key for the dashboard. Relevant security guards:
+
+- **Path-traversal guard (SH-4):** every output path (`--cert-file`,
+  `--key-file`) is `path.resolve`d and asserted to live strictly under the
+  resolved `--cert-dir`. Escapes are rejected with stable error code
+  `PATH_OUTSIDE_CERT_DIR` and **no file is written outside the directory**.
+- **No shell invocation:** OpenSSL is invoked via `child_process.execFile`
+  with an argument array. SAN values, CN, and paths are never interpolated
+  into a shell command, so shell metacharacters in user input cannot reach
+  the shell.
+- **TLS verification posture (SH-6):** the switch only generates trust
+  material; it never modifies `strict-ssl`, `NODE_TLS_REJECT_UNAUTHORIZED`,
+  or any verification flag elsewhere in the server.
+- **Key permissions:** private key written `0600` on POSIX. On Windows the
+  POSIX bits are ignored by NTFS — restrict access via folder ACLs.
+- **No automatic OS-trust-store install** (out of scope for v1; security-
+  sensitive and platform-specific).
+
+See [`cert_init.md`](cert_init.md) for the full reference.
+
 ## Operational Guidance
 
 - Run: `pre-commit run --files <changed files>` while iterating on touched files.

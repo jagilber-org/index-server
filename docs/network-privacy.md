@@ -104,6 +104,8 @@ The following activities generate **zero** outbound network traffic:
 - Dashboard rendering (all assets served locally)
 - Schema validation
 - Index snapshots and backups
+- `--init-cert` certificate bootstrap (invokes local `openssl`; no CA or
+  OCSP endpoints contacted; cert material stays on the host)
 
 ---
 

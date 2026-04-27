@@ -34,6 +34,10 @@ The default compose file publishes the dashboard to `127.0.0.1` only. To expose 
 # Generate self-signed certificates
 node scripts/generate-certs.mjs
 
+# Or use the built-in CLI bootstrap (requires openssl on PATH)
+# See docs/cert_init.md for full reference and options
+node dist/server/index-server.js --init-cert
+
 # Run with TLS
 docker compose --profile tls up -d
 ```

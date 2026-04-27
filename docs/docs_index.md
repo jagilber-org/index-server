@@ -23,6 +23,7 @@ This index distinguishes between **active** project documentation and **archived
 | Security | `SECURITY.md` | Security controls & compliance posture |
 | Security Guards | `SECURITY-GUARDS.md` | Pre-commit & security mechanisms |
 | Dashboard | `DASHBOARD.md` | Admin UI usage & drift maintenance |
+| TLS Bootstrap | [Cert Init](cert_init.md) | `--init-cert` switch: generate self-signed dashboard TLS cert via OpenSSL |
 | Planning | `../ACTIVE-PLAN.md` | Current sprint priorities, feedback-driven tasks & compliance reviews |
 | Testing | `TESTING-STRATEGY.md` | Test tiers, quarantine & drift policies |
 | Testing | `TESTING.md` | Test artifact management guide |
