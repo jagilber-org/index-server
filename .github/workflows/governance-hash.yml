@@ -22,8 +22,10 @@ jobs:
           CUR=$(echo '{"jsonrpc":"2.0","id":1,"method":"instructions/governanceHash"}' | node dist/server/index-server.js | jq -r '.result.governanceHash')
           echo "hash=$CUR" >> $GITHUB_OUTPUT
       - name: Checkout base for comparison
+        env:
+          BASE_REF: ${{ github.base_ref }}
         run: |
-          git fetch origin ${{ github.base_ref }} --depth=1
+          git fetch origin "$BASE_REF" --depth=1
           git checkout FETCH_HEAD
           npm ci
           npm run build
