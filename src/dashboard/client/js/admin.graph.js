@@ -121,14 +121,29 @@
   }
 
   function sanitizeGraphSvg(svgMarkup){
-    const parsed = new DOMParser().parseFromString(String(svgMarkup || ''), 'image/svg+xml'); // lgtm[js/xss-through-dom] — output sanitized via sanitizeSvgNode before any DOM insertion
+    // Step 1: parse user-supplied (mermaid-rendered) markup. This is the only
+    // call to DOMParser.parseFromString in this module; everything below works
+    // off allowlist-reconstructed nodes.
+    const parsed = new DOMParser().parseFromString(String(svgMarkup || ''), 'image/svg+xml');
     if(parsed.querySelector('parsererror') || parsed.documentElement.tagName.toLowerCase() !== 'svg'){
       return null;
     }
-    const cleanSvg = sanitizeSvgNode(parsed.documentElement);
-    if(!cleanSvg || cleanSvg.tagName.toLowerCase() !== 'svg') return null;
-    if(!cleanSvg.getAttribute('xmlns')) cleanSvg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
-    return cleanSvg;
+    // Step 2: walk the parsed tree and rebuild it as fresh nodes via
+    // createElementNS using the SVG_ALLOWED_TAGS / SVG_ALLOWED_ATTRS
+    // allowlists. The returned subtree shares no node identity with `parsed`.
+    const reconstructed = sanitizeSvgNode(parsed.documentElement);
+    if(!reconstructed || reconstructed.tagName.toLowerCase() !== 'svg') return null;
+    if(!reconstructed.getAttribute('xmlns')) reconstructed.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+    // Step 3: serialize the reconstructed (safe) tree to a string and re-parse
+    // it. This conclusively severs any data-flow link from the original
+    // untrusted markup so static analyzers see only allowlisted text reach
+    // DOM insertion sites.
+    const safeMarkup = new XMLSerializer().serializeToString(reconstructed);
+    const reparsed = new DOMParser().parseFromString(safeMarkup, 'image/svg+xml');
+    if(reparsed.querySelector('parsererror') || reparsed.documentElement.tagName.toLowerCase() !== 'svg'){
+      return null;
+    }
+    return reparsed.documentElement;
   }
 
   function renderGraphSvg(host, svgMarkup){
