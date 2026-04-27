@@ -196,9 +196,13 @@ export function emitTrace(label: string, data: unknown, min: TraceLevel = 1): vo
 
   pushBuffer(rec, tracing.buffer);
 
-  try {
-    logError(label, JSON.stringify(rec));
-  } catch { /* ignore */ }
+  // Only emit to stderr for high trace levels to avoid flooding CI/test logs.
+  // Trace data is still captured in the buffer and written to file if configured.
+  if (currentTraceLevel() >= 3) {
+    try {
+      logError(label, JSON.stringify(rec));
+    } catch { /* ignore */ }
+  }
 
   if (!(tracing.persist || tracing.file)) return;
 

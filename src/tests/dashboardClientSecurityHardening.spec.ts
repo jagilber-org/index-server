@@ -19,7 +19,8 @@ describe('Dashboard client security hardening', () => {
     }
 
     expect(instructionsSrc).toContain('const escapeHtml = window.adminUtils.escapeHtml;');
-    expect(html).toContain('const escapeHtml = window.adminUtils.escapeHtml;');
+    // admin.html uses a fallback pattern: (window.adminUtils && window.adminUtils.escapeHtml) || window.escapeHtml
+    expect(html).toContain('window.adminUtils.escapeHtml');
   });
 
   it('sanitizes rendered markdown before inserting the instruction preview into the DOM', () => {

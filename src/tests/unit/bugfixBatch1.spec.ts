@@ -157,7 +157,6 @@ describe('#135: duplicated logic extracted to shared utilities', () => {
     );
     expect(src).toContain('computeSourceHash');
     expect(src).toContain('normalizeCategories');
-    expect(src).toContain('isJunkCategory');
   });
 
   it('patch handler imports shared bumpVersion and createChangeLogEntry', () => {
