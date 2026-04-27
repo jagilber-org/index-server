@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import crypto from 'crypto';
 import { getRuntimeConfig } from '../config/runtimeConfig';
 import { logError } from './logger.js';
 
@@ -67,7 +68,7 @@ function resolveSessionId(): string {
   if (cachedSessionId) return cachedSessionId;
   const tracing = getRuntimeConfig().tracing;
   const provided = tracing.sessionId && tracing.sessionId.trim().length ? tracing.sessionId.trim() : undefined;
-  cachedSessionId = provided || Math.random().toString(36).slice(2, 10); // lgtm[js/insecure-randomness] — trace ID for correlation, not security
+  cachedSessionId = provided || crypto.randomBytes(4).toString('hex');
   return cachedSessionId;
 }
 
