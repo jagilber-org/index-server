@@ -1,0 +1,26 @@
+name: "Index Server CodeQL config"
+
+paths:
+  - src
+  - scripts
+
+paths-ignore:
+  # Compiled output and vendored deps
+  - dist
+  - coverage
+  - node_modules
+  - "**/node_modules"
+  # Self-hosted runner npm install captured by autobuild (not our code)
+  - usr/local/lib
+  - "**/usr/local/lib"
+  # Test files: TLS validation disabling and string-sanitization helpers are
+  # intentional in test fixtures; real production code is scanned separately.
+  - src/tests
+  - "**/*.spec.ts"
+  - "**/*.test.ts"
+  # Dev / build / publish scripts: many use intentional cert/url patterns and
+  # are not exposed to end users.
+  - scripts/validate-security-headers.mjs
+  - scripts/pre-push-public-guard.cjs
+  - scripts/generate-tools-doc.mjs
+  - scripts/generate-tools-doc.cjs
