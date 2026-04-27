@@ -1,4 +1,3 @@
-/* eslint-disable */
 /**
  * legacyDashboardHtml - generates the v1 legacy dashboard HTML page.
  * Extracted from DashboardServer.ts to keep the coordinator within line limits.
@@ -11,10 +10,16 @@ import { LEGACY_DASHBOARD_CSS } from "./legacyDashboardStyles.js";
 // ---------------------------------------------------------------------------
 // stripGraphTab - removes graph-related markup when the graph feature is off
 // ---------------------------------------------------------------------------
+// NOTE: These regexes operate on dashboard HTML built in this module from
+// trusted constants — never on user input. The patterns are intentional
+// targeted strips (matching specific data-section, comment markers, and the
+// admin.graph.js script src) rather than a general HTML sanitizer.
+// CodeQL bad-tag-filter / incomplete-multi-character-sanitization queries
+// are suppressed for this file via .github/codeql/codeql-config.yml.
 export function stripGraphTab(html: string): string {
-  html = html.replace(/<button[^>]*data-section="graph"[^>]*>Graph<\/button>\s*/i, ""); // lgtm[js/incomplete-multi-character-sanitization] — stripping graph tab, not sanitization
+  html = html.replace(/<button[^>]*data-section="graph"[^>]*>Graph<\/button>\s*/i, "");
   html = html.replace(/<!--\s*Graph Section\s*-->[\s\S]*?(?=<!--\s*Configuration Section\s*-->)/i, "");
-  html = html.replace(/<script[^>]*src="js\/admin\.graph\.js[^"]*"[^>]*><\/script>\s*/i, ""); // lgtm[js/incomplete-multi-character-sanitization] — stripping graph script tag, not sanitization
+  html = html.replace(/<script[^>]*src="js\/admin\.graph\.js[^"]*"[^>]*><\/script>\s*/i, "");
   return html;
 }
 

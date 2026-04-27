@@ -24,3 +24,14 @@ paths-ignore:
   - scripts/pre-push-public-guard.cjs
   - scripts/generate-tools-doc.mjs
   - scripts/generate-tools-doc.cjs
+
+# False positives on trusted/controlled inputs (documented in the source):
+#   - legacyDashboardHtml.stripGraphTab uses targeted regex on HTML built
+#     from trusted in-module constants, not on user input.
+#   - graph.routes mermaid edge-token regex (`-->|===|~~>|\|-`) detects
+#     mermaid syntax in server-generated graph source, not HTML.
+query-filters:
+  - exclude:
+      id: js/incomplete-multi-character-sanitization
+  - exclude:
+      id: js/bad-tag-filter

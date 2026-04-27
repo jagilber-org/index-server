@@ -19,8 +19,10 @@ describe('Dashboard client security hardening', () => {
     }
 
     expect(instructionsSrc).toContain('const escapeHtml = window.adminUtils.escapeHtml;');
-    // admin.html uses a fallback pattern: (window.adminUtils && window.adminUtils.escapeHtml) || window.escapeHtml
-    expect(html).toContain('window.adminUtils.escapeHtml');
+    // admin.html intentionally uses a TDZ-safe wrapper that resolves the helper
+    // at call time (see PR #214). Assert the wrapper still routes through
+    // window.adminUtils.escapeHtml.
+    expect(html).toMatch(/window\.adminUtils\s*&&\s*window\.adminUtils\.escapeHtml/);
   });
 
   it('sanitizes rendered markdown before inserting the instruction preview into the DOM', () => {

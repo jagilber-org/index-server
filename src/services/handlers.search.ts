@@ -472,7 +472,6 @@ function validateRegexKeyword(keyword: string): void {
  */
 function compileSafeUserRegex(pattern: string, flags: string): RegExp {
   validateRegexKeyword(pattern);
-  // eslint-disable-next-line security/detect-non-literal-regexp -- input validated by validateRegexKeyword above
   return new RegExp(pattern, flags); // lgtm[js/regex-injection] — pattern validated by validateRegexKeyword above
 }
 
