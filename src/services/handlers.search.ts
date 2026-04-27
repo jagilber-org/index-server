@@ -230,11 +230,10 @@ function calculateRelevance(
       // validateRegexKeyword. Re-validate here in the fallback path so direct
       // invocations (tests, future handlers) cannot bypass ReDoS / unsupported-
       // construct rejection. Throws on invalid pattern.
-      validateRegexKeyword(keyword);
       return {
         source: keyword,
-        testRegex: new RegExp(keyword, caseSensitive ? '' : 'i'), // lgtm[js/regex-injection] — validated above by validateRegexKeyword
-        countRegex: new RegExp(keyword, regexFlags), // lgtm[js/regex-injection] — validated above by validateRegexKeyword
+        testRegex: compileSafeUserRegex(keyword, caseSensitive ? '' : 'i'),
+        countRegex: compileSafeUserRegex(keyword, regexFlags),
       };
     }))
     : [];
@@ -465,15 +464,24 @@ function validateRegexKeyword(keyword: string): void {
   }
 }
 
+/**
+ * Compile a user-supplied regex pattern after running ReDoS / unsupported-
+ * construct validation. This is the single trusted construction site for
+ * `new RegExp(<user input>)` in the search pipeline; all callers must route
+ * through here so the validation step is provably adjacent to construction.
+ */
+function compileSafeUserRegex(pattern: string, flags: string): RegExp {
+  validateRegexKeyword(pattern);
+  // eslint-disable-next-line security/detect-non-literal-regexp -- input validated by validateRegexKeyword above
+  return new RegExp(pattern, flags); // lgtm[js/regex-injection] — pattern validated by validateRegexKeyword above
+}
+
 function compileRegexKeywords(keywords: string[], caseSensitive: boolean): CompiledRegexKeyword[] {
-  return keywords.map((keyword) => {
-    validateRegexKeyword(keyword);
-    return {
-      source: keyword,
-      testRegex: new RegExp(keyword, caseSensitive ? '' : 'i'), // lgtm[js/regex-injection] — pattern validated by validateRegexKeyword above
-      countRegex: new RegExp(keyword, caseSensitive ? 'g' : 'gi'), // lgtm[js/regex-injection] — pattern validated by validateRegexKeyword above
-    };
-  });
+  return keywords.map((keyword) => ({
+    source: keyword,
+    testRegex: compileSafeUserRegex(keyword, caseSensitive ? '' : 'i'),
+    countRegex: compileSafeUserRegex(keyword, caseSensitive ? 'g' : 'gi'),
+  }));
 }
 
 /**
