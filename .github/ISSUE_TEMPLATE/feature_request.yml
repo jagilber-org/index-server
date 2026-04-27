@@ -40,7 +40,6 @@ body:
         - label: Instructions or documentation
         - label: Scripts or tooling
         - label: Scanner configuration
-        - label: VS Code extension or VSIX
         - label: Template adoption or metadata
 
   - type: textarea

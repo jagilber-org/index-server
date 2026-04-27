@@ -30,6 +30,31 @@
           "description": "Human readable summary of change"
         }
       }
+    },
+    "extensionValue": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/extensionValue"
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/extensionValue"
+          }
+        }
+      ]
     }
   },
   "required": [
@@ -148,6 +173,11 @@
       "minimum": 0,
       "description": "Number of tracked usage events"
     },
+    "firstSeenTs": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Timestamp when usage was first observed (ISO 8601)"
+    },
     "lastUsedAt": {
       "type": "string",
       "format": "date-time",
@@ -237,6 +267,11 @@
       "type": "string",
       "description": "ID of instruction this one replaces"
     },
+    "archivedAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Timestamp when archived (ISO 8601)"
+    },
     "semanticSummary": {
       "type": "string",
       "maxLength": 600,
@@ -255,7 +290,9 @@
     "extensions": {
       "type": "object",
       "description": "Future-proof vendor / experimental fields",
-      "additionalProperties": true
+      "additionalProperties": {
+        "$ref": "#/definitions/extensionValue"
+      }
     }
   },
   "additionalProperties": false

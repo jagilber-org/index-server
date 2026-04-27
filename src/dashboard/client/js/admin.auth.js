@@ -1,32 +1,33 @@
 /* eslint-disable */
 // admin.auth.js
 // Dashboard authentication — manages admin API key for non-loopback access.
-// Stores token in sessionStorage (cleared on tab close). On 401/403, shows a
-// login modal and retries the request once after the user enters a key.
+// Token is held in module-scoped memory only (never written to sessionStorage
+// or localStorage). It is cleared on tab close / reload by virtue of being a
+// JavaScript variable, and cleared on 401/403 + explicit logout. On 401/403,
+// shows a login modal and retries the request once after the user enters a
+// key. This avoids js/clear-text-storage-of-sensitive-data exposure to XSS.
 (function(window) {
   'use strict';
 
-  var STORAGE_KEY = 'indexserver_admin_token';
+  // In-memory only. Re-prompt on page reload.
+  var _token = '';
   var _loginPromise = null;
   var _overlay = null;
 
   function getToken() {
-    try { return sessionStorage.getItem(STORAGE_KEY) || ''; } catch (_) { return ''; }
+    return _token || '';
   }
 
   function setToken(token) {
-    try {
-      if (token) sessionStorage.setItem(STORAGE_KEY, token);
-      else sessionStorage.removeItem(STORAGE_KEY);
-    } catch (_) { /* private browsing or quota */ }
+    _token = token ? String(token) : '';
   }
 
   function clearToken() {
-    try { sessionStorage.removeItem(STORAGE_KEY); } catch (_) { /* ignore */ }
+    _token = '';
   }
 
   function isAuthenticated() {
-    return !!getToken();
+    return !!_token;
   }
 
   function applyAuthHeader(headers, token) {
@@ -48,6 +49,19 @@
     applyAuthHeader(options.headers, getToken());
 
     var response = await fetch(url, options);
+
+    // Rate-limit detection: surface 429 visibly (issue #63)
+    if (response.status === 429) {
+      try {
+        var rlBody = await response.clone().json();
+        var retryAfter = rlBody.retryAfterSeconds || Number(response.headers.get('Retry-After')) || 60;
+        var tier = rlBody.tier || 'global';
+        if (window.adminUtils && window.adminUtils.showRateLimitBanner) {
+          window.adminUtils.showRateLimitBanner(retryAfter, tier);
+        }
+      } catch (_e) { /* couldn't parse 429 body — still return the response */ }
+      return response;
+    }
 
     if (response.status !== 401 && response.status !== 403) return response;
 
@@ -144,7 +158,7 @@
     if (isAuthenticated()) {
       badge.textContent = '🔓 Authenticated';
       badge.className = 'auth-indicator auth-ok';
-      badge.title = 'Admin API key active (sessionStorage). Click to logout.';
+      badge.title = 'Admin API key active (in-memory; cleared on reload). Click to logout.';
       badge.onclick = logout;
       badge.style.cursor = 'pointer';
     } else {

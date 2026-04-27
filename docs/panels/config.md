@@ -20,7 +20,7 @@ Shows all active configuration values resolved from environment variables, defau
 | Variable | Default | Description |
 | -------- | ------- | ----------- |
 | INDEX_SERVER_DIR | ./instructions | Instruction file directory |
-| INDEX_SERVER_MUTATION | 0 | Enable write operations (add/remove/import) |
+| INDEX_SERVER_MUTATION | 1 | Write operations are enabled by default; set `0` for read-only |
 | INDEX_SERVER_DASHBOARD_PORT | 3001 | Dashboard HTTP port |
 | INDEX_SERVER_DASHBOARD_TLS | 0 | Enable HTTPS for dashboard |
 | INDEX_SERVER_VERBOSE_LOGGING | 0 | Verbose debug logging |

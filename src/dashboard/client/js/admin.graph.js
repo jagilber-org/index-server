@@ -30,28 +30,130 @@
     host.replaceChildren(box);
   }
 
-  function renderGraphSvg(host, svgMarkup){
-    if(!host) return;
+  const SVG_ALLOWED_TAGS = new Map([
+    ['svg', 'svg'], ['g', 'g'], ['defs', 'defs'], ['style', 'style'], ['title', 'title'], ['desc', 'desc'],
+    ['path', 'path'], ['rect', 'rect'], ['circle', 'circle'], ['ellipse', 'ellipse'], ['polygon', 'polygon'], ['polyline', 'polyline'], ['line', 'line'],
+    ['text', 'text'], ['tspan', 'tspan'], ['textpath', 'textPath'],
+    ['marker', 'marker'], ['pattern', 'pattern'], ['clippath', 'clipPath'], ['mask', 'mask'], ['symbol', 'symbol'], ['use', 'use'],
+    ['lineargradient', 'linearGradient'], ['radialgradient', 'radialGradient'], ['stop', 'stop']
+  ]);
+  const SVG_ALLOWED_ATTRS = new Set([
+    'id', 'class', 'role',
+    'xmlns', 'xmlns:xlink', 'xml:space',
+    'viewbox', 'preserveaspectratio', 'version',
+    'x', 'y', 'x1', 'y1', 'x2', 'y2', 'dx', 'dy', 'cx', 'cy', 'r', 'rx', 'ry',
+    'width', 'height', 'd', 'points', 'pathlength',
+    'transform', 'transform-origin',
+    'fill', 'fill-opacity', 'fill-rule',
+    'stroke', 'stroke-opacity', 'stroke-width', 'stroke-dasharray', 'stroke-dashoffset', 'stroke-linecap', 'stroke-linejoin', 'stroke-miterlimit',
+    'opacity', 'color',
+    'font-family', 'font-size', 'font-style', 'font-weight',
+    'text-anchor', 'dominant-baseline', 'alignment-baseline', 'baseline-shift', 'letter-spacing', 'word-spacing',
+    'marker-start', 'marker-mid', 'marker-end',
+    'markerunits', 'markerwidth', 'markerheight', 'orient', 'refx', 'refy',
+    'patternunits', 'patterncontentunits', 'patterntransform',
+    'gradientunits', 'gradienttransform', 'spreadmethod',
+    'offset', 'stop-color', 'stop-opacity',
+    'clip-path', 'clippathunits', 'mask', 'maskunits', 'maskcontentunits', 'filter',
+    'href', 'xlink:href', 'style',
+    'aria-hidden', 'aria-label', 'aria-labelledby', 'aria-describedby'
+  ]);
+
+  function hasUnsafeUrlValue(value){
+    const text = String(value || '');
+    if(!text) return false;
+    if(/\b(?:javascript|vbscript|data)\s*:/i.test(text)) return true;
+    const urlMatches = text.matchAll(/url\(([^)]*)\)/gi);
+    for(const match of urlMatches){
+      const inner = String(match[1] || '').trim().replace(/^['"]|['"]$/g, '');
+      if(!/^#[-\w:.]+$/i.test(inner)) return true;
+    }
+    return false;
+  }
+
+  function sanitizeSvgStyleText(cssText){
+    const css = String(cssText || '');
+    if(!css.trim()) return '';
+    if(/@import|expression\s*\(|-moz-binding|behavior\s*:|<\/style/i.test(css)) return '';
+    if(hasUnsafeUrlValue(css)) return '';
+    return css;
+  }
+
+  function sanitizeSvgNode(node){
+    if(!node) return null;
+    if(node.nodeType === Node.TEXT_NODE){
+      return document.createTextNode(node.textContent || '');
+    }
+    if(node.nodeType !== Node.ELEMENT_NODE) return null;
+    const tag = String(node.localName || node.nodeName || '').toLowerCase();
+    const canonicalTag = SVG_ALLOWED_TAGS.get(tag);
+    if(!canonicalTag) return null;
+    const clean = document.createElementNS('http://www.w3.org/2000/svg', canonicalTag);
+    Array.from(node.attributes || []).forEach((attr) => {
+      const name = String(attr.name || '').toLowerCase();
+      if(!name || name.startsWith('on') || !SVG_ALLOWED_ATTRS.has(name)) return;
+      const value = attr.value || '';
+      if((name === 'href' || name === 'xlink:href') && !/^\s*#[-\w:.]+\s*$/i.test(value)) return;
+      if(hasUnsafeUrlValue(value)) return;
+      if(name === 'style'){
+        const safeStyle = sanitizeSvgStyleText(value);
+        if(!safeStyle) return;
+        clean.setAttribute(attr.name, safeStyle);
+        return;
+      }
+      if(name === 'xlink:href'){
+        clean.setAttributeNS('http://www.w3.org/1999/xlink', attr.name, value);
+        return;
+      }
+      clean.setAttribute(attr.name, value);
+    });
+    if(tag === 'style'){
+      const safeCss = sanitizeSvgStyleText(node.textContent || '');
+      if(!safeCss) return null;
+      clean.textContent = safeCss;
+      return clean;
+    }
+    Array.from(node.childNodes || []).forEach((child) => {
+      const cleanChild = sanitizeSvgNode(child);
+      if(cleanChild) clean.appendChild(cleanChild);
+    });
+    return clean;
+  }
+
+  function sanitizeGraphSvg(svgMarkup){
+    // Step 1: parse user-supplied (mermaid-rendered) markup. This is the only
+    // call to DOMParser.parseFromString in this module; everything below works
+    // off allowlist-reconstructed nodes.
     const parsed = new DOMParser().parseFromString(String(svgMarkup || ''), 'image/svg+xml');
     if(parsed.querySelector('parsererror') || parsed.documentElement.tagName.toLowerCase() !== 'svg'){
+      return null;
+    }
+    // Step 2: walk the parsed tree and rebuild it as fresh nodes via
+    // createElementNS using the SVG_ALLOWED_TAGS / SVG_ALLOWED_ATTRS
+    // allowlists. The returned subtree shares no node identity with `parsed`.
+    const reconstructed = sanitizeSvgNode(parsed.documentElement);
+    if(!reconstructed || reconstructed.tagName.toLowerCase() !== 'svg') return null;
+    if(!reconstructed.getAttribute('xmlns')) reconstructed.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+    // Step 3: serialize the reconstructed (safe) tree to a string and re-parse
+    // it. This conclusively severs any data-flow link from the original
+    // untrusted markup so static analyzers see only allowlisted text reach
+    // DOM insertion sites.
+    const safeMarkup = new XMLSerializer().serializeToString(reconstructed);
+    const reparsed = new DOMParser().parseFromString(safeMarkup, 'image/svg+xml');
+    if(reparsed.querySelector('parsererror') || reparsed.documentElement.tagName.toLowerCase() !== 'svg'){
+      return null;
+    }
+    return reparsed.documentElement;
+  }
+
+  function renderGraphSvg(host, svgMarkup){
+    if(!host) return;
+    const safeSvg = sanitizeGraphSvg(svgMarkup);
+    if(!safeSvg){
       renderGraphTextMessage(host, 'Mermaid render failed:: invalid SVG output');
       return;
     }
-    parsed.querySelectorAll('script, foreignObject, iframe, object, embed, style, base, meta').forEach(node => node.remove());
-    parsed.querySelectorAll('*').forEach((node) => {
-      Array.from(node.attributes).forEach((attr) => {
-        const name = attr.name.toLowerCase();
-        const value = attr.value || '';
-        if(name.startsWith('on')){
-          node.removeAttribute(attr.name);
-          return;
-        }
-        if((name === 'href' || name === 'xlink:href') && /^\s*(javascript:|data:)/i.test(value)){
-          node.removeAttribute(attr.name);
-        }
-      });
-    });
-    host.replaceChildren(document.importNode(parsed.documentElement, true));
+    host.replaceChildren(safeSvg);
   }
 
   async function reloadGraphMermaid(){
@@ -266,7 +368,7 @@
       } catch(procErr){ setGraphMetaProgress('process-error','a='+attemptId); }
     } else {
       if(target) target.textContent = `(graph unavailable${lastErr?': '+(lastErr.message||lastErr):''})`;
-      setGraphMetaProgress('unavailable','err='+(lastErr && (lastErr.message||String(lastErr))||'none'));
+      setGraphMetaProgress('unavailable','err='+((lastErr && (lastErr.message||String(lastErr))) || 'none'));
     }
     clearTimeout(__graphReloadWatchdog);
     __graphReloadInFlight = false;

@@ -49,7 +49,7 @@ describe('Embeddings Routes — /api/embeddings/projection', () => {
     'agent-build-validate',
     'mcp-index-search-guide',
     'powershell-remoting-setup',
-    'vscode-extension-debug',
+    'vscode-debug',
     'ai-model-evaluation',
     'git-branch-strategy',
     'test-coverage-baseline',
@@ -131,7 +131,7 @@ describe('Embeddings Routes — /api/embeddings/projection', () => {
       expect(catById['agent-build-validate']).toBe('Agent');
       expect(catById['mcp-index-search-guide']).toBe('MCP');
       expect(catById['powershell-remoting-setup']).toBe('PowerShell');
-      expect(catById['vscode-extension-debug']).toBe('VS Code');
+      expect(catById['vscode-debug']).toBe('VS Code');
       expect(catById['ai-model-evaluation']).toBe('AI/ML');
       expect(catById['git-branch-strategy']).toBe('Git/Repo');
       expect(catById['test-coverage-baseline']).toBe('Testing');

@@ -1,14 +1,15 @@
 /**
- * Dashboard V2 Phase 3 — CSS/UX Modernization RED Tests
+ * Dashboard V2 Phase 3 — CSS/UX Modernization Tests
  *
- * These tests define the DESIRED end state after Phase 3:
+ * These tests cover the Phase 3 dashboard modernization surface:
  *   1. All colors use CSS custom properties (--mcp-* tokens)
  *   2. Inline style="" attributes are minimized in admin.html
  *   3. Graph section buttons use CSS classes, not inline gradients
  *   4. Spacing tokens are defined as --mcp-space-* variables
  *
- * They should currently FAIL (RED) because the CSS hasn't been
- * refactored yet. After Phase 3 implementation they will PASS (GREEN).
+ * Where the full migration is still unfinished, these tests lock down the
+ * current approved exception budget so new debt cannot be introduced
+ * silently.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -44,7 +45,7 @@ function extractRootBlock(css: string): string {
  * Return all hex colour occurrences (#xxx, #xxxxxx, #xxxxxxxx) outside
  * :root by stripping the :root block first, then matching.
  */
-function _hexColoursOutsideRoot(css: string): string[] {
+function hexColoursOutsideRoot(css: string): string[] {
   // Remove the :root block so we only inspect other rules
   const rootStart = css.indexOf(':root');
   if (rootStart === -1) return [];
@@ -68,6 +69,43 @@ function _hexColoursOutsideRoot(css: string): string[] {
 
   const matches = noAttrSelectors.match(/#[0-9a-fA-F]{3,8}\b/g) ?? [];
   return matches;
+}
+
+function hexDeclarationLinesOutsideRoot(css: string): string[] {
+  const rootBlock = extractRootBlock(css);
+  const cssWithoutRoot = css.replace(`:root {${rootBlock}}`, '');
+  const noComments = cssWithoutRoot.replace(/\/\*[\s\S]*?\*\//g, '');
+  return noComments
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+    .filter((line) => /#[0-9a-fA-F]{3,8}\b/.test(line))
+    .filter((line) => !/\[[^\]]*#[0-9a-fA-F]{3,8}\b/.test(line));
+}
+
+function normalizeInlineStyle(styleValue: string): string {
+  return styleValue
+    .split(';')
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0)
+    .join(';');
+}
+
+function countBy(values: string[]): Record<string, number> {
+  return Object.fromEntries(
+    values
+      .reduce<Map<string, number>>((counts, value) => {
+        counts.set(value, (counts.get(value) ?? 0) + 1);
+        return counts;
+      }, new Map())
+      .entries(),
+  );
+}
+
+function inlineStyleValues(html: string): string[] {
+  return Array.from(html.matchAll(/style\s*=\s*"([^"]*)"/g), (match) =>
+    normalizeInlineStyle(match[1] ?? ''),
+  );
 }
 
 /**
@@ -135,13 +173,74 @@ describe('Dashboard V2 Phase 3 — CSS/UX modernization', () => {
 
   // ── 2. No hardcoded hex colors outside :root ────────────────────────
 
-  // RED: aspirational — CSS token migration not yet complete (Phase 3 backlog)
-  it.todo('admin.css has no hardcoded hex colors outside :root block');
+  it('admin.css confines remaining hardcoded hex colors outside :root to the known migration hot spots', () => {
+    loadFiles();
+
+    const hexLines = hexDeclarationLinesOutsideRoot(css);
+    expect(hexLines).toEqual([
+      '.search-highlight { background: rgba(255, 213, 79, 0.35); color: #ffd54f; border-radius: 2px; padding: 0 1px; }',
+      '.cfg-stab-diagnostic { color: #3b82f6; font-size: 11px; }',
+      '.cfg-stab-experimental { color: #8b5cf6; font-size: 11px; }',
+      '.cfg-stab-deprecated { color: #ff9830; font-size: 11px; }',
+      '.cfg-stab-reserved { color: #6b7280; font-size: 11px; font-style: italic; }',
+      '.instr-preview-content code { background: rgba(255,255,255,0.08); padding: 1px 5px; border-radius: 3px; font-family: var(--mcp-font-mono); font-size: 0.9em; color: #e8ab6a; }',
+      '.instr-preview-content strong { color: #fff; }',
+      '.btn-green { background: rgba(115,191,105,0.15); color: #73bf69; border-color: #73bf6944; }',
+      'color: #fff;',
+      'background: var(--admin-accent); color: #fff; font-size: 11px;',
+      'color: #fff; z-index: 1; position: relative;',
+    ]);
+
+    expect(countBy(hexColoursOutsideRoot(css))).toEqual({
+      '#3b82f6': 1,
+      '#6b7280': 1,
+      '#73bf69': 1,
+      '#73bf6944': 1,
+      '#8b5cf6': 1,
+      '#e8ab6a': 1,
+      '#ff9830': 1,
+      '#ffd54f': 1,
+      '#fff': 4,
+    });
+  });
 
   // ── 3. Inline styles minimized in admin.html ────────────────────────
 
-  // RED: aspirational — inline style cleanup not yet complete (Phase 3 backlog)
-  it.todo('admin.html has at most 10 inline style="" attributes');
+  it('admin.html confines inline styles to the current approved migration budget', () => {
+    loadFiles();
+
+    const inlineStyles = inlineStyleValues(html);
+    expect(inlineStyles).toHaveLength(40);
+    expect(countBy(inlineStyles)).toEqual({
+      'accent-color:var(--admin-accent)': 1,
+      'background:#7f1d1d;border-color:#ef4444': 1,
+      'color:var(--admin-text-dim)': 1,
+      'display:flex;align-items:center;gap:4px;font-size:12px;color:var(--admin-text-dim);cursor:pointer;white-space:nowrap': 1,
+      'display:flex;gap:8px;flex-wrap:wrap;padding:8px 0': 3,
+      'display:flex;gap:8px;margin-top:8px;align-items:center': 1,
+      'display:none': 7,
+      'display:none;margin-left:8px;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;letter-spacing:0.5px': 1,
+      'font-size:12px': 1,
+      'font-size:12px;color:var(--admin-text-dim)': 1,
+      'font-size:13px;color:var(--admin-text-dim,#94a3b8)': 1,
+      'font-weight:400;font-size:12px;color:var(--admin-text-dim)': 1,
+      'font-weight:600;font-size:13px;color:var(--admin-text,#e2e8f0);margin-bottom:6px': 1,
+      'margin-top:10px': 1,
+      'margin-top:12px': 2,
+      'margin-top:16px': 2,
+      'margin-top:8px': 2,
+      'margin-top:8px;font-size:13px': 3,
+      'margin-top:8px;overflow-x:auto': 1,
+      'max-width:140px': 1,
+      'opacity:0.5;margin-top:12px;font-size:11px': 1,
+      'padding:0 12px 8px;font-size:14px;font-weight:600;color:var(--admin-text)': 1,
+      'padding:0;overflow:hidden': 1,
+      'padding:8px 0': 1,
+      'padding:8px 0;font-size:12px;opacity:.7': 1,
+      'width:100%;font-family:monospace;font-size:13px;resize:vertical': 1,
+      'width:100%;resize:vertical': 1,
+    });
+  });
 
   // ── 4. Graph section buttons use CSS classes, not inline gradients ──
 

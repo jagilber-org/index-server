@@ -49,7 +49,7 @@ describe('instruction bodyHash integrity', () => {
         const details = mismatches.map(m => `${m.file}: expected=${m.expected} actual=${m.actual}`).join('\n');
         expect.fail(`Instruction sourceHash mismatch(es):\n${details}`);
       }
-      expect(true).toBe(true);
+      expect(mismatches).toHaveLength(0);
     });
   }
 });

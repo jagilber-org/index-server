@@ -70,14 +70,15 @@ describe.skipIf(!fileExists)('Imperative Directive: mcp.json diagnostic flags re
   }
 
   it('has no forbidden active diagnostic flags', () => {
-    // If we reached here without throwing, enforcement passed.
-    expect(true).toBe(true);
+    const activeForbiddenKeys = forbiddenKeys.filter(key => activeKeyRegex(key).test(content));
+    expect(activeForbiddenKeys).toEqual([]);
   });
 
   it('documents imperative directive inside source for discoverability', () => {
-    const directiveMarker = 'Imperative Directive';
-    // Use a stable key still under enforcement to prove directive presence.
-    expect(content.includes('INDEX_SERVER_ALWAYS_RELOAD') || forbiddenKeys.length > 0).toBe(true);
-    expect(directiveMarker.length).toBeGreaterThan(0);
+    expect(forbiddenKeys).toEqual([
+      'INDEX_SERVER_ALWAYS_RELOAD',
+      'INDEX_SERVER_LOG_DIAG',
+      'INDEX_AUTOSAVE_INTERVAL_MS'
+    ]);
   });
 });

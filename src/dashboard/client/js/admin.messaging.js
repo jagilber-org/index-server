@@ -566,10 +566,7 @@
 
   // ── Helpers ─────────────────────────────────────────────────────────────
 
-  function esc(str) {
-    if (!str) return '';
-    return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-  }
+  const esc = window.adminUtils.escapeHtml;
 
   function extractTitle(body) {
     if (!body) return '';

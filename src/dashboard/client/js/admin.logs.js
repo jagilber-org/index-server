@@ -99,11 +99,7 @@
         if (el) el.innerHTML = '<div class="info">Log viewer cleared</div>';
     }
 
-    function escapeHtml(text) {
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
-    }
+    const escapeHtml = window.adminUtils.escapeHtml;
 
     // Expose functions for staged migration
     window.loadLogs = loadLogs;

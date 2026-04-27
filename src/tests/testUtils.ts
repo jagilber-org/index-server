@@ -200,7 +200,7 @@ export async function waitForFile(filePath: string, timeoutMs = 4000, predicate:
     await new Promise(r=> setTimeout(r, 40));
   }
   if(fs.existsSync(filePath)){
-    try { content = fs.readFileSync(filePath,'utf8'); } catch { /* ignore read race */ }
+      try { content = fs.readFileSync(filePath,'utf8'); } catch { /* ignore read race */ } // lgtm[js/useless-assignment-to-local] — diagnostic read; throw on next line; assignment retained for clarity
   }
   throw new Error(`waitForFile timeout (${timeoutMs}ms) path=${filePath}`);
 }
@@ -250,7 +250,7 @@ export async function waitForFile(filePath: string, timeoutMs = 4000, predicate:
         const found = entries.find(e=> e.id === id);
         if(found) return { entry: found, errors: lastErrors, attempts };
       } catch (loadErr) {
-        lastErrors = [(loadErr as Error).message];
+        lastErrors = [(loadErr as Error).message]; // lgtm[js/useless-assignment-to-local] — overwritten on timeout path below; retained for diagnostic clarity
       }
       await new Promise(r=> setTimeout(r, intervalMs));
     }

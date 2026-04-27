@@ -22,6 +22,7 @@
     <script defer src="js/admin.messaging.js"></script>
     <script defer src="js/admin.sqlite.js"></script>
     <script defer src="js/admin.boot.js"></script>
+    <script defer src="js/admin.feedback.js"></script>
 </head>
 <body>
     <div class="admin-container admin-root">
@@ -39,7 +40,6 @@
                 </div>
             </div>
             <div id="buildMeta" class="build-meta">Loading build metadata…</div>
-            <a id="feedback-btn" class="feedback-btn" href="https://github.com/jagilber-org/index-server/issues/new/choose" target="_blank" rel="noopener noreferrer" title="Send Feedback (opens GitHub Issues)">&#x1F4AC; Feedback</a>
             <div class="admin-nav">
                 <!-- Added explicit data-section attributes so JS can reliably map buttons to sections after HTML refactor -->
                 <!-- Redundant inline onclick fallback keeps basic navigation working even if JS wiring changes -->
@@ -52,6 +52,7 @@
                 <button class="nav-btn" data-section="graph" onclick="window.showSection && window.showSection('graph')">Graph</button>
                 <button class="nav-btn" data-section="embeddings" onclick="window.showSection && window.showSection('embeddings')">Embeddings</button>
                 <button class="nav-btn" data-section="messaging" onclick="window.showSection && window.showSection('messaging')">Messaging</button>
+                <button class="nav-btn" data-section="feedback" onclick="window.showSection && window.showSection('feedback')">Feedback</button>
                 <button class="nav-btn" data-section="sqlite" id="nav-sqlite" onclick="window.showSection && window.showSection('sqlite')" style="display:none">SQLite</button>
             </div>
         </div>
@@ -596,6 +597,90 @@
             <div id="messaging-detail"></div>
         </div>
 
+        <!-- Feedback Section -->
+        <div id="feedback-section" class="admin-section hidden">
+            <div class="admin-card">
+                <div class="card-header">
+                    <div class="card-icon">💬</div>
+                    <div class="card-title">Feedback Entries</div>
+                </div>
+                <div class="feedback-toolbar">
+                    <button id="feedback-create-btn" class="action-btn" data-fb-action="create">➕ New Entry</button>
+                    <button class="action-btn" data-fb-action="refresh">🔄 Refresh</button>
+                    <input id="feedback-filter" class="form-input" type="text" placeholder="Filter entries…" />
+                    <select id="feedback-status-filter" class="form-input feedback-status-filter">
+                        <option value="">All Status</option>
+                        <option value="new">New</option>
+                        <option value="acknowledged">Acknowledged</option>
+                        <option value="in-progress">In Progress</option>
+                        <option value="resolved">Resolved</option>
+                        <option value="closed">Closed</option>
+                    </select>
+                </div>
+                <div id="feedback-table" class="feedback-table-wrap" role="region" aria-label="Feedback entries">
+                    <div class="feedback-empty">Click <strong>Refresh</strong> or <strong>New Entry</strong> to get started.</div>
+                </div>
+            </div>
+
+            <!-- Detail / edit area -->
+            <div id="feedback-detail" class="admin-card hidden feedback-detail-card">
+                <div class="card-header">
+                    <div class="card-icon">📝</div>
+                    <div class="card-title" id="feedback-detail-title">Entry Details</div>
+                </div>
+                <div class="feedback-form">
+                    <div class="form-group">
+                        <label class="form-label" for="feedback-entry-title">Title <span class="feedback-required">*</span></label>
+                        <input id="feedback-entry-title" class="form-input" type="text" placeholder="Short summary" aria-required="true" />
+                    </div>
+                    <div class="feedback-form-row">
+                        <div class="form-group">
+                            <label class="form-label" for="feedback-entry-type">Type</label>
+                            <select id="feedback-entry-type" class="form-input">
+                                <option value="bug-report">Bug Report</option>
+                                <option value="feature-request">Feature Request</option>
+                                <option value="issue">Issue</option>
+                                <option value="performance">Performance</option>
+                                <option value="usability">Usability</option>
+                                <option value="security">Security</option>
+                                <option value="status">Status</option>
+                                <option value="other">Other</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="feedback-entry-severity">Severity</label>
+                            <select id="feedback-entry-severity" class="form-input">
+                                <option value="low">Low</option>
+                                <option value="medium" selected>Medium</option>
+                                <option value="high">High</option>
+                                <option value="critical">Critical</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="feedback-entry-status">Status</label>
+                            <select id="feedback-entry-status" class="form-input">
+                                <option value="new">New</option>
+                                <option value="acknowledged">Acknowledged</option>
+                                <option value="in-progress">In Progress</option>
+                                <option value="resolved">Resolved</option>
+                                <option value="closed">Closed</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="feedback-entry-description">Description</label>
+                        <textarea id="feedback-entry-description" class="form-input feedback-entry-description" rows="5" placeholder="Detailed description…"></textarea>
+                    </div>
+                </div>
+                <div class="feedback-detail-actions">
+                    <button id="feedback-save-btn" class="action-btn" data-fb-action="save">💾 Save</button>
+                    <button id="feedback-delete-btn" class="action-btn danger" data-fb-action="delete">🗑️ Delete</button>
+                    <button id="feedback-github-btn" class="action-btn btn-info" data-fb-action="github" title="Open as GitHub issue in jagilber-org/index-server (client-side only)">🐙 Open GitHub Issue</button>
+                    <button class="action-btn warning" data-fb-action="cancel">✖ Cancel</button>
+                </div>
+            </div>
+        </div>
+
         <!-- SQLite Section -->
         <div id="sqlite-section" class="admin-section hidden">
             <div class="admin-grid">
@@ -787,6 +872,9 @@
                 case 'messaging':
                     if (window.initMessaging) window.initMessaging();
                     break;
+                case 'feedback':
+                    if (window.initFeedback) window.initFeedback();
+                    break;
             }
         }
 
@@ -873,11 +961,12 @@
                 if (statusOverride === 'healthy') statusOverride = 'unknown';
             }
             const statusClass = `status-${statusOverride}`;
+            const safeStatus = escapeHtml(statusOverride.toUpperCase());
             let html = `
                 <div class="stat-row">
                     <span class="stat-label">Overall Status</span>
                     <span class="stat-value">
-                        ${statusOverride.toUpperCase()}
+                        ${safeStatus}
                         <span class="${statusClass} status-indicator"></span>
                     </span>
                 </div>
@@ -888,7 +977,7 @@
                 const checkKeys = Object.keys(normalized.checks);
                 if(checkKeys.length){
                     html += '<div class="health-mt"><strong>Checks:</strong><ul class="health-list">' +
-                        checkKeys.map(k => `<li class="${normalized.checks[k]?'text-ok':'text-fail'}">${k}: ${normalized.checks[k]?'ok':'fail'}</li>`).join('') + '</ul></div>';
+                        checkKeys.map(k => `<li class="${normalized.checks[k]?'text-ok':'text-fail'}">${escapeHtml(k)}: ${normalized.checks[k]?'ok':'fail'}</li>`).join('') + '</ul></div>';
                 }
             } catch { /* ignore */ }
 
@@ -898,7 +987,7 @@
                     <div class="health-mt">
                         <strong>CPU Trend:</strong>
                         <span class="${health.cpuTrend === 'stable' ? 'text-ok' : health.cpuTrend === 'increasing' ? 'text-warn' : 'text-fail'}">
-                            ${health.cpuTrend}
+                            ${escapeHtml(health.cpuTrend)}
                         </span>
                     </div>
                 `;
@@ -911,14 +1000,17 @@
                     if (Math.abs(rate) < 1024 * 1024) return `${(rate / 1024).toFixed(1)} KB/min`;
                     return `${(rate / (1024 * 1024)).toFixed(1)} MB/min`;
                 };
+                const safeMemoryGrowthRate = health.memoryGrowthRate
+                    ? escapeHtml(formatGrowthRate(health.memoryGrowthRate))
+                    : '';
 
                 html += `
                     <div class="health-mt">
                         <strong>Memory Trend:</strong>
                         <span class="${health.memoryTrend === 'stable' ? 'text-ok' : health.memoryTrend === 'increasing' ? 'text-warn' : 'text-fail'}">
-                            ${health.memoryTrend}
+                            ${escapeHtml(health.memoryTrend)}
                         </span>
-                        ${health.memoryGrowthRate ? ` (${formatGrowthRate(health.memoryGrowthRate)})` : ''}
+                        ${safeMemoryGrowthRate ? ` (${safeMemoryGrowthRate})` : ''}
                     </div>
                 `;
             }
@@ -928,7 +1020,7 @@
                     <div class="health-mt-lg">
                         <strong>Issues:</strong>
                         <ul class="health-list">
-                            ${normalized.issues.map(issue => `<li class="text-fail">${issue}</li>`).join('')}
+                            ${normalized.issues.map(issue => `<li class="text-fail">${escapeHtml(issue)}</li>`).join('')}
                         </ul>
                     </div>
                 `;
@@ -939,7 +1031,7 @@
                     <div class="health-mt-lg">
                         <strong>Recommendations:</strong>
                         <ul class="health-list">
-                            ${normalized.recommendations.map(rec => `<li class="text-warn">${rec}</li>`).join('')}
+                            ${normalized.recommendations.map(rec => `<li class="text-warn">${escapeHtml(rec)}</li>`).join('')}
                         </ul>
                     </div>
                 `;
@@ -955,12 +1047,12 @@
                             <div class="resource-trend-col">
                                 <div class="spark-col">
                                     <span class="spark-label">CPU Spark (last ${Math.min(40, t.sampleCount || 0)} samples)</span>
-                                    <span class="spark-value">${t.spark || ''}</span>
+                                    <span class="spark-value">${escapeHtml(t.spark || '')}</span>
                                     <span class="spark-stats">Latest ${t.latestCpu?.toFixed ? t.latestCpu.toFixed(1) : '0'}% • Min ${(t.minCpu??0).toFixed(1)}% • Max ${(t.maxCpu??0).toFixed(1)}%</span>
                                 </div>
                                 <div class="spark-col">
                                     <span class="spark-label">Mem Spark (heap)</span>
-                                    <span class="spark-value">${t.memSpark || ''}</span>
+                                    <span class="spark-value">${escapeHtml(t.memSpark || '')}</span>
                                     <span class="spark-stats">Latest ${(t.latestHeap/1024/1024).toFixed(2)} MB • Min ${(t.minHeap/1024/1024).toFixed(2)} MB • Max ${(t.maxHeap/1024/1024).toFixed(2)} MB</span>
                                 </div>
                             </div>
@@ -1048,11 +1140,13 @@
                         var data = await res.json();
                         if (!data.success) throw new Error('Failed to load config');
                         var cfg = data.config;
+                        var safeMaxConnections = escapeHtml(String(cfg.serverSettings.maxConnections ?? ''));
+                        var safeRequestTimeout = escapeHtml(String(cfg.serverSettings.requestTimeout ?? ''));
                         var html = '<form onsubmit="return updateConfiguration(event)">'
                             + '<div class="form-group"><label class="form-label">Max Connections</label>'
-                            + '<input class="form-input" type="number" id="cfg-maxConnections" value="' + cfg.serverSettings.maxConnections + '" /></div>'
+                            + '<input class="form-input" type="number" id="cfg-maxConnections" value="' + safeMaxConnections + '" /></div>'
                             + '<div class="form-group"><label class="form-label">Request Timeout (ms)</label>'
-                            + '<input class="form-input" type="number" id="cfg-requestTimeout" value="' + cfg.serverSettings.requestTimeout + '" /></div>'
+                            + '<input class="form-input" type="number" id="cfg-requestTimeout" value="' + safeRequestTimeout + '" /></div>'
                             + '<div class="form-group"><label class="form-label">Verbose Logging</label>'
                             + '<select class="form-input" id="cfg-verbose"><option value="1"' + (cfg.serverSettings.enableVerboseLogging ? ' selected' : '') + '>Enabled</option>'
                             + '<option value="0"' + (!cfg.serverSettings.enableVerboseLogging ? ' selected' : '') + '>Disabled</option></select></div>'
@@ -1240,18 +1334,23 @@
                             let short = rawSummary.slice(0, 160);
                             if (rawSummary.length > 160) short += '…';
                             const safeSummary = escapeHtml(short);
+                            const safeName = escapeHtml(instr.name || '');
+                            const safeCategory = escapeHtml(instr.category || '—');
+                            const safeSize = escapeHtml(String(instr.size ?? '0'));
+                            const safeSizeCategory = escapeHtml(instr.sizeCategory || 'unknown');
+                            const safeModified = escapeHtml(new Date(instr.mtime).toLocaleString());
                             return `
                 <div class="session-item instr-item-bg">
                     <div class="session-header">
-                        <span class="session-id instr-id-bg">${instr.name}</span>
+                        <span class="session-id instr-id-bg">${safeName}</span>
                         <div>
-                           <button class="action-btn" onclick="editInstruction('${instr.name}')">✏ Edit</button>
-                           <button class="action-btn danger" onclick="deleteInstruction('${instr.name}')">🗑 Delete</button>
+                           <button class="action-btn" data-instruction-action="edit" data-instruction-name="${safeName}">✏ Edit</button>
+                           <button class="action-btn danger" data-instruction-action="delete" data-instruction-name="${safeName}">🗑 Delete</button>
                         </div>
                     </div>
-                    <div class="stat-row"><span class="stat-label">Category</span><span class="stat-value">${instr.category || '—'}</span></div>
-                    <div class="stat-row"><span class="stat-label">Size</span><span class="stat-value">${instr.size} bytes (${instr.sizeCategory})</span></div>
-                    <div class="stat-row"><span class="stat-label">Modified</span><span class="stat-value">${new Date(instr.mtime).toLocaleString()}</span></div>
+                    <div class="stat-row"><span class="stat-label">Category</span><span class="stat-value">${safeCategory}</span></div>
+                    <div class="stat-row"><span class="stat-label">Size</span><span class="stat-value">${safeSize} bytes (${safeSizeCategory})</span></div>
+                    <div class="stat-row"><span class="stat-label">Modified</span><span class="stat-value">${safeModified}</span></div>
                     <div class="stat-row stat-row-top">
                         <span class="stat-label stat-label-pt">Summary</span>
                         <span class="stat-value stat-value-wrap">
@@ -1261,6 +1360,7 @@
                 </div>`;
                         }).join('');
             document.getElementById('instructions-list').innerHTML = rows;
+                        wireLegacyInstructionActions(document.getElementById('instructions-list'));
                         buildInstructionPaginationControls(totalFiltered);
         }
 
@@ -1675,14 +1775,29 @@
             const i = Math.floor(Math.log(bytes) / Math.log(1024));
             return Math.round(bytes / Math.pow(1024, i) * 100) / 100 + ' ' + sizes[i];
         }
-        function escapeHtml(str) {
-            if (str == null) return '';
-            return String(str)
-                .replace(/&/g, '&amp;')
-                .replace(/</g, '&lt;')
-                .replace(/>/g, '&gt;')
-                .replace(/"/g, '&quot;')
-                .replace(/'/g, '&#39;');
+        // Defensive: window.adminUtils is provided by the deferred admin.utils.js
+        // script which runs AFTER this inline script, so direct access throws and
+        // permanently leaves this binding in TDZ — breaking every inline function
+        // that references escapeHtml (notably displaySystemHealth, which would
+        // silently exit and leave the System Health card stuck on its loading
+        // placeholder). Wrap in a function that resolves the helper at call time.
+        const escapeHtml = function(s) {
+            const fn = (window.adminUtils && window.adminUtils.escapeHtml) || window.escapeHtml;
+            if (fn) return fn(s);
+            return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+        };
+        function wireLegacyInstructionActions(listEl) {
+            if (!listEl) return;
+            listEl.querySelectorAll('[data-instruction-action]').forEach((button) => {
+                if (button.__legacyInstructionActionBound) return;
+                button.addEventListener('click', () => {
+                    const action = button.getAttribute('data-instruction-action');
+                    const instructionName = button.getAttribute('data-instruction-name') || '';
+                    if (action === 'edit') editInstruction(instructionName);
+                    if (action === 'delete') deleteInstruction(instructionName);
+                });
+                button.__legacyInstructionActionBound = true;
+            });
         }
         // ---------------- Drilldown Layered SVG (Experimental) -----------------
         // ELK auto-layout integration (Option A): dynamically load elkjs for layered layout.
@@ -2027,13 +2142,15 @@
         }
         function updateDrillLegend(data){
             const el = document.getElementById('drill-legend'); if(!el) return;
+            const safeSelected = escapeHtml(data.selected);
+            const safeLayout = escapeHtml(data.layout);
             el.innerHTML = `<div class="drill-legend-title">Legend / Stats</div>` +
                 `<div class="drill-legend-body">`+
-                `Selected: <b>${data.selected}</b>${data.expansionEnabled? ' (expand '+(data.expanded||0)+')':''}<br>`+
+                `Selected: <b>${safeSelected}</b>${data.expansionEnabled? ' (expand '+(data.expanded||0)+')':''}<br>`+
                 `Rendered Instructions: <b>${data.total}</b><br>`+
                 `Instruction Edges: <b>${data.edges}</b><br>`+
                 `Membership Lines: <b>${data.membership}</b> ${data.membership? '(primary category connectors)':''}<br>`+
-                `Layout: <b>${data.layout}</b>${data.expansionEnabled? ' + expand':''}`+
+                `Layout: <b>${safeLayout}</b>${data.expansionEnabled? ' + expand':''}`+
                 `</div>`;
         }
         function exportDrillSvg(){

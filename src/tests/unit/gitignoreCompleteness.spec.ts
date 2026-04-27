@@ -95,7 +95,7 @@ describe('.gitignore completeness', () => {
   describe('no accidental negation of critical patterns', () => {
     it('does not un-ignore dist/ at root level', () => {
       const content = load();
-      // Allow !release/vscode-extension/dist/ but not !dist/
+      // Root dist output should stay ignored.
       const badNegation = content.some(l =>
         l === '!dist/' || l === '!dist'
       );

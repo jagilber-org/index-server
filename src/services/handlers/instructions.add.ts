@@ -3,7 +3,7 @@ import path from 'path';
 import crypto from 'crypto';
 import { InstructionEntry } from '../../models/instruction';
 import { registerHandler } from '../../server/registry';
-import { ensureLoaded, getInstructionsDir, invalidate, touchIndexVersion, writeEntry } from '../indexContext';
+import { ensureLoadedAsync, getInstructionsDir, invalidate, isDuplicateInstructionWriteError, touchIndexVersion, writeEntryAsync } from '../indexContext';
 import { incrementCounter } from '../features';
 import { SCHEMA_VERSION } from '../../versioning/schemaVersion';
 import { ClassificationService } from '../classificationService';
@@ -14,16 +14,18 @@ import { getRuntimeConfig } from '../../config/runtimeConfig';
 import { hashBody } from '../canonical';
 import { writeManifestFromIndex, attemptManifestUpdate } from '../manifestManager';
 import { emitTrace } from '../tracing';
-import { guard, ImportEntry, traceVisibility, traceInstructionVisibility, traceEnvSnapshot } from './instructions.shared';
+import { INSTRUCTION_INPUT_SCHEMA_REF, validateInstructionInputSurface, validateInstructionRecord, sanitizeLoadError, sanitizeErrorDetail, type SanitizedLoadError } from '../instructionRecordValidation';
+import { isInstructionValidationError } from '../instructionRecordValidation';
+import { guard, ImportEntry, traceVisibility, traceInstructionVisibility, traceEnvSnapshot, normalizeInputCategories, repairChangeLog, ADD_GOVERNANCE_KEYS, applyGovernanceKeys } from './instructions.shared';
 
 interface AddParams { entry: ImportEntry & { lax?: boolean }; overwrite?: boolean; lax?: boolean }
 
-registerHandler('index_add', guard('index_add', (p: AddParams) => {
+registerHandler('index_add', guard('index_add', async (p: AddParams) => {
   const e = p.entry as ImportEntry | undefined;
   const instructionsCfg = getRuntimeConfig().instructions;
   const SEMVER_REGEX = /^([0-9]+)\.([0-9]+)\.([0-9]+)(?:[-+].*)?$/;
   const ADD_INPUT_SCHEMA = getToolRegistry({ tier: 'admin' }).find(t => t.name === 'index_add')?.inputSchema;
-  const fail = (error: string, opts?: { id?: string; hash?: string }) => {
+  const fail = (error: string, opts?: { id?: string; hash?: string; message?: string; validationErrors?: string[]; hints?: string[]; errorCode?: string; detail?: string }) => {
     const id = opts?.id || (e && e.id) || 'unknown';
     const rawBody = e && typeof e.body === 'string' ? e.body : (e && e.body ? String(e.body) : '');
     const bodyPreview = rawBody.trim().slice(0, 200);
@@ -36,27 +38,123 @@ registerHandler('index_add', guard('index_add', (p: AddParams) => {
       bodyPreview
     } : { id };
     interface AddFailureResult {
-      id: string; created: boolean; overwritten: boolean; skipped: boolean; error: string; hash?: string; feedbackHint: string; reproEntry: Record<string, unknown>; schemaRef?: string; inputSchema?: unknown;
+      id: string; success: false; created: boolean; overwritten: boolean; skipped: boolean; error: string; hash?: string; message: string; feedbackHint: string; reproEntry: Record<string, unknown>; validationErrors?: string[]; hints?: string[]; schemaRef?: string; inputSchema?: unknown; errorCode?: string; detail?: string;
     }
     const base: AddFailureResult = {
       id,
+      success: false,
       created: false,
       overwritten: false,
       skipped: false,
       error,
       hash: opts?.hash,
-      feedbackHint: 'Creation failed. If unexpected, call feedback_submit with reproEntry.',
+      message: opts?.message || 'Instruction not added.',
+      feedbackHint: 'Instruction not added. Fix validationErrors or call feedback_submit with reproEntry.',
       reproEntry
     };
-    if (/^missing (entry|id|required fields)/.test(error) || error === 'missing required fields') {
-      if (ADD_INPUT_SCHEMA) {
-        base.schemaRef = "meta_tools[name='index_add'].inputSchema";
-        base.inputSchema = ADD_INPUT_SCHEMA;
-      } else {
-        base.schemaRef = 'meta_tools (lookup index_add)';
-      }
+    if (opts?.validationErrors?.length) base.validationErrors = opts.validationErrors;
+    if (opts?.hints?.length) base.hints = opts.hints;
+    if (opts?.errorCode) base.errorCode = opts.errorCode;
+    if (opts?.detail) base.detail = opts.detail;
+    if (/^missing (entry|id|required fields)/.test(error) || error === 'missing required fields' || error === 'invalid_instruction') {
+      base.schemaRef = INSTRUCTION_INPUT_SCHEMA_REF;
+      if (ADD_INPUT_SCHEMA) base.inputSchema = ADD_INPUT_SCHEMA;
     }
     return base as typeof base;
+  };
+  const failValidation = (error: string, validationErrors: string[], hints: string[], opts?: { id?: string; hash?: string }) =>
+    fail(error, { ...opts, validationErrors, hints, message: 'Instruction not added.' });
+  const loadExistingEntry = async (id: string, filePath: string): Promise<{ entry?: InstructionEntry; error?: SanitizedLoadError }> => {
+    let priorLoad: SanitizedLoadError | undefined;
+    try {
+      const stExisting = await ensureLoadedAsync();
+      const memEntry = stExisting.byId.get(id);
+      if (memEntry) return { entry: { ...memEntry } };
+    } catch (err) {
+      priorLoad = sanitizeLoadError(err, 'load_failed');
+    }
+    if (fs.existsSync(filePath)) {
+      let diskRaw: string;
+      try {
+        diskRaw = fs.readFileSync(filePath, 'utf8');
+      } catch (err) {
+        return { error: sanitizeLoadError(err, 'load_failed') };
+      }
+      try {
+        return { entry: JSON.parse(diskRaw) as InstructionEntry };
+      } catch (err) {
+        return { error: sanitizeLoadError(err, 'parse_failed') };
+      }
+    }
+    if (priorLoad) return { error: priorLoad };
+    return { error: { code: 'unknown', detail: 'missing-existing-entry', raw: 'missing-existing-entry' } };
+  };
+  const verifyReadBack = async (id: string, filePath: string, requestedCategories: unknown) => {
+    try { invalidate(); } catch { /* ignore */ }
+    const stReloaded = await ensureLoadedAsync();
+    let strictVerified = false;
+    const verifyIssues: string[] = [];
+    try {
+      let parsed: InstructionEntry | undefined;
+      parsed = stReloaded.byId.get(id) ?? undefined;
+      if (!parsed && fs.existsSync(filePath)) {
+        let diskRaw: string | undefined;
+        try { diskRaw = fs.readFileSync(filePath, 'utf8'); } catch (ex) { verifyIssues.push('read-failed:' + (ex as Error).message); }
+        if (diskRaw) {
+          try { parsed = JSON.parse(diskRaw) as InstructionEntry; } catch (ex) { verifyIssues.push('parse-failed:' + (ex as Error).message); }
+        }
+      }
+      if (parsed) {
+        if (parsed.id !== id) verifyIssues.push('id-mismatch');
+        if (!parsed.title) verifyIssues.push('missing-title');
+        if (!parsed.body) verifyIssues.push('missing-body');
+        const wantCats = Array.isArray(requestedCategories)
+          ? requestedCategories.filter((c): c is string => typeof c === 'string').map(c => c.toLowerCase())
+          : [];
+        if (wantCats.length) {
+          for (const c of wantCats) {
+            if (!parsed.categories?.includes(c)) verifyIssues.push('missing-category:' + c);
+          }
+        }
+      }
+      const mem = stReloaded.byId.get(id);
+      if (!mem) verifyIssues.push('not-in-index');
+      const wantCats2 = Array.isArray(requestedCategories)
+        ? requestedCategories.filter((c): c is string => typeof c === 'string').map(c => c.toLowerCase())
+        : [];
+      if (wantCats2.length) {
+        const catHit = stReloaded.list.some(rec => rec.id === id && wantCats2.every(c => rec.categories.includes(c)));
+        if (!catHit) verifyIssues.push('category-query-miss');
+      }
+      try {
+        if (parsed) {
+          const classifier2 = new ClassificationService();
+          const issues = classifier2.validate(parsed as InstructionEntry);
+          if (issues.length) verifyIssues.push('classification-issues:' + issues.join(','));
+        }
+      } catch (err) {
+        verifyIssues.push('classification-exception:' + (err as Error).message);
+      }
+      if (verifyIssues.includes('not-in-index')) {
+        try {
+          invalidate();
+          const st2 = await ensureLoadedAsync();
+          if (st2.byId.has(id)) {
+            const idx = verifyIssues.indexOf('not-in-index');
+            if (idx >= 0) verifyIssues.splice(idx, 1);
+          }
+        } catch { /* ignore */ }
+      }
+      if (!verifyIssues.length) strictVerified = true;
+    } catch (err) {
+      verifyIssues.push('verify-exception:' + (err as Error).message);
+    }
+    return {
+      stReloaded,
+      strictVerified,
+      verifyIssues,
+      verified: strictVerified && verifyIssues.length === 0,
+    };
   };
   const metadataEquals = (left: unknown, right: unknown) => {
     if (left === right) return true;
@@ -75,58 +173,57 @@ registerHandler('index_add', guard('index_add', (p: AddParams) => {
   if (lax) {
     if (!e.id) return fail('missing id');
     const mutable = e as Partial<ImportEntry> & { id: string };
-    if (!mutable.title) mutable.title = mutable.id;
-    if (typeof mutable.priority !== 'number') mutable.priority = 50;
-    if (!mutable.audience) mutable.audience = 'all' as InstructionEntry['audience'];
-    if (!mutable.requirement) mutable.requirement = 'optional';
-    if (!Array.isArray(mutable.categories)) mutable.categories = [];
+    // Only fill defaults for *missing* fields. Never silently coerce a wrong-typed value:
+    // shape violations are surfaced as invalid_instruction by validateInstructionInputSurface.
+    if (mutable.title === undefined) mutable.title = mutable.id;
+    if (mutable.priority === undefined) mutable.priority = 50;
+    if (mutable.audience === undefined) mutable.audience = 'all' as InstructionEntry['audience'];
+    if (mutable.requirement === undefined) mutable.requirement = 'optional';
+    if (mutable.categories === undefined) mutable.categories = [];
   }
-  if (p.overwrite && (!e.body || !e.title)) {
-    try {
-      // Try in-memory state first (covers SQLite and JSON backends), fall back to disk
-      let raw: Partial<InstructionEntry> | undefined;
-      const stHydrate = ensureLoaded();
-      const memEntry = stHydrate.byId.get(e.id);
-      if (memEntry) { raw = { ...memEntry }; }
-      if (!raw) {
-        const dirCandidate = getInstructionsDir();
-        const fileCandidate = path.join(dirCandidate, `${e.id}.json`);
-        if (fs.existsSync(fileCandidate)) {
-          try { raw = JSON.parse(fs.readFileSync(fileCandidate, 'utf8')) as Partial<InstructionEntry>; } catch { /* ignore parse */ }
-        }
-      }
-      if (raw) {
-        const mutableExisting = e as Partial<InstructionEntry> & { id: string };
-        if (!mutableExisting.body && typeof raw.body === 'string' && raw.body.trim()) {
-          mutableExisting.body = raw.body;
-        }
-        if (!mutableExisting.title && typeof raw.title === 'string' && raw.title.trim()) {
-          mutableExisting.title = raw.title;
-        }
-      }
-    } catch { /* ignore hydration errors */ }
-  }
-  if (!e.id || !e.title || !e.body) return fail('missing required fields');
   const dir = getInstructionsDir(); if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   const file = path.join(dir, `${e.id}.json`);
-  const existsInStore = ensureLoaded().byId.has(e.id);
-  const existsOnDisk = !existsInStore && fs.existsSync(file);
-  const exists = existsInStore || existsOnDisk;
-  const existedBeforeOriginal = exists;
-  const overwrite = !!p.overwrite;
-  if (exists && !overwrite) {
-    let st0 = ensureLoaded(); let visible = st0.byId.has(e.id); let repaired = false; if (!visible) {
-      try { invalidate(); st0 = ensureLoaded(); visible = st0.byId.has(e.id); if (visible) repaired = true; } catch { /* ignore reload */ }
+  if (p.overwrite && (!e.body || !e.title)) {
+      const hydrated = await loadExistingEntry(e.id, file);
+    if (hydrated.entry) {
+      const mutableExisting = e as Partial<InstructionEntry> & { id: string };
+      if (!mutableExisting.body && typeof hydrated.entry.body === 'string' && hydrated.entry.body.trim()) {
+        mutableExisting.body = hydrated.entry.body;
+      }
+      if (!mutableExisting.title && typeof hydrated.entry.title === 'string' && hydrated.entry.title.trim()) {
+        mutableExisting.title = hydrated.entry.title;
+      }
+    } else if (hydrated.error) {
+      // Surface all read failures, including those combined with 'missing-existing-entry'
+      const hasRealError = hydrated.error.detail !== 'missing-existing-entry';
+      if (hasRealError) {
+        logAudit('add_hydration_error', e.id, { error: hydrated.error.raw, errorCode: hydrated.error.code, overwrite: true });
+        return fail('existing_instruction_unreadable', {
+          id: e.id,
+          message: `Existing instruction could not be hydrated for overwrite (${hydrated.error.code}): ${hydrated.error.detail}`,
+          errorCode: hydrated.error.code,
+          detail: hydrated.error.detail,
+        });
+      }
     }
-    logAudit('add', e.id, { skipped: true, late_visible: visible, repaired });
-    if (traceVisibility()) { emitTrace('[trace:add:skip]', { id: e.id, visible, repaired }); }
-    if (traceVisibility()) {
-      traceInstructionVisibility(e.id, 'add-skip-pre-return', { visible, repaired });
-      if (!visible) traceEnvSnapshot('add-skip-anomalous', { repaired });
-    }
-    if (!visible) { return { id: e.id, skipped: true, created: false, overwritten: false, hash: st0.hash, visibilityWarning: 'skipped_file_not_in_index' }; }
-    return { id: e.id, skipped: true, created: false, overwritten: false, hash: st0.hash, repaired: repaired ? true : undefined };
   }
+  const requiredFieldErrors = [
+    !e.id ? 'id: missing required field' : undefined,
+    e.title === undefined ? 'title: missing required field' : undefined,
+    e.body === undefined ? 'body: missing required field' : undefined,
+  ].filter((issue): issue is string => !!issue);
+  const surfaceValidation = validateInstructionInputSurface(e as unknown as Record<string, unknown>);
+  if (requiredFieldErrors.length || surfaceValidation.validationErrors.length) {
+    return failValidation(
+      requiredFieldErrors.length ? 'missing required fields' : 'invalid_instruction',
+      [...requiredFieldErrors, ...surfaceValidation.validationErrors],
+      surfaceValidation.hints,
+      { id: e.id },
+    );
+  }
+  const overwrite = !!p.overwrite;
+  const exists = overwrite ? ((await ensureLoadedAsync()).byId.has(e.id) || fs.existsSync(file)) : false;
+  const existedBeforeOriginal = exists;
   const now = new Date().toISOString();
   const rawBody = typeof e.body === 'string' ? e.body : String(e.body || '');
   const bodyTrimmed = rawBody.trim();
@@ -139,7 +236,7 @@ registerHandler('index_add', guard('index_add', (p: AddParams) => {
       guidance: `Body exceeds the ${bodyWarnLength}-character limit (${bodyTrimmed.length} chars). Please split into multiple cross-linked instructions, refine/compress content, or categorize sections as separate entries. Use categories and cross-references (e.g., "See also: <sibling-id>") to maintain discoverability.`
     };
   }
-  let categories = Array.from(new Set((Array.isArray(e.categories) ? e.categories : []).filter((c): c is string => typeof c === 'string' && c.trim().length > 0).map(c => c.toLowerCase()))).sort();
+  let categories = normalizeInputCategories(e.categories);
   if (!categories.length) {
     const allowAuto = lax || !instructionsCfg.requireCategory;
     if (allowAuto) {
@@ -160,106 +257,144 @@ registerHandler('index_add', guard('index_add', (p: AddParams) => {
   const classifier = new ClassificationService();
   let base: InstructionEntry;
   if (exists) {
-    try {
-      let existing: InstructionEntry;
-      // Try store first (covers SQLite), fall back to disk (JSON backend)
-      const stMerge = ensureLoaded();
-      const memEntry = stMerge.byId.get(e.id);
-      if (memEntry) {
-        existing = { ...memEntry };
-      } else if (existsOnDisk) {
-        existing = JSON.parse(fs.readFileSync(file, 'utf8')) as InstructionEntry;
-      } else {
-        throw new Error('entry not found in store or on disk');
+    const existingLoad = await loadExistingEntry(e.id, file);
+    if (!existingLoad.entry) {
+      const errCode = existingLoad.error?.code ?? 'unknown';
+      const errDetail = existingLoad.error?.detail ?? 'missing-existing-entry';
+      return fail('existing_instruction_unreadable', {
+        id: e.id,
+        message: `Existing instruction could not be read for overwrite (${errCode}): ${errDetail}`,
+        errorCode: errCode,
+        detail: errDetail,
+      });
+    }
+    const existing = existingLoad.entry;
+    base = { ...existing } as InstructionEntry;
+    const prevBody = existing.body;
+    const prevVersion = existing.version || '1.0.0';
+    if (e.title) base.title = e.title;
+    if (e.body) base.body = bodyTrimmed;
+    if (e.rationale !== undefined) base.rationale = e.rationale;
+    if (typeof e.priority === 'number') base.priority = e.priority;
+    if (e.audience) base.audience = e.audience;
+    if (e.requirement) base.requirement = e.requirement as InstructionEntry['requirement'];
+    if (categories.length) { base.categories = categories; base.primaryCategory = primaryCategory; }
+    base.updatedAt = now;
+    if (e.version !== undefined) base.version = e.version;
+    if (e.changeLog !== undefined) base.changeLog = e.changeLog as InstructionEntry['changeLog'];
+    const semverRegex = SEMVER_REGEX;
+    const parse = (v: string) => { const m = semverRegex.exec(v); if (!m) return null; return { major: +m[1], minor: +m[2], patch: +m[3] }; };
+    const gt = (a: string, b: string) => { const pa = parse(a), pb = parse(b); if (!pa || !pb) return false; if (pa.major !== pb.major) return pa.major > pb.major; if (pa.minor !== pb.minor) return pa.minor > pb.minor; return pa.patch > pb.patch; };
+    const bodyChanged = e.body ? (bodyTrimmed !== prevBody) : false;
+    const titleChanged = e.title !== undefined && e.title !== existing.title;
+    const eRec = e as unknown as Record<string, unknown>;
+    const mutableMetadataKeys = ['owner', 'status', 'priorityTier', 'classification', 'lastReviewedAt', 'nextReviewDue', 'semanticSummary', 'contentType', 'extensions'] as const;
+    const metadataChanged = mutableMetadataKeys.some((key) =>
+      eRec[key] !== undefined && !metadataEquals(eRec[key], (existing as unknown as Record<string, unknown>)[key]),
+    );
+    const versionChanged = e.version !== undefined && e.version !== existing.version;
+    const categoriesChanged = categories.length > 0 && JSON.stringify(categories.sort()) !== JSON.stringify((existing.categories || []).sort());
+    const governanceMetaChanged = titleChanged || metadataChanged || versionChanged || categoriesChanged;
+    if (overwrite && !bodyChanged && !governanceMetaChanged) {
+      // Noop overwrite: no mutation needed because the incoming entry matches
+      // the existing record. Even so, verify the persisted state still matches
+      // the in-memory index — the file (or store row) may have disappeared
+      // since the index was last loaded. Skipping verification here would mean
+      // silently reporting success when the entry is no longer durable.
+      const verification = await verifyReadBack(e.id, file, e.categories);
+      const noopVerified = verification.verified;
+      logAudit('add', e.id, {
+        created: false,
+        overwritten: false,
+        skipped: true,
+        verified: noopVerified,
+        strictVerified: verification.strictVerified,
+        verifyIssues: verification.verifyIssues.length ? verification.verifyIssues : undefined,
+        noop: true,
+        note: noopVerified ? 'noop_verified' : 'noop_read_back_failed',
+      });
+      if (traceVisibility()) emitTrace('[trace:add:noop-overwrite]', {
+        id: e.id,
+        hash: verification.stReloaded.hash,
+        verified: noopVerified,
+        strictVerified: verification.strictVerified,
+        issues: verification.verifyIssues.slice(0, 5),
+        reason: noopVerified
+          ? 'no body/governance delta — persisted state verified'
+          : 'no body/governance delta — persisted state verification failed',
+      });
+      if (!noopVerified) {
+        return {
+          ...fail('read-back verification failed', {
+            id: e.id,
+            hash: verification.stReloaded.hash,
+            message: 'Noop overwrite rejected: persisted instruction state does not match the in-memory index.',
+            validationErrors: verification.verifyIssues,
+          }),
+          created: false,
+          overwritten: false,
+          verified: false,
+          strictVerified: verification.strictVerified,
+          verifyIssues: verification.verifyIssues,
+        };
       }
-      base = { ...existing } as InstructionEntry;
-      const prevBody = existing.body;
-      const prevVersion = existing.version || '1.0.0';
-      if (e.title) base.title = e.title;
-      if (e.body) base.body = bodyTrimmed;
-      if (e.rationale !== undefined) base.rationale = e.rationale;
-      if (typeof e.priority === 'number') base.priority = e.priority;
-      if (e.audience) base.audience = e.audience;
-      if (e.requirement) base.requirement = e.requirement as InstructionEntry['requirement'];
-      if (categories.length) { base.categories = categories; base.primaryCategory = primaryCategory; }
-      base.updatedAt = now;
-      if (e.version !== undefined) base.version = e.version;
-      if (e.changeLog !== undefined) base.changeLog = e.changeLog as InstructionEntry['changeLog'];
-      const semverRegex = SEMVER_REGEX;
-      const parse = (v: string) => { const m = semverRegex.exec(v); if (!m) return null; return { major: +m[1], minor: +m[2], patch: +m[3] }; };
-      const gt = (a: string, b: string) => { const pa = parse(a), pb = parse(b); if (!pa || !pb) return false; if (pa.major !== pb.major) return pa.major > pb.major; if (pa.minor !== pb.minor) return pa.minor > pb.minor; return pa.patch > pb.patch; };
-      const bodyChanged = e.body ? (bodyTrimmed !== prevBody) : false;
-      const titleChanged = e.title !== undefined && e.title !== existing.title;
-      const eRec = e as unknown as Record<string, unknown>;
-      const mutableMetadataKeys = ['owner', 'status', 'priorityTier', 'classification', 'lastReviewedAt', 'nextReviewDue', 'semanticSummary', 'contentType', 'extensions'] as const;
-      const metadataChanged = mutableMetadataKeys.some((key) =>
-        eRec[key] !== undefined && !metadataEquals(eRec[key], (existing as unknown as Record<string, unknown>)[key]),
-      );
-      const versionChanged = e.version !== undefined && e.version !== existing.version;
-      const categoriesChanged = categories.length > 0 && JSON.stringify(categories.sort()) !== JSON.stringify((existing.categories || []).sort());
-      const governanceMetaChanged = titleChanged || metadataChanged || versionChanged || categoriesChanged;
-      if (overwrite && !bodyChanged && !governanceMetaChanged) {
-        const stNoop = ensureLoaded();
-        const respNoop: { id: string; created: boolean; overwritten: boolean; skipped: boolean; hash: string; verified: true; strictVerified?: true } = { id: e.id, created: false, overwritten: false, skipped: true, hash: stNoop.hash, verified: true };
-        if (instructionsCfg.strictCreate) respNoop.strictVerified = true;
-        logAudit('add', e.id, { created: false, overwritten: false, skipped: true, verified: true, noop: true });
-        if (traceVisibility()) emitTrace('[trace:add:noop-overwrite]', { id: e.id, hash: stNoop.hash, reason: 'no body/governance delta' });
-        return respNoop;
+      const respNoop: {
+        id: string;
+        success: true;
+        created: boolean;
+        overwritten: boolean;
+        skipped: boolean;
+        hash: string;
+        verified: boolean;
+        note: string;
+        strictVerified?: boolean;
+      } = {
+        id: e.id,
+        success: true,
+        created: false,
+        overwritten: false,
+        skipped: true,
+        hash: verification.stReloaded.hash,
+        verified: true,
+        note: 'noop_verified',
+      };
+      if (instructionsCfg.strictCreate) {
+        respNoop.strictVerified = verification.strictVerified;
       }
-      let incomingVersion = e.version;
-      if (incomingVersion && !semverRegex.test(incomingVersion)) return fail('invalid_semver', { id: e.id });
-      if (bodyChanged) {
-        if (incomingVersion) {
-          if (!gt(incomingVersion, prevVersion)) return fail('version_not_bumped', { id: e.id });
-        } else {
-          const pv = parse(prevVersion) || { major: 1, minor: 0, patch: 0 };
-          const autoVersion = `${pv.major}.${pv.minor}.${pv.patch + 1}`;
-          base.version = autoVersion;
-          incomingVersion = autoVersion;
-        }
-      } else if (incomingVersion) {
+      return respNoop;
+    }
+    let incomingVersion = e.version;
+    if (incomingVersion && !semverRegex.test(incomingVersion)) return fail('invalid_semver', { id: e.id });
+    if (bodyChanged) {
+      if (incomingVersion) {
         if (!gt(incomingVersion, prevVersion)) return fail('version_not_bumped', { id: e.id });
       } else {
-        base.version = prevVersion;
-        incomingVersion = prevVersion;
+        const pv = parse(prevVersion) || { major: 1, minor: 0, patch: 0 };
+        const autoVersion = `${pv.major}.${pv.minor}.${pv.patch + 1}`;
+        base.version = autoVersion;
+        incomingVersion = autoVersion;
       }
-      if (!Array.isArray(base.changeLog) || !base.changeLog.length) {
-        base.changeLog = [{ version: prevVersion, changedAt: existing.createdAt || now, summary: 'initial import' }];
-      }
-      const finalVersion = base.version || incomingVersion || prevVersion;
-      const last = base.changeLog[base.changeLog.length - 1];
-      if (last.version !== finalVersion) {
-        const summary = bodyChanged ? (e.version ? 'body update' : 'auto bump (body change)') : 'metadata update';
-        base.changeLog.push({ version: finalVersion, changedAt: now, summary });
-      }
-      const repairChangeLog = (cl: unknown): InstructionEntry['changeLog'] => {
-        interface CLRaw { version?: unknown; changedAt?: unknown; summary?: unknown }
-        const out: InstructionEntry['changeLog'] = [];
-        if (Array.isArray(cl)) {
-          for (const entry of cl) {
-            if (!entry || typeof entry !== 'object') continue;
-            const { version: v, changedAt: ca, summary: sum } = entry as CLRaw;
-            if (typeof v === 'string' && v.trim() && typeof sum === 'string' && sum.trim()) {
-              const caIso = typeof ca === 'string' && /T/.test(ca) ? ca : now;
-              out.push({ version: v.trim(), changedAt: caIso, summary: sum.trim() });
-            }
-          }
-        }
-        if (!out.length) {
-          out.push({ version: prevVersion, changedAt: existing.createdAt || now, summary: 'initial import (repaired)' });
-        }
-        const lastVer = out[out.length - 1].version;
-        if (lastVer !== finalVersion) {
-          out.push({ version: finalVersion, changedAt: now, summary: bodyChanged ? 'body update (repaired)' : 'metadata update (repaired)' });
-        }
-        return out;
-      };
-      base.changeLog = repairChangeLog(base.changeLog);
-    } catch {
-      base = { id: e.id, title: e.title, body: bodyTrimmed, rationale: e.rationale, priority: e.priority, audience: e.audience, requirement: e.requirement, categories, primaryCategory, sourceHash, schemaVersion: SCHEMA_VERSION, deprecatedBy: e.deprecatedBy, createdAt: now, updatedAt: now, riskScore: e.riskScore, createdByAgent: instructionsCfg.agentId, sourceWorkspace: instructionsCfg.workspaceId, extensions: e.extensions } as InstructionEntry;
-      base.version = '1.0.0';
-      base.changeLog = [{ version: '1.0.0', changedAt: now, summary: 'initial import' }];
+    } else if (incomingVersion) {
+      if (!gt(incomingVersion, prevVersion)) return fail('version_not_bumped', { id: e.id });
+    } else {
+      base.version = prevVersion;
+      incomingVersion = prevVersion;
     }
+    if (!Array.isArray(base.changeLog) || !base.changeLog.length) {
+      base.changeLog = [{ version: prevVersion, changedAt: existing.createdAt || now, summary: 'initial import' }];
+    }
+    const finalVersion = base.version || incomingVersion || prevVersion;
+    const last = base.changeLog[base.changeLog.length - 1];
+    if (last.version !== finalVersion) {
+      const summary = bodyChanged ? (e.version ? 'body update' : 'auto bump (body change)') : 'metadata update';
+      base.changeLog.push({ version: finalVersion, changedAt: now, summary });
+    }
+    base.changeLog = repairChangeLog(base.changeLog, {
+      finalVersion,
+      now,
+      fallback: { version: prevVersion, changedAt: existing.createdAt || now, summary: 'initial import (repaired)' },
+      trailingSummary: bodyChanged ? 'body update (repaired)' : 'metadata update (repaired)'
+    });
   } else {
     base = { id: e.id, title: e.title, body: bodyTrimmed, rationale: e.rationale, priority: e.priority, audience: e.audience, requirement: e.requirement, categories, primaryCategory, sourceHash, schemaVersion: SCHEMA_VERSION, deprecatedBy: e.deprecatedBy, createdAt: now, updatedAt: now, riskScore: e.riskScore, createdByAgent: instructionsCfg.agentId, sourceWorkspace: instructionsCfg.workspaceId, extensions: e.extensions } as InstructionEntry;
     if (e.version !== undefined) {
@@ -272,27 +407,15 @@ registerHandler('index_add', guard('index_add', (p: AddParams) => {
       base.changeLog = [{ version: base.version, changedAt: now, summary: 'initial import' }];
     }
     if (Array.isArray(base.changeLog)) {
-      interface CLRaw { version?: unknown; changedAt?: unknown; summary?: unknown }
-      const repaired: InstructionEntry['changeLog'] = [];
-      for (const entry of base.changeLog) {
-        if (!entry || typeof entry !== 'object') continue;
-        const { version: v, changedAt: ca, summary: sum } = entry as CLRaw;
-        if (typeof v === 'string' && v.trim() && typeof sum === 'string' && sum.trim()) {
-          const caIso = typeof ca === 'string' && /T/.test(ca) ? ca : now;
-          repaired.push({ version: v.trim(), changedAt: caIso, summary: sum.trim() });
-        }
-      }
-      if (!repaired.length) {
-        repaired.push({ version: base.version, changedAt: now, summary: 'initial import (repaired)' });
-      }
-      if (repaired[repaired.length - 1].version !== base.version) {
-        repaired.push({ version: base.version, changedAt: now, summary: 'initial import (normalized)' });
-      }
-      base.changeLog = repaired;
+      base.changeLog = repairChangeLog(base.changeLog, {
+        finalVersion: base.version,
+        now,
+        fallback: { version: base.version, changedAt: now, summary: 'initial import (repaired)' },
+        trailingSummary: 'initial import (normalized)'
+      });
     }
   }
-  const govKeys: (keyof ImportEntry)[] = ['version', 'owner', 'status', 'priorityTier', 'classification', 'lastReviewedAt', 'nextReviewDue', 'semanticSummary', 'contentType', 'extensions'];
-  for (const k of govKeys) { const v = (e as ImportEntry)[k]; if (v !== undefined) { (base as unknown as Record<string, unknown>)[k] = v as unknown; } }
+  applyGovernanceKeys(base, e as ImportEntry, ADD_GOVERNANCE_KEYS);
   if (!base.sourceWorkspace) base.sourceWorkspace = instructionsCfg.workspaceId;
   if (!exists || base.body === bodyTrimmed) {
     base.sourceHash = sourceHash;
@@ -303,74 +426,107 @@ registerHandler('index_add', guard('index_add', (p: AddParams) => {
   }
   const record = classifier.normalize(base);
   if (record.owner === 'unowned') { const auto = resolveOwner(record.id); if (auto) { record.owner = auto; record.updatedAt = new Date().toISOString(); } }
-  try { writeEntry(record); } catch (err) { return fail((err as Error).message || 'write-failed', { id: e.id }); }
-  try { touchIndexVersion(); } catch { /* ignore */ }
-  let stReloaded;
-  const strictMode = instructionsCfg.strictVisibility;
-  if (strictMode) {
-    try {
-      const current = ensureLoaded();
-      stReloaded = current;
-      if (!current.byId.has(record.id)) {
-        current.byId.set(record.id, record);
-        current.list.push(record);
+  const recordValidation = validateInstructionRecord(record);
+  if (recordValidation.validationErrors.length) {
+    return failValidation('invalid_instruction', recordValidation.validationErrors, recordValidation.hints, { id: e.id });
+  }
+  try { await writeEntryAsync(record, overwrite ? undefined : { createOnly: true }); } catch (err) {
+    if (isInstructionValidationError(err)) {
+      return failValidation('invalid_instruction', err.validationErrors, err.hints, { id: e.id });
+    }
+    if (!overwrite && isDuplicateInstructionWriteError(err)) {
+      let st0 = await ensureLoadedAsync(); let visible = st0.byId.has(e.id); let repaired = false; if (!visible) {
+        try { invalidate(); st0 = await ensureLoadedAsync(); visible = st0.byId.has(e.id); if (visible) repaired = true; } catch { /* ignore reload */ }
       }
-    } catch { /* fallback to reload path below if anything fails */ }
+      logAudit('add', e.id, { skipped: true, late_visible: visible, repaired, duplicateAtWrite: true });
+      if (traceVisibility()) { emitTrace('[trace:add:skip]', { id: e.id, visible, repaired, duplicateAtWrite: true }); }
+      if (traceVisibility()) {
+        traceInstructionVisibility(e.id, 'add-skip-post-write-conflict', { visible, repaired });
+        if (!visible) traceEnvSnapshot('add-skip-anomalous', { repaired });
+      }
+      if (!visible) {
+        const existingLoadError = st0.loadErrors?.find((issue) => {
+          const fileName = path.basename(issue.file);
+          return issue.file === `${e.id}.json` || fileName === `${e.id}.json` || issue.file.endsWith(`\\${e.id}.json`);
+        });
+        if (existingLoadError) {
+          return {
+            id: e.id,
+            success: false,
+            skipped: false,
+            created: false,
+            overwritten: false,
+            hash: st0.hash,
+            error: 'existing_instruction_invalid',
+            validationErrors: [sanitizeErrorDetail(existingLoadError.error) || 'existing entry could not be parsed'],
+          };
+        }
+        return { id: e.id, success: true, skipped: true, created: false, overwritten: false, hash: st0.hash, visibilityWarning: 'skipped_file_not_in_index' };
+      }
+      return { id: e.id, success: true, skipped: true, created: false, overwritten: false, hash: st0.hash, repaired: repaired ? true : undefined };
+    }
+    // Catch-all: never expose raw Node error text (ENOENT, null-byte path errors, stack frames) to MCP clients.
+    return fail('write_failed', {
+      id: e.id,
+      message: 'Instruction write failed due to an internal error. The error details are not exposed to clients.',
+    });
   }
-  if (!stReloaded) {
-    try { invalidate(); } catch { /* ignore */ }
-    stReloaded = ensureLoaded();
-  }
+  try { touchIndexVersion(); } catch { /* ignore */ }
+  const strictMode = instructionsCfg.strictVisibility || instructionsCfg.strictCreate;
   const createdNow = !existedBeforeOriginal;
   const overwrittenNow = overwrite && existedBeforeOriginal;
-  let strictVerified = false; const verifyIssues: string[] = [];
-  try {
-    let parsed: InstructionEntry | undefined;
-    // Verify from in-memory store first (covers SQLite), fall back to disk (JSON backend)
-    parsed = stReloaded.byId.get(e.id) ?? undefined;
-    if (!parsed) {
-      if (fs.existsSync(file)) {
-        let diskRaw: string | undefined;
-        try { diskRaw = fs.readFileSync(file, 'utf8'); } catch (ex) { verifyIssues.push('read-failed:' + (ex as Error).message); }
-        if (diskRaw) {
-          try { parsed = JSON.parse(diskRaw) as InstructionEntry; } catch (ex) { verifyIssues.push('parse-failed:' + (ex as Error).message); }
-        }
-      }
-    }
-    if (parsed) {
-      if (parsed.id !== e.id) verifyIssues.push('id-mismatch');
-      if (!parsed.title) verifyIssues.push('missing-title');
-      if (!parsed.body) verifyIssues.push('missing-body');
-      const wantCats = Array.isArray(e.categories) ? e.categories.filter((c): c is string => typeof c === 'string').map(c => c.toLowerCase()) : [];
-      if (wantCats.length) {
-        for (const c of wantCats) { if (!parsed.categories?.includes(c)) { verifyIssues.push('missing-category:' + c); } }
-      }
-    }
-    const mem = stReloaded.byId.get(e.id);
-    if (!mem) { verifyIssues.push('not-in-index'); }
-    const wantCats2 = Array.isArray(e.categories) ? e.categories.filter((c): c is string => typeof c === 'string').map(c => c.toLowerCase()) : [];
-    if (wantCats2.length) {
-      const catHit = stReloaded.list.some(rec => rec.id === e.id && wantCats2.every(c => rec.categories.includes(c)));
-      if (!catHit) verifyIssues.push('category-query-miss');
-    }
-    try {
-      if (parsed) {
-        const classifier2 = new ClassificationService();
-        const issues = classifier2.validate(parsed as InstructionEntry);
-        if (issues.length) { verifyIssues.push('classification-issues:' + issues.join(',')); }
-      }
-    } catch (err) { verifyIssues.push('classification-exception:' + (err as Error).message); }
-    if (verifyIssues.includes('not-in-index')) {
-      try { invalidate(); const st2 = ensureLoaded(); if (st2.byId.has(e.id)) { const idx = verifyIssues.indexOf('not-in-index'); if (idx >= 0) verifyIssues.splice(idx, 1); } } catch { /* ignore */ }
-    }
-    if (!verifyIssues.length) strictVerified = true;
-  } catch (err) { verifyIssues.push('verify-exception:' + (err as Error).message); }
+  const verification = await verifyReadBack(e.id, file, e.categories);
   try {
     if (instructionsCfg.manifest.writeEnabled) writeManifestFromIndex(); else setImmediate(() => { try { attemptManifestUpdate(); } catch { /* ignore */ } });
   } catch { /* ignore manifest */ }
-  logAudit('add', e.id, { created: createdNow, overwritten: overwrittenNow, verified: true, forcedReload: true });
-  if (traceVisibility()) emitTrace('[trace:add:forced-reload]', { id: e.id, created: createdNow, overwritten: overwrittenNow, hash: stReloaded.hash, strictVerified, issues: verifyIssues.slice(0, 5), strictMode });
-  return { id: e.id, created: createdNow, overwritten: overwrittenNow, skipped: false, hash: stReloaded.hash, verified: true, strictVerified, verifyIssues: verifyIssues.length ? verifyIssues : undefined, strictMode, bodyLength: bodyTrimmed.length };
+  logAudit('add', e.id, {
+    created: createdNow,
+    overwritten: overwrittenNow,
+    verified: verification.verified,
+    strictVerified: verification.strictVerified,
+    verifyIssues: verification.verifyIssues.length ? verification.verifyIssues : undefined,
+    forcedReload: true,
+  });
+  if (traceVisibility()) emitTrace('[trace:add:forced-reload]', {
+    id: e.id,
+    created: createdNow,
+    overwritten: overwrittenNow,
+    hash: verification.stReloaded.hash,
+    verified: verification.verified,
+    strictVerified: verification.strictVerified,
+    issues: verification.verifyIssues.slice(0, 5),
+    strictMode,
+  });
+  if (!verification.verified) {
+    return {
+      ...fail('read-back verification failed', {
+        id: e.id,
+        hash: verification.stReloaded.hash,
+        message: 'Instruction write completed but read-back verification failed.',
+        validationErrors: verification.verifyIssues,
+      }),
+      created: createdNow,
+      overwritten: overwrittenNow,
+      verified: false,
+      strictVerified: verification.strictVerified,
+      verifyIssues: verification.verifyIssues,
+      strictMode,
+      bodyLength: bodyTrimmed.length,
+    };
+  }
+  return {
+    id: e.id,
+    success: true,
+    created: createdNow,
+    overwritten: overwrittenNow,
+    skipped: false,
+    hash: verification.stReloaded.hash,
+    verified: verification.verified,
+    strictVerified: verification.strictVerified,
+    verifyIssues: undefined,
+    strictMode,
+    bodyLength: bodyTrimmed.length,
+  };
 }));
 
 export {};

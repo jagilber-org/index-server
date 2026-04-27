@@ -14,6 +14,7 @@ import schema from '../../schemas/instruction.schema.json';
 import { emitTrace, traceEnabled } from './tracing';
 import { getRuntimeConfig } from '../config/runtimeConfig';
 import { splitOversizedEntry } from './autoSplit';
+import { logError } from './logger.js';
 
 export interface IndexLoadResult {
   entries: InstructionEntry[];
@@ -36,6 +37,18 @@ export interface IndexLoadSummary {
   softWarnings?: Record<string, number>; // non-fatal issues (e.g. near-size-limit)
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function getRetryBackoffMs(baseBackoff: number, attempt: number): number {
+  return baseBackoff * Math.pow(2, attempt - 1) + Math.floor(Math.random() * baseBackoff);
+}
+
+function isRetryableLoadError(error: string): boolean {
+  return /empty file transient|unexpected end of json input|eprem|ebusy|eacces|enoent/i.test(error);
+}
+
 export class IndexLoader {
   constructor(private readonly baseDir: string = getRuntimeConfig().index.baseDir, private readonly classifier = new ClassificationService()){}
 
@@ -45,9 +58,8 @@ export class IndexLoader {
    * to momentary locks while another process is atomically renaming/writing.
    */
   private readJsonWithRetry(file: string): unknown {
-    const { attempts, backoffMs } = getRuntimeConfig().index.readRetries;
+    const { attempts } = getRuntimeConfig().index.readRetries;
     const maxAttempts = Math.max(1, attempts);
-    const baseBackoff = Math.max(1, backoffMs);
     let lastErr: unknown = null;
     for(let attempt=1; attempt<=maxAttempts; attempt++){
       try {
@@ -62,13 +74,25 @@ export class IndexLoader {
         const transient = code==='EPERM' || code==='EBUSY' || code==='EACCES' || code==='ENOENT' || (err instanceof Error && /transient|JSON/.test(err.message));
         if(!transient || attempt===maxAttempts){ lastErr = err; break; }
         lastErr = err;
-        const sleep = baseBackoff * Math.pow(2, attempt-1) + Math.floor(Math.random()*baseBackoff);
-        const start = Date.now();
-        while(Date.now()-start < sleep){ /* spin tiny backoff (< few ms) */ }
       }
     }
     if(lastErr) throw lastErr instanceof Error? lastErr: new Error('readJsonWithRetry failed');
     return {}; // unreachable but satisfies typing
+  }
+
+  async loadAsync(): Promise<IndexLoadResult> {
+    const { attempts, backoffMs } = getRuntimeConfig().index.readRetries;
+    const maxAttempts = Math.max(1, attempts);
+    const baseBackoff = Math.max(1, backoffMs);
+    for(let attempt = 1; attempt <= maxAttempts; attempt++){
+      const result = this.load();
+      const retryable = result.errors.length > 0 && result.errors.every(error => isRetryableLoadError(error.error));
+      if(!retryable || attempt === maxAttempts){
+        return result;
+      }
+      await sleep(getRetryBackoffMs(baseBackoff, attempt));
+    }
+    return this.load();
   }
 
   load(): IndexLoadResult {
@@ -124,7 +148,7 @@ export class IndexLoader {
     }
   } catch { /* ignore meta-schema registration issues */ }
   // Patch schema body maxLength from config before compiling (allows INDEX_SERVER_BODY_WARN_LENGTH override)
-  const bodyMaxLen = IndexConfig.bodyWarnLength || 100000;
+  const bodyMaxLen = IndexConfig.bodyWarnLength || 50000;
   const autoSplit = IndexConfig.autoSplitOversized === true;
   const schemaCopy = JSON.parse(JSON.stringify(schema)) as Record<string, unknown>;
   try {
@@ -571,7 +595,7 @@ export class IndexLoader {
           bump('schema');
           if(trace) trace.push({ file:f, accepted:false, reason });
           // Log schema rejections at info level for operational visibility
-          try { console.error(`[index:skip] ${f}: ${reason}`); } catch { /* ignore */ }
+          try { logError(`[index:skip] ${f}: ${reason}`); } catch { /* ignore */ }
           if(traceEnabled(1)){
             try { emitTrace('[trace:index:file-end]', { file: f, accepted: false, reason, scanned: scannedSoFar, acceptedSoFar }); } catch { /* ignore */ }
             try { emitTrace('[trace:index:file-progress]', { scanned: scannedSoFar, total: files.length, acceptedSoFar, rejectedSoFar: scannedSoFar - acceptedSoFar }); } catch { /* ignore */ }
@@ -585,7 +609,7 @@ export class IndexLoader {
           errors.push({ file: f, error: reason });
           bump('classification');
           if(trace) trace.push({ file:f, accepted:false, reason });
-          try { console.error(`[index:skip] ${f}: classification: ${reason}`); } catch { /* ignore */ }
+          try { logError(`[index:skip] ${f}: classification: ${reason}`); } catch { /* ignore */ }
           if(traceEnabled(1)){
             try { emitTrace('[trace:index:file-end]', { file: f, accepted: false, reason, scanned: scannedSoFar, acceptedSoFar }); } catch { /* ignore */ }
             try { emitTrace('[trace:index:file-progress]', { scanned: scannedSoFar, total: files.length, acceptedSoFar, rejectedSoFar: scannedSoFar - acceptedSoFar }); } catch { /* ignore */ }

@@ -154,7 +154,7 @@ describe('publish script hardening', () => {
     });
   });
 
-  describe('dotfile stripping behavior', () => {
+  describe.skipIf(!HAS_PUBLISH_EXCLUDE)('dotfile stripping behavior', () => {
     let fakeRoot: string;
     let outputDir: string;
 
@@ -282,10 +282,12 @@ describe('publish script hardening', () => {
       expect(src).toMatch(/Tag '\$Tag' already exists on the remote\./);
     });
 
-    it('Publish-ToMirror.ps1 removes existing remote tags during reset publish', () => {
+    it('Publish-ToMirror.ps1 only removes the target remote tag during explicit overwrite', () => {
       const src = fs.readFileSync(path.join(REPO_ROOT, 'scripts', 'Publish-ToMirror.ps1'), 'utf8');
-      expect(src).toContain("Get-RemoteRefs -RemoteName 'public' -RefKind 'tags'");
-      expect(src).toContain(`@('push', 'public', ":refs/tags/$tagName")`);
+      expect(src).toContain("Invoke-Git -Arguments @('ls-remote', '--tags', 'public', \"refs/tags/$Tag\")");
+      expect(src).toContain("if ($AllowTagOverwrite) {");
+      expect(src).toContain(`@('push', 'public', ":refs/tags/$Tag")`);
+      expect(src).toContain('Existing remote tags are preserved to avoid orphaning GitHub Releases.');
     });
 
     it('Publish-ToMirror.ps1 stages into a temporary git workspace instead of mutating SourcePath', () => {
@@ -293,6 +295,17 @@ describe('publish script hardening', () => {
       expect(src).toContain('$publishWorkspace');
       expect(src).toContain('Copy-PreparedContent -SourceRoot $SourcePath');
       expect(src).not.toContain('Push-Location $SourcePath');
+    });
+
+    it('Publish-ToMirror.ps1 -CreatePR clones main from the public remote so the PR has shared ancestry', () => {
+      const src = fs.readFileSync(path.join(REPO_ROOT, 'scripts', 'Publish-ToMirror.ps1'), 'utf8');
+      // Clone-from-main (not orphan init) is what allows `gh pr create` to compute a diff.
+      expect(src).toContain('git clone --origin public --branch main --single-branch --depth 1');
+      // Tracked content is wiped before the prepared snapshot is laid down so the
+      // commit is exactly the diff of $SourcePath against main.
+      expect(src).toContain("'rm', '-rf', '--ignore-unmatch'");
+      // DirectPublish / CreateReviewRepo continue to use orphan-init (clean-room snapshot).
+      expect(src).toContain('Orphan-init flow for DirectPublish and CreateReviewRepo');
     });
 
     it('neither blocklist is empty', () => {

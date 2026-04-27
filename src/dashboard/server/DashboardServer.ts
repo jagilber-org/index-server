@@ -150,7 +150,7 @@ export class DashboardServer {
         const origin = req.headers.origin;
         // nosemgrep: javascript.express.security.cors-misconfiguration.cors-misconfiguration -- origin is validated against loopback-only regex; not user-controlled
         if (origin && /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/.test(origin)) {
-          res.header('Access-Control-Allow-Origin', origin);
+          res.header('Access-Control-Allow-Origin', origin); // lgtm[js/cors-misconfiguration] — origin validated against loopback-only regex above
         }
         res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
         res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');

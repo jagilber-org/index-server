@@ -201,7 +201,7 @@ Appears when selecting an instruction for edit or creating a new one (when mutat
 Enable mutation (example):
 
 ```bash
-INDEX_SERVER_MUTATION=1 INDEX_SERVER_DASHBOARD=1 npm start
+INDEX_SERVER_DASHBOARD=1 npm start
 ```
 
 #### Markdown Preview
@@ -425,10 +425,10 @@ When the server is running (dashboard optional), a new MCP tool `dashboard_confi
     {
       "name": "INDEX_SERVER_MUTATION",
       "category": "core",
-      "description": "Enable mutation tools (add/import/remove/enrich/governance updates).",
+      "description": "Optional read-only override for mutation tools (unset/1=enabled, 0=off).",
       "stability": "stable",
       "since": "1.0.0",
-      "default": "off",
+      "default": "on",
       "type": "boolean",
       "value": "1",          // present only if set
       "enabled": true,         // boolean flags include parsed enabled
@@ -444,9 +444,9 @@ When the server is running (dashboard optional), a new MCP tool `dashboard_confi
 | Field | Meaning |
 |-------|---------|
 | name | Environment variable identifier |
-| category | Logical grouping (core, dashboard, manifest, tracing, instructions, usage, metrics, validation, diagnostics, stress, auth, experimental, deprecated) |
+| category | Logical grouping (core, dashboard, manifest, tracing, instructions, usage, metrics, validation, diagnostics, stress, auth, experimental) |
 | description | Concise human readable purpose |
-| stability | Lifecycle classification (stable/diagnostic/experimental/deprecated/reserved) |
+| stability | Lifecycle classification (stable/diagnostic/experimental/reserved) |
 | since | First version flag introduced (best effort) |
 | default | Documented default behavior when unset |
 | type | Expected value type (boolean/number/string) |
@@ -464,7 +464,7 @@ When the server is running (dashboard optional), a new MCP tool `dashboard_confi
 
 - Auditing: Compare two environments by diffing returned flag arrays; highlight mismatches for investigation.
 - UI: Populate a feature flag matrix with grouping & stability badges.
-- Testing: Assert required stable flags exist with expected defaults; ensure deprecated flags remain listed (visibility) but are not active.
+- Testing: Assert required stable flags exist with expected defaults and that diagnostics stay inactive under production profiles.
 - Hardening: Failsafe check in CI that no diagnostic flags are active in production build pipeline (e.g. assert all diagnostic flags have enabled=false under prod profile).
 
 ### Extension Guidance
@@ -476,4 +476,4 @@ When adding a new flag:
 3. Update README environment table if user‑facing.
 4. Add tests if behavior materially affects runtime semantics.
 
-> The curated list avoids dynamic discovery so that even removed / deprecated flags may be retained for operator awareness and historical audits.
+> The curated list avoids dynamic discovery so flag ordering and grouping remain stable for operators, tests, and UI diffs.

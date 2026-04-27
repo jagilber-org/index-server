@@ -233,7 +233,7 @@ function scanFile(filePath) {
       return null;
     }
 
-    const content = fs.readFileSync(filePath, 'utf8');
+    const content = fs.readFileSync(filePath, 'utf8'); // lgtm[js/file-system-race] — scanner reads files traversed in this run; CLI tool
     return scanContent(content, filePath);
   } catch (error) {
     if (error.code === 'ENOENT') return null;

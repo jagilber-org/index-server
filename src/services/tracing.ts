@@ -1,6 +1,8 @@
 import fs from 'fs';
 import path from 'path';
+import crypto from 'crypto';
 import { getRuntimeConfig } from '../config/runtimeConfig';
+import { logError } from './logger.js';
 
 export type TraceLevel = 0|1|2|3|4;
 
@@ -66,7 +68,7 @@ function resolveSessionId(): string {
   if (cachedSessionId) return cachedSessionId;
   const tracing = getRuntimeConfig().tracing;
   const provided = tracing.sessionId && tracing.sessionId.trim().length ? tracing.sessionId.trim() : undefined;
-  cachedSessionId = provided || Math.random().toString(36).slice(2, 10); // lgtm[js/insecure-randomness] — trace ID for correlation, not security
+  cachedSessionId = provided || crypto.randomBytes(4).toString('hex');
   return cachedSessionId;
 }
 
@@ -195,10 +197,13 @@ export function emitTrace(label: string, data: unknown, min: TraceLevel = 1): vo
 
   pushBuffer(rec, tracing.buffer);
 
-  try {
-    // eslint-disable-next-line no-console
-    console.error(label, JSON.stringify(rec));
-  } catch { /* ignore */ }
+  // Only emit to stderr for high trace levels to avoid flooding CI/test logs.
+  // Trace data is still captured in the buffer and written to file if configured.
+  if (currentTraceLevel() >= 3) {
+    try {
+      logError(label, JSON.stringify(rec));
+    } catch { /* ignore */ }
+  }
 
   if (!(tracing.persist || tracing.file)) return;
 
@@ -208,7 +213,7 @@ export function emitTrace(label: string, data: unknown, min: TraceLevel = 1): vo
 
   const line = `${label} ${JSON.stringify(rec)}\n`;
   try {
-    stream.write(line);
+    stream.write(line); // lgtm[js/http-to-file-access] — trace stream targets config-controlled trace file
     traceBytesWritten += Buffer.byteLength(line);
     rotateIfNeeded();
     if (tracing.fsync) {

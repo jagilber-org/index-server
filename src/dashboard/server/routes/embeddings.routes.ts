@@ -7,6 +7,7 @@ import { Router, Request, Response } from 'express';
 import fs from 'node:fs';
 import { getRuntimeConfig } from '../../../config/runtimeConfig.js';
 import { getInstructionEmbeddings } from '../../../services/embeddingService.js';
+import type { IEmbeddingStore } from '../../../services/storage/types.js';
 import type { IndexLocals } from '../middleware/ensureLoadedMiddleware.js';
 import { dashboardAdminAuth } from './adminAuth.js';
 
@@ -181,22 +182,29 @@ function computeStats(
 // Route factory
 // ---------------------------------------------------------------------------
 
-export function createEmbeddingsRoutes(embeddingPathOverride?: string): Router {
+export function createEmbeddingsRoutes(embeddingPathOverride?: string, embeddingStore?: IEmbeddingStore): Router {
   const router = Router();
 
   router.get('/embeddings/projection', (_req: Request, res: Response) => { // lgtm[js/missing-rate-limiting] — parent router applies rate-limit
     try {
-      const embeddingPath = embeddingPathOverride ?? getRuntimeConfig().semantic.embeddingPath ?? '';
+      let data: EmbeddingsFile;
 
-      if (!embeddingPath || !fs.existsSync(embeddingPath)) {
-        return res.status(404).json({
-          success: false,
-          error: 'Embeddings file not found',
-        });
+      if (embeddingStore) {
+        // Use IEmbeddingStore abstraction (works with both JSON and SQLite)
+        const loaded = embeddingStore.load();
+        if (!loaded) {
+          return res.status(404).json({ success: false, error: 'No embeddings data in store' });
+        }
+        data = { indexHash: loaded.indexHash, modelName: loaded.modelName ?? 'unknown', embeddings: loaded.embeddings };
+      } else {
+        // Fallback: read directly from JSON file
+        const embeddingPath = embeddingPathOverride ?? getRuntimeConfig().semantic.embeddingPath ?? '';
+        if (!embeddingPath || !fs.existsSync(embeddingPath)) {
+          return res.status(404).json({ success: false, error: 'Embeddings file not found' });
+        }
+        const raw = fs.readFileSync(embeddingPath, 'utf-8');
+        data = JSON.parse(raw);
       }
-
-      const raw = fs.readFileSync(embeddingPath, 'utf-8');
-      const data: EmbeddingsFile = JSON.parse(raw);
 
       const ids = Object.keys(data.embeddings);
       const vectors = ids.map(id => data.embeddings[id]);

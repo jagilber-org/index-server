@@ -8,6 +8,7 @@
  * - Promotion workflow guidance
  */
 import { describe, it, expect } from 'vitest';
+import { getRuntimeConfig } from '../config/runtimeConfig';
 import { spawnServer } from './helpers/mcpTestClient.js';
 
 /**
@@ -190,7 +191,7 @@ describe('index_schema tool', () => {
 
     const lengthRule = bodyRules.find((r: any) => r.rule === 'Length');
     expect(lengthRule).toBeDefined();
-    expect(lengthRule.constraint).toContain('20,000');
+    expect(lengthRule.constraint).toContain(getRuntimeConfig().index.bodyWarnLength.toLocaleString('en-US'));
   });
 
   it('includes priority range constraint', async () => {

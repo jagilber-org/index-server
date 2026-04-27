@@ -14,6 +14,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { spawn, ChildProcess } from 'child_process';
 import path from 'path';
 import fs from 'fs';
+import { StdioFramingParser, buildContentLengthFrame } from './util/stdioFraming.js';
 
 const SERVER = path.resolve(__dirname, '../../dist/server/index-server.js');
 const TIMEOUT = 10000;
@@ -68,29 +69,19 @@ function createCleanEnv() {
 
 describe('Dispatcher Action Enum Validation', () => {
   let proc: ChildProcess;
-  let responses: JsonRpcResponse[];
+  let parser: StdioFramingParser;
 
   function send(msg: JsonRpcRequest) {
     if (!proc.stdin) throw new Error('stdin not available');
-    proc.stdin.write(JSON.stringify(msg) + '\n');
+    proc.stdin.write(buildContentLengthFrame(msg));
   }
 
   function waitForResponse(id: number | string, timeoutMs = 5000): Promise<JsonRpcResponse> {
-    return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => reject(new Error(`Timeout waiting for response ${id}`)), timeoutMs);
-      const interval = setInterval(() => {
-        const found = responses.find(r => r.id === id);
-        if (found) {
-          clearInterval(interval);
-          clearTimeout(timeout);
-          resolve(found);
-        }
-      }, 50);
-    });
+    return parser.waitForId(Number(id), timeoutMs, 50).then(frame => JSON.parse(frame.raw) as JsonRpcResponse);
   }
 
   beforeEach(async () => {
-    responses = [];
+    parser = new StdioFramingParser();
 
     const tmpDir = path.join(__dirname, '../../tmp/dispatcher-enum-test');
     if (fs.existsSync(tmpDir)) fs.rmSync(tmpDir, { recursive: true, force: true });
@@ -122,22 +113,7 @@ describe('Dispatcher Action Enum Validation', () => {
     proc.stdout?.setEncoding('utf8');
     proc.stderr?.setEncoding('utf8');
 
-    let buffer = '';
-    proc.stdout?.on('data', (chunk: string) => {
-      buffer += chunk;
-      const lines = buffer.split('\n');
-      buffer = lines.pop() || '';
-
-      for (const line of lines) {
-        if (!line.trim()) continue;
-        try {
-          const msg = JSON.parse(line);
-          if (msg.jsonrpc === '2.0' && msg.id !== undefined) {
-            responses.push(msg);
-          }
-        } catch { /* ignore non-JSON */ }
-      }
-    });
+    proc.stdout?.on('data', (chunk: string) => parser.push(chunk));
 
     // Wait for initialization
     send({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'test', version: '1.0.0' } } });
@@ -145,7 +121,7 @@ describe('Dispatcher Action Enum Validation', () => {
 
     // Send initialized notification (no response expected)
     if (proc.stdin) {
-      proc.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
+      proc.stdin.write(buildContentLengthFrame({ jsonrpc: '2.0', method: 'notifications/initialized' }));
     }
 
     // Give index time to initialize - increased for reliable index load
@@ -257,14 +233,7 @@ describe('Dispatcher Action Enum Validation', () => {
     }
   }, TIMEOUT);
 
-  it.skip('valid action with valid params succeeds', async () => { // SKIP_OK: subprocess IPC timeout — see TODO
-    // TODO: Subprocess stdin/stdout communication fails for Index-dependent actions
-    // - Dev server confirmed working (process.cwd() dev repo)
-    // - Test creates instruction file but subprocess doesn't respond
-    // - Tried: MCP notification fix, 1000ms delay, test instruction creation
-    // - Result: Still timeouts at 6800ms+
-    // - Impact: None - 6/11 tests validate Priority 1.1 improvements
-    // - Investigation needed: Subprocess IPC debugging for index handlers
+  it('valid action with valid params succeeds', async () => {
     send({ jsonrpc: '2.0', id: 5, method: 'tools/call', params: {
       name: 'index_dispatch',
       arguments: { action: 'list' }
@@ -281,8 +250,7 @@ describe('Dispatcher Action Enum Validation', () => {
     expect(result.items).toBeInstanceOf(Array);
   }, TIMEOUT);
 
-  it.skip('health action returns status information', async () => { // SKIP_OK: subprocess IPC timeout
-    // TODO: Same subprocess communication issue as list action above
+  it('health action returns status information', async () => {
     send({ jsonrpc: '2.0', id: 6, method: 'tools/call', params: {
       name: 'index_dispatch',
       arguments: { action: 'health' }
@@ -299,8 +267,7 @@ describe('Dispatcher Action Enum Validation', () => {
     expect(result.governanceHash).toBeDefined();
   }, TIMEOUT);
 
-  it.skip('categories action returns category list', async () => { // SKIP_OK: subprocess IPC timeout
-    // TODO: Same subprocess communication issue as list action above
+  it('categories action returns category list', async () => {
     send({ jsonrpc: '2.0', id: 7, method: 'tools/call', params: {
       name: 'index_dispatch',
       arguments: { action: 'categories' }
@@ -333,8 +300,7 @@ describe('Dispatcher Action Enum Validation', () => {
     expect(result.files).toBeInstanceOf(Array);
   }, TIMEOUT);
 
-  it.skip('export action returns instruction data', async () => { // SKIP_OK: subprocess IPC timeout
-    // TODO: Same subprocess communication issue as list action above
+  it('export action returns instruction data', async () => {
     send({ jsonrpc: '2.0', id: 9, method: 'tools/call', params: {
       name: 'index_dispatch',
       arguments: { action: 'export', id: 'test-dispatcher-instruction' }
@@ -351,8 +317,7 @@ describe('Dispatcher Action Enum Validation', () => {
     expect(result.items).toBeInstanceOf(Array);
   }, TIMEOUT);
 
-  it.skip('search action with query parameter works', async () => { // SKIP_OK: subprocess IPC timeout
-    // TODO: Same subprocess communication issue as list action above
+  it('search action with query parameter works', async () => {
     send({ jsonrpc: '2.0', id: 10, method: 'tools/call', params: {
       name: 'index_dispatch',
       arguments: { action: 'search', q: 'test' }
@@ -372,29 +337,19 @@ describe('Dispatcher Action Enum Validation', () => {
 
 describe('Dispatcher Tool Schema Validation', () => {
   let proc: ChildProcess;
-  let responses: JsonRpcResponse[];
+  let parser: StdioFramingParser;
 
   function send(msg: JsonRpcRequest) {
     if (!proc.stdin) throw new Error('stdin not available');
-    proc.stdin.write(JSON.stringify(msg) + '\n');
+    proc.stdin.write(buildContentLengthFrame(msg));
   }
 
   function waitForResponse(id: number | string, timeoutMs = 5000): Promise<JsonRpcResponse> {
-    return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => reject(new Error(`Timeout waiting for response ${id}`)), timeoutMs);
-      const interval = setInterval(() => {
-        const found = responses.find(r => r.id === id);
-        if (found) {
-          clearInterval(interval);
-          clearTimeout(timeout);
-          resolve(found);
-        }
-      }, 50);
-    });
+    return parser.waitForId(Number(id), timeoutMs, 50).then(frame => JSON.parse(frame.raw) as JsonRpcResponse);
   }
 
   beforeEach(async () => {
-    responses = [];
+    parser = new StdioFramingParser();
 
     const tmpDir = path.join(__dirname, '../../tmp/dispatcher-schema-test');
     if (fs.existsSync(tmpDir)) fs.rmSync(tmpDir, { recursive: true, force: true });
@@ -408,29 +363,14 @@ describe('Dispatcher Tool Schema Validation', () => {
     proc.stdout?.setEncoding('utf8');
     proc.stderr?.setEncoding('utf8');
 
-    let buffer = '';
-    proc.stdout?.on('data', (chunk: string) => {
-      buffer += chunk;
-      const lines = buffer.split('\n');
-      buffer = lines.pop() || '';
-
-      for (const line of lines) {
-        if (!line.trim()) continue;
-        try {
-          const msg = JSON.parse(line);
-          if (msg.jsonrpc === '2.0' && msg.id !== undefined) {
-            responses.push(msg);
-          }
-        } catch { /* ignore non-JSON */ }
-      }
-    });
+    proc.stdout?.on('data', (chunk: string) => parser.push(chunk));
 
     send({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'test', version: '1.0.0' } } });
     await waitForResponse(1);
 
     // Send initialized notification (no response expected)
     if (proc.stdin) {
-      proc.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
+      proc.stdin.write(buildContentLengthFrame({ jsonrpc: '2.0', method: 'notifications/initialized' }));
     }
 
     // Give index time to initialize - increased for reliable index load

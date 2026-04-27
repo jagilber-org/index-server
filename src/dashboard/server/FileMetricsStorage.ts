@@ -11,6 +11,13 @@ export class FileMetricsStorage {
   private storageDir: string;
   private maxFiles: number;
   private retentionMinutes: number;
+  private cleanupHealth = {
+    degraded: false,
+    deletionFailures: 0,
+    lastDeletionError: undefined as string | undefined,
+    lastDeletionFailureAt: undefined as number | undefined,
+    lastDeletionRecoveredAt: undefined as number | undefined,
+  };
 
   constructor(options: {
     storageDir?: string;
@@ -109,12 +116,19 @@ export class FileMetricsStorage {
     totalSizeKB: number;
     oldestTimestamp?: number;
     newestTimestamp?: number;
+    cleanup: {
+      degraded: boolean;
+      deletionFailures: number;
+      lastDeletionError?: string;
+      lastDeletionFailureAt?: number;
+      lastDeletionRecoveredAt?: number;
+    };
   }> {
     try {
       const files = await this.getSnapshotFiles();
 
       if (files.length === 0) {
-        return { fileCount: 0, totalSizeKB: 0 };
+        return { fileCount: 0, totalSizeKB: 0, cleanup: this.getCleanupHealth() };
       }
 
       let totalSize = 0;
@@ -134,10 +148,11 @@ export class FileMetricsStorage {
         totalSizeKB: Math.round(totalSize / 1024),
         oldestTimestamp: timestamps.length > 0 ? Math.min(...timestamps) : undefined,
         newestTimestamp: timestamps.length > 0 ? Math.max(...timestamps) : undefined,
+        cleanup: this.getCleanupHealth(),
       };
     } catch (error) {
       logError('[FileMetricsStorage] Failed to get storage stats', error);
-      return { fileCount: 0, totalSizeKB: 0 };
+      return { fileCount: 0, totalSizeKB: 0, cleanup: this.getCleanupHealth() };
     }
   }
 
@@ -147,14 +162,24 @@ export class FileMetricsStorage {
   async clearAll(): Promise<void> {
     try {
       const files = await this.getSnapshotFiles();
-      await Promise.all(
-        files.map(file =>
-          fs.promises.unlink(path.join(this.storageDir, file)).catch(() => {})
-        )
-      );
+      const results = await Promise.all(files.map(file => this.deleteSnapshotFile(file)));
+      const failedCount = results.filter(result => !result).length;
+      if (failedCount > 0) {
+        logWarn('[FileMetricsStorage] Failed to delete one or more metrics files during clear', { failedCount });
+      }
     } catch (error) {
       logError('[FileMetricsStorage] Failed to clear metrics storage', error);
     }
+  }
+
+  getCleanupHealth(): {
+    degraded: boolean;
+    deletionFailures: number;
+    lastDeletionError?: string;
+    lastDeletionFailureAt?: number;
+    lastDeletionRecoveredAt?: number;
+  } {
+    return { ...this.cleanupHealth };
   }
 
   private async ensureStorageDir(): Promise<void> {
@@ -202,16 +227,46 @@ export class FileMetricsStorage {
       }
 
       if (filesToDelete.length > 0) {
-        await Promise.all(
-          filesToDelete.map(file =>
-            fs.promises.unlink(path.join(this.storageDir, file)).catch(() => {})
-          )
-        );
+        const results = await Promise.all(filesToDelete.map(file => this.deleteSnapshotFile(file)));
+        const deletedCount = results.filter(Boolean).length;
+        const failedCount = filesToDelete.length - deletedCount;
 
-        logInfo('[FileMetricsStorage] Cleaned up old metrics files', { count: filesToDelete.length });
+        logInfo('[FileMetricsStorage] Cleaned up old metrics files', { count: deletedCount, failedCount });
       }
     } catch (error) {
       logError('[FileMetricsStorage] Failed to cleanup old metrics files', error);
+    }
+  }
+
+  private formatCleanupError(error: unknown): string {
+    return error instanceof Error ? (error.stack ?? error.message) : String(error);
+  }
+
+  private recordDeletionFailure(file: string, error: unknown): void {
+    this.cleanupHealth.degraded = true;
+    this.cleanupHealth.deletionFailures += 1;
+    this.cleanupHealth.lastDeletionError = this.formatCleanupError(error);
+    this.cleanupHealth.lastDeletionFailureAt = Date.now();
+    this.cleanupHealth.lastDeletionRecoveredAt = undefined;
+    logWarn(`[FileMetricsStorage] Failed to delete metrics file ${file}`, error);
+  }
+
+  private recordDeletionRecovery(file: string): void {
+    if (!this.cleanupHealth.degraded) return;
+    this.cleanupHealth.degraded = false;
+    this.cleanupHealth.lastDeletionError = undefined;
+    this.cleanupHealth.lastDeletionRecoveredAt = Date.now();
+    logInfo('[FileMetricsStorage] Metrics file cleanup recovered', { file, deletionFailures: this.cleanupHealth.deletionFailures });
+  }
+
+  private async deleteSnapshotFile(file: string): Promise<boolean> {
+    try {
+      await fs.promises.unlink(path.join(this.storageDir, file));
+      this.recordDeletionRecovery(file);
+      return true;
+    } catch (error) {
+      this.recordDeletionFailure(file, error);
+      return false;
     }
   }
 }

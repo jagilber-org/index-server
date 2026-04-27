@@ -1,6 +1,7 @@
 # Privacy Policy
 
-**Effective Date:** 2025  
+**Effective Date:** 2025-06-15  
+**Last Updated:** 2026-04-25  
 **Project:** Index (`@jagilber-org/index-server`)  
 **License:** MIT
 
@@ -8,20 +9,22 @@
 
 ## Summary
 
-Index collects **no personal data**. All processing occurs locally on your machine. No telemetry, analytics, usage tracking, or phone-home behavior exists in the default configuration.
+Index Server itself collects **no personal data**. All processing occurs locally on your machine in the default configuration. No telemetry, analytics, usage tracking, or phone-home behavior exists. Optional features (semantic search) may trigger a one-time third-party download — see [Optional Network Connections](#optional-network-connections) for details.
 
 ---
 
 ## Data Collection
 
-**We collect no data.** Specifically:
+**Index Server itself collects no personal data.** Specifically:
 
-- **No personal information** is collected, stored, or transmitted
-- **No telemetry** is sent to any external service
+- **No personal information** is collected, stored, or transmitted by Index Server
+- **No telemetry** is sent to any external service by Index Server
 - **No usage analytics** leave your machine
 - **No cookies** are set (the dashboard, if enabled, is localhost-only)
 - **No user accounts** are required
 - **No registration** is required
+
+> **Scope note:** This policy covers only the Index Server application. Your MCP client, operating system, Node.js runtime, and npm registry may have their own data collection practices outside the scope of this policy.
 
 ---
 
@@ -41,7 +44,9 @@ Index has exactly **three** code paths that make outbound network connections. *
 | Leader/follower RPC | `127.0.0.1` (localhost only) | Multi-instance mode only | `INDEX_SERVER_MODE=standalone` (default) |
 | Instance health ping | `127.0.0.1` (localhost only) | Dashboard clustering only | `INDEX_SERVER_DASHBOARD=0` (default) |
 
-**No user data is included in any outbound connection.** The only external download is a pre-trained open-source ML model from HuggingFace. After the one-time download, the model is cached locally and all subsequent operations are fully offline.
+**No user data is included in any outbound connection.** The only external download is a pre-trained open-source ML model from HuggingFace.
+
+> **HuggingFace CDN note:** The one-time model download connects to `huggingface.co` over HTTPS. HuggingFace's CDN infrastructure may log standard HTTP request metadata (IP address, user-agent, timestamps) according to their own [privacy policy](https://huggingface.co/privacy). Index Server does not control or have access to HuggingFace's server-side logging. After the one-time download, the model is cached locally and all subsequent operations are fully offline.
 
 For detailed technical verification procedures (including Process Monitor and network audit commands), see [Network Privacy & Verification Guide](docs/network-privacy.md).
 

@@ -33,6 +33,22 @@
 .PARAMETER SkipCertCheck
   Skip TLS cert validation
 
+.PARAMETER SemanticSearch
+  Include semantic (embedding-based) search in each CRUD cycle.
+  Requires INDEX_SERVER_SEMANTIC_ENABLED=1 on the target server.
+
+.PARAMETER EmbeddingsCompute
+  Trigger embedding computation via the dashboard /api/embeddings/compute
+  endpoint at the start and end of the run. Requires -DashboardUrl.
+
+.PARAMETER EmbeddingsProjection
+  Fetch the /api/embeddings/projection endpoint after compute.
+  Requires -DashboardUrl.
+
+.PARAMETER DashboardUrl
+  Dashboard base URL for embedding HTTP endpoints (e.g. https://localhost:8687).
+  Defaults to BaseUrl if not specified.
+
 .PARAMETER CleanupOnly
   Only remove leftover stress-test instructions
 
@@ -42,6 +58,7 @@
 .EXAMPLE
   .\stress-test.ps1 -Iterations 50
   .\stress-test.ps1 -Iterations 200 -Parallel 4
+  .\stress-test.ps1 -SemanticSearch -EmbeddingsCompute -DashboardUrl https://localhost:8687 -SkipCertCheck
   .\stress-test.ps1 -CleanupOnly
 #>
 [CmdletBinding()]
@@ -52,6 +69,10 @@ param(
     [int]$Parallel = 1,
     [switch]$SkipCertCheck,
     [switch]$NoDelete,
+    [switch]$SemanticSearch,
+    [switch]$EmbeddingsCompute,
+    [switch]$EmbeddingsProjection,
+    [string]$DashboardUrl = '',
     [switch]$CleanupOnly,
     [string]$AdminKey = $env:INDEX_SERVER_ADMIN_API_KEY
 )
@@ -89,6 +110,52 @@ if (-not $health) {
     exit 1
 }
 Write-Host "Health: OK" -ForegroundColor Green
+
+# Dashboard URL for embedding HTTP endpoints
+if (-not $DashboardUrl) { $DashboardUrl = $BaseUrl }
+$dashboardArgs = @{}
+if ($SkipCertCheck) { $dashboardArgs['SkipCertificateCheck'] = $true }
+
+function Invoke-Dashboard {
+    param([string]$Method, [string]$Path, [int]$TimeoutSec = 120)
+    $url = "$DashboardUrl$Path"
+    $splat = @{ Uri = $url; Method = $Method; TimeoutSec = $TimeoutSec } + $dashboardArgs
+    if ($Method -eq 'POST') { $splat['ContentType'] = 'application/json' }
+    try {
+        $resp = Invoke-WebRequest @splat -ErrorAction Stop
+        return $resp.Content | ConvertFrom-Json
+    } catch {
+        $msg = $_.Exception.Message
+        try { $msg = $_.ErrorDetails.Message | ConvertFrom-Json | ForEach-Object { $_.error ?? $_.message ?? $msg } } catch {}
+        return [PSCustomObject]@{ success = $false; error = $msg }
+    }
+}
+
+# Pre-run embedding compute
+if ($EmbeddingsCompute) {
+    Write-Host ""
+    Write-Host "── Embedding Compute (pre-run) ──" -ForegroundColor Magenta
+    $sw = [System.Diagnostics.Stopwatch]::StartNew()
+    $emb = Invoke-Dashboard -Method POST -Path '/api/embeddings/compute'
+    $sw.Stop()
+    if ($emb.success) {
+        Write-Host ("  OK: {0} embeddings in {1}ms (model={2} device={3})" -f $emb.count, $sw.ElapsedMilliseconds, $emb.model, $emb.device) -ForegroundColor Green
+    } else {
+        Write-Host ("  WARN: {0}" -f ($emb.error ?? 'Unknown error')) -ForegroundColor Yellow
+    }
+}
+
+if ($EmbeddingsProjection) {
+    Write-Host "── Embedding Projection (pre-run) ──" -ForegroundColor Magenta
+    $sw = [System.Diagnostics.Stopwatch]::StartNew()
+    $proj = Invoke-Dashboard -Method GET -Path '/api/embeddings/projection'
+    $sw.Stop()
+    if ($proj.success) {
+        Write-Host ("  OK: {0} points, avgCosSim={1:N4} ({2}ms)" -f $proj.count, $proj.stats.avgCosineSim, $sw.ElapsedMilliseconds) -ForegroundColor Green
+    } else {
+        Write-Host ("  WARN: {0}" -f ($proj.error ?? 'Unknown error')) -ForegroundColor Yellow
+    }
+}
 
 # Cleanup mode
 if ($CleanupOnly) {
@@ -128,11 +195,21 @@ function Run-Cycle {
     $sw.Stop()
     $timings['get'] = $sw.ElapsedMilliseconds
 
-    # SEARCH
+    # SEARCH (keyword)
     $sw = [System.Diagnostics.Stopwatch]::StartNew()
     $searchResult = Invoke-Client @{ Action = 'search'; Keywords = @($Prefix, "$i") }
     $sw.Stop()
     $timings['search'] = $sw.ElapsedMilliseconds
+
+    # SEMANTIC SEARCH (when enabled)
+    if ($SemanticSearch) {
+        $sw = [System.Diagnostics.Stopwatch]::StartNew()
+        $semResult = Invoke-Client @{ Action = 'search'; Keywords = @("stress test instruction $i"); Mode = 'semantic' }
+        $sw.Stop()
+        $timings['semantic'] = $sw.ElapsedMilliseconds
+        $semJson = $semResult | ConvertFrom-Json -ErrorAction SilentlyContinue
+        if (-not $semJson -or $semJson.isError) { $errors += "SEMANTIC failed: $semResult" }
+    }
 
     # UPDATE (overwrite)
     $sw = [System.Diagnostics.Stopwatch]::StartNew()
@@ -195,6 +272,7 @@ else {
         $clientPath = $using:client
         $cArgs = $using:commonArgs
         $noDelete = $using:NoDelete
+        $doSemantic = $using:SemanticSearch
 
         $id = "$prefix-$i"
         $title = "Stress instruction $i"
@@ -224,11 +302,21 @@ else {
         $sw.Stop()
         $timings['get'] = $sw.ElapsedMilliseconds
 
-        # SEARCH
+        # SEARCH (keyword)
         $sw = [System.Diagnostics.Stopwatch]::StartNew()
         $searchResult = & $invokeClient @{ Action = 'search'; Keywords = @($prefix, "$i") }
         $sw.Stop()
         $timings['search'] = $sw.ElapsedMilliseconds
+
+        # SEMANTIC SEARCH (when enabled)
+        if ($doSemantic) {
+            $sw = [System.Diagnostics.Stopwatch]::StartNew()
+            $semResult = & $invokeClient @{ Action = 'search'; Keywords = @("stress test instruction $i"); Mode = 'semantic' }
+            $sw.Stop()
+            $timings['semantic'] = $sw.ElapsedMilliseconds
+            $semJson = $semResult | ConvertFrom-Json -ErrorAction SilentlyContinue
+            if (-not $semJson -or $semJson.isError) { $errors += "SEMANTIC failed: $semResult" }
+        }
 
         # UPDATE (overwrite)
         $sw = [System.Diagnostics.Stopwatch]::StartNew()
@@ -273,15 +361,15 @@ else {
 $totalSw.Stop()
 
 # Summary
-$passed = ($results | Where-Object { $_.Errors.Count -eq 0 }).Count
-$failed = ($results | Where-Object { $_.Errors.Count -gt 0 }).Count
+$passed = @($results | Where-Object { $_.Errors.Count -eq 0 }).Count
+$failed = @($results | Where-Object { $_.Errors.Count -gt 0 }).Count
 $allTimings = $results | ForEach-Object { $_.TotalMs }
 $avgMs = if ($allTimings.Count -gt 0) { [math]::Round(($allTimings | Measure-Object -Average).Average, 1) } else { 0 }
 $maxMs = if ($allTimings.Count -gt 0) { ($allTimings | Measure-Object -Maximum).Maximum } else { 0 }
 $minMs = if ($allTimings.Count -gt 0) { ($allTimings | Measure-Object -Minimum).Minimum } else { 0 }
 
 $opTimings = @{}
-foreach ($op in @('add','get','search','update','remove')) {
+foreach ($op in @('add','get','search','semantic','update','remove')) {
     $vals = $results | ForEach-Object { $_.Timings[$op] } | Where-Object { $_ -ne $null }
     if ($vals.Count -gt 0) {
         $opTimings[$op] = @{
@@ -302,7 +390,7 @@ Write-Host ""
 Write-Host "Cycle time (ms): avg=$avgMs  min=$minMs  max=$maxMs"
 Write-Host ""
 Write-Host "Per-operation avg (ms):"
-foreach ($op in @('add','get','search','update','remove')) {
+foreach ($op in @('add','get','search','semantic','update','remove')) {
     if ($opTimings.ContainsKey($op)) {
         $t = $opTimings[$op]
         Write-Host ("  {0,-8} avg={1,6}  min={2,6}  max={3,6}" -f $op, $t.Avg, $t.Min, $t.Max)
@@ -321,4 +409,33 @@ if ($failed -gt 0) {
 
 Write-Host ""
 Write-Host "All cycles passed." -ForegroundColor Green
+
+# Post-run embedding compute (after CRUD cycles modified the index)
+# Brief pause to avoid rate-limit after stress cycles
+Start-Sleep -Seconds 2
+if ($EmbeddingsCompute) {
+    Write-Host ""
+    Write-Host "── Embedding Compute (post-run) ──" -ForegroundColor Magenta
+    $sw = [System.Diagnostics.Stopwatch]::StartNew()
+    $emb = Invoke-Dashboard -Method POST -Path '/api/embeddings/compute'
+    $sw.Stop()
+    if ($emb.success) {
+        Write-Host ("  OK: {0} embeddings in {1}ms (model={2} device={3})" -f $emb.count, $sw.ElapsedMilliseconds, $emb.model, $emb.device) -ForegroundColor Green
+    } else {
+        Write-Host ("  FAIL: {0}" -f ($emb.error ?? 'Unknown error')) -ForegroundColor Red
+    }
+}
+
+if ($EmbeddingsProjection) {
+    Write-Host "── Embedding Projection (post-run) ──" -ForegroundColor Magenta
+    $sw = [System.Diagnostics.Stopwatch]::StartNew()
+    $proj = Invoke-Dashboard -Method GET -Path '/api/embeddings/projection'
+    $sw.Stop()
+    if ($proj.success) {
+        Write-Host ("  OK: {0} points, avgCosSim={1:N4} ({2}ms)" -f $proj.count, $proj.stats.avgCosineSim, $sw.ElapsedMilliseconds) -ForegroundColor Green
+    } else {
+        Write-Host ("  FAIL: {0}" -f ($proj.error ?? 'Unknown error')) -ForegroundColor Red
+    }
+}
+
 exit 0

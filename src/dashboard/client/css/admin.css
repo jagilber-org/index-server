@@ -1604,3 +1604,135 @@ a.mermaid-link { color: var(--admin-accent); }
 }
 
 /* .admin-root marker (used by tests, no visual styling) */
+
+/* ==========================================================================
+   Feedback Tab
+   ========================================================================== */
+
+.feedback-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+}
+
+.feedback-status-filter {
+    max-width: 160px;
+}
+
+.feedback-table-wrap {
+    overflow-x: auto;
+    min-height: 60px;
+}
+
+.feedback-empty {
+    padding: 24px;
+    color: var(--admin-text-dim);
+    font-size: 13px;
+    text-align: center;
+}
+
+.fb-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+
+.fb-th {
+    padding: 6px 10px;
+    text-align: left;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    color: var(--admin-text-dim);
+    border-bottom: 1px solid var(--admin-border);
+    white-space: nowrap;
+}
+
+.fb-cell {
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--admin-border-muted);
+    color: var(--admin-text);
+    vertical-align: middle;
+}
+
+.feedback-row {
+    cursor: pointer;
+    transition: background 0.1s;
+}
+
+.feedback-row:hover { background: var(--admin-surface-alt); }
+.feedback-row.selected { background: rgba(59,130,246,0.10); }
+
+.fb-id { font-family: monospace; font-size: 11px; color: var(--admin-text-dim); }
+.fb-title { max-width: 280px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 500; }
+.fb-type { white-space: nowrap; }
+.fb-ts { font-size: 11px; white-space: nowrap; }
+.fb-actions { white-space: nowrap; }
+
+.fb-badge {
+    display: inline-block;
+    padding: 2px 7px;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+    white-space: nowrap;
+}
+
+.feedback-form {
+    padding: 8px 0 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.feedback-form-row {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.feedback-form-row .form-group {
+    flex: 1;
+    min-width: 130px;
+}
+
+.feedback-detail-card {
+    margin-top: 16px;
+}
+
+.feedback-entry-description {
+    width: 100%;
+    resize: vertical;
+}
+
+.feedback-required {
+    color: var(--admin-danger);
+}
+
+.feedback-detail-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    padding-top: 8px;
+    border-top: 1px solid var(--admin-border);
+    margin-top: 4px;
+}
+
+/* Rate-limit banner (issue #63) */
+#rate-limit-banner {
+    animation: rl-fade-in 0.3s ease-out;
+}
+
+@keyframes rl-fade-in {
+    from { opacity: 0; transform: translateY(-8px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Backup warning banner (issue #121) */
+#backup-warning-banner {
+    animation: rl-fade-in 0.3s ease-out;
+}

@@ -1,7 +1,0 @@
-# Ignore everything except the packaged output
-node_modules/
-src/
-*.ts
-!dist/**
-tsconfig.json
-.vscode/

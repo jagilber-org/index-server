@@ -1,7 +1,8 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
+import * as logger from '../services/logger.js';
 import { createKnowledgeStore } from '../dashboard/server/KnowledgeStore';
 
 describe('KnowledgeStore', () => {
@@ -14,6 +15,7 @@ describe('KnowledgeStore', () => {
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     try { fs.rmSync(dataDir, { recursive: true, force: true }); } catch { /* ignore */ }
   });
 
@@ -113,6 +115,35 @@ describe('KnowledgeStore', () => {
       expect(entry).toBeDefined();
       expect(entry!.content).toBe('persist-content');
       expect(entry!.metadata.source).toBe('test');
+    });
+
+    it('logs a warning when persisted data cannot be loaded', () => {
+      const filePath = path.join(dataDir, 'knowledge-store.json');
+      fs.writeFileSync(filePath, '{not valid json');
+      const logWarnSpy = vi.spyOn(logger, 'logWarn').mockImplementation(() => undefined);
+
+      const store2 = createKnowledgeStore(dataDir);
+
+      expect(store2.count()).toBe(0);
+      expect(logWarnSpy).toHaveBeenCalledWith(
+        '[KnowledgeStore] Failed to load persisted knowledge store',
+        expect.any(Error)
+      );
+    });
+
+    it('logs a warning when persistence to disk fails', () => {
+      const logWarnSpy = vi.spyOn(logger, 'logWarn').mockImplementation(() => undefined);
+      const writeFileSyncSpy = vi.spyOn(fs, 'writeFileSync').mockImplementation(() => {
+        throw new Error('disk full');
+      });
+
+      expect(() => store.upsert('persist-failure', 'content')).not.toThrow();
+      expect(store.get('persist-failure')?.content).toBe('content');
+      expect(logWarnSpy).toHaveBeenCalledWith(
+        '[KnowledgeStore] Failed to persist knowledge store',
+        expect.any(Error)
+      );
+      expect(writeFileSyncSpy).toHaveBeenCalled();
     });
   });
 });

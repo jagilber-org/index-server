@@ -1,5 +1,7 @@
 import fs from 'fs';
 import path from 'path';
+import { logWarn, logInfo } from './logger.js';
+import { compileSafeRegex } from './regexSafety.js';
 
 export interface PromptRule {
   id: string; pattern?: string; mustContain?: string; severity: string; description: string;
@@ -7,9 +9,11 @@ export interface PromptRule {
 export interface PromptCategory { id: string; rules: PromptRule[] }
 export interface PromptCriteria { version: string; categories: PromptCategory[] }
 export interface PromptIssue { ruleId: string; severity: string; description: string; match?: string }
+interface CompiledPromptRule extends PromptRule { patternRegex?: RegExp; mustContainRegex?: RegExp }
+interface CompiledPromptCategory { id: string; rules: CompiledPromptRule[] }
 
 export class PromptReviewService {
-  private criteria: PromptCriteria;
+  private compiledCategories: CompiledPromptCategory[];
   /**
    * @param criteriaPath - Optional explicit path to a `PROMPT-CRITERIA.json` file.
    *   When omitted the service searches a set of standard candidate locations.
@@ -40,13 +44,13 @@ export class PromptReviewService {
     if(!loaded){
       // Graceful fallback: empty criteria so server can still start.
       const msg = `[promptReviewService] WARN: Could not locate PROMPT-CRITERIA.json in any candidate paths. Using empty criteria.`;
-      // Write to stderr explicitly (console.error already does)
-      console.error(msg);
+      // Write to stderr explicitly (logWarn writes to stderr)
+      logWarn(msg);
       loaded = { version: '0.0.0', categories: [] };
     } else {
-      console.error(`[promptReviewService] Loaded criteria from ${usedPath}`); // stderr so it won't pollute stdout
+      logInfo(`[promptReviewService] Loaded criteria from ${usedPath}`); // stderr so it won't pollute stdout
     }
-    this.criteria = loaded;
+    this.compiledCategories = this.compileCategories(loaded);
   }
   /**
    * Run all loaded criteria rules against a prompt string and return any detected issues.
@@ -55,25 +59,51 @@ export class PromptReviewService {
    */
   review(prompt: string): PromptIssue[] {
     const issues: PromptIssue[] = [];
-    for(const cat of this.criteria.categories){
+    for(const cat of this.compiledCategories){
       for(const rule of cat.rules){
-        if(rule.pattern){
-          // Apply global + case-insensitive flags for broader detection
-          const regex = new RegExp(rule.pattern,'gi');
-            const m = prompt.match(regex);
-            if(m){
-              issues.push({ ruleId: rule.id, severity: rule.severity, description: rule.description, match: m[0] });
-            }
+        if(rule.patternRegex){
+          rule.patternRegex.lastIndex = 0;
+          const m = prompt.match(rule.patternRegex);
+          if(m){
+            issues.push({ ruleId: rule.id, severity: rule.severity, description: rule.description, match: m[0] });
+          }
         }
-        if(rule.mustContain){
-          const mc = new RegExp(rule.mustContain,'i');
-          if(!mc.test(prompt)){
+        if(rule.mustContainRegex){
+          if(!rule.mustContainRegex.test(prompt)){
             issues.push({ ruleId: rule.id, severity: rule.severity, description: 'Missing required token(s): ' + rule.description });
           }
         }
       }
     }
     return issues;
+  }
+
+  private compileCategories(criteria: PromptCriteria): CompiledPromptCategory[] {
+    return criteria.categories.map((category) => ({
+      id: category.id,
+      rules: category.rules.map((rule) => this.compileRule(category.id, rule)),
+    }));
+  }
+
+  private compileRule(categoryId: string, rule: PromptRule): CompiledPromptRule {
+    const compiled: CompiledPromptRule = { ...rule };
+    if (rule.pattern) {
+      const { regex, error } = compileSafeRegex(rule.pattern, 'gi');
+      if (regex) {
+        compiled.patternRegex = regex;
+      } else {
+        logWarn(`[promptReviewService] Skipping unsafe pattern regex for rule "${rule.id}" in category "${categoryId}": ${error}`);
+      }
+    }
+    if (rule.mustContain) {
+      const { regex, error } = compileSafeRegex(rule.mustContain, 'i');
+      if (regex) {
+        compiled.mustContainRegex = regex;
+      } else {
+        logWarn(`[promptReviewService] Skipping unsafe mustContain regex for rule "${rule.id}" in category "${categoryId}": ${error}`);
+      }
+    }
+    return compiled;
   }
 }
 

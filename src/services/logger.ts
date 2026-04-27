@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { getRuntimeConfig } from '../config/runtimeConfig';
+import { isMcpLogBridgeActive, sendMcpLog } from './mcpLogBridge';
 
 // ── NDJSON Log Schema ───────────────────────────────────────────
 // Compliant with typescript-schema-viewer log analysis format.
@@ -206,8 +207,15 @@ function emit(rec: LogRecord){
   if (rec.correlationId) out.correlationId = rec.correlationId;
   const logLine = JSON.stringify(out);
 
-  // Always log to stderr for VS Code output panel
-  console.error(logLine);
+  // Route through MCP protocol notifications/message when available.
+  // This gives VS Code correct severity (info/debug/warning/error) instead
+  // of tagging every line as [warning] [server stderr].
+  if (isMcpLogBridgeActive()) {
+    sendMcpLog(rec.level, logLine);
+  } else {
+    // Pre-handshake: fall back to stderr (intercepted and buffered by McpStdioLogger)
+    console.error(logLine);
+  }
 
   // Also log to file if configured and available
   if (logFileHandle && !logFileHandle.destroyed) {

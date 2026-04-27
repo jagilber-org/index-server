@@ -8,22 +8,20 @@
 import path from 'node:path';
 import { Router, Request, Response } from 'express';
 import { getLocalHandler } from '../../../server/registry.js';
-import { ensureLoaded, invalidate, touchIndexVersion, writeEntry, removeEntry, getInstructionsDir } from '../../../services/indexContext.js';
+import { ensureLoadedAsync, invalidate, touchIndexVersion, writeEntryAsync, removeEntry, getInstructionsDir } from '../../../services/indexContext.js';
 import { dashboardAdminAuth } from './adminAuth.js';
 import { handleInstructionsSearch } from '../../../services/handlers.search.js';
 import { InstructionEntry } from '../../../models/instruction.js';
 import type { IndexLocals } from '../middleware/ensureLoadedMiddleware.js';
+import { isInstructionValidationError } from '../../../services/instructionRecordValidation.js';
+import { logError } from '../../../services/logger.js';
+import { validatePathContainment } from '../utils/pathContainment.js';
 
 /** Sanitize an instruction name with defense-in-depth path-traversal guard. */
 function safeName(name: string): string {
   const sanitized = String(name).replace(/[^a-zA-Z0-9-_]/g, '-');
-  // Defense-in-depth: verify the resolved path stays inside the instructions directory
   const base = getInstructionsDir();
-  const resolved = path.resolve(base, `${sanitized}.json`);
-  const normalized = path.normalize(resolved);
-  if (!normalized.startsWith(path.normalize(base) + path.sep) && normalized !== path.normalize(base)) {
-    throw new Error('Path traversal detected');
-  }
+  validatePathContainment(path.resolve(base, `${sanitized}.json`), base);
   return sanitized;
 }
 
@@ -80,7 +78,7 @@ export function createInstructionsRoutes(): Router {
       });
       res.json({ success: true, instructions, count: instructions.length, timestamp: Date.now() });
     } catch (error) {
-      console.error('[API] Failed to list instructions:', error);
+      logError('[API] Failed to list instructions:', error);
       res.status(500).json({ success: false, error: 'Failed to list instructions' });
     }
   });
@@ -127,7 +125,7 @@ export function createInstructionsRoutes(): Router {
       }
       res.json({ success: true, query, count: results.length, results, timestamp: Date.now() });
     } catch (error) {
-      console.error('[API] instructions search error:', error);
+      logError('[API] instructions search error:', error);
       res.status(500).json({ success: false, error: 'search_failed' });
     }
   });
@@ -153,7 +151,7 @@ export function createInstructionsRoutes(): Router {
         timestamp: Date.now()
       });
     } catch (error) {
-      console.error('[API] Failed to get categories:', error);
+      logError('[API] Failed to get categories:', error);
       res.status(500).json({
         success: false,
         error: 'Failed to get categories',
@@ -172,7 +170,7 @@ export function createInstructionsRoutes(): Router {
       if (!entry) return res.status(404).json({ success: false, error: 'Not found' });
       res.json({ success: true, content: entry, timestamp: Date.now() });
     } catch (error) {
-      console.error('[API] Failed to load instruction:', error);
+      logError('[API] Failed to load instruction:', error);
       res.status(500).json({ success: false, error: 'Failed to load instruction' });
     }
   });
@@ -181,28 +179,41 @@ export function createInstructionsRoutes(): Router {
    * POST /api/instructions - create new instruction
    * body: { name, content }
    */
-  router.post('/instructions', dashboardAdminAuth, (req: Request, res: Response) => { // lgtm[js/missing-rate-limiting] — parent router applies rate-limit
+  router.post('/instructions', dashboardAdminAuth, async (req: Request, res: Response) => { // lgtm[js/missing-rate-limiting] — parent router applies rate-limit
     try {
       const { name, content } = req.body || {};
       if (!name || !content) return res.status(400).json({ success: false, error: 'Missing name or content' });
       const id = safeName(name);
       const st = (res.locals as IndexLocals).indexState;
       if (st.byId.has(id)) return res.status(409).json({ success: false, error: 'Instruction already exists' });
+      const contentObj = typeof content === 'object' && content !== null ? content : {}; // lgtm[js/comparison-between-incompatible-types] — idiomatic typeof-object plus null check (typeof null === 'object' in JS)
       const entry: InstructionEntry = {
-        ...(typeof content === 'object' && content !== null ? content : {}),
+        ...contentObj,
         id,
-        title: (content && typeof content === 'object' ? content.title : undefined) || id,
-        body: (content && typeof content === 'object' ? content.body : undefined) || (typeof content === 'string' ? content : ''),
+        title: contentObj.title || id,
+        body: contentObj.body || (typeof content === 'string' ? content : ''),
+        categories: Array.isArray(contentObj.categories) ? contentObj.categories : [],
+        priority: typeof contentObj.priority === 'number' ? contentObj.priority : 50,
+        audience: contentObj.audience || 'all',
+        requirement: contentObj.requirement || 'optional',
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
-      writeEntry(entry); // lgtm[js/http-to-file-access] — writes to config-controlled instructions directory
+      await writeEntryAsync(entry); // lgtm[js/http-to-file-access] — writes to config-controlled instructions directory
       touchIndexVersion();
       invalidate();
-      ensureLoaded();
-      res.json({ success: true, message: 'Instruction created', name: id, timestamp: Date.now() });
+      const reloaded = await ensureLoadedAsync();
+      const verified = reloaded.byId.has(id);
+      if (!verified) {
+        logError('[API] Instruction written but NOT visible after reload', { id });
+        return res.status(500).json({ success: false, error: 'Instruction written but failed read-back verification' });
+      }
+      res.json({ success: true, message: 'Instruction created', name: id, verified, timestamp: Date.now() });
     } catch (error) {
-      console.error('[API] Failed to create instruction:', error);
+      if (isInstructionValidationError(error)) {
+        return res.status(400).json({ success: false, error: 'invalid_instruction', validationErrors: error.validationErrors });
+      }
+      logError('[API] Failed to create instruction:', error);
       res.status(500).json({ success: false, error: 'Failed to create instruction' });
     }
   });
@@ -210,7 +221,7 @@ export function createInstructionsRoutes(): Router {
   /**
    * PUT /api/instructions/:name - update existing instruction
    */
-  router.put('/instructions/:name', dashboardAdminAuth, (req: Request, res: Response) => { // lgtm[js/missing-rate-limiting] — parent router applies rate-limit
+  router.put('/instructions/:name', dashboardAdminAuth, async (req: Request, res: Response) => { // lgtm[js/missing-rate-limiting] — parent router applies rate-limit
     try {
       const { content } = req.body || {};
       const id = safeName(req.params.name);
@@ -220,17 +231,25 @@ export function createInstructionsRoutes(): Router {
       if (!existing) return res.status(404).json({ success: false, error: 'Not found' });
       const updated: InstructionEntry = {
         ...existing,
-        ...(typeof content === 'object' && content !== null ? content : {}),
+        ...(typeof content === 'object' && content !== null ? content : {}), // lgtm[js/comparison-between-incompatible-types] — idiomatic typeof-object plus null check (typeof null === 'object' in JS)
         id, // preserve id
         updatedAt: new Date().toISOString(),
       };
-      writeEntry(updated); // lgtm[js/http-to-file-access] — writes to config-controlled instructions directory
+      await writeEntryAsync(updated); // lgtm[js/http-to-file-access] — writes to config-controlled instructions directory
       touchIndexVersion();
       invalidate();
-      ensureLoaded();
-      res.json({ success: true, message: 'Instruction updated', timestamp: Date.now() });
+      const reloaded = await ensureLoadedAsync();
+      const verified = reloaded.byId.has(id);
+      if (!verified) {
+        logError('[API] Instruction updated but NOT visible after reload', { id });
+        return res.status(500).json({ success: false, error: 'Instruction updated but failed read-back verification' });
+      }
+      res.json({ success: true, message: 'Instruction updated', verified, timestamp: Date.now() });
     } catch (error) {
-      console.error('[API] Failed to update instruction:', error);
+      if (isInstructionValidationError(error)) {
+        return res.status(400).json({ success: false, error: 'invalid_instruction', validationErrors: error.validationErrors });
+      }
+      logError('[API] Failed to update instruction:', error);
       res.status(500).json({ success: false, error: 'Failed to update instruction' });
     }
   });
@@ -238,7 +257,7 @@ export function createInstructionsRoutes(): Router {
   /**
    * DELETE /api/instructions/:name - delete instruction
    */
-  router.delete('/instructions/:name', dashboardAdminAuth, (req: Request, res: Response) => { // lgtm[js/missing-rate-limiting] — parent router applies rate-limit
+  router.delete('/instructions/:name', dashboardAdminAuth, async (req: Request, res: Response) => { // lgtm[js/missing-rate-limiting] — parent router applies rate-limit
     try {
       const id = safeName(req.params.name);
       const st = (res.locals as IndexLocals).indexState;
@@ -246,10 +265,10 @@ export function createInstructionsRoutes(): Router {
       removeEntry(id);
       touchIndexVersion();
       invalidate();
-      ensureLoaded();
+      await ensureLoadedAsync();
       res.json({ success: true, message: 'Instruction deleted', timestamp: Date.now() });
     } catch (error) {
-      console.error('[API] Failed to delete instruction:', error);
+      logError('[API] Failed to delete instruction:', error);
       res.status(500).json({ success: false, error: 'Failed to delete instruction' });
     }
   });

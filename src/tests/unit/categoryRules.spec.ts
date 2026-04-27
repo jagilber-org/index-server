@@ -54,7 +54,7 @@ describe('categoryRules — deriveCategory', () => {
   });
 
   it('VS Code: matches vscode, vs-code', () => {
-    expect(deriveCategory('vscode-extension-debug')).toBe('VS Code');
+    expect(deriveCategory('vscode-debug')).toBe('VS Code');
     expect(deriveCategory('vs-code-toolsets-configuration')).toBe('VS Code');
   });
 

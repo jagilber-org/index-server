@@ -158,6 +158,13 @@ for (const backend of backends) {
         expect(entry!.body).toBe('v2');
       });
 
+      it('createOnly rejects duplicate writes without mutating the original entry', () => {
+        store.write(makeEntry({ id: 'write-create-only', body: 'v1' }));
+        expect(() => store.write(makeEntry({ id: 'write-create-only', body: 'v2' }), { createOnly: true })).toThrow();
+        const entry = store.get('write-create-only');
+        expect(entry!.body).toBe('v1');
+      });
+
       it('does not affect other entries on overwrite', () => {
         store.write(makeEntry({ id: 'write-3a' }));
         store.write(makeEntry({ id: 'write-3b' }));

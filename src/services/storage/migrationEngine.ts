@@ -7,7 +7,9 @@
 import fs from 'fs';
 import path from 'path';
 import { JsonFileStore } from './jsonFileStore.js';
+import { JsonEmbeddingStore } from './jsonEmbeddingStore.js';
 import { SqliteStore } from './sqliteStore.js';
+import type { IEmbeddingStore } from './types.js';
 
 export interface MigrationOptions {
   onProgress?: (current: number, total: number) => void;
@@ -113,4 +115,45 @@ export function migrateSqliteToJson(
   }
 
   return { exported, errors };
+}
+
+export interface EmbeddingMigrationResult {
+  migrated: number;
+  skipped: number;
+  error?: string;
+}
+
+/**
+ * Migrate embeddings from a JSON file to an IEmbeddingStore (e.g. SqliteEmbeddingStore).
+ *
+ * Reads the JSON embedding cache and saves it into the target store.
+ * Idempotent: calling again with the same data overwrites safely.
+ */
+export function migrateJsonEmbeddingsToStore(
+  jsonEmbeddingPath: string,
+  targetStore: IEmbeddingStore,
+): EmbeddingMigrationResult {
+  try {
+    const jsonStore = new JsonEmbeddingStore(jsonEmbeddingPath);
+    const data = jsonStore.load();
+    jsonStore.close();
+
+    if (!data) {
+      return { migrated: 0, skipped: 0, error: 'No embedding data in JSON file' };
+    }
+
+    const count = Object.keys(data.embeddings).length;
+    if (count === 0) {
+      return { migrated: 0, skipped: 0 };
+    }
+
+    targetStore.save(data);
+    return { migrated: count, skipped: 0 };
+  } catch (err) {
+    return {
+      migrated: 0,
+      skipped: 0,
+      error: err instanceof Error ? err.message : 'Migration failed',
+    };
+  }
 }

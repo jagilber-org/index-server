@@ -27,16 +27,52 @@
                 if (meta) meta.textContent = 'No backups available';
                 return;
             }
-            sel.innerHTML = backups.map(b => {
-                const label = `${b.id}  •  ${b.instructionCount} files  •  ${b.schemaVersion || 'schema?'}  •  ${new Date(b.createdAt).toLocaleString()}`;
-                return `<option value="${b.id}">${label}</option>`;
+            const warningBackups = backups.filter(function(b){ return b.warnings && b.warnings.length > 0; });
+            sel.innerHTML = backups.map(function(b) {
+                var warnTag = (b.warnings && b.warnings.length > 0) ? ' ⚠️' : '';
+                var label = b.id + '  •  ' + b.instructionCount + ' files  •  ' + (b.schemaVersion || 'schema?') + '  •  ' + new Date(b.createdAt).toLocaleString() + warnTag;
+                return '<option value="' + b.id + '">' + label + '</option>';
             }).join('');
-            if (meta) meta.textContent = `${backups.length} backup(s)`;
+            if (meta) {
+                var metaText = backups.length + ' backup(s)';
+                if (warningBackups.length > 0) {
+                    metaText += ' — ⚠️ ' + warningBackups.length + ' with warnings';
+                }
+                meta.innerHTML = metaText;
+            }
+            if (data.hasWarnings) {
+                showBackupWarningBanner(warningBackups);
+            } else {
+                clearBackupWarningBanner();
+            }
         } catch (err) {
             console.warn('loadBackups error', err);
-            const sel = document.getElementById('backup-select');
+            var sel = document.getElementById('backup-select');
             if (sel) sel.innerHTML = '<option value="">(error loading)</option>';
+            showBackupWarningBanner([{ id: 'load-error', warnings: ['Failed to load backup list: ' + (err.message || err)] }]);
         }
+    }
+
+    function showBackupWarningBanner(backupsWithWarnings) {
+        var container = document.getElementById('backup-restore-area');
+        if (!container) return;
+        clearBackupWarningBanner();
+        if (!backupsWithWarnings || backupsWithWarnings.length === 0) return;
+        var banner = document.createElement('div');
+        banner.id = 'backup-warning-banner';
+        banner.setAttribute('role', 'alert');
+        banner.style.cssText = 'background:#ff983022;border:1px solid #ff983066;border-radius:6px;padding:8px 12px;margin-top:8px;font-size:12px;color:#ff9830;';
+        var lines = ['<strong>⚠️ Backup warnings:</strong>'];
+        backupsWithWarnings.forEach(function(b) {
+            (b.warnings || []).forEach(function(w) { lines.push('• ' + w); });
+        });
+        banner.innerHTML = lines.join('<br>');
+        container.parentNode.insertBefore(banner, container.nextSibling);
+    }
+
+    function clearBackupWarningBanner() {
+        var existing = document.getElementById('backup-warning-banner');
+        if (existing) existing.remove();
     }
 
     async function restoreSelectedBackup() {
@@ -68,7 +104,7 @@
             const data = await response.json();
 
             if (data.success) {
-                if (typeof displayMaintenanceStatus === 'function') displayMaintenanceStatus(data.maintenance);
+                if (typeof displayMaintenanceStatus === 'function') displayMaintenanceStatus(data.maintenance); // lgtm[js/unneeded-defensive-code] — global may load asynchronously across dashboard panels
             } else {
                 if (typeof showError === 'function') showError('Failed to load maintenance status');
             }
@@ -221,9 +257,18 @@
         try {
             const res = await adminAuth.adminFetch('/api/admin/maintenance/backups/prune', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ retain })});
             const data = await res.json();
-            if(data.success){ if (typeof showSuccess === 'function') showSuccess(data.message || 'Pruned'); loadMaintenanceStatus(); loadBackups(); }
+            if(data.success){
+                var msg = data.message || 'Pruned';
+                if (data.errors && data.errors.length > 0) {
+                    msg += '\n⚠️ ' + data.errors.length + ' error(s):\n' + data.errors.join('\n');
+                    if (typeof showError === 'function') showError(msg);
+                } else {
+                    if (typeof showSuccess === 'function') showSuccess(msg);
+                }
+                loadMaintenanceStatus(); loadBackups();
+            }
             else { if (typeof showError === 'function') showError(data.error || 'Prune failed'); }
-        } catch(e){ if (typeof showError === 'function') showError('Prune failed'); }
+        } catch(e){ if (typeof showError === 'function') showError('Prune failed: ' + (e.message || e)); }
     }
 
     function filterBackupRows(){

@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { AsyncLocalStorage } from 'async_hooks';
 import { getRuntimeConfig } from '../config/runtimeConfig';
+import { logWarn } from './logger';
 import { MUTATION } from './toolRegistry';
 
 // Append-only JSONL audit log for all server operations.
@@ -26,27 +27,75 @@ export function getCurrentCorrelationId(): string | undefined {
 
 let cachedKey: string | undefined;
 let cachedPath: string | null | undefined;
-function resolveLogPath(){
+
+interface AuditLogState {
+  writeFailures: number;
+  readFailures: number;
+  parseErrors: number;
+  lastWriteError?: string;
+  lastReadError?: string;
+  writeWarningActive: boolean;
+}
+
+const auditLogState: AuditLogState = {
+  writeFailures: 0,
+  readFailures: 0,
+  parseErrors: 0,
+  writeWarningActive: false,
+};
+
+function formatAuditError(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function markAuditWriteFailure(file: string, error: unknown): void {
+  auditLogState.writeFailures += 1;
+  auditLogState.lastWriteError = formatAuditError(error);
+  if (!auditLogState.writeWarningActive) {
+    auditLogState.writeWarningActive = true;
+    logWarn('[audit] Failed to persist audit log; entries may be dropped until persistence recovers', {
+      file,
+      error: auditLogState.lastWriteError,
+      writeFailures: auditLogState.writeFailures,
+    });
+  }
+}
+
+function markAuditWriteSuccess(): void {
+  auditLogState.lastWriteError = undefined;
+  auditLogState.writeWarningActive = false;
+}
+
+function markAuditReadFailure(error: unknown): void {
+  auditLogState.readFailures += 1;
+  auditLogState.lastReadError = formatAuditError(error);
+}
+
+function resolveLogPath() {
   const { auditLog } = getRuntimeConfig().instructions;
   const key = auditLog.enabled && auditLog.file ? `on:${auditLog.file}` : 'off';
-  if(cachedKey === key && cachedPath !== undefined){
+  if (cachedKey === key && cachedPath !== undefined) {
     return cachedPath;
   }
 
   cachedKey = key;
-  if(!auditLog.enabled || !auditLog.file){
+  if (!auditLog.enabled || !auditLog.file) {
     cachedPath = null;
     return cachedPath;
   }
+
   const file = auditLog.file;
   try {
     const dir = path.dirname(file);
-    if(!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     fs.appendFileSync(file, '');
     cachedPath = file;
-  } catch {
-    cachedPath = null;
+  } catch (error) {
+    cachedPath = undefined;
+    markAuditWriteFailure(file, error);
+    return null;
   }
+
   return cachedPath;
 }
 
@@ -54,6 +103,12 @@ function resolveLogPath(){
 export function resetAuditLogCache(): void {
   cachedKey = undefined;
   cachedPath = undefined;
+  auditLogState.writeFailures = 0;
+  auditLogState.readFailures = 0;
+  auditLogState.parseErrors = 0;
+  auditLogState.lastWriteError = undefined;
+  auditLogState.lastReadError = undefined;
+  auditLogState.writeWarningActive = false;
 }
 
 export type AuditKind = 'mutation' | 'read' | 'http';
@@ -66,6 +121,36 @@ export interface AuditEntry {
   meta?: Record<string, unknown>; // lightweight result summary (counts, flags, clientIp, etc.)
 }
 
+export interface AuditReadResult {
+  entries: AuditEntry[];
+  parseErrors: number;
+}
+
+export interface AuditLogHealth {
+  enabled: boolean;
+  file: string | null;
+  writeFailures: number;
+  readFailures: number;
+  parseErrors: number;
+  degraded: boolean;
+  lastWriteError?: string;
+  lastReadError?: string;
+}
+
+export function getAuditLogHealth(): AuditLogHealth {
+  const { auditLog } = getRuntimeConfig().instructions;
+  return {
+    enabled: Boolean(auditLog.enabled && auditLog.file),
+    file: auditLog.file ?? null,
+    writeFailures: auditLogState.writeFailures,
+    readFailures: auditLogState.readFailures,
+    parseErrors: auditLogState.parseErrors,
+    degraded: auditLogState.writeFailures > 0 || auditLogState.readFailures > 0 || auditLogState.parseErrors > 0,
+    lastWriteError: auditLogState.lastWriteError,
+    lastReadError: auditLogState.lastReadError,
+  };
+}
+
 /**
  * Append an entry to the audit log file. Silent no-op when logging is disabled.
  * @param action - Tool or operation name being recorded
@@ -73,21 +158,28 @@ export interface AuditEntry {
  * @param meta - Lightweight result summary (counts, flags, etc.)
  * @param kind - Entry classification; defaults to `'mutation'`
  */
-export function logAudit(action: string, ids?: string[]|string, meta?: Record<string, unknown>, kind?: AuditKind){
+export function logAudit(action: string, ids?: string[] | string, meta?: Record<string, unknown>, kind?: AuditKind) {
   const file = resolveLogPath();
-  if(!file) return; // silent no-op when logging disabled
+  if (!file) return; // silent no-op when logging is disabled
+
   const entry: AuditEntry = { ts: new Date().toISOString(), kind: kind ?? 'mutation', action };
-  if(ids){ entry.ids = Array.isArray(ids)? ids: [ids]; }
+  if (ids) entry.ids = Array.isArray(ids) ? ids : [ids];
+
   // Auto-inject correlationId from async context if not already present in meta
   const ctxCorr = getCurrentCorrelationId();
-  if(ctxCorr || meta){
+  if (ctxCorr || meta) {
     const m = meta ? { ...meta } : {};
-    if(ctxCorr && !m.correlationId) m.correlationId = ctxCorr;
+    if (ctxCorr && !m.correlationId) m.correlationId = ctxCorr;
     entry.meta = m;
   }
+
   try {
-    fs.appendFileSync(file, JSON.stringify(entry)+'\n','utf8'); // lgtm[js/http-to-file-access] — audit log path from config
-  } catch { /* swallow logging errors to avoid impacting primary operation path */ }
+    fs.appendFileSync(file, JSON.stringify(entry) + '\n', 'utf8'); // lgtm[js/http-to-file-access] — audit log path from config
+    markAuditWriteSuccess();
+  } catch (error) {
+    cachedPath = undefined;
+    markAuditWriteFailure(file, error);
+  }
 }
 
 /**
@@ -97,8 +189,8 @@ export function logAudit(action: string, ids?: string[]|string, meta?: Record<st
 export function logToolAudit(toolName: string, success: boolean, durationMs: number, correlationId?: string, errorType?: string): void {
   const kind: AuditKind = MUTATION.has(toolName) ? 'mutation' : 'read';
   const meta: Record<string, unknown> = { success, durationMs: Math.round(durationMs * 100) / 100 };
-  if(correlationId) meta.correlationId = correlationId;
-  if(!success && errorType) meta.errorType = errorType;
+  if (correlationId) meta.correlationId = correlationId;
+  if (!success && errorType) meta.errorType = errorType;
   logAudit(toolName, undefined, meta, kind);
 }
 
@@ -108,24 +200,39 @@ export function logToolAudit(toolName: string, success: boolean, durationMs: num
  */
 export function logHttpAudit(method: string, route: string, statusCode: number, durationMs: number, clientIp?: string, userAgent?: string): void {
   const meta: Record<string, unknown> = { statusCode, durationMs: Math.round(durationMs * 100) / 100 };
-  if(clientIp) meta.clientIp = clientIp;
-  if(userAgent) meta.userAgent = userAgent;
+  if (clientIp) meta.clientIp = clientIp;
+  if (userAgent) meta.userAgent = userAgent;
   logAudit(`${method} ${route}`, undefined, meta, 'http');
 }
 
 /**
  * Read the most recent audit log entries from disk.
  * @param limit - Maximum number of lines to return from the tail of the file (default 1000)
- * @returns Parsed audit entries, or an empty array if logging is disabled or the file is missing
+ * @returns Parsed audit entries plus parse-error count, or an empty result if logging is disabled or the file is missing
  */
-export function readAuditEntries(limit=1000): AuditEntry[] {
+export function readAuditEntries(limit = 1000): AuditReadResult {
   const file = resolveLogPath();
-  if(!file || !fs.existsSync(file)) return [];
+  if (!file || !fs.existsSync(file)) return { entries: [], parseErrors: 0 };
+
   try {
-    const lines = fs.readFileSync(file,'utf8').split(/\r?\n/).filter(l=> l.trim());
+    const lines = fs.readFileSync(file, 'utf8').split(/\r?\n/).filter(l => l.trim());
     const recent = lines.slice(-limit);
     const parsed: AuditEntry[] = [];
-    for(const l of recent){ try { parsed.push(JSON.parse(l)); } catch { /* ignore */ } }
-    return parsed;
-  } catch { return []; }
+    let parseErrors = 0;
+
+    for (const line of recent) {
+      try {
+        parsed.push(JSON.parse(line));
+      } catch {
+        parseErrors += 1;
+      }
+    }
+
+    auditLogState.parseErrors += parseErrors;
+    auditLogState.lastReadError = undefined;
+    return { entries: parsed, parseErrors };
+  } catch (error) {
+    markAuditReadFailure(error);
+    return { entries: [], parseErrors: 0 };
+  }
 }

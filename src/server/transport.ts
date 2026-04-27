@@ -12,6 +12,12 @@
 import { createInterface } from 'readline';
 import { validateParams } from '../services/validationService';
 import { getRuntimeConfig } from '../config/runtimeConfig';
+import {
+  getHandler as getRegistryHandler,
+  getMetricsRaw,
+  listRegisteredMethods as listRegistryMethods,
+  registerHandler as registerRegistryHandler,
+} from './registry';
 import fs from 'fs';
 import path from 'path';
 
@@ -35,6 +41,7 @@ interface JsonRpcError {
 type JsonRpcResponse = JsonRpcSuccess | JsonRpcError;
 
 export type Handler<TParams = unknown> = (params: TParams) => Promise<unknown> | unknown;
+interface MetricRecord { count: number; totalMs: number; maxMs: number; }
 
 // Robust version resolution: attempt cwd + relative to compiled dist location
 const versionCandidates = [
@@ -46,55 +53,59 @@ for(const p of versionCandidates){
   try { if(fs.existsSync(p)){ const raw = JSON.parse(fs.readFileSync(p,'utf8')); if(raw?.version){ VERSION = raw.version; break; } } } catch { /* ignore */ }
 }
 
-const handlers: Record<string, Handler> = {
-  'health_check': () => {
-    // Minimal fallback health; enriched version registered by handlers.metrics.ts overwrites this
-    let instances: Array<{ pid: number; port: number; host: string; startedAt: string; current: boolean }> = [];
-    try {
-      // Dynamic require avoids circular dependency at module load time
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const { getActiveInstances } = require('../dashboard/server/InstanceManager') as typeof import('../dashboard/server/InstanceManager');
-      instances = getActiveInstances().map(i => ({ pid: i.pid, port: i.port, host: i.host, startedAt: i.startedAt, current: i.current }));
-    } catch { /* fail-open */ }
-    return { status: 'ok', timestamp: new Date().toISOString(), version: VERSION, pid: process.pid, uptime: Math.round(process.uptime()), instances };
-  }
-};
-
-// Simple in-memory metrics
-interface MetricRecord { count: number; totalMs: number; maxMs: number; }
-const metrics: Record<string, MetricRecord> = {};
 /** Return the in-memory per-method metrics map (count, totalMs, maxMs).
  * @returns Reference to the live metrics map keyed by method name
  */
-export function getMetrics(){ return metrics; }
+export function getMetrics(): Record<string, MetricRecord> {
+  return getMetricsRaw() as Record<string, MetricRecord>;
+}
 
-const handlerMeta: Record<string, { method: string }> = {};
 /**
- * Register a method handler in the stdio transport's handler table.
- * Unlike the SDK registry, this does not add wrapping (metrics, audit, etc.).
+ * Register a transport-exposed method handler via the canonical registry.
  * @param method - JSON-RPC method name
  * @param handler - Handler function invoked with the parsed params
  */
 export function registerHandler<TParams=unknown>(method: string, handler: Handler<TParams>){
-  handlers[method] = handler as Handler;
-  handlerMeta[method] = { method };
+  registerRegistryHandler(method, handler);
 }
 
 /**
- * Return a sorted list of all registered method names in the stdio transport.
+ * Return a sorted list of transport-exposed method names.
  * @returns Array of method name strings in alphabetical order
  */
 export function listRegisteredMethods(): string[]{
-  return Object.keys(handlerMeta).sort();
+  return listRegistryMethods();
 }
 
 /**
- * Look up a registered handler by method name.
+ * Look up a canonical registered handler by method name.
  * @param method - JSON-RPC method name to look up
- * @returns The handler function, or `undefined` if not registered
- */
+  * @returns The handler function, or `undefined` if not registered
+  */
 export function getHandler(method: string): Handler | undefined {
-  return handlers[method];
+  return getRegistryHandler(method);
+}
+
+function getFallbackHealth(): {
+  status: 'ok';
+  timestamp: string;
+  version: string;
+  pid: number;
+  uptime: number;
+  instances: Array<{ pid: number; port: number; host: string; startedAt: string; current: boolean }>;
+} {
+  let instances: Array<{ pid: number; port: number; host: string; startedAt: string; current: boolean }> = [];
+  try {
+    // Dynamic require avoids circular dependency at module load time
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { getActiveInstances } = require('../dashboard/server/InstanceManager') as typeof import('../dashboard/server/InstanceManager');
+    instances = getActiveInstances().map(i => ({ pid: i.pid, port: i.port, host: i.host, startedAt: i.startedAt, current: i.current }));
+  } catch { /* fail-open */ }
+  return { status: 'ok', timestamp: new Date().toISOString(), version: VERSION, pid: process.pid, uptime: Math.round(process.uptime()), instances };
+}
+
+if(!getRegistryHandler('health_check')){
+  registerRegistryHandler('health_check', () => getFallbackHealth());
 }
 
 function makeError(id: string | number | null | undefined, code: number, message: string, data?: unknown): JsonRpcError {
@@ -154,6 +165,24 @@ export function startTransport(opts: TransportOptions = {}){
     log('error', 'unhandledRejection', { reason: msg });
   });
 
+  const transportHandlers: Record<string, Handler> = {
+    'initialize': (params: unknown) => {
+      const p = params as { protocolVersion?: string } | undefined;
+      return {
+        protocolVersion: p?.protocolVersion || '2025-06-18',
+        serverInfo: { name: 'index', version: VERSION },
+        capabilities: { roots: { listChanged: true }, tools: { listChanged: true } }
+      };
+    },
+    'notifications/initialized': () => ({ acknowledged: true }),
+    'shutdown': () => ({ shuttingDown: true }),
+    'exit': () => { setTimeout(() => process.exit(0), 0); return { exiting: true }; }
+  };
+  const getAvailableMethods = () => Array.from(new Set([
+    ...Object.keys(transportHandlers),
+    ...listRegistryMethods(),
+  ])).sort();
+
   // Handshake state & helpers (deterministic: initialize result flushes, then server/ready)
   let initialized = false;
   let readyEmitted = false;
@@ -165,21 +194,6 @@ export function startTransport(opts: TransportOptions = {}){
       (opts.output || process.stdout).write(JSON.stringify({ jsonrpc:'2.0', method:'notifications/tools/list_changed', params:{} })+'\n');
     } catch { /* ignore */ }
   }
-  // Replace initialize handler with direct interception below to control write callback ordering.
-  registerHandler('initialize', (params: unknown) => {
-    // This body will be bypassed by explicit fast-path in line reader (kept for compatibility if called indirectly)
-    const p = params as { protocolVersion?: string } | undefined;
-    return {
-      protocolVersion: p?.protocolVersion || '2025-06-18',
-      serverInfo: { name: 'index', version: VERSION },
-      capabilities: { roots: { listChanged: true }, tools: { listChanged: true } }
-    };
-  });
-  // Accept notification some clients send post-initialize; respond benignly (single registration)
-  registerHandler('notifications/initialized', () => ({ acknowledged: true }));
-  registerHandler('shutdown', () => ({ shuttingDown: true }));
-  registerHandler('exit', () => { setTimeout(() => process.exit(0), 0); return { exiting: true }; });
-
   // Use readline only for input parsing; do NOT set output to avoid echoing client-sent
   // JSON-RPC request lines back to stdout (which confused tests expecting only server
   // responses and caused false negatives when matching initialize/result frames).
@@ -222,8 +236,7 @@ export function startTransport(opts: TransportOptions = {}){
       }
       initialized = true;
       // Reuse registered initialize handler so future shared logic (capability changes, root listing, etc.) stays centralized.
-      const initHandler = handlers['initialize'];
-      const start = Date.now();
+      const initHandler = transportHandlers['initialize'];
       let resultPayload: unknown;
       try {
         resultPayload = initHandler ? initHandler(req.params) : {
@@ -237,9 +250,6 @@ export function startTransport(opts: TransportOptions = {}){
       }
       // Support promise return from handler
       Promise.resolve(resultPayload).then(resolved => {
-        const dur = Date.now() - start;
-        const rec = metrics['initialize'] || (metrics['initialize'] = { count:0,totalMs:0,maxMs:0 });
-        rec.count++; rec.totalMs += dur; if(dur > rec.maxMs) rec.maxMs = dur;
         const initResult = { jsonrpc:'2.0', id: req.id ?? 1, result: resolved };
         try {
           if(protocolLog){
@@ -257,10 +267,10 @@ export function startTransport(opts: TransportOptions = {}){
       });
       return;
     }
-    const handler = handlers[req.method];
+    const handler = transportHandlers[req.method] ?? getRegistryHandler(req.method);
     if(!handler){
       // Provide richer context for missing method to help client authors.
-      const available = listRegisteredMethods();
+      const available = getAvailableMethods();
       log('debug', 'method_not_found', { requested: req.method, availableCount: available.length });
       respondFn(makeError(req.id ?? null, -32601, 'Method not found', { method: req.method, available }));
       return;
@@ -273,25 +283,18 @@ export function startTransport(opts: TransportOptions = {}){
         return;
       }
     } catch{ /* fail-open on validator issues */ }
-    const start = Date.now();
     Promise.resolve()
       .then(() => handler(req.params))
       .then(result => {
-  if(!initialized){
+        if(!initialized){
           log('debug', 'call_before_initialize', { method: req.method });
         }
-        const dur = Date.now() - start;
-        const rec = metrics[req.method] || (metrics[req.method] = { count:0,totalMs:0,maxMs:0 });
-        rec.count++; rec.totalMs += dur; if(dur > rec.maxMs) rec.maxMs = dur;
         if(req.id !== undefined && req.id !== null){
           try { if(protocolLog || verbose) log('debug','respond_success', { id: req.id, method: req.method }); } catch { /* ignore */ }
           respondFn({ jsonrpc: '2.0', id: req.id, result });
         }
       })
       .catch(e => {
-        const dur = Date.now() - start;
-        const rec = metrics[req.method] || (metrics[req.method] = { count:0,totalMs:0,maxMs:0 });
-        rec.count++; rec.totalMs += dur; if(dur > rec.maxMs) rec.maxMs = dur;
         // Support structured JSON-RPC style errors (objects with numeric code) without coercing to -32603.
         interface JsonRpcLikeError { code: number; message?: string; data?: Record<string,unknown>; }
         const maybeErr = e as Partial<JsonRpcLikeError> | null;

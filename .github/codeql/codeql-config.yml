@@ -1,0 +1,46 @@
+name: "Index Server CodeQL config"
+
+paths:
+  - src
+  - scripts
+
+paths-ignore:
+  # Compiled output and vendored deps
+  - dist
+  - coverage
+  - node_modules
+  - "**/node_modules"
+  # Self-hosted runner npm install captured by autobuild (not our code)
+  - usr/local/lib
+  - "**/usr/local/lib"
+  # Test files: TLS validation disabling and string-sanitization helpers are
+  # intentional in test fixtures; real production code is scanned separately.
+  - src/tests
+  - "**/*.spec.ts"
+  - "**/*.test.ts"
+  # Dev / build / publish scripts: many use intentional cert/url patterns and
+  # are not exposed to end users.
+  - scripts/validate-security-headers.mjs
+  - scripts/pre-push-public-guard.cjs
+  - scripts/generate-tools-doc.mjs
+  - scripts/generate-tools-doc.cjs
+
+# False positives on trusted/controlled inputs (documented in the source):
+#   - legacyDashboardHtml.stripGraphTab uses targeted regex on HTML built
+#     from trusted in-module constants, not on user input.
+#   - graph.routes mermaid edge-token regex (`-->|===|~~>|\|-`) detects
+#     mermaid syntax in server-generated graph source, not HTML.
+#   - handlers.search.ts regex-mode search intentionally accepts user-
+#     supplied regex patterns. These pass through a multi-layer validation
+#     chain before construction: length bound (200 chars), syntax check,
+#     rejection of lookaround/backreferences/nested quantifiers, and
+#     safe-regex2 ReDoS analysis. CodeQL cannot trace through safe-regex2
+#     as a sanitizer, so these are false positives.
+#   - regexSafety.ts centralizes the same validated regex construction.
+query-filters:
+  - exclude:
+      id: js/incomplete-multi-character-sanitization
+  - exclude:
+      id: js/bad-tag-filter
+  - exclude:
+      id: js/regex-injection

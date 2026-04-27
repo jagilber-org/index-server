@@ -856,6 +856,36 @@ describe('Instructions Search Tool', () => {
       }
     });
 
+    it('should reject valid regex patterns with catastrophic backtracking risk', async () => {
+      try {
+        await handleInstructionsSearch({
+          keywords: ['(a?){25}a{25}'],
+          mode: 'regex'
+        });
+        expect.unreachable('Should have thrown');
+      } catch (e) {
+        expect(isSemanticError(e)).toBe(true);
+        const err = e as { code: number; message: string };
+        expect(err.code).toBe(-32602);
+        expect(err.message).toContain('catastrophic');
+      }
+    });
+
+    it('should reject lookaround assertions in regex mode', async () => {
+      try {
+        await handleInstructionsSearch({
+          keywords: ['(?=Java)JavaScript'],
+          mode: 'regex'
+        });
+        expect.unreachable('Should have thrown');
+      } catch (e) {
+        expect(isSemanticError(e)).toBe(true);
+        const err = e as { code: number; message: string };
+        expect(err.code).toBe(-32602);
+        expect(err.message).toContain('lookaround');
+      }
+    });
+
     it('should validate mode is valid enum value', async () => {
       try {
         await handleInstructionsSearch({

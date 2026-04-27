@@ -40,13 +40,15 @@ function containerExec(cmd: string): string {
 
 describe.skipIf(!dockerAvailable())('Docker Image Security', () => {
   let containerReady = false;
+  let startupError: Error | null = null;
 
   beforeAll(() => {
     // Build the image
     try {
       execSync(`docker build -t ${IMAGE_NAME} .`, { ...EXEC_OPTS, timeout: 300_000, cwd: path.resolve(__dirname, '../..') });
     } catch (e) {
-      console.error('Docker build failed:', (e as Error).message);
+      startupError = e as Error;
+      console.error('Docker build failed:', startupError.message);
       return;
     }
     // Start container for inspection
@@ -65,12 +67,17 @@ describe.skipIf(!dockerAvailable())('Docker Image Security', () => {
         try {
           execSync(`docker exec ${CONTAINER_NAME} node -e "process.exit(0)"`, { stdio: 'pipe', timeout: 5_000 });
           containerReady = true;
+          startupError = null;
           break;
         } catch { /* retry */ }
         execSync('sleep 2 || timeout /t 2 >nul', { stdio: 'pipe', shell: process.platform === 'win32' ? 'cmd' : '/bin/sh' });
       }
+      if (!containerReady) {
+        startupError = new Error(`Container ${CONTAINER_NAME} did not become ready within the startup window`);
+      }
     } catch (e) {
-      console.error('Container start failed:', (e as Error).message);
+      startupError = e as Error;
+      console.error('Container start failed:', startupError.message);
     }
   }, 360_000);
 
@@ -78,12 +85,8 @@ describe.skipIf(!dockerAvailable())('Docker Image Security', () => {
     try { execSync(`docker rm -f ${CONTAINER_NAME}`, { stdio: 'pipe' }); } catch { /* ok */ }
   });
 
-  it('should skip if Docker is not available', () => {
-    if (!containerReady) {
-      console.log('Docker container not ready — skipping Docker security tests');
-      expect(true).toBe(true);
-      return;
-    }
+  it('should start the inspection container', () => {
+    expect(startupError).toBeNull();
     expect(containerReady).toBe(true);
   });
 
@@ -111,14 +114,7 @@ describe.skipIf(!dockerAvailable())('Docker Image Security', () => {
     if (!containerReady) return;
     // Check that gcc, make, python are NOT in the runtime image
     for (const tool of ['gcc', 'make', 'python3', 'g++']) {
-      try {
-        containerExec(`which ${tool}`);
-        // If 'which' succeeds, the tool exists — fail
-        expect.fail(`Development tool '${tool}' should not be in runtime image`);
-      } catch {
-        // Expected: tool not found
-        expect(true).toBe(true);
-      }
+      expect(() => containerExec(`which ${tool}`)).toThrow();
     }
   });
 
@@ -134,18 +130,18 @@ describe.skipIf(!dockerAvailable())('Docker Image Security', () => {
 
   it('should have health check responding', async () => {
     if (!containerReady) return;
-    // Query the health check endpoint
-    try {
-      const result = execSync(
-        `docker inspect --format="{{.State.Health.Status}}" ${CONTAINER_NAME}`,
-        EXEC_OPTS
-      ).toString().trim();
-      // Give it time to become healthy
-      expect(['healthy', 'starting']).toContain(result);
-    } catch {
-      // Container might not have had time for health check
-      expect(true).toBe(true);
+    let statusCode: number | null = null;
+    for (let i = 0; i < 10; i++) {
+      try {
+        const response = await fetch(`http://127.0.0.1:${TEST_PORT}/api/status`);
+        statusCode = response.status;
+        if (response.ok) {
+          break;
+        }
+      } catch { /* retry */ }
+      await new Promise(resolve => setTimeout(resolve, 2_000));
     }
+    expect(statusCode).toBe(200);
   });
 
   it('should not expose secrets in environment', () => {
@@ -163,15 +159,13 @@ describe.skipIf(!dockerAvailable())('Docker Image Security', () => {
 
   it('should have read-only root filesystem when configured', () => {
     if (!containerReady) return;
-    // Test that writing to non-volume paths fails
-    try {
-      containerExec('touch /app/test-write-should-fail 2>&1');
-      // If it succeeds, read_only is not enabled (docker run level)
-      // This is informational; docker-compose.yml sets read_only: true
-    } catch {
-      // Expected in read_only mode
-      expect(true).toBe(true);
-    }
+    expect(() =>
+      execFileSync(
+        'docker',
+        ['run', '--rm', '--read-only', '--entrypoint', 'sh', IMAGE_NAME, '-lc', 'touch /app/test-write-should-fail'],
+        EXEC_OPTS
+      )
+    ).toThrow();
   });
 
   it('should expose only the dashboard port', () => {

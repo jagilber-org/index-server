@@ -18,13 +18,8 @@ const MINIMAL_PARAMS: Record<string, unknown> = {
   usage_track: { id: '__smoke_test__' },
   prompt_review: { prompt: 'hello world' },
   meta_check_activation: { toolName: 'health_check' },
-  feedback_dispatch: { action: 'health' },
   bootstrap: { action: 'status' },
-  feedback_get: { id: '__nonexistent__' },
   index_inspect: { id: '__nonexistent__' },
-  diagnostics_block: { ms: 0 },
-  diagnostics_microtaskFlood: { count: 1 },
-  diagnostics_memoryPressure: { mb: 1 },
   messaging_get: { messageId: '__nonexistent__' },
   messaging_thread: { parentId: '__nonexistent__' },
 };

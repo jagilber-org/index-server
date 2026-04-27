@@ -23,13 +23,43 @@ Maintainers may use additional private development and publishing workflows inte
 
 Use feature branches. Submit PRs to `main`.
 
+## Pull Request Review
+
+Fill out the PR template completely before requesting review.
+
+### Mandatory AI-Generated Code/Test Review
+
+If any code or tests in the PR were generated or materially edited by an AI agent, reviewers MUST confirm all of the following before merge:
+
+- [ ] No placeholder tests: no `placeholder`, `expect(true)`, `expect(1).toBe(1)`, or empty `() => {}` test bodies were introduced
+- [ ] No new `it.skip()` or `describe.skip()` without a linked issue and inline justification
+- [ ] Negative tests exist for handler changes, including invalid input, missing required fields, and non-existent resources where applicable
+- [ ] Mutation-handler tests verify disk truth independently (for example, by reading the filesystem) rather than trusting only the server response
+- [ ] No new `SKIP_OK` markers were added to normalize permanently skipped coverage
+- [ ] Claimed test counts match real coverage and assertions
+- [ ] No hardcoded success values such as `verified: true` or `created: true` were added unless computed from a real check
+- [ ] Agent attestation metadata present on agent-authored commits (AG-4)
+- [ ] Copilot `Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>` trailer present on Copilot-authored commits
+- [ ] Tests added for behavioral changes (unit + integration where the change crosses a layer boundary)
+- [ ] No hardcoded paths or secrets — all tunables routed through `src/config/runtimeConfig.ts` (`npm run guard:env` passes)
+- [ ] `logAudit()` invoked on every mutation success and side-effecting error path
+- [ ] `src/services/toolRegistry.ts` updated for new/changed tools (INPUT_SCHEMAS + STABLE + MUTATION + describeTool) and registered via `src/services/toolHandlers.ts`
+- [ ] Conventional Commit subjects on every commit
+- [ ] If `constitution.json` changed: `pwsh -File scripts/sync-constitution.ps1 -Check` passes and rendered `.md` files are regenerated
+- [ ] Security-sensitive changes carry explicit Morpheus + Tank consensus approvals or a linked `.squad/decisions/` record
+- [ ] Imported external code has a documented source and a `LICENSE`-compatible license, with attribution recorded in `THIRD-PARTY-LICENSES.md` where required
+
+PRs that fail any AI-generated code/test review item must be sent back for correction before merge.
+
+> **Full policy with examples, grep commands, and constitution references:** [`docs/pr_review_checklist.md`](docs/pr_review_checklist.md)
+
 ## Commit Messages
 
 Use conventional style where practical (feat:, fix:, docs:, chore:).
 
 ## Tests
 
-Include unit tests for new logic. Run `npm test` and ensure coverage not reduced.
+Include unit tests for new logic. Run `npm test` for the default fast suite, and use `npm run test:slow` or `npm run test:all` when your change touches heavy integration/perf coverage.
 
 ### Repo Root Policy
 
@@ -50,7 +80,7 @@ All runtime and test tunables must flow through `src/config/runtimeConfig.ts`:
 
 1. If you need a new timing / wait value, extend `INDEX_SERVER_TIMING_JSON` key usage (e.g. `{"featureX.startupWait":5000}`) instead of adding `FEATUREX_STARTUP_WAIT_MS`.
 2. For logging verbosity, use `INDEX_SERVER_LOG_LEVEL` (levels: silent,error,warn,info,debug,trace) or add a trace token to `INDEX_SERVER_TRACE` (comma-separated) rather than a new boolean flag.
-3. For mutation gating, rely on `INDEX_SERVER_MUTATION` (legacy `INDEX_SERVER_MUTATION` is auto-mapped; do not reintroduce it).
+3. For mutation control, rely on `INDEX_SERVER_MUTATION` (`0` forces read-only mode; do not introduce alternate flags).
 4. Fast coverage paths use `INDEX_SERVER_TEST_MODE=coverage-fast`; legacy `FAST_COVERAGE` accepted but should not appear in new code.
 
 If an absolutely new capability requires configuration:

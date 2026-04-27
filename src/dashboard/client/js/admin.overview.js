@@ -23,7 +23,11 @@
                 try { displayMaintenanceInfo(maintenanceData.maintenance); } catch(e){ console.warn('displayMaintenanceInfo failed:', e); }
             }
             if(healthData && (healthData.success || ['ok','healthy','degraded'].includes(healthData.status))){
-                displaySystemHealth(healthData.systemHealth || healthData.maintenance?.systemHealth || healthData);
+                // /api/system/health wraps the actual payload under .data; older
+                // shapes use .systemHealth or .maintenance.systemHealth. Unwrap so
+                // displaySystemHealth sees status/uptime/checks at the top level
+                // instead of receiving the wrapper and degrading to 'unknown'.
+                displaySystemHealth(healthData.systemHealth || healthData.maintenance?.systemHealth || healthData.data || healthData);
             }
         } catch(err){
             console.error('Error loading overview data:', err);

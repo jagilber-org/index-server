@@ -38,8 +38,17 @@ jobs:
           if [ ! -f dist/server/index-server.js ]; then echo "ERROR: dist/server/index-server.js not found; failing early"; exit 1; fi
       - name: Test
         run: |
-          npm run coverage:ci --if-present || npm test --if-present
-        continue-on-error: true
+          # Fast suite on PRs to conserve Actions minutes; full coverage runs
+          # on main pushes (event_name != 'pull_request'). The slow concurrent /
+          # stress / multi-instance suites have their own dedicated workflows
+          # (multi-agent-concurrency.yml, stress-nightly.yml, multi-instance-validation.yml).
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "PR run: using test:fast (no coverage) to conserve minutes"
+            npm test --if-present
+          else
+            echo "Push/dispatch run: full coverage suite"
+            npm run coverage:ci --if-present || npm test --if-present
+          fi
       - name: Upload coverage to Codecov
         if: always()
         uses: codecov/codecov-action@v6

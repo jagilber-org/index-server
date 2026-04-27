@@ -4,7 +4,7 @@
     var _configRefreshTimer = null;
     var _collapsedCategories = {};
 
-    function escapeHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+    var escapeHtml = window.adminUtils.escapeHtml;
 
     function buildFlagRow(f, featureFlags) {
         var isBool = f.type === 'boolean';

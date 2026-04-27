@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { InstructionEntry } from '../../models/instruction';
 import { registerHandler } from '../../server/registry';
-import { computeGovernanceHash, ensureLoaded, getDebugIndexSnapshot, getInstructionsDir, invalidate } from '../indexContext';
+import { computeGovernanceHash, ensureLoaded, getDebugIndexSnapshot, getInstructionsDir, getInvariantRepairSummary, invalidate } from '../indexContext';
 import { BOOTSTRAP_ALLOWLIST } from '../bootstrapGating';
 import { ClassificationService } from '../classificationService';
 import { incrementCounter } from '../features';
@@ -146,23 +146,6 @@ export const instructionActions = {
     if (tierSet.size) { items = items.filter(e => e.priorityTier && tierSet.has(e.priorityTier)); pushStage('tiers'); }
     if (reqSet.size) { items = items.filter(e => reqSet.has(e.requirement)); pushStage('requirements'); }
     if (text) { items = items.filter(e => e.title.toLowerCase().includes(text) || e.body.toLowerCase().includes(text) || (e.semanticSummary || '').toLowerCase().includes(text)); pushStage('text'); }
-    try {
-      const recent = (st as unknown as { _recentAdds?: Record<string, { ts: number; categories: string[] }> })._recentAdds;
-      if (recent) {
-        const now = Date.now(); const GRACE = 300;
-        for (const [id, meta] of Object.entries(recent)) {
-          if (now - meta.ts > GRACE) continue;
-          if (items.some(e => e.id === id)) continue;
-          const catMatchAll = !catsAll.length || catsAll.every(c => meta.categories.includes(c));
-          const catMatchAny = !catsAny.length || meta.categories.some(c => catsAny.includes(c));
-          const catExcluded = catsEx.length && meta.categories.some(c => catsEx.includes(c));
-          if (catMatchAll && catMatchAny && !catExcluded) {
-            const injected = st.byId.get(id);
-            if (injected) { items = items.concat([injected]); if (traceVisibility()) emitTrace('[trace:query:recent-add-injected]', { id, graceMs: now - meta.ts }); }
-          }
-        }
-      }
-    } catch { /* ignore fallback */ }
     const total = items.length;
     const limit = Math.min(Math.max((p.limit ?? 100), 1), 1000);
     const offset = Math.max((p.offset ?? 0), 0);
@@ -201,7 +184,22 @@ registerHandler('index_inspect', (p: { id: string }) => {
   if (!id) return { error: 'missing id' };
   const st = ensureLoaded();
   const entry = st.byId.get(id);
-  if (!entry) return { id, exists: false, fileMissing: true };
+  if (!entry) {
+    // Check if the file exists on disk but was skipped during load (#208)
+    const dir = getInstructionsDir();
+    const filePath = path.join(dir, `${id}.json`);
+    const fileExists = fs.existsSync(filePath);
+    if (fileExists) {
+      // File exists but wasn't loaded — check loadErrors for the reason
+      const loadError = st.loadErrors?.find(e => {
+        const fileName = path.basename(e.file);
+        return e.file === `${id}.json` || fileName === `${id}.json` || e.file.endsWith(`${path.sep}${id}.json`);
+      });
+      const skipReason = loadError?.error || 'unknown (file exists but was not loaded)';
+      return { id, exists: false, fileMissing: false, skipped: true, skipReason };
+    }
+    return { id, exists: false, fileMissing: true };
+  }
   let schemaErrors: string | undefined; let classificationIssues: string[] | undefined; let normalized: InstructionEntry | undefined;
   try {
     const rec = entry as Partial<InstructionEntry>;
@@ -244,7 +242,9 @@ registerHandler('index_health', () => {
   } catch {
     recursionRisk = effectiveGovernanceLike === 0 ? 'none' : (leakageRatio < 0.01 ? 'warning' : 'critical');
   }
-  const snapshot = path.join(process.cwd(), 'snapshots', 'canonical-instructions.json'); if (!fs.existsSync(snapshot)) return { snapshot: 'missing', hash: st.hash, count: st.list.length, governanceHash, recursionRisk, leakage: { governanceLike, keywordHit, leakageRatio }, summary }; try { const raw = JSON.parse(fs.readFileSync(snapshot, 'utf8')) as { items?: { id: string; sourceHash: string }[] }; const snapItems = raw.items || []; const snapMap = new Map(snapItems.map(i => [i.id, i.sourceHash] as const)); const missing: string[] = []; const changed: string[] = []; for (const e of st.list) { const h = snapMap.get(e.id); if (h === undefined) missing.push(e.id); else if (h !== e.sourceHash) changed.push(e.id); } const extra = snapItems.filter(i => !st.byId.has(i.id)).map(i => i.id); return { snapshot: 'present', hash: st.hash, count: st.list.length, missing, changed, extra, drift: missing.length + changed.length + extra.length, governanceHash, recursionRisk, leakage: { governanceLike, keywordHit, leakageRatio }, summary }; } catch (e) { return { snapshot: 'error', error: e instanceof Error ? e.message : String(e), hash: st.hash, governanceHash, recursionRisk, leakage: { governanceLike, keywordHit, leakageRatio }, summary }; }
+  // #131: surface invariant-repair summary so operators can detect silent reconstruction
+  const invariantRepairs = getInvariantRepairSummary();
+  const snapshot = path.join(process.cwd(), 'snapshots', 'canonical-instructions.json'); if (!fs.existsSync(snapshot)) return { snapshot: 'missing', hash: st.hash, count: st.list.length, governanceHash, recursionRisk, leakage: { governanceLike, keywordHit, leakageRatio }, summary, invariantRepairs }; try { const raw = JSON.parse(fs.readFileSync(snapshot, 'utf8')) as { items?: { id: string; sourceHash: string }[] }; const snapItems = raw.items || []; const snapMap = new Map(snapItems.map(i => [i.id, i.sourceHash] as const)); const missing: string[] = []; const changed: string[] = []; for (const e of st.list) { const h = snapMap.get(e.id); if (h === undefined) missing.push(e.id); else if (h !== e.sourceHash) changed.push(e.id); } const extra = snapItems.filter(i => !st.byId.has(i.id)).map(i => i.id); return { snapshot: 'present', hash: st.hash, count: st.list.length, missing, changed, extra, drift: missing.length + changed.length + extra.length, governanceHash, recursionRisk, leakage: { governanceLike, keywordHit, leakageRatio }, summary, invariantRepairs }; } catch (e) { return { snapshot: 'error', error: e instanceof Error ? e.message : String(e), hash: st.hash, governanceHash, recursionRisk, leakage: { governanceLike, keywordHit, leakageRatio }, summary, invariantRepairs }; }
 });
 
 registerHandler('index_debug', () => {

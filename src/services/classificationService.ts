@@ -21,7 +21,7 @@ export class ClassificationService {
     let userId = entry.userId;
   const teamIds = entry.teamIds ? [...entry.teamIds] : [];
     const otherCats: string[] = [];
-    for(const cRaw of entry.categories){
+    for(const cRaw of entry.categories ?? []){
       const c = cRaw.toLowerCase();
       if(c.startsWith('scope:workspace:')){ if(!workspaceId) workspaceId = c.substring('scope:workspace:'.length); continue; }
       if(c.startsWith('scope:user:')){ if(!userId) userId = c.substring('scope:user:'.length); continue; }
@@ -47,8 +47,12 @@ export class ClassificationService {
       categories: Array.from(new Set(otherCats.map(c => c.toLowerCase()))).sort(),
       updatedAt: entry.updatedAt || now,
       createdAt: entry.createdAt || now,
-  // Guarantee schemaVersion presence (tests/assertions now rely on dispatcher list action output)
-  schemaVersion: entry.schemaVersion || SCHEMA_VERSION,
+  // Always coerce to current SCHEMA_VERSION on normalization. The write path
+  // (writeEntry / writeEntryAsync) validates against the loader JSON schema
+  // which only accepts the current version. Preserving a legacy version here
+  // would cause silent write rejection. Migration of legacy fields runs
+  // separately via migrateInstructionRecord on the write path.
+  schemaVersion: SCHEMA_VERSION,
   // Compute hash from canonical (trimmed) body to ensure stability across innocuous whitespace differences
   sourceHash: entry.sourceHash && entry.sourceHash.length === 64 ? entry.sourceHash : this.computeHash(trimmedBody),
       riskScore: this.computeRisk(entry),
@@ -81,7 +85,6 @@ export class ClassificationService {
     if(!entry.id) issues.push('missing id');
     if(!entry.title) issues.push('missing title');
     if(!entry.body) issues.push('missing body');
-    if(entry.requirement === 'deprecated' && !entry.deprecatedBy) issues.push('deprecated requires deprecatedBy');
     return issues;
   }
 

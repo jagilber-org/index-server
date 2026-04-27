@@ -32,6 +32,8 @@ This Code of Conduct applies within all community spaces, including GitHub repos
 
 Instances of abusive, harassing, or otherwise unacceptable behavior may be reported to the project maintainer via [GitHub Issues](https://github.com/jagilber-org/index-server/issues) or by contacting the maintainer directly.
 
+> **Private reporting:** If you do not feel comfortable reporting publicly, you may contact the maintainer privately using the email listed in the repository's GitHub profile. Reports will be kept confidential to the extent permitted by law and project operational needs.
+
 All complaints will be reviewed and investigated promptly and fairly. The project maintainer is obligated to respect the privacy and security of the reporter of any incident.
 
 ### Enforcement Guidelines

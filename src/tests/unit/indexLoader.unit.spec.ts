@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 import { IndexLoader } from '../../services/indexLoader';
@@ -74,5 +74,38 @@ describe('IndexLoader (unit)', () => {
     expect(res2.entries[0].id).toBe('a');
     delete process.env.INDEX_SERVER_MEMOIZE;
     reloadRuntimeConfig();
+  });
+
+  it('loadAsync yields to timers while retrying transient read errors', async () => {
+    writeJson(path.join(DIR, 'async.json'), minimal('async'));
+    process.env.INDEX_SERVER_READ_RETRIES = '2';
+    process.env.INDEX_SERVER_READ_BACKOFF_MS = '10';
+    reloadRuntimeConfig();
+
+    const loader = new IndexLoader(DIR, new ClassificationService());
+    const realLoad = loader.load.bind(loader);
+    let loadCalls = 0;
+    vi.spyOn(loader, 'load').mockImplementation(() => {
+      loadCalls++;
+      if (loadCalls === 1) {
+        return { entries: [], errors: [{ file: 'async.json', error: 'empty file transient' }], hash: '' };
+      }
+      return realLoad();
+    });
+    let timerFired = false;
+    const timer = new Promise<void>(resolve => {
+      setTimeout(() => {
+        timerFired = true;
+        resolve();
+      }, 0);
+    });
+
+    const loadPromise = loader.loadAsync();
+    await timer;
+    const result = await loadPromise;
+
+    expect(timerFired).toBe(true);
+    expect(loadCalls).toBe(2);
+    expect(result.entries[0]?.id).toBe('async');
   });
 });

@@ -6,6 +6,7 @@
 import { Router, Request, Response } from 'express';
 import fs from 'fs';
 import { getRuntimeConfig } from '../../../config/runtimeConfig.js';
+import { logError } from '../../../services/logger.js';
 
 export function createLogsRoutes(): Router {
   const router = Router();
@@ -55,7 +56,7 @@ export function createLogsRoutes(): Router {
       });
 
     } catch (error) {
-      console.error('[API] Logs error:', error);
+      logError('[API] Logs error:', error);
       res.status(500).json({
         error: 'Failed to read logs',
         timestamp: Date.now()
@@ -133,7 +134,7 @@ export function createLogsRoutes(): Router {
             });
 
             stream.on('error', (error) => {
-              console.error('[Logs] Stream read error:', error);
+              logError('[Logs] Stream read error:', error);
               res.write(`data: ${JSON.stringify({
                 type: 'error',
                 message: 'Failed to read log stream',
@@ -142,7 +143,7 @@ export function createLogsRoutes(): Router {
             });
           }
         } catch (error) {
-          console.error('[Logs] Stream poll error:', error);
+          logError('[Logs] Stream poll error:', error);
           res.write(`data: ${JSON.stringify({
             type: 'error',
             message: 'Failed to poll log file',
@@ -169,7 +170,7 @@ export function createLogsRoutes(): Router {
       });
 
     } catch (error) {
-      console.error('[Logs] Failed to start log streaming:', error);
+      logError('[Logs] Failed to start log streaming:', error);
       res.write(`data: ${JSON.stringify({
         type: 'error',
         message: 'Failed to start log streaming',

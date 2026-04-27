@@ -9,6 +9,7 @@
 import { Router, Request, Response } from 'express';
 import { MetricsCollector, ToolMetrics } from '../MetricsCollector.js';
 import { listRegisteredMethods } from '../../../server/registry.js';
+import { logError } from '../../../services/logger.js';
 
 export function createMetricsRoutes(metricsCollector: MetricsCollector): Router {
   const router = Router();
@@ -38,7 +39,7 @@ export function createMetricsRoutes(metricsCollector: MetricsCollector): Router 
         timestamp: Date.now(),
       });
     } catch (error) {
-      console.error('[API] Tools error:', error);
+      logError('[API] Tools error:', error);
       res.status(500).json({
         error: 'Failed to get tools list',
       });
@@ -53,7 +54,7 @@ export function createMetricsRoutes(metricsCollector: MetricsCollector): Router 
       const snapshot = metricsCollector.getCurrentSnapshot();
       res.json(snapshot);
     } catch (error) {
-      console.error('[API] Metrics error:', error);
+      logError('[API] Metrics error:', error);
       res.status(500).json({
         error: 'Failed to get metrics',
       });
@@ -74,7 +75,7 @@ export function createMetricsRoutes(metricsCollector: MetricsCollector): Router 
         timestamp: Date.now(),
       });
     } catch (error) {
-      console.error('[API] Metrics history error:', error);
+      logError('[API] Metrics history error:', error);
       res.status(500).json({
         error: 'Failed to get metrics history',
       });
@@ -102,7 +103,7 @@ export function createMetricsRoutes(metricsCollector: MetricsCollector): Router 
         timestamp: Date.now(),
       });
     } catch (error) {
-      console.error('[API] Tool metrics error:', error);
+      logError('[API] Tool metrics error:', error);
       res.status(500).json({
         error: 'Failed to get tool metrics',
       });
@@ -127,7 +128,7 @@ export function createMetricsRoutes(metricsCollector: MetricsCollector): Router 
         timestamp: snapshot.timestamp,
       });
     } catch (error) {
-      console.error('[API] Performance error:', error);
+      logError('[API] Performance error:', error);
       res.status(500).json({
         error: 'Failed to get performance metrics',
       });
@@ -146,7 +147,7 @@ export function createMetricsRoutes(metricsCollector: MetricsCollector): Router 
         timestamp: Date.now(),
       });
     } catch (error) {
-      console.error('[API] Realtime metrics error:', error);
+      logError('[API] Realtime metrics error:', error);
       res.status(500).json({
         error: 'Failed to get realtime metrics',
       });
@@ -165,7 +166,7 @@ export function createMetricsRoutes(metricsCollector: MetricsCollector): Router 
         timestamp: Date.now()
       });
     } catch (error) {
-      console.error('[API] Streaming data error:', error);
+      logError('[API] Streaming data error:', error);
       res.status(500).json({
         error: 'Failed to get streaming data',
       });
@@ -188,7 +189,7 @@ export function createMetricsRoutes(metricsCollector: MetricsCollector): Router 
         timestamp: Date.now(),
       });
     } catch (error) {
-      console.error('[API] Tool usage chart error:', error);
+      logError('[API] Tool usage chart error:', error);
       res.status(500).json({
         error: 'Failed to get tool usage chart data',
       });
@@ -211,7 +212,7 @@ export function createMetricsRoutes(metricsCollector: MetricsCollector): Router 
         timestamp: Date.now(),
       });
     } catch (error) {
-      console.error('[API] Performance chart error:', error);
+      logError('[API] Performance chart error:', error);
       res.status(500).json({
         error: 'Failed to get performance chart data',
       });
@@ -245,7 +246,7 @@ export function createMetricsRoutes(metricsCollector: MetricsCollector): Router 
         timestamp: Date.now(),
       });
     } catch (error) {
-      console.error('[API] Time range chart error:', error);
+      logError('[API] Time range chart error:', error);
       res.status(500).json({
         error: 'Failed to get time range data',
       });
@@ -290,7 +291,7 @@ export function createMetricsRoutes(metricsCollector: MetricsCollector): Router 
         });
       }
     } catch (error) {
-      console.error('[API] Chart export error:', error);
+      logError('[API] Chart export error:', error);
       res.status(500).json({
         error: 'Failed to export chart data',
       });
@@ -323,7 +324,7 @@ export function createMetricsRoutes(metricsCollector: MetricsCollector): Router 
         timestamp: Date.now()
       });
     } catch (err) {
-      console.error('[API] Performance detailed error:', err);
+      logError('[API] Performance detailed error:', err);
       res.status(500).json({ success: false, error: 'Failed to compute performance metrics' });
     }
   });
@@ -341,7 +342,7 @@ export function createMetricsRoutes(metricsCollector: MetricsCollector): Router 
         timestamp: Date.now()
       });
     } catch (error) {
-      console.error('[API] Advanced analytics error:', error);
+      logError('[API] Advanced analytics error:', error);
       res.status(500).json({
         error: 'Failed to get advanced analytics',
       });

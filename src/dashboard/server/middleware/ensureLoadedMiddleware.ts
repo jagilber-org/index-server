@@ -12,7 +12,7 @@
  */
 
 import { Request, Response, NextFunction } from 'express';
-import { ensureLoaded, IndexState } from '../../../services/indexContext.js';
+import { ensureLoadedAsync, IndexState } from '../../../services/indexContext.js';
 
 /**
  * Augment Express res.locals with the pre-loaded index state.
@@ -25,7 +25,11 @@ export interface IndexLocals {
  * Middleware that eagerly loads the instruction index once per request.
  * Attach to any router whose handlers need index state.
  */
-export function ensureLoadedMiddleware(_req: Request, res: Response, next: NextFunction): void {
-  res.locals.indexState = ensureLoaded();
-  next();
+export async function ensureLoadedMiddleware(_req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    res.locals.indexState = await ensureLoadedAsync();
+    next();
+  } catch (error) {
+    next(error);
+  }
 }

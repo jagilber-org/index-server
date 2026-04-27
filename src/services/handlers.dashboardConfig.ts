@@ -10,7 +10,7 @@ import { getBooleanEnv } from '../utils/envUtils';
  *  - Default semantics
  *  - Category (core | dashboard | instructions | manifest | tracing | diagnostics | stress | usage | validation | auth | metrics | experimental)
  *  - Description
- *  - Stability (stable | diagnostic | experimental | deprecated | reserved)
+ *  - Stability (stable | diagnostic | experimental | reserved)
  *  - Since (version first introduced when known – best effort)
  *
  * The list is curated (not discovered dynamically) to ensure ordering stability and to include flags
@@ -18,14 +18,14 @@ import { getBooleanEnv } from '../utils/envUtils';
  * predictable client diffing.
  */
 
-export interface FlagMeta { name:string; category:string; description:string; stability:'stable'|'diagnostic'|'experimental'|'deprecated'|'reserved'; since?:string; default?:string; type?:'boolean'|'string'|'number'; }
+export interface FlagMeta { name:string; category:string; description:string; stability:'stable'|'diagnostic'|'experimental'|'reserved'; since?:string; default?:string; type?:'boolean'|'string'|'number'; }
 export interface FlagRuntime extends FlagMeta { value?:string; enabled?:boolean; parsed?:unknown; docAnchor?:string; }
 
 // Curated registry. Order is intentional for grouping high-value operational flags first.
 export const FLAG_REGISTRY: FlagMeta[] = [
   // Core operation & dashboard
   { name:'INDEX_SERVER_DIR', category:'core', description:'Instructions catalog directory. Defaults to ./instructions relative to CWD.', stability:'stable', default:'./instructions', type:'string', since:'1.0.0' },
-  { name:'INDEX_SERVER_MUTATION', category:'core', description:'Enable mutation tools (add/import/remove/enrich/governance updates).', stability:'stable', default:'off', type:'boolean', since:'1.0.0' },
+  { name:'INDEX_SERVER_MUTATION', category:'core', description:'Override mutation tools (unset or 1 = enabled, 0 = read-only).', stability:'stable', default:'on', type:'boolean', since:'1.0.0' },
   { name:'INDEX_SERVER_VERBOSE_LOGGING', category:'core', description:'Verbose logging (handshake, dispatch timings).', stability:'stable', default:'off', type:'boolean', since:'1.0.0' },
   { name:'INDEX_SERVER_LOG_DIAG', category:'diagnostics', description:'Diagnostic logging (lower-level/internal).', stability:'diagnostic', default:'off', type:'boolean', since:'1.0.0' },
   { name:'INDEX_SERVER_DASHBOARD', category:'dashboard', description:'Enable admin dashboard HTTP server.', stability:'stable', default:'off', type:'boolean', since:'1.0.0' },
@@ -100,7 +100,6 @@ export const FLAG_REGISTRY: FlagMeta[] = [
   { name:'INDEX_SERVER_LOG_MUTATION', category:'diagnostics', description:'Emit mutation-specific verbose logs.', stability:'diagnostic', default:'off', type:'boolean', since:'1.1.0' },
 
   // Legacy / removed (for awareness; not parsed at runtime)
-  { name:'INDEX_SERVER_SHORTCIRCUIT', category:'deprecated', description:'Removed legacy short-circuit handshake path.', stability:'deprecated', default:'(removed)', since:'<1.1.0' },
 
   // Multi-instance / leader-follower
   { name:'INDEX_SERVER_MODE', category:'multi-instance', description:'Instance mode: standalone (default), leader, follower, auto.', stability:'experimental', default:'standalone', type:'string', since:'1.8.5' },

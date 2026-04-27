@@ -151,14 +151,10 @@ describe('graph_export', () => {
     // buildTs can differ if rebuilt, but calling twice without mutation should reuse cache => identical edge arrays by value
   });
 
-  it('invalidates cache after index_add mutation', async () => {
+  it('invalidates cache after instruction mutation', async () => {
     const before = await callTool<any>('graph_export', {});
-    // Add new instruction which shares a category with existing to create at least one new edge
-    const entry = { id:'z-new', title:'z-new', body:'z', priority:10, audience:'all', requirement:'optional', categories:['shared'], schemaVersion:'v3' };
-    // Enable direct mutation for this test (avoids using dispatch abstraction)
-    process.env.INDEX_SERVER_MUTATION = '1';
-    reloadRuntimeConfig();
-    await callTool<any>('index_add', { entry, overwrite:true, lax:true });
+    writeInstruction('z-new', 'z', ['shared']);
+    invalidateFn?.();
     const after = await callTool<any>('graph_export', {});
     // Node count increases
     expect(after.meta.nodeCount).toBe(before.meta.nodeCount + 1);

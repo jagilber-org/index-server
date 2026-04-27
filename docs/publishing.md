@@ -4,6 +4,43 @@ This project uses a dual-repo pattern: private dev repo (`jagilber-dev/index-ser
 
 Publication uses a **two-step safety workflow** to separate content preparation from remote delivery.
 
+## MCP Registry release auth
+
+The GitHub Actions release workflow in this repository normally runs from the **private dev repo** (`jagilber-dev/index-server`).
+
+- In that context, MCP Registry publish must use **`MCP_GITHUB_TOKEN` PAT fallback**
+- **GitHub OIDC** is only expected when the release workflow runs from the **public mirror** (`jagilber-org/index-server`)
+- The workflow now fails fast if neither auth path is available, rather than silently skipping MCP Registry publication
+- Scope `MCP_GITHUB_TOKEN` as narrowly as possible for MCP Registry publication; do not grant broader repository access than the publish step needs
+- **Required PAT permissions for `MCP_GITHUB_TOKEN`:** `contents:write` on the public mirror (`jagilber-org/index-server`) to push registry metadata. No other scopes are needed. Use a fine-grained PAT scoped to only the public mirror repository when possible.
+
+Treat PAT fallback as the current canonical path for private-repo-driven releases until the public mirror owns the release execution context end-to-end.
+
+## MCP marketplace migration status
+
+This repository is in a staged migration from the legacy VSIX distribution story to an MCP-native install and registry model.
+
+### Current status
+
+| Area | Status | Notes |
+|------|--------|-------|
+| npm package distribution | Complete for Stage 1 | Root package is publishable and MCP-native install docs are the default path. |
+| MCP Registry metadata | Complete for Stage 1 | `package.json#mcpName` and root `server.json` are now part of the release surface. |
+| Release workflow auth | Complete for current private-repo model | Private-repo-driven releases must assume `MCP_GITHUB_TOKEN` PAT fallback until release execution moves to the public mirror. |
+| VSIX distribution | Deprecated fallback | Keep the legacy VSIX path available only as a fallback while MCP-native publishing and install flow are proven. |
+| MCP prompts/resources | Deferred | Stage 2 follow-up is tracked in issue #108. |
+| Broader release hardening | In progress | Pre-existing `build:verify` failures remain tracked separately in issue #109. |
+
+### Follow-up guidance
+
+1. Treat the MCP-native package + registry path as the primary install story in docs and release notes.
+2. Do **not** retire the VSIX fallback until marketplace listing, install reproducibility, and any required feature parity are verified.
+3. Keep release messaging explicit: VSIX is legacy fallback only, not the recommended path for new installs.
+4. Use PAT-authenticated MCP Registry publishing from the private repo today; revisit OIDC only when the public mirror owns release execution end-to-end.
+5. Land Stage 2 work as follow-up changes instead of reopening Stage 1 scope:
+   - issue #108 — prompts/resources decision and implementation
+   - issue #109 — triage pre-existing `build:verify` failures outside the migration surface
+
 ## Scripts Overview
 
 | Script | Role | Who Can Run |

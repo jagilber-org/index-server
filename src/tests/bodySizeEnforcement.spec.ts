@@ -219,4 +219,29 @@ describe('body size enforcement', () => {
     expect(resp.item.body.length).toBe(body.length);
     expect(resp.item.body).toBe(body);
   });
+
+  it('advertises body limit in index_add and index_import schemas', async () => {
+    const { getToolRegistry } = await import('../services/toolRegistry.js');
+    const tools = getToolRegistry({ tier: 'admin' });
+    const add = tools.find((tool: { name: string }) => tool.name === 'index_add');
+    const importTool = tools.find((tool: { name: string }) => tool.name === 'index_import');
+
+    const addBody = (((add?.inputSchema as any)?.properties?.entry?.properties?.body) ?? {});
+    const importBody = (((importTool?.inputSchema as any)?.properties?.entries?.oneOf?.[0]?.items?.properties?.body) ?? {});
+
+    expect(addBody.maxLength).toBe(bodyWarnLength);
+    expect(importBody.maxLength).toBe(bodyWarnLength);
+  });
+
+  it('advertises body limit in dispatcher add schema for flat and nested params', async () => {
+    const { getToolRegistry } = await import('../services/toolRegistry.js');
+    const tools = getToolRegistry({ tier: 'admin' });
+    const dispatchTool = tools.find((tool: { name: string }) => tool.name === 'index_dispatch');
+
+    const flatBody = (((dispatchTool?.inputSchema as any)?.properties?.body) ?? {});
+    const nestedBody = (((dispatchTool?.inputSchema as any)?.properties?.entry?.properties?.body) ?? {});
+
+    expect(flatBody.maxLength).toBe(bodyWarnLength);
+    expect(nestedBody.maxLength).toBe(bodyWarnLength);
+  });
 });

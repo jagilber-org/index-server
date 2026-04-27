@@ -23,6 +23,7 @@ import '../services/instructions.dispatcher';
 import { getHandler } from '../server/registry';
 import { getRuntimeConfig, reloadRuntimeConfig } from '../config/runtimeConfig';
 import { invalidate, ensureLoaded, getIndexState, getInstructionsDir } from '../services/indexContext';
+import { forceBootstrapConfirmForTests } from '../services/bootstrapGating';
 
 function uniqueId(): string {
   return `crud-test-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -49,6 +50,7 @@ describe('Instruction CRUD Full Lifecycle', () => {
     process.env.INDEX_SERVER_MUTATION = '1';
     reloadRuntimeConfig();
     invalidate();
+    forceBootstrapConfirmForTests('crud-integration');
     // Ensure instructions directory exists (may be absent on public repo)
     const dir = getInstructionsDir();
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
@@ -73,7 +75,6 @@ describe('Instruction CRUD Full Lifecycle', () => {
   it('should create an instruction and read it back', async () => {
     const id = uniqueId();
     createdIds.push(id);
-    createdIds.push(id);
     const addResult = await invokeHandler('index_dispatch', { action: 'add',
       id,
       title: 'Test Create Read',
@@ -96,14 +97,9 @@ describe('Instruction CRUD Full Lifecycle', () => {
     expect(item.id).toBe(id);
   });
 
-  // NOTE: The following tests require full MCP process isolation (like createReadSmoke.spec.ts)
-  // because getInstructionsDir() pins the first directory used in the process.
-  // In-process handler tests sharing module state cannot reliably change the index directory.
-  // These tests use index_dispatch which routes through the dispatcher and can write to disk
-  // when run in an isolated process.
-
-  it.skip('should update an instruction and verify changes (requires process isolation)', async () => { // SKIP_OK — needs process isolation
+  it('should update an instruction and verify changes', async () => {
     const id = uniqueId();
+    createdIds.push(id);
 
     // Create
     await invokeHandler('index_dispatch', { action: 'add',
@@ -124,6 +120,7 @@ describe('Instruction CRUD Full Lifecycle', () => {
       priority: 50,
       audience: 'developer',
       requirement: 'optional',
+      overwrite: true,
     });
     expect(updateResult).toBeDefined();
 

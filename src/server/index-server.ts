@@ -21,6 +21,11 @@
 // and then re-emit the buffered chunks once the SDK has attached its handlers.
 // This ensures spec compliance: an initialize request always yields either a
 // success or a version negotiation error – never silent drop.
+// Install MCP log bridge stderr intercept FIRST — before any module writes to stderr.
+// This buffers all stderr output and replays it through MCP notifications/message
+// after the handshake, so VS Code shows proper [info]/[warning]/[error] levels
+// instead of tagging everything as [warning] [server stderr].
+import '../services/mcpLogBridge';
 // Install global stderr log prefix (timestamps, pid, ppid, seq, tid) before any diagnostic output.
 import '../services/logPrefix';
 // Ensure logger initializes early (file logging environment may auto-resolve)
@@ -64,9 +69,10 @@ import { getBooleanEnv } from '../utils/envUtils';
 import { DEFAULT_PORTS } from '../config/defaultValues';
 import fs from 'fs';
 import path from 'path';
-import { logInfo } from '../services/logger';
+import { logError, logInfo } from '../services/logger';
 import { forceBootstrapConfirmForTests } from '../services/bootstrapGating';
 import { emitPreflightAndMaybeExit } from '../services/preflight';
+import { execFileSync } from 'child_process';
 import { createShutdownGuard } from './shutdownGuard';
 
 // Singleton shutdown guard — all exit paths funnel through this (Issue #36 fix)
@@ -208,8 +214,17 @@ function parseArgs(argv: string[]): CliConfig {
     const raw = args[i];
     if(raw === '--dashboard') config.dashboard = true;
     else if(raw === '--no-dashboard') config.dashboard = false;
-    else if(raw.startsWith('--dashboard-port=')) config.dashboardPort = parseInt(raw.split('=')[1],10) || config.dashboardPort;
-    else if(raw === '--dashboard-port'){ const v = args[++i]; if(v) config.dashboardPort = parseInt(v,10) || config.dashboardPort; }
+    else if(raw.startsWith('--dashboard-port=')) {
+      const parsed = parseInt(raw.split('=')[1], 10);
+      if (!Number.isNaN(parsed)) config.dashboardPort = parsed;
+    }
+    else if(raw === '--dashboard-port'){
+      const v = args[++i];
+      if(v){
+        const parsed = parseInt(v, 10);
+        if (!Number.isNaN(parsed)) config.dashboardPort = parsed;
+      }
+    }
     else if(raw.startsWith('--dashboard-host=')) config.dashboardHost = raw.split('=')[1] || config.dashboardHost;
     else if(raw === '--dashboard-host'){ const v = args[++i]; if(v) config.dashboardHost = v; }
     else if(raw.startsWith('--dashboard-tries=')) config.maxPortTries = Math.max(1, parseInt(raw.split('=')[1],10) || config.maxPortTries);
@@ -222,11 +237,28 @@ function parseArgs(argv: string[]): CliConfig {
   else if(raw.startsWith('--dashboard-tls-ca=')) config.dashboardTlsCa = raw.split('=')[1];
   else if(raw === '--dashboard-tls-ca'){ const v = args[++i]; if(v) config.dashboardTlsCa = v; }
   else if(raw === '--legacy' || raw === '--legacy-transport') config.legacy = true; // no-op
+  else if(raw === '--setup' || raw === '--configure'){
+      launchSetupWizard(argv);
+    }
   else if(raw === '--help' || raw === '-h'){
       printHelpAndExit();
     }
   }
   return config;
+}
+
+function launchSetupWizard(argv: string[]): never {
+  const wizardPath = path.join(__dirname, '..', '..', 'scripts', 'setup-wizard.mjs');
+  // Forward all args after --setup/--configure to the wizard
+  const setupIdx = argv.findIndex(a => a === '--setup' || a === '--configure');
+  const forwardArgs = setupIdx >= 0 ? argv.slice(setupIdx + 1) : [];
+  try {
+    execFileSync(process.execPath, [wizardPath, ...forwardArgs], { stdio: 'inherit' });
+  } catch (e) {
+    const code = (e as { status?: number }).status ?? 1;
+    process.exit(code);
+  }
+  process.exit(0);
 }
 
 function printHelpAndExit(){
@@ -236,6 +268,10 @@ MCP TRANSPORT (Client Communication):
   Primary transport: JSON-RPC 2.0 over stdio (stdin/stdout)
   Purpose: VS Code, Claude, and other MCP clients
   Security: Process-isolated, no network exposure
+
+SETUP:
+  --setup                  Launch interactive configuration wizard
+  --configure              Alias for --setup
 
 ADMIN DASHBOARD (Optional):
   --dashboard              Enable read-only admin dashboard (default off)
@@ -262,7 +298,7 @@ ENVIRONMENT VARIABLES:
   Other environment variables:
   INDEX_SERVER_VERBOSE_LOGGING=1   Verbose RPC/transport logging
   INDEX_SERVER_LOG_DIAG=1           Diagnostic logging
-  INDEX_SERVER_MUTATION=1           Enable write operations
+  INDEX_SERVER_MUTATION=0           Force read-only mode (writes enabled by default)
   INDEX_SERVER_IDLE_KEEPALIVE_MS    Keepalive interval (default 30000ms)
   NODE_ENV=development              Use dev ports (dashboard=${DEFAULT_PORTS.DASHBOARD_DEV}, leader=${DEFAULT_PORTS.LEADER_DEV})
 
@@ -424,8 +460,6 @@ export async function main(){
   // stdin activity or after the bounded max window.
   startIdleKeepalive();
 
-  // Short-circuit handshake mode removed (INDEX_SERVER_SHORTCIRCUIT) now that full
-  // protocol framing is stable and locked by tests. (2025-08-31)
   const cfg = parseArgs(process.argv);
   const runtime = getRuntimeConfig();
 
@@ -525,8 +559,7 @@ export async function main(){
           try { process.stderr.write(`[handshake-buffer] replay error: ${(e instanceof Error) ? e.message : String(e)}\n`); } catch { /* ignore */ }
         }
       }
-      // eslint-disable-next-line no-console
-      if(runtime.logging.diagnostics) console.error(`[handshake-buffer] replayed ${__earlyInitChunks.length} early chunk(s)`);
+      if(runtime.logging.diagnostics) logError(`[handshake-buffer] replayed ${__earlyInitChunks.length} early chunk(s)`);
       __earlyInitChunks.length = 0;
     } else if(runtime.logging.diagnostics){
       try { process.stderr.write(`[handshake-buffer] replay skipped (no buffered chunks)\n`); } catch { /* ignore */ }

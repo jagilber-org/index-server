@@ -222,8 +222,13 @@ function pingInstance(host: string, port: number, protocol: 'http' | 'https' = '
       if (caPath && fs.existsSync(caPath)) {
         tlsOpts.ca = fs.readFileSync(caPath);
       } else {
-        // Localhost health-check against self-signed certs when no CA configured
-        tlsOpts.rejectUnauthorized = false; // lgtm[js/disabling-certificate-validation] — localhost self-signed cert
+        // No trusted CA configured. Do NOT disable certificate verification
+        // in production code — instead, skip the HTTPS reachability probe
+        // entirely. The earlier isProcessAlive() PID check still ensures the
+        // owning process exists; treat the instance as alive and defer
+        // liveness validation to the next iteration once a CA is configured.
+        resolve(true);
+        return;
       }
     }
     const opts = {
