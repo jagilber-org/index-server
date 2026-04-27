@@ -151,10 +151,14 @@ describe('dashboard routes — path traversal prevention (PR #70, issue #62)', (
     expect(src).toMatch(/validatePathContainment/);
   });
 
-  it('/api/docs/:name strips non-allowlisted characters from the doc name', () => {
+  it('/api/docs/:name applies a strict basename allowlist before path resolution', () => {
     const src = readRoutes();
-    // The handler must apply the allowlist BEFORE building the path
-    expect(src).toMatch(/req\.params\.name\.replace\(\/\[\^a-z0-9_-\]\/gi/);
+    // The handler must validate the param via safeAssetName + a strict regex
+    // BEFORE building the path. The allowlist is now enforce-and-reject (not
+    // strip), which is stricter than the original PR #70 behavior.
+    const block = src.match(/app\.get\(['"]\/api\/docs\/:name['"][\s\S]*?\}\);/);
+    expect(block, 'expected /api/docs/:name route to exist').not.toBeNull();
+    expect(block![0]).toMatch(/safeAssetName\(req\.params\.name,\s*\/\^\[a-z0-9_-\]/);
   });
 
   it('/api/docs/:name validates the resolved path stays inside docs/panels', () => {
@@ -173,9 +177,8 @@ describe('dashboard routes — path traversal prevention (PR #70, issue #62)', (
     expect(block, 'expected /api/screenshots/:name route to exist').not.toBeNull();
     expect(block![0]).toContain('validatePathContainment');
     expect(block![0]).toContain('screenshots');
-    // Filename allowlist must reject path separators / traversal markers
-    expect(block![0]).toMatch(/replace\(\/\[\^a-z0-9\._-\]\/gi/);
-    expect(block![0]).toMatch(/endsWith\(['"]\.png['"]\)/);
+    // Filename allowlist must require .png suffix and reject path separators
+    expect(block![0]).toMatch(/safeAssetName\(req\.params\.name,\s*\/\^\[a-z0-9\._-\][^)]*\\\.png/);
   });
 
   it('routes return HTTP 400 on path-escape errors (not 500)', () => {

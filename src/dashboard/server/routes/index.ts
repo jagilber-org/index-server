@@ -5,6 +5,7 @@
 import { readFile } from 'fs/promises';
 import path from 'path';
 import { Express } from 'express';
+import expressRateLimit from 'express-rate-limit';
 import { createApiRoutes } from '../ApiRoutes.js';
 import { MetricsCollector } from '../MetricsCollector.js';
 import { generateDashboardHtml, stripGraphTab } from '../legacyDashboardHtml.js';
@@ -12,6 +13,18 @@ import { listRegisteredMethods } from '../../../server/registry.js';
 import { logError } from '../../../services/logger.js';
 import { escapeHtml } from '../utils/escapeHtml.js';
 import { validatePathContainment } from '../utils/pathContainment.js';
+import { getRuntimeConfig } from '../../../config/runtimeConfig.js';
+
+/**
+ * Strict allowlist for static-asset path parameters. Returns the matched
+ * filename only if it matches the allowlist regex; otherwise null. Using a
+ * fresh string from RegExp.exec() avoids passing the original tainted
+ * req.params.name down the file-access chain.
+ */
+function safeAssetName(raw: string, pattern: RegExp): string | null {
+  const match = pattern.exec(String(raw || ''));
+  return match ? match[0] : null;
+}
 
 export { createStatusRoutes } from './status.routes.js';
 export { createMetricsRoutes } from './metrics.routes.js';
@@ -86,6 +99,27 @@ export function renderPanelMarkdownHtml(name: string, markdown: string): string 
  * Called once during DashboardServer construction after middleware is set up.
  */
 export function mountDashboardRoutes(app: Express, ctx: DashboardRoutesContext): void {
+  // Build a per-route rate limiter using the same dashboard.http.rateLimit*
+  // configuration as the /api router. Re-uses the same window/max so behavior
+  // is consistent across the dashboard. Disabled if rateLimitEnabled is false.
+  const httpCfg = getRuntimeConfig().dashboard.http;
+  const dashboardLimiter = expressRateLimit({
+    windowMs: Math.max(1, httpCfg.rateLimitWindowMs),
+    max: Math.max(1, httpCfg.rateLimitMax),
+    standardHeaders: true,
+    legacyHeaders: false,
+    validate: { ip: false },
+    skip: () => !httpCfg.rateLimitEnabled,
+    handler: (_req, res) => {
+      const retryAfter = Number(res.getHeader('Retry-After') || Math.ceil(httpCfg.rateLimitWindowMs / 1000));
+      res.status(429).json({
+        error: 'Too Many Requests',
+        message: `Rate limit exceeded. Try again in ${retryAfter} second(s).`,
+        retryAfterSeconds: retryAfter,
+      });
+    },
+  });
+
   // Redirect root to admin panel (v2 dashboard)
   app.get('/', (_req, res) => {
     res.redirect('/admin');
@@ -104,7 +138,7 @@ export function mountDashboardRoutes(app: Express, ctx: DashboardRoutesContext):
   });
 
   // Admin Panel (v2 dashboard — primary UI)
-  app.get('/admin', async (_req, res) => { // lgtm[js/missing-rate-limiting] — localhost-only admin panel
+  app.get('/admin', dashboardLimiter, async (_req, res) => {
     try {
       // __dirname here is src/dashboard/server/routes — step up two levels to reach client/
       const adminHtmlPath = path.join(__dirname, '..', '..', 'client', 'admin.html');
@@ -113,8 +147,12 @@ export function mountDashboardRoutes(app: Express, ctx: DashboardRoutesContext):
         adminHtml = stripGraphTab(adminHtml);
       }
       const nonce = res.locals.cspNonce as string;
-      adminHtml = adminHtml.replace(/<script>/g, `<script nonce="${nonce}">`); // lgtm[js/bad-tag-filter] — nonce is crypto-generated
-      adminHtml = adminHtml.replace(/<script defer /g, `<script nonce="${nonce}" defer `);
+      // Inject the CSP nonce by replacing literal opening <script> tokens
+      // with the nonce-bearing variant. The nonce is server-generated via
+      // crypto and never user-controlled. Avoid open-ended tag regex by
+      // matching only the exact literal opening forms used in admin.html.
+      adminHtml = adminHtml.split('<script>').join(`<script nonce="${nonce}">`);
+      adminHtml = adminHtml.split('<script defer ').join(`<script nonce="${nonce}" defer `);
       res.type('html').send(adminHtml);
     } catch (error) {
       logError('[Dashboard] Admin panel load error:', error);
@@ -134,13 +172,17 @@ export function mountDashboardRoutes(app: Express, ctx: DashboardRoutesContext):
   });
 
   // Panel documentation — serves markdown rendered as styled HTML
-  app.get('/api/docs/:name', async (req, res) => { // lgtm[js/missing-rate-limiting] — serves static markdown docs
-    const name = req.params.name.replace(/[^a-z0-9_-]/gi, '');
+  app.get('/api/docs/:name', dashboardLimiter, async (req, res) => {
+    // Strict basename allowlist: a–z0–9_- only, 1–64 chars. Returns a fresh
+    // string from RegExp.exec; the original tainted req.params.name never
+    // reaches path.resolve. validatePathContainment is retained as
+    // defense-in-depth.
+    const name = safeAssetName(req.params.name, /^[a-z0-9_-]{1,64}$/i);
     if (!name) { res.status(400).send('Invalid doc name'); return; }
     const docsDir = path.resolve(__dirname, '..', '..', '..', '..', 'docs', 'panels');
     try {
-      const docPath = validatePathContainment(path.resolve(docsDir, `${name}.md`), docsDir); // lgtm[js/path-injection] — containment validated by shared helper
-      const md = await readFile(docPath, 'utf-8'); // lgtm[js/path-injection] — docPath containment validated by validatePathContainment above
+      const docPath = validatePathContainment(path.resolve(docsDir, `${name}.md`), docsDir);
+      const md = await readFile(docPath, 'utf-8');
       res.type('html').send(renderPanelMarkdownHtml(name, md));
     } catch (error) {
       if (error instanceof Error && error.message.startsWith('Path escapes allowed base:')) {
@@ -152,13 +194,14 @@ export function mountDashboardRoutes(app: Express, ctx: DashboardRoutesContext):
   });
 
   // Panel screenshot — serves PNG images from docs/screenshots/
-  app.get('/api/screenshots/:name', async (req, res) => { // lgtm[js/missing-rate-limiting] — localhost-only admin endpoint serves static screenshots
-    const fileName = req.params.name.replace(/[^a-z0-9._-]/gi, '');
-    if (!fileName || !fileName.endsWith('.png')) { res.status(400).send('Invalid'); return; }
+  app.get('/api/screenshots/:name', dashboardLimiter, async (req, res) => {
+    // Strict basename allowlist: a–z0–9._- only, must end in .png, 1–80 chars.
+    const fileName = safeAssetName(req.params.name, /^[a-z0-9._-]{1,80}\.png$/i);
+    if (!fileName) { res.status(400).send('Invalid'); return; }
     const screenshotsDir = path.resolve(__dirname, '..', '..', '..', '..', 'docs', 'screenshots');
     try {
-      const filePath = validatePathContainment(path.resolve(screenshotsDir, fileName), screenshotsDir); // lgtm[js/path-injection] — containment validated by shared helper
-      const data = await readFile(filePath); // lgtm[js/path-injection] — filePath containment validated by validatePathContainment above
+      const filePath = validatePathContainment(path.resolve(screenshotsDir, fileName), screenshotsDir);
+      const data = await readFile(filePath);
       res.setHeader('Content-Type', 'image/png');
       res.setHeader('Cache-Control', 'public, max-age=3600');
       res.send(data);
