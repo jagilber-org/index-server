@@ -1,0 +1,21 @@
+# apm.yml — Agent Package Manager manifest
+# See: https://github.com/microsoft/apm
+#
+# This file makes your Squad skills versioned, portable, and community-shareable.
+# Run 'squad skill publish' to populate the skills section after adding skills.
+
+name: index-server
+version: 1.0.0
+
+# Skills — add entries here or run 'squad skill publish' to auto-populate
+skills: []
+
+# Instruction files deployed by 'apm install'
+instructions:
+  - path: .squad/copilot-instructions.md
+    target: .github/copilot-instructions.md
+
+# Prompts deployed by 'apm install'
+prompts:
+  - path: .squad/skills/*/skill.md
+    target: .github/prompts/

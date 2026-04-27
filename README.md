@@ -37,6 +37,20 @@ To launch the server directly without the wizard:
 npx -y @jagilber-org/index-server@latest --dashboard
 ```
 
+#### Bootstrap HTTPS for the dashboard
+
+Generate a self-signed TLS cert+key in one command (requires `openssl` on PATH):
+
+```bash
+# Generate at ~/.index-server/certs/, then start with HTTPS automatically
+npx -y @jagilber-org/index-server@latest --init-cert --start --dashboard
+```
+
+`--init-cert` alone exits after generation. `--init-cert --start` continues
+into normal startup with the generated cert wired into `--dashboard-tls`
+automatically. See [`docs/cert_init.md`](docs/cert_init.md) for the full
+flag reference, security notes, and troubleshooting.
+
 ### Option B: VS Code MCP configuration
 
 Use VS Code's built-in MCP support with `.vscode/mcp.json` or your global `mcp.json`. You can add the server entry manually or run `npx -y @jagilber-org/index-server@latest --setup` to generate the config for you.

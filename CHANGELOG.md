@@ -6,6 +6,17 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 
 ## [Unreleased]
 
+### Added
+
+- **`--init-cert` CLI switch on `index-server`** to bootstrap a self-signed
+  TLS certificate + key for the admin dashboard via OpenSSL. Exits after
+  generation by default; pair with `--start` to continue normal startup using
+  the generated material (auto-wires `--dashboard-tls`). Supports `--cert-dir`,
+  `--cert-file`, `--key-file`, `--cn`, `--san`, `--days`, `--key-bits`,
+  `--force`, and `--print-env[=posix|powershell|both|auto]`. Path-traversal
+  guarded (SH-4); private key permissions set to `0600` on POSIX. See
+  `docs/cert_init.md`.
+
 ### Changed
 
 - `health_check` now reports audit-log health counters while exposing only sanitized audit persistence error messages.
@@ -1410,3 +1421,9 @@ No client changes required. Enable `INDEX_SERVER_MEMOIZE=1` (and optionally `IND
 - Rename catalog_* MCP tools to index_*, add dashboard panel help docs, fix restore script zip support
 
 ## [1.16.2] - 2026-04-02
+
+## [1.26.0] - 2026-04-27
+
+### Added
+
+- Add --init-cert CLI switch for self-signed dashboard TLS bootstrap (PR #233, issue #232)

@@ -339,6 +339,28 @@ node dist/server/index-server.js --dashboard --dashboard-port=8787
 # Dashboard accessible at http://localhost:8787
 ```
 
+#### TLS Bootstrap (`--init-cert`)
+
+To bootstrap a self-signed TLS certificate for the dashboard from the CLI (no
+wizard required), use the `--init-cert` switch family. Requires `openssl` on
+PATH.
+
+```bash
+# Generate cert+key under ~/.index-server/certs/, then exit
+node dist/server/index-server.js --init-cert
+
+# Generate AND continue startup with HTTPS auto-wired
+node dist/server/index-server.js --init-cert --start --dashboard
+```
+
+Flag summary (`--init-cert`, `--cert-dir`, `--cert-file`, `--key-file`,
+`--cn`, `--san`, `--days`, `--key-bits`, `--force`,
+`--print-env[=posix|powershell|both|auto]`, `--start`). Path-traversal
+guarded; private key permissions set to `0600` on POSIX. **No new
+`INDEX_SERVER_*` env vars are introduced in v1** — the switch only writes
+files and (with `--start`) feeds them into the running process. See
+[`cert_init.md`](cert_init.md) for the full reference.
+
 ### Development
 
 1. Install dependencies: `npm ci`

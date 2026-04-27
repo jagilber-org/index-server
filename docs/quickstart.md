@@ -70,9 +70,17 @@ npm run setup
 
 # Non-interactive
 node scripts/setup-wizard.mjs --non-interactive --tls --port 8787
+
+# Or, one-shot CLI bootstrap (requires openssl on PATH):
+index-server --init-cert --start --dashboard
 ```
 
 This generates self-signed certificates in `.certs/` and configures the dashboard for HTTPS.
+
+The `--init-cert` switch is the lightweight CLI alternative: it generates a
+self-signed cert+key under `~/.index-server/certs/` and (with `--start`)
+auto-wires `--dashboard-tls` so no extra flags are needed. See
+[`docs/cert_init.md`](cert_init.md) for the full reference.
 
 Or manually:
 

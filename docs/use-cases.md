@@ -147,6 +147,27 @@ Add to the repo's `copilot-instructions.md`:
 
 ---
 
+## Scenario 6: Bootstrap Dashboard HTTPS for a Fresh Install
+
+**Problem:** A new operator wants the admin dashboard on HTTPS but does not
+want to compose multi-line `openssl req` commands or hand-author SAN
+extensions just to enable TLS for local/internal use.
+
+**Solution:** Use the built-in `--init-cert` switch (requires `openssl` on
+PATH):
+
+```bash
+# One step: generate cert+key under ~/.index-server/certs/, then start the
+# dashboard with HTTPS automatically wired in.
+index-server --init-cert --start --dashboard
+```
+
+For custom CN/SAN/validity see [`docs/cert_init.md`](cert_init.md). Idempotent
+(safe to re-run; preserves existing files unless `--force` given) and never
+contacts the network.
+
+---
+
 ## How Agents Interact with Index Server
 
 ### Searching (most common)

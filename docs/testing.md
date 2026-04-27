@@ -97,6 +97,23 @@ This prevents any accidental repo-root instruction directory from being committe
 3. **Don't create directories in repo root** — use `tmp/` or `os.tmpdir()`
 4. **Don't rely on .gitignore alone** — isolation is the primary defense
 
+## External-Tool Gating Pattern
+
+Some integration tests need an external binary (e.g., `openssl`) that may
+not be present on every CI image. These tests use a `spawnSync` probe in
+`beforeAll` and gate each case with `it.skipIf(!available)` so missing
+prerequisites produce **clean skips, not failures**.
+
+Examples:
+
+- `src/tests/dashboardTls.spec.ts` — original openssl-gated TLS smoke.
+- `src/tests/certInit.spec.ts` — `--init-cert` integration tests; logs
+  `[certInit.spec] opensslAvailable=<bool> reason="..."` to make the gate
+  decision visible in CI output.
+- `src/tests/unit/certInit.unit.spec.ts` and
+  `src/tests/unit/cliParseInitCert.unit.spec.ts` — pure unit tests for the
+  same module; do not require openssl and run on every image.
+
 ## Related Files
 
 - `.gitignore`: Safety-net patterns

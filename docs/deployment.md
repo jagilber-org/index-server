@@ -290,6 +290,7 @@ Aggregate or forward these into your logging system for RUM or audit trails. Cor
 | Promotion | Git-based PR review for instruction changes; promote via controlled import tool. |
 | Drift Detection | Scheduled tool invoking `Index-summary` & diffing against last baseline snapshot. |
 | Access | File ACL restrict write to service account; devs mutate via controlled workflow only. |
+| Dashboard TLS | For local/internal/dev: `index-server --init-cert --start --dashboard` bootstraps a self-signed cert+key (see [`cert_init.md`](cert_init.md)). **For internet-exposed or production services use a CA-issued cert from your existing PKI** — `--init-cert` is intentionally a developer/internal-loopback convenience and v1 does not auto-install into OS trust stores. |
 
 ---
  
