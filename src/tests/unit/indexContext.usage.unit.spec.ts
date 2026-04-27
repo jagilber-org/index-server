@@ -18,7 +18,7 @@ import { enableFeature } from '../../services/features';
 
 // Minimal instruction factory
 function makeEntry(id: string){
-  return { id, title: `Title ${id}`, body: 'Sample body', version: '1.0.0', categories: ['scope:workspace:unit', 'type:test'] } as any;
+  return { id, title: `Title ${id}`, body: 'Sample body', version: '1.0.0', categories: ['scope-workspace-unit', 'type-test'] } as any;
 }
 
 describe('indexContext usage + materialization (P0)', () => {
@@ -61,7 +61,7 @@ describe('indexContext usage + materialization (P0)', () => {
   });
 
   it('incrementUsage establishes firstSeenTs + lastUsedAt and increments monotonically (no double increment)', () => {
-  const id = 'unit_usageMonotonic_' + Date.now();
+  const id = 'unit_usage_monotonic_' + Date.now();
   const filePath = path.join(INSTR_DIR, id + '.json');
   if(fs.existsSync(filePath)) fs.unlinkSync(filePath);
     writeEntry(makeEntry(id));
