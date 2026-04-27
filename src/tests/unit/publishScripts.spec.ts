@@ -154,7 +154,7 @@ describe('publish script hardening', () => {
     });
   });
 
-  describe('dotfile stripping behavior', () => {
+  describe.skipIf(!HAS_PUBLISH_EXCLUDE)('dotfile stripping behavior', () => {
     let fakeRoot: string;
     let outputDir: string;
 
