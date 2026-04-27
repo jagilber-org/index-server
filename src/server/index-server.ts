@@ -74,6 +74,9 @@ import { forceBootstrapConfirmForTests } from '../services/bootstrapGating';
 import { emitPreflightAndMaybeExit } from '../services/preflight';
 import { execFileSync } from 'child_process';
 import { createShutdownGuard } from './shutdownGuard';
+import { runCertInit, formatPrintEnv, validateOptions as validateCertOptions } from './certInit';
+import { CertInitError } from './certInit.types';
+import type { PrintEnvFormat } from './certInit.types';
 
 // Singleton shutdown guard — all exit paths funnel through this (Issue #36 fix)
 export const shutdownGuard = createShutdownGuard();
@@ -192,6 +195,29 @@ interface CliConfig {
   dashboardTlsCert?: string;
   dashboardTlsKey?: string;
   dashboardTlsCa?: string;
+  // ── --init-cert family (see src/server/certInit.ts and docs/cert_init.md) ──
+  /** Trigger TLS cert generation on startup. */
+  initCert?: boolean;
+  /** Output directory for generated cert/key. Defaults to <home>/.index-server/certs. */
+  certDir?: string;
+  /** Override path for generated certificate file. */
+  certFile?: string;
+  /** Override path for generated private key file. */
+  keyFile?: string;
+  /** CommonName for the generated certificate. */
+  certCn?: string;
+  /** Comma-separated SAN entries (DNS:/IP: prefixed). */
+  certSan?: string;
+  /** Validity period in days (1..3650). */
+  certDays?: number;
+  /** RSA key size in bits (2048 or 4096). */
+  certKeyBits?: number;
+  /** Overwrite existing cert/key files. */
+  certForce?: boolean;
+  /** Print env-var lines after generation. true=auto, or 'posix'|'powershell'|'both'. */
+  certPrintEnv?: boolean | string;
+  /** Continue normal server startup after cert-init (composes with --init-cert). */
+  start?: boolean;
 }
 
 function parseArgs(argv: string[]): CliConfig {
@@ -236,6 +262,26 @@ function parseArgs(argv: string[]): CliConfig {
   else if(raw === '--dashboard-tls-key'){ const v = args[++i]; if(v) config.dashboardTlsKey = v; }
   else if(raw.startsWith('--dashboard-tls-ca=')) config.dashboardTlsCa = raw.split('=')[1];
   else if(raw === '--dashboard-tls-ca'){ const v = args[++i]; if(v) config.dashboardTlsCa = v; }
+  // ── --init-cert family ───────────────────────────────────────────────
+  else if(raw === '--init-cert') config.initCert = true;
+  else if(raw.startsWith('--cert-dir=')) config.certDir = raw.split('=').slice(1).join('=');
+  else if(raw === '--cert-dir'){ const v = args[++i]; if(v) config.certDir = v; }
+  else if(raw.startsWith('--cert-file=')) config.certFile = raw.split('=').slice(1).join('=');
+  else if(raw === '--cert-file'){ const v = args[++i]; if(v) config.certFile = v; }
+  else if(raw.startsWith('--key-file=')) config.keyFile = raw.split('=').slice(1).join('=');
+  else if(raw === '--key-file'){ const v = args[++i]; if(v) config.keyFile = v; }
+  else if(raw.startsWith('--cn=')) config.certCn = raw.split('=').slice(1).join('=');
+  else if(raw === '--cn'){ const v = args[++i]; if(v) config.certCn = v; }
+  else if(raw.startsWith('--san=')) config.certSan = raw.split('=').slice(1).join('=');
+  else if(raw === '--san'){ const v = args[++i]; if(v) config.certSan = v; }
+  else if(raw.startsWith('--days=')) { const p = parseInt(raw.split('=')[1], 10); if(!Number.isNaN(p)) config.certDays = p; }
+  else if(raw === '--days'){ const v = args[++i]; if(v){ const p = parseInt(v, 10); if(!Number.isNaN(p)) config.certDays = p; } }
+  else if(raw.startsWith('--key-bits=')) { const p = parseInt(raw.split('=')[1], 10); if(!Number.isNaN(p)) config.certKeyBits = p; }
+  else if(raw === '--key-bits'){ const v = args[++i]; if(v){ const p = parseInt(v, 10); if(!Number.isNaN(p)) config.certKeyBits = p; } }
+  else if(raw === '--force') config.certForce = true;
+  else if(raw === '--print-env') config.certPrintEnv = true;
+  else if(raw.startsWith('--print-env=')) config.certPrintEnv = raw.split('=').slice(1).join('=');
+  else if(raw === '--start') config.start = true;
   else if(raw === '--legacy' || raw === '--legacy-transport') config.legacy = true; // no-op
   else if(raw === '--setup' || raw === '--configure'){
       launchSetupWizard(argv);
@@ -284,6 +330,23 @@ ADMIN DASHBOARD (Optional):
   --dashboard-tls-key=PATH   TLS private key file (PEM)
   --dashboard-tls-ca=PATH    Optional CA certificate file (PEM)
   Purpose: Local administrator monitoring only
+
+CERTIFICATE BOOTSTRAP (Optional, Self-Signed TLS):
+  --init-cert              Generate a self-signed TLS cert+key (requires openssl on PATH).
+                           Exits after generation unless --start is also given.
+  --cert-dir PATH          Output directory (default: ~/.index-server/certs)
+  --cert-file PATH         Override cert output path (must be under --cert-dir)
+  --key-file PATH          Override key output path (must be under --cert-dir)
+  --cn NAME                CommonName subject (default: localhost)
+  --san LIST               Comma-separated SAN entries (default: DNS:localhost,IP:127.0.0.1)
+  --days N                 Validity in days, 1..3650 (default: 365)
+  --key-bits N             RSA key size, 2048 or 4096 (default: 2048)
+  --force                  Overwrite existing cert/key files
+  --print-env[=FMT]        Print INDEX_SERVER_DASHBOARD_TLS_* env lines after generation.
+                           FMT = posix | powershell | both | auto (default: auto)
+  --start                  After --init-cert, start the server with the generated material
+                           (sets --dashboard-tls and feeds the new cert/key automatically)
+  See docs/cert_init.md for full reference, examples, and security notes.
 
 ENVIRONMENT VARIABLES:
   INDEX_SERVER_DASHBOARD=1          Enable dashboard (0=disable, 1=enable)
@@ -462,6 +525,68 @@ export async function main(){
 
   const cfg = parseArgs(process.argv);
   const runtime = getRuntimeConfig();
+
+  // ── --init-cert dispatch ──────────────────────────────────────────────
+  // Self-contained: if --init-cert is given, run cert generation. When --start
+  // is NOT also given, exit after generation (or on error). When --start IS
+  // given, inject the generated paths into the dashboard TLS config so the
+  // server boots with the new material — no extra env wiring required.
+  // Constitution refs: AR-1 (additive, no implicit side effects without flag),
+  // SH-4 (path traversal guard re-asserted by validateOptions inside runCertInit),
+  // OB-3/OB-5 (CertInitError surfaced with stable code; structured logs from module).
+  if (cfg.initCert) {
+    try {
+      const result = await runCertInit({
+        certDir: cfg.certDir,
+        certFile: cfg.certFile,
+        keyFile: cfg.keyFile,
+        cn: cfg.certCn,
+        san: cfg.certSan,
+        days: cfg.certDays,
+        keyBits: cfg.certKeyBits as 2048 | 4096 | undefined,
+        force: cfg.certForce ?? false,
+        printEnv: (cfg.certPrintEnv ?? false) as boolean | PrintEnvFormat,
+      });
+      process.stderr.write(
+        `[init-cert] ${result.kind === 'generated' ? 'generated' : 'skipped'}: cert=${result.certFile} key=${result.keyFile}\n`,
+      );
+      if (cfg.certPrintEnv) {
+        const fmt: PrintEnvFormat = (typeof cfg.certPrintEnv === 'string')
+          ? (cfg.certPrintEnv as PrintEnvFormat)
+          : 'auto';
+        // Re-validate to obtain the resolved option shape (paths) for the helper.
+        const opts = validateCertOptions({
+          certDir: cfg.certDir,
+          certFile: result.certFile,
+          keyFile: result.keyFile,
+          cn: cfg.certCn,
+          san: cfg.certSan,
+          days: cfg.certDays,
+          keyBits: cfg.certKeyBits as 2048 | 4096 | undefined,
+          force: cfg.certForce ?? false,
+          printEnv: (cfg.certPrintEnv ?? false) as boolean | PrintEnvFormat,
+        });
+        process.stderr.write(formatPrintEnv(opts, fmt));
+      }
+      // When --start was passed, inject paths into the dashboard TLS config
+      // so startDashboard() picks them up without requiring --dashboard-tls-cert/key.
+      if (cfg.start) {
+        cfg.dashboardTls = true;
+        cfg.dashboardTlsCert = result.certFile;
+        cfg.dashboardTlsKey = result.keyFile;
+        // Continue normal startup below.
+      } else {
+        // Generation-only mode: exit cleanly.
+        process.exit(0);
+      }
+    } catch (e) {
+      const code = (e instanceof CertInitError) ? e.code : 'UNKNOWN';
+      const msg = (e instanceof Error) ? e.message : String(e);
+      process.stderr.write(`[init-cert] FAILED (code=${code}): ${msg}\n`);
+      try { logError('[init-cert] failed', { code, message: msg }); } catch { /* ignore */ }
+      process.exit(2);
+    }
+  }
 
   // ── Dev/prod port-collision guard ─────────────────────────────────
   // When NODE_ENV=development (or --watch), refuse to start on production

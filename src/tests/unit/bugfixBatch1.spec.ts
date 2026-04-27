@@ -157,6 +157,9 @@ describe('#135: duplicated logic extracted to shared utilities', () => {
     );
     expect(src).toContain('computeSourceHash');
     expect(src).toContain('normalizeCategories');
+    // Note: isJunkCategory is used transitively via normalizeCategories
+    // (which filters junk categories internally), so it does not need to be
+    // imported directly in the groom handler.
   });
 
   it('patch handler imports shared bumpVersion and createChangeLogEntry', () => {

@@ -176,6 +176,20 @@ Environment variables / CLI flags:
 - `INDEX_SERVER_DASHBOARD_PORT` or `--dashboard-port` -- override port (default 8787)
 - `INDEX_SERVER_HTTP_METRICS=1` – (optional) exposes per-route counters shown in health panel (if implemented)
 
+### Enabling HTTPS for the Dashboard
+
+Two paths:
+
+1. **Bring your own cert.** Set `--dashboard-tls --dashboard-tls-cert <path>
+   --dashboard-tls-key <path>` (or the matching `INDEX_SERVER_DASHBOARD_TLS*`
+   env vars) to point the dashboard at an existing PEM cert + key.
+2. **Bootstrap a self-signed cert from the CLI.** Run
+   `index-server --init-cert --start --dashboard` to generate a self-signed
+   cert+key under `~/.index-server/certs/` and start the dashboard with HTTPS
+   in one step. Requires `openssl` on PATH. See [`cert_init.md`](cert_init.md)
+   for the full reference (flags, security notes, troubleshooting,
+   `--print-env` helper).
+
 ## Core Panels
 
 ### System Health Card

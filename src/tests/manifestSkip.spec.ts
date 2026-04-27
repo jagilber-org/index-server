@@ -1,17 +1,11 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll } from 'vitest';
 import path from 'path';
 import fs from 'fs';
 import { callTool } from './testUtils';
 import { reloadRuntimeConfig } from '../config/runtimeConfig';
 
 const DIR = path.join(process.cwd(),'tmp','manifest-skip');
-// Manifest snapshot path is process.cwd()-relative inside writeManifestFromIndex.
-// To avoid cross-test races on the shared snapshots/index-manifest.json under
-// parallel pool execution, the test chdir's into an isolated tmp work dir so
-// only this fork writes to its own snapshots/ tree.
-const WORK = path.join(process.cwd(),'tmp','manifest-skip-work');
-let originalCwd = '';
-let SNAP = '';
+const SNAP = path.join(process.cwd(),'snapshots','index-manifest.json');
 
 beforeAll(async () => {
   process.env.INDEX_SERVER_MUTATION = '1';
@@ -20,11 +14,6 @@ beforeAll(async () => {
   reloadRuntimeConfig(); // Reload config after setting env vars
   fs.rmSync(DIR,{recursive:true,force:true});
   fs.mkdirSync(DIR,{recursive:true});
-  fs.rmSync(WORK,{recursive:true,force:true});
-  fs.mkdirSync(path.join(WORK,'snapshots'),{recursive:true});
-  originalCwd = process.cwd();
-  process.chdir(WORK);
-  SNAP = path.join(WORK,'snapshots','index-manifest.json');
   // side-effect imports
   // @ts-expect-error dynamic side-effect import after env setup
   await import('../services/handlers.instructions');
@@ -32,10 +21,6 @@ beforeAll(async () => {
   await import('../services/instructions.dispatcher');
   // @ts-expect-error dynamic side-effect import after env setup
   await import('../services/handlers.manifest');
-});
-
-afterAll(() => {
-  if (originalCwd) process.chdir(originalCwd);
 });
 
 describe('manifest no-change skip', () => {
