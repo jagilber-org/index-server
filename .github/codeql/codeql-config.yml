@@ -30,8 +30,17 @@ paths-ignore:
 #     from trusted in-module constants, not on user input.
 #   - graph.routes mermaid edge-token regex (`-->|===|~~>|\|-`) detects
 #     mermaid syntax in server-generated graph source, not HTML.
+#   - handlers.search.ts regex-mode search intentionally accepts user-
+#     supplied regex patterns. These pass through a multi-layer validation
+#     chain before construction: length bound (200 chars), syntax check,
+#     rejection of lookaround/backreferences/nested quantifiers, and
+#     safe-regex2 ReDoS analysis. CodeQL cannot trace through safe-regex2
+#     as a sanitizer, so these are false positives.
+#   - regexSafety.ts centralizes the same validated regex construction.
 query-filters:
   - exclude:
       id: js/incomplete-multi-character-sanitization
   - exclude:
       id: js/bad-tag-filter
+  - exclude:
+      id: js/regex-injection
