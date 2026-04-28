@@ -186,6 +186,86 @@ describe('Setup Wizard Multi-Target Config', () => {
   });
 });
 
+describe('Setup Wizard Next Steps — Build Step Skip', () => {
+  const distDir = path.join(ROOT, 'dist', 'server');
+  const distFile = path.join(distDir, 'index-server.js');
+  let distExistedBefore: boolean;
+
+  // Capture whether dist exists before tests run so we can restore state
+  afterEach(() => {
+    try { fs.unlinkSync(path.join(ROOT, '.env.generated')); } catch { /* ok */ }
+  });
+
+  it('should skip "Build the server" step when dist exists', () => {
+    // In a dev repo after `npm run build`, dist/server/index-server.js exists
+    if (!fs.existsSync(distFile)) {
+      console.log('dist not built — skipping (run npm run build first)');
+      return;
+    }
+    const output = runWizard('');
+    expect(output).toContain('Next Steps');
+    expect(output).not.toContain('Build the server');
+    expect(output).not.toContain('npm run build');
+  });
+
+  it('should show "Build the server" step when dist is missing', () => {
+    // Temporarily rename dist file to simulate pre-build state
+    distExistedBefore = fs.existsSync(distFile);
+    let renamed = false;
+    try {
+      if (distExistedBefore) {
+        fs.renameSync(distFile, distFile + '.bak');
+        renamed = true;
+      }
+      const output = runWizard('');
+      expect(output).toContain('Build the server');
+      expect(output).toContain('npm run build');
+    } finally {
+      if (renamed) {
+        fs.renameSync(distFile + '.bak', distFile);
+      }
+    }
+  });
+
+  it('should number steps correctly when build step is skipped', () => {
+    if (!fs.existsSync(distFile)) {
+      console.log('dist not built — skipping');
+      return;
+    }
+    const output = runWizard('');
+    // Without build step, first step should be "1. Copy generated config" or "1. Config files"
+    // and dashboard should be "2. Open the dashboard"
+    expect(output).toMatch(/1\.\s+(Copy generated config|Config files have been written)/);
+    expect(output).toMatch(/2\.\s+Open the dashboard/);
+  });
+
+  it('should number steps correctly when build step is shown', () => {
+    distExistedBefore = fs.existsSync(distFile);
+    let renamed = false;
+    try {
+      if (distExistedBefore) {
+        fs.renameSync(distFile, distFile + '.bak');
+        renamed = true;
+      }
+      const output = runWizard('');
+      // With build step: 1=Build, 2=Copy/Config, 3=Dashboard
+      expect(output).toMatch(/1\.\s+Build the server/);
+      expect(output).toMatch(/2\.\s+(Copy generated config|Config files have been written)/);
+      expect(output).toMatch(/3\.\s+Open the dashboard/);
+    } finally {
+      if (renamed) {
+        fs.renameSync(distFile + '.bak', distFile);
+      }
+    }
+  });
+
+  it('should show semantic search step for enhanced profile regardless of dist', () => {
+    const output = runWizard('--profile enhanced');
+    expect(output).toContain('First-time semantic search');
+    expect(output).toContain('MiniLM model');
+  });
+});
+
 describe('Certificate Generation', () => {
   const certDir = path.join(os.tmpdir(), `cert-test-${Date.now()}`);
   const CERT_SCRIPT = path.join(ROOT, 'scripts', 'generate-certs.mjs');
