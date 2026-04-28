@@ -31,7 +31,7 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 
 - `health_check` now reports audit-log health counters while exposing only sanitized audit persistence error messages.
 
-### Removed (breaking — MCP feedback surface)
+### Removed (breaking ΓÇö MCP feedback surface)
 
 - **MCP feedback tools collapsed to `feedback_submit` only (#111)**. The following MCP tools have been removed with no deprecation alias and no compatibility shim: `feedback_list`, `feedback_get`, `feedback_update`, `feedback_delete`, `feedback_stats`, `feedback_health`, `feedback_dispatch`. Agents must use `feedback_submit` to file entries. Human-operator CRUD now lives behind dashboard authentication at `GET/POST /admin/feedback`, `GET/PATCH/DELETE /admin/feedback/:id`, sharing the same `feedback/feedback-entries.json` store as the MCP submit path. GitHub issue handoff from the dashboard is browser-side, human-triggered, token-free, and targets `jagilber-org/index-server`. Spec: `specs/111-feedback-mcp-rip-down.md`.
 
@@ -40,15 +40,15 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 ### Added
 
 - `IEmbeddingStore` interface with pluggable embedding storage backends.
-- `SqliteEmbeddingStore` — sqlite-vec backed embedding storage with native KNN search via `vec0` virtual table.
-- `JsonEmbeddingStore` — file-based embedding storage adapter with brute-force cosine similarity search.
-- `INDEX_SERVER_SQLITE_VEC_ENABLED` env var — opt-in toggle for sqlite-vec embedding storage (default: off).
-- `INDEX_SERVER_SQLITE_VEC_PATH` env var — custom sqlite-vec native binary path override.
+- `SqliteEmbeddingStore` ΓÇö sqlite-vec backed embedding storage with native KNN search via `vec0` virtual table.
+- `JsonEmbeddingStore` ΓÇö file-based embedding storage adapter with brute-force cosine similarity search.
+- `INDEX_SERVER_SQLITE_VEC_ENABLED` env var ΓÇö opt-in toggle for sqlite-vec embedding storage (default: off).
+- `INDEX_SERVER_SQLITE_VEC_PATH` env var ΓÇö custom sqlite-vec native binary path override.
 - `createEmbeddingStore()` factory function with automatic JSON fallback when sqlite-vec is unavailable.
-- `resolveDevice()` — ONNX Runtime backend probe with injectable fallback chain (cuda → dml → cpu).
-- `checkModelReadiness()` — startup check that warns when embedding model is missing with LOCAL_ONLY enabled.
-- `checkNodeVersion()` — runtime version gate with clear error messages for feature-specific Node.js requirements.
-- Embedding migration support: `migrateJsonEmbeddingsToStore()` for JSON → SQLite migration.
+- `resolveDevice()` ΓÇö ONNX Runtime backend probe with injectable fallback chain (cuda ΓåÆ dml ΓåÆ cpu).
+- `checkModelReadiness()` ΓÇö startup check that warns when embedding model is missing with LOCAL_ONLY enabled.
+- `checkNodeVersion()` ΓÇö runtime version gate with clear error messages for feature-specific Node.js requirements.
+- Embedding migration support: `migrateJsonEmbeddingsToStore()` for JSON ΓåÆ SQLite migration.
 - 62 new embedding-related tests across 8 test files (contract, unit, integration, scenario).
 - Documentation for all new env vars in configuration.md, mcp_configuration.md, vscode_mcp.md, deployment.md, docker_deployment.md, docker-compose.yml, runtime_config_mapping.md.
 - Architecture docs updated with embedding store abstraction diagram and IEmbeddingStore interface reference.
@@ -57,14 +57,14 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 
 - Fixed dual-write stderr that caused duplicate log entries in VS Code Output panel.
 - Fixed `.Count` on `$null` in `New-CleanRoomCopy.ps1` by wrapping collections in `@()`.
-- Fixed tag-wiping in `Publish-ToMirror.ps1` and `publish-direct-to-remote.cjs` — publish scripts no longer delete existing remote tags (template-repo#47).
+- Fixed tag-wiping in `Publish-ToMirror.ps1` and `publish-direct-to-remote.cjs` ΓÇö publish scripts no longer delete existing remote tags (template-repo#47).
 
 ### Changed
 
 - Replaced 137 `console.*` calls with structured logger (`logError`/`logWarn`/`logInfo`/`logDebug`) across 27 server-side TypeScript files.
-- Fixed severity misassignment in `promptReviewService.ts` — `logError` → `logWarn`/`logInfo` for non-error messages.
+- Fixed severity misassignment in `promptReviewService.ts` ΓÇö `logError` ΓåÆ `logWarn`/`logInfo` for non-error messages.
 - Added embedding stress tests and `/api/embeddings/compute` route tests.
-- Fixed `logInfo('')` empty-string calls in `performanceBaseline.ts` — replaced with `logInfo('---')` separators.
+- Fixed `logInfo('')` empty-string calls in `performanceBaseline.ts` ΓÇö replaced with `logInfo('---')` separators.
 - Fixed `factory.ts` formatting defect (multi-statement single line in sqlite case block).
 - Docker deployment docs now note Alpine/musl limitation for sqlite-vec native binary.
 
@@ -92,8 +92,8 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 - Dashboard authentication via `INDEX_SERVER_ADMIN_API_KEY` with Bearer token, login modal, and sessionStorage-based session management.
 - CRUD stress test scripts (`scripts/stress-test.ps1`) for load testing instruction operations.
 - `dashboardAdminAuth` middleware now protects dashboard mutation routes (POST/PUT/DELETE instructions).
-- Integration tests for dashboard auth middleware (`dashboardAuth.spec.ts` — 33 tests).
-- Playwright E2E tests for dashboard auth flow (`dashboard-auth.spec.ts` — 10 tests).
+- Integration tests for dashboard auth middleware (`dashboardAuth.spec.ts` ΓÇö 33 tests).
+- Playwright E2E tests for dashboard auth flow (`dashboard-auth.spec.ts` ΓÇö 10 tests).
 - `npm audit` step in build pipeline and `prepack` script.
 - `ensureLoadedMiddleware` to reduce redundant `ensureLoaded()` calls in dashboard routes.
 - Comprehensive stress testing documentation (`docs/stress-testing.md`).
@@ -106,7 +106,7 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 - All instruction handlers now use `IInstructionStore` interface instead of direct disk I/O, enabling pluggable storage backends.
 - Auto-migration from JSON to SQLite on startup when `INDEX_SERVER_STORAGE_BACKEND=sqlite`.
 - Dashboard CRUD routes now properly invalidate cache after mutations, matching MCP handler patterns.
-- README replaced with streamlined v2 (216 lines vs 449 original) focused on install → quickstart → copilot integration.
+- README replaced with streamlined v2 (216 lines vs 449 original) focused on install ΓåÆ quickstart ΓåÆ copilot integration.
 - Bootstrapper instruction (000-bootstrapper) rewritten to v3 with search-first workflow and copilot instructions setup.
 - Stress test parallel mode refactored from `Start-Job` to `ForEach-Object -Parallel` (PS 7+).
 - `.github/copilot-instructions.md` updated with search-before-add gate and fixed stale tool names.
@@ -119,7 +119,7 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 
 ### Deprecated
 
-- `INDEX_SERVER_DISABLE_USAGE_RATE_LIMIT` — replaced by `INDEX_SERVER_DISABLE_RATE_LIMIT` which covers all rate limiting.
+- `INDEX_SERVER_DISABLE_USAGE_RATE_LIMIT` ΓÇö replaced by `INDEX_SERVER_DISABLE_RATE_LIMIT` which covers all rate limiting.
 
 ### Removed
 
@@ -163,20 +163,20 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 
 ### Changed
 
-- **Environment variable consolidation** — All direct `process.env` reads in runtime source files have been migrated to the centralized `getRuntimeConfig()` config layer. 12 files consolidated: `handlers.feedback.ts`, `autoBackup.ts`, `instructions.dispatcher.ts`, `sqlite.routes.ts`, `admin.routes.ts`, `seedBootstrap.ts`, `sdkServer.ts`, `BufferRing.ts`, `SessionPersistenceManager.ts`, `manifestManager.ts`, `registry.ts`, `transportFactory.ts`.
-- **Standardized env var prefixes** — Unprefixed environment variables have been replaced with `INDEX_SERVER_*` equivalents. Old unprefixed names are no longer supported.
+- **Environment variable consolidation** ΓÇö All direct `process.env` reads in runtime source files have been migrated to the centralized `getRuntimeConfig()` config layer. 12 files consolidated: `handlers.feedback.ts`, `autoBackup.ts`, `instructions.dispatcher.ts`, `sqlite.routes.ts`, `admin.routes.ts`, `seedBootstrap.ts`, `sdkServer.ts`, `BufferRing.ts`, `SessionPersistenceManager.ts`, `manifestManager.ts`, `registry.ts`, `transportFactory.ts`.
+- **Standardized env var prefixes** ΓÇö Unprefixed environment variables have been replaced with `INDEX_SERVER_*` equivalents. Old unprefixed names are no longer supported.
 
 ### Environment Variables
 
-- `INDEX_SERVER_BUFFER_RING_APPEND` — replaces `BUFFER_RING_APPEND` (default: `1`)
-- `INDEX_SERVER_BUFFER_RING_PRELOAD` — replaces `BUFFER_RING_APPEND_PRELOAD` (default: `0`)
-- `INDEX_SERVER_GRAPH_INCLUDE_PRIMARY_EDGES` — replaces `GRAPH_INCLUDE_PRIMARY_EDGES` (default: `1`)
-- `INDEX_SERVER_GRAPH_LARGE_CATEGORY_CAP` — replaces `GRAPH_LARGE_CATEGORY_CAP` (default: `150`)
-- `INDEX_SERVER_AUDIT_LOG` — replaces `INSTRUCTIONS_AUDIT_LOG` (default: enabled, `logs/audit/`)
-- `INDEX_SERVER_COVERAGE_FAST` — replaces `FAST_COVERAGE` (default: `0`)
-- `INDEX_SERVER_COVERAGE_HARD_MIN` — replaces `COVERAGE_HARD_MIN`
-- `INDEX_SERVER_COVERAGE_TARGET` — replaces `COVERAGE_TARGET`
-- `INDEX_SERVER_COVERAGE_STRICT` — replaces `COVERAGE_STRICT` (default: `0`)
+- `INDEX_SERVER_BUFFER_RING_APPEND` ΓÇö replaces `BUFFER_RING_APPEND` (default: `1`)
+- `INDEX_SERVER_BUFFER_RING_PRELOAD` ΓÇö replaces `BUFFER_RING_APPEND_PRELOAD` (default: `0`)
+- `INDEX_SERVER_GRAPH_INCLUDE_PRIMARY_EDGES` ΓÇö replaces `GRAPH_INCLUDE_PRIMARY_EDGES` (default: `1`)
+- `INDEX_SERVER_GRAPH_LARGE_CATEGORY_CAP` ΓÇö replaces `GRAPH_LARGE_CATEGORY_CAP` (default: `150`)
+- `INDEX_SERVER_AUDIT_LOG` ΓÇö replaces `INSTRUCTIONS_AUDIT_LOG` (default: enabled, `logs/audit/`)
+- `INDEX_SERVER_COVERAGE_FAST` ΓÇö replaces `FAST_COVERAGE` (default: `0`)
+- `INDEX_SERVER_COVERAGE_HARD_MIN` ΓÇö replaces `COVERAGE_HARD_MIN`
+- `INDEX_SERVER_COVERAGE_TARGET` ΓÇö replaces `COVERAGE_TARGET`
+- `INDEX_SERVER_COVERAGE_STRICT` ΓÇö replaces `COVERAGE_STRICT` (default: `0`)
 
 ### Fixed
 
@@ -223,14 +223,14 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 
 ### Fixed
 
-- Addressed P1 scan findings — path-injection and regex-injection hardening.
+- Addressed P1 scan findings ΓÇö path-injection and regex-injection hardening.
 
 ## [1.18.2] - 2026-04-14 (retroactively documented)
 
 ### Fixed
 
-- **Path traversal** in instruction routes — validated and sanitized file path parameters.
-- **XSS** in admin dashboard — escaped user-supplied content in DOM insertion paths.
+- **Path traversal** in instruction routes ΓÇö validated and sanitized file path parameters.
+- **XSS** in admin dashboard ΓÇö escaped user-supplied content in DOM insertion paths.
 - Added scan reconciliation report documenting resolved findings.
 
 ## [1.18.1] - 2026-04-14 (retroactively documented)
@@ -249,36 +249,36 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 
 ### Added
 
-- **SQLite storage backend** (⚠️ EXPERIMENTAL — limited testing performed): `INDEX_SERVER_STORAGE_BACKEND=sqlite` enables SQLite-backed instruction storage using Node.js built-in `node:sqlite` (zero third-party dependencies). Not recommended for production use.
-  - `IInstructionStore` interface — storage abstraction layer for backend-agnostic instruction persistence
-  - `JsonFileStore` — existing JSON-file-per-instruction behavior wrapped in the interface
-  - `SqliteStore` — full SQLite implementation with WAL mode, indexes, and FTS5 full-text search
-  - `SqliteMessageStore` — message persistence in SQLite with channel/sender/thread queries
-  - `SqliteUsageStore` — usage tracking in SQLite with atomic increment
-  - Migration engine — bidirectional JSON ↔ SQLite migration (lossless round-trip)
+- **SQLite storage backend** (ΓÜá∩╕Å EXPERIMENTAL ΓÇö limited testing performed): `INDEX_SERVER_STORAGE_BACKEND=sqlite` enables SQLite-backed instruction storage using Node.js built-in `node:sqlite` (zero third-party dependencies). Not recommended for production use.
+  - `IInstructionStore` interface ΓÇö storage abstraction layer for backend-agnostic instruction persistence
+  - `JsonFileStore` ΓÇö existing JSON-file-per-instruction behavior wrapped in the interface
+  - `SqliteStore` ΓÇö full SQLite implementation with WAL mode, indexes, and FTS5 full-text search
+  - `SqliteMessageStore` ΓÇö message persistence in SQLite with channel/sender/thread queries
+  - `SqliteUsageStore` ΓÇö usage tracking in SQLite with atomic increment
+  - Migration engine ΓÇö bidirectional JSON Γåö SQLite migration (lossless round-trip)
   - FTS5 search with BM25 ranking (title 10x, body 5x weight)
   - SQLite backup support in autoBackup (copies .db + WAL/SHM files)
   - Factory pattern with feature flag: `createStore()` selects backend from config
   - 115+ storage-specific tests (contract, migration, FTS5, messaging, usage)
   - Governance hash identical across both backends
 - **NDJSON structured logging**: All server log output now uses strict NDJSON (newline-delimited JSON) format. Each log line is a JSON object with `ts`, `level`, `msg`, and optional `detail`, `tool`, `ms`, `pid`, `port`, `correlationId` fields. V8 `Error.captureStackTrace` auto-populates stack traces on WARN/ERROR. Module-prefixed messages (`[module]`) support source-file heatmap matching.
-- **Markdown preview in instruction editor**: Dashboard instruction editor includes a 📖 Preview button that renders the instruction `body` as GitHub Flavored Markdown (via `marked`). Preview auto-updates as you type.
+- **Markdown preview in instruction editor**: Dashboard instruction editor includes a ≡ƒôû Preview button that renders the instruction `body` as GitHub Flavored Markdown (via `marked`). Preview auto-updates as you type.
 - **Zip-based backups**: All backup operations (auto-backup, bulk-delete, admin panel) now produce `.zip` archives via `adm-zip`. SQLite backend backups include WAL/SHM files for full state preservation. Retention pruning removes oldest snapshots beyond `INDEX_SERVER_AUTO_BACKUP_MAX_COUNT`.
 - **Offset/limit pagination** for `index_dispatch` list action.
 
 ### Changed
 
-- **Pre-push slow test gate removed** — slow tests now run exclusively in CI workflows.
+- **Pre-push slow test gate removed** ΓÇö slow tests now run exclusively in CI workflows.
 - Security headers added to dashboard script routes.
 - Large modules split into focused single-responsibility files (CQ-1 compliance).
 - 66 ESLint unused-variable warnings resolved.
 
-### Environment Variables (⚠️ SQLite options are experimental)
+### Environment Variables (ΓÜá∩╕Å SQLite options are experimental)
 
-- `INDEX_SERVER_STORAGE_BACKEND` — `json` (default) or `sqlite` (experimental — not recommended for production)
-- `INDEX_SERVER_SQLITE_PATH` — SQLite database path (default: `data/index.db`)
-- `INDEX_SERVER_SQLITE_WAL` — Enable WAL mode (default: `true`)
-- `INDEX_SERVER_SQLITE_MIGRATE_ON_START` — Auto-migrate JSON → SQLite on first start (default: `true`)
+- `INDEX_SERVER_STORAGE_BACKEND` ΓÇö `json` (default) or `sqlite` (experimental ΓÇö not recommended for production)
+- `INDEX_SERVER_SQLITE_PATH` ΓÇö SQLite database path (default: `data/index.db`)
+- `INDEX_SERVER_SQLITE_WAL` ΓÇö Enable WAL mode (default: `true`)
+- `INDEX_SERVER_SQLITE_MIGRATE_ON_START` ΓÇö Auto-migrate JSON ΓåÆ SQLite on first start (default: `true`)
 
 ## [1.16.1] - 2026-04-01
 
@@ -403,13 +403,13 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 
 ### Added
 
-- **Dashboard configuration panel redesign**: Category-grouped flags with collapsible sections, live search/filter, documentation links (📖 icons), 15-second auto-refresh, stability color coding, and full-height layout replacing the constrained 480px scroll area.
-- **Constitution rule A-7**: Canonical seeds in `seedBootstrap.ts` must contain only generalized, public-safe content — no environment-specific or org-specific data.
+- **Dashboard configuration panel redesign**: Category-grouped flags with collapsible sections, live search/filter, documentation links (≡ƒôû icons), 15-second auto-refresh, stability color coding, and full-height layout replacing the constrained 480px scroll area.
+- **Constitution rule A-7**: Canonical seeds in `seedBootstrap.ts` must contain only generalized, public-safe content ΓÇö no environment-specific or org-specific data.
 
 ### Changed
 
 - **Auto-backup default**: `autoBackupEnabled` now defaults to `false` (was `true`). Set `INDEX_SERVER_AUTO_BACKUP=1` to re-enable.
-- **Flag registry sorting**: `/api/admin/config` flags are now sorted by category → name for consistent ordering.
+- **Flag registry sorting**: `/api/admin/config` flags are now sorted by category ΓåÆ name for consistent ordering.
 - **Flag metadata**: Each flag now includes a `docAnchor` slug and the response includes `lastRefreshed` timestamp.
 
 ## [1.10.0] - 2026-03-02
@@ -420,8 +420,8 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 - **Embedding cache model awareness**: Embedding cache now stores `modelName` alongside `catalogHash`, automatically invalidating cached embeddings when the semantic model is changed (e.g., switching from `all-MiniLM-L6-v2` to `bge-base-en-v1.5`). Prevents dimension mismatch errors.
 - **Zod schema for `index_search`**: Added `zInstructionsSearch` to `toolRegistry.zod.ts` with all parameters (`keywords`, `mode`, `limit`, `includeCategories`, `caseSensitive`, `contentType`) matching the JSON Schema definition.
 - **Documentation**: Added docs index, MCP configuration guide, project PRD, prompt optimization guide, search benchmark results, credential centralization runbook.
-- **Benchmark script**: `scripts/benchmark-search.ps1` — stress-tests keyword/regex/semantic search modes and generates markdown + Mermaid report.
-- **Tools REST routes**: `src/dashboard/server/routes/tools.routes.ts` — REST bridge for MCP tool handlers.
+- **Benchmark script**: `scripts/benchmark-search.ps1` ΓÇö stress-tests keyword/regex/semantic search modes and generates markdown + Mermaid report.
+- **Tools REST routes**: `src/dashboard/server/routes/tools.routes.ts` ΓÇö REST bridge for MCP tool handlers.
 
 ### Fixed
 
@@ -436,13 +436,13 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 ### Added
 
 - **Search modes**: `index_search` now supports `mode` parameter with three values:
-  - `keyword` (default) — substring matching with auto-tokenization
-  - `regex` — pattern matching (e.g., `"deploy|release"`, `"Type[Ss]cript"`) with ReDoS protection (200-char limit)
-  - `semantic` — embedding-based cosine similarity search with lazy-loaded HuggingFace model, disk-cached embeddings, and graceful degradation to keyword mode on failure. Requires `INDEX_SERVER_SEMANTIC_ENABLED=1`.
+  - `keyword` (default) ΓÇö substring matching with auto-tokenization
+  - `regex` ΓÇö pattern matching (e.g., `"deploy|release"`, `"Type[Ss]cript"`) with ReDoS protection (200-char limit)
+  - `semantic` ΓÇö embedding-based cosine similarity search with lazy-loaded HuggingFace model, disk-cached embeddings, and graceful degradation to keyword mode on failure. Requires `INDEX_SERVER_SEMANTIC_ENABLED=1`.
 - **Embedding service**: New `embeddingService.ts` with cosine similarity, disk cache, staleness detection, and lazy model loading (zero startup impact).
 - **Semantic configuration**: New env vars `INDEX_SERVER_SEMANTIC_ENABLED`, `INDEX_SERVER_SEMANTIC_MODEL`, `INDEX_SERVER_SEMANTIC_CACHE_DIR`, `INDEX_SERVER_EMBEDDING_PATH`, `INDEX_SERVER_SEMANTIC_DEVICE`, `INDEX_SERVER_SEMANTIC_LOCAL_ONLY` via `SemanticConfig` in `runtimeConfig.ts`.
-  - `INDEX_SERVER_SEMANTIC_DEVICE` — Run embeddings on GPU: `cuda` (NVIDIA) or `dml` (DirectML/Windows). Default: `cpu`.
-  - `INDEX_SERVER_SEMANTIC_LOCAL_ONLY` — Block remote model downloads when set to `1`. Model must already be cached.
+  - `INDEX_SERVER_SEMANTIC_DEVICE` ΓÇö Run embeddings on GPU: `cuda` (NVIDIA) or `dml` (DirectML/Windows). Default: `cpu`.
+  - `INDEX_SERVER_SEMANTIC_LOCAL_ONLY` ΓÇö Block remote model downloads when set to `1`. Model must already be cached.
 - **Search highlighting**: Match highlighting in both global search results and local instruction list filter using `<mark>` tags with gold background.
 - **Backup file export/import**: "Backup to File" and "Restore from File" buttons in Maintenance tab with file dialog support.
 - **Server export/import endpoints**: `GET /api/admin/maintenance/backup/:id/export` and `POST /api/admin/maintenance/backup/import` for backup bundle transfer.
@@ -450,7 +450,7 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 
 ### Fixed
 
-- **Global search URL mismatch**: Client was calling `/api/instructions/search` but server route is `/api/index_search` — global search always returned "Not found".
+- **Global search URL mismatch**: Client was calling `/api/instructions/search` but server route is `/api/index_search` ΓÇö global search always returned "Not found".
 - **Cache-busting**: Now hashes all JS + CSS + HTML files (was CSS-only), ensuring JS changes are picked up by browsers.
 - **Instance badge**: Shows green when count > 0 (was > 1).
 - **Instance dropdown positioning**: Aligned left instead of centered.
@@ -487,11 +487,11 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 - **Pre-mutation auto-backup**: When a forced bulk delete exceeds the threshold and `INDEX_SERVER_BACKUP_BEFORE_BULK_DELETE` is enabled (default), all instruction files are snapshotted to `backups/instructions-{timestamp}/` before deletion proceeds. Backup failure aborts the entire operation.
 - **Dry-run mode**: `index_remove` accepts `dryRun: true` to preview which IDs would be deleted without modifying disk.
 - **New env vars**: `INDEX_SERVER_MAX_BULK_DELETE` (number, default 5), `INDEX_SERVER_BACKUP_BEFORE_BULK_DELETE` (boolean, default true).
-- **Tests**: `bulkDeleteGuard.spec.ts` — 6 unit tests covering threshold enforcement, force override, dry-run, and auto-backup behavior.
+- **Tests**: `bulkDeleteGuard.spec.ts` ΓÇö 6 unit tests covering threshold enforcement, force override, dry-run, and auto-backup behavior.
 
 ### Security
 
-- Mitigates accidental or automated mass instruction deletion — the incident that wiped production catalog is no longer possible without explicit `force` acknowledgement and automatic backup.
+- Mitigates accidental or automated mass instruction deletion ΓÇö the incident that wiped production catalog is no longer possible without explicit `force` acknowledgement and automatic backup.
 
 ## [1.8.1] - 2026-02-24
 
@@ -505,7 +505,7 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 
 - **Constitution Q-7**: Schema-contract tests required for dispatcher action additions.
 - **Constitution Q-8**: Agent-perspective tests required for mutation dispatch actions.
-- **Test file**: `dispatcherAddFlatParams.spec.ts` — 11 contract + agent-perspective tests covering all dispatch mutation actions.
+- **Test file**: `dispatcherAddFlatParams.spec.ts` ΓÇö 11 contract + agent-perspective tests covering all dispatch mutation actions.
 
 ## [1.8.0] - 2026-02-24
 
@@ -543,26 +543,26 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 ### Changed
 
 - **Schema version bumped to v4**: Instruction schema now accepts `sourceWorkspace` and `createdByAgent` as optional root-level properties. These fields are set by `promote_from_repo` to track provenance of promoted entries. Previously, entries with these fields were rejected by `additionalProperties: false` validation (caused 10 skipped entries in production catalogs).
-- **Migration v3→v4**: Automatic no-op migration — fields are optional so no data transforms needed; schemaVersion stamp is updated on load.
+- **Migration v3ΓåÆv4**: Automatic no-op migration ΓÇö fields are optional so no data transforms needed; schemaVersion stamp is updated on load.
 
 ## [1.6.7] - 2026-02-16
 
 ### Added
 
 - **SpecKit bootstrap**: Full spec-driven development scaffolding for the repo.
-  - `constitution.json` — Machine-checkable quality gates (quality, security, architecture, governance articles)
-  - `.specify/` folder — `memory/constitution.md`, `templates/` (spec, plan, tasks), `config/promotion-map.json`, `commands/`
-  - `.github/copilot-instructions.md` — Canonical repo instructions with MCP integration section
-  - `.github/agents/` — 5 SpecKit agent slash commands (constitution, specify, plan, tasks, implement)
-  - `.github/prompts/` — 5 matching reusable prompt files
-  - `sync-constitution.cjs` — Generates derived constitution.md from constitution.json (supports `--check` mode)
-  - `promotion-map.json` — Maps existing docs (ARCHITECTURE, PRD, TOOLS, CONTRIBUTING, specs) for catalog promotion
+  - `constitution.json` ΓÇö Machine-checkable quality gates (quality, security, architecture, governance articles)
+  - `.specify/` folder ΓÇö `memory/constitution.md`, `templates/` (spec, plan, tasks), `config/promotion-map.json`, `commands/`
+  - `.github/copilot-instructions.md` ΓÇö Canonical repo instructions with MCP integration section
+  - `.github/agents/` ΓÇö 5 SpecKit agent slash commands (constitution, specify, plan, tasks, implement)
+  - `.github/prompts/` ΓÇö 5 matching reusable prompt files
+  - `sync-constitution.cjs` ΓÇö Generates derived constitution.md from constitution.json (supports `--check` mode)
+  - `promotion-map.json` ΓÇö Maps existing docs (ARCHITECTURE, PRD, TOOLS, CONTRIBUTING, specs) for catalog promotion
 
 ## [1.6.6] - 2026-02-16
 
 ### Added
 
-- **`promote_from_repo` tool**: New mutation tool that scans a local Git repository and promotes its knowledge content (constitutions, docs, instructions, specs) into the instruction catalog. Supports `.specify/config/promotion-map.json` for explicit source→instruction mappings and automatic `instructions/*.json` discovery. Features SHA-256 content hash dedup, scope filtering, dry-run mode, force re-promote, and custom repoId override. Replaces per-repo promotion logic with a centralized server-side tool.
+- **`promote_from_repo` tool**: New mutation tool that scans a local Git repository and promotes its knowledge content (constitutions, docs, instructions, specs) into the instruction catalog. Supports `.specify/config/promotion-map.json` for explicit sourceΓåÆinstruction mappings and automatic `instructions/*.json` discovery. Features SHA-256 content hash dedup, scope filtering, dry-run mode, force re-promote, and custom repoId override. Replaces per-repo promotion logic with a centralized server-side tool.
 - **15 unit tests** for `promote_from_repo` covering promotion-map, instruction file scanning, scope filtering, content hash dedup, force flag, dry-run, repoId override, error handling, and malformed file resilience.
 - **TOOLS.md** documentation for `promote_from_repo` tool.
 
@@ -570,7 +570,7 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 
 ### Changed
 
-- **Tool name separator**: Renamed all 44 MCP tool names from slash (`/`) to underscore (`_`) format (e.g., `health/check` → `health_check`, `instructions/dispatch` → `index_dispatch`). Underscore naming improves compatibility across MCP clients and avoids path-separator ambiguity.
+- **Tool name separator**: Renamed all 44 MCP tool names from slash (`/`) to underscore (`_`) format (e.g., `health/check` ΓåÆ `health_check`, `instructions/dispatch` ΓåÆ `index_dispatch`). Underscore naming improves compatibility across MCP clients and avoids path-separator ambiguity.
 - **Dispatch schema**: Added `listScoped` and `getEnhanced` to the `index_dispatch` action enum so these actions are no longer blocked by schema validation.
 
 ### Fixed
@@ -585,7 +585,7 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 
 ### Changed (Catalog Configuration)
 
-- **Configurable body max length**: Added `INDEX_SERVER_BODY_MAX_LENGTH` environment variable (default: 20000, range: 1000–1000000) to control the maximum body character length for instruction entries. The JSON schema ceiling is 1MB; the runtime config controls effective enforcement.
+- **Configurable body max length**: Added `INDEX_SERVER_BODY_MAX_LENGTH` environment variable (default: 20000, range: 1000ΓÇô1000000) to control the maximum body character length for instruction entries. The JSON schema ceiling is 1MB; the runtime config controls effective enforcement.
 - **Enhanced salvage for missing fields**: Missing `audience` now defaults to `all` (salvage counter: `audienceMissing`), missing `requirement` defaults to `recommended` (counter: `requirementMissing`). Previously, entries without these fields were hard-rejected.
 - **Body truncation always applies**: Removed the 24K ceiling on body truncation salvage. Bodies exceeding the configured limit are always truncated, regardless of how far over they are.
 - **Near-limit warning is relative**: The `body:near-limit` soft warning now triggers at 90% of the configured body max length instead of a hardcoded 18K threshold.
@@ -605,8 +605,8 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 ### Fixed (MCP Protocol Compliance)
 
 - **CRITICAL:** Eliminated stdout contamination violating MCP stdio transport specification. Server was writing diagnostic messages to stdout, contaminating the JSON-RPC message stream and causing PowerShell MCP client connection failures.
-  - Changed `MetricsCollector.ts`: 4 instances of `console.log()` → `console.error()` (storage mode, clear messages)
-  - Changed `memoryMonitor.ts`: 9 instances of `console.log()` → `console.error()` (monitoring lifecycle, snapshots, utilities)
+  - Changed `MetricsCollector.ts`: 4 instances of `console.log()` ΓåÆ `console.error()` (storage mode, clear messages)
+  - Changed `memoryMonitor.ts`: 9 instances of `console.log()` ΓåÆ `console.error()` (monitoring lifecycle, snapshots, utilities)
   - Fixed `sdkServer.ts`: Corrected literal `\n` escape sequences that broke TypeScript compilation
   - Impact: stdout now contains ONLY JSON-RPC messages (MCP spec compliant), stderr contains all diagnostic/debug logging
   - Fixes: PowerShell MCP client timeout issue caused by non-JSON lines in stdout stream
@@ -645,7 +645,7 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 
 ### Added (test infrastructure)
 
-- Introduced shared dashboard readiness helper `waitForDashboard.ts` eliminating ad‑hoc polling loops across graph-related tests.
+- Introduced shared dashboard readiness helper `waitForDashboard.ts` eliminating adΓÇæhoc polling loops across graph-related tests.
 
 ### Fixed (flaky tests)
 
@@ -663,9 +663,9 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 
 ### Future (1.6.2 follow-up)
 
-- Schedule removal of legacy mutation flag references in help text and admin dashboard after confirming negligible usage (target ≥90% replacement) and possibly introduce `INDEX_SERVER_CONFIG_STRICT` to enforce consolidated variable set.
+- Schedule removal of legacy mutation flag references in help text and admin dashboard after confirming negligible usage (target ΓëÑ90% replacement) and possibly introduce `INDEX_SERVER_CONFIG_STRICT` to enforce consolidated variable set.
 
-### Configuration Consolidation (Phases 1–4)
+### Configuration Consolidation (Phases 1ΓÇô4)
 
 - Added unified runtime configuration loader `src/config/runtimeConfig.ts` centralizing parsing & normalization of environment variables.
 - Introduced consolidated variables: `INDEX_SERVER_TIMING_JSON`, `INDEX_SERVER_TEST_MODE`, `INDEX_SERVER_LOG_LEVEL`, `INDEX_SERVER_MUTATION`, `INDEX_SERVER_TRACE` (token set), with future placeholders (`INDEX_SERVER_BUFFER_RING`).
@@ -673,7 +673,7 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 - Pilot migration: `manifestEdgeCases.spec.ts` refactored to consume timing via `cfg.timing()` accessor; remaining high-churn tests scheduled for follow-up phases.
 - Documentation updates: README consolidation section, deployment matrix extended with migration notes, contributing guidelines prohibit new ad-hoc env vars, configuration guide cross-referenced.
 - Coverage gating integrated with loader (`runtimeConfig.coverage`) maintaining dual-threshold (`COVERAGE_HARD_MIN`, `COVERAGE_TARGET`).
-- Established future Phase 5 plan: optional strict mode (`INDEX_SERVER_CONFIG_STRICT=1`) to reject unmapped legacy flags once adoption threshold met (target ≥70% migrated usages).
+- Established future Phase 5 plan: optional strict mode (`INDEX_SERVER_CONFIG_STRICT=1`) to reject unmapped legacy flags once adoption threshold met (target ΓëÑ70% migrated usages).
 
 
 ### Added (dispatcher capabilities & batch)
@@ -682,8 +682,8 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 
 - Added `docs/MANIFEST.md` detailing catalog manifest lifecycle, invariants, drift categories, opportunistic materialization, and fastload roadmap.
 - Updated `README.md` with Manifest & Opportunistic Materialization section; added MANIFEST doc links in primary doc suite lists.
-- Updated `PROJECT_PRD.md` to version 1.4.2 including formal Manifest & Materialization requirements (MF1–MF7) and ratified schema‑aided failure contract.
-- Updated `ARCHITECTURE.md` (version banner 1.4.1 → context now aligned with opportunistic materialization & manifest helper) – cross-linked manifest semantics.
+- Updated `PROJECT_PRD.md` to version 1.4.2 including formal Manifest & Materialization requirements (MF1ΓÇôMF7) and ratified schemaΓÇæaided failure contract.
+- Updated `ARCHITECTURE.md` (version banner 1.4.1 ΓåÆ context now aligned with opportunistic materialization & manifest helper) ΓÇô cross-linked manifest semantics.
 - Updated `DOCS-INDEX.md` adding Manifest category; refreshed recent updates section for 1.4.x runtime changes.
 - Removed deprecated PRD stub files (`docs/PRD.md`, `docs/PROJECT-PRD.md`) to eliminate duplication; canonical remains `docs/PROJECT_PRD.md`.
 - Ensured CHANGELOG references preserved and future fastload placeholder documented (no runtime effect yet).
@@ -714,28 +714,28 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 
   ### Added (manifest observability & helper)
 
-  - Centralized manifest update helper `attemptManifestUpdate()` consolidates all post‑mutation catalog manifest writes (future hook point for batching/debounce without changing call sites).
+  - Centralized manifest update helper `attemptManifestUpdate()` consolidates all postΓÇæmutation catalog manifest writes (future hook point for batching/debounce without changing call sites).
   - Structured manifest write log lines: `[manifest] wrote catalog-manifest.json count=<entryCount> ms=<duration>` emitted only on successful writes.
   - New counters:
-    - `manifest:write` – incremented on each successful manifest write
-    - `manifest:writeFailed` – incremented when an exception occurs during write
-    - `manifest:hookError` – incremented when update hook invocation throws
+    - `manifest:write` ΓÇô incremented on each successful manifest write
+    - `manifest:writeFailed` ΓÇô incremented when an exception occurs during write
+    - `manifest:hookError` ΓÇô incremented when update hook invocation throws
   - Environment flag `INDEX_SERVER_MANIFEST_WRITE=0` disables manifest persistence (read-only / diagnostic mode) while allowing normal runtime behavior.
 
   ### Fixed (visibility flake)
 
-  - Stabilized intermittent add → immediate list/get visibility timing by refining late materialization path and adding targeted retry logic in `addVisibilityInvariant.spec.ts` (single bounded retry, preserves genuine failure signal).
+  - Stabilized intermittent add ΓåÆ immediate list/get visibility timing by refining late materialization path and adding targeted retry logic in `addVisibilityInvariant.spec.ts` (single bounded retry, preserves genuine failure signal).
 
   ### Tests (edge coverage)
 
   - New `manifestEdgeCases.spec.ts` validating:
     - Disabled write mode respects `INDEX_SERVER_MANIFEST_WRITE=0` (no file created/modified)
-    - Corrupted on-disk manifest auto‑repair after subsequent catalog mutation
+    - Corrupted on-disk manifest autoΓÇærepair after subsequent catalog mutation
   - Visibility invariant test enhanced with diagnostic trace & retry instrumentation (now consistently green).
 
   ### Documentation
 
-  - README: Added Manifest Observability section, documented new counters & `INDEX_SERVER_MANIFEST_WRITE` flag plus reserved `INDEX_SERVER_MANIFEST_FASTLOAD` (planned fast load optimization – inactive placeholder).
+  - README: Added Manifest Observability section, documented new counters & `INDEX_SERVER_MANIFEST_WRITE` flag plus reserved `INDEX_SERVER_MANIFEST_FASTLOAD` (planned fast load optimization ΓÇô inactive placeholder).
   - CONFIGURATION guide: Added Manifest Configuration section & environment variable table entries.
   - CHANGELOG: This entry formalizes helper + observability release.
 
@@ -748,28 +748,28 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 
   - No instruction schema or tool interface changes.
   - Purely additive logging & metrics; safe transparent upgrade for all clients.
-  - When `INDEX_SERVER_MANIFEST_WRITE=0`, runtime skips writes silently (counter increments suppressed) – intended only for diagnostics / perf profiling.
+  - When `INDEX_SERVER_MANIFEST_WRITE=0`, runtime skips writes silently (counter increments suppressed) ΓÇô intended only for diagnostics / perf profiling.
 
   ### Upgrade Guidance (1.4.0)
 
-  - Pull & rebuild – no client changes required.
+  - Pull & rebuild ΓÇô no client changes required.
   - To disable manifest file writes for diagnostics: set `INDEX_SERVER_MANIFEST_WRITE=0` (do not use in production if you rely on external manifest consumers).
   - Monitoring systems may now scrape manifest counters alongside existing metrics buckets.
 
-  ### Future (not included – 1.4.0 roadmap)
+  ### Future (not included ΓÇô 1.4.0 roadmap)
 
-  - Planned `INDEX_SERVER_MANIFEST_FASTLOAD` optimization mode (hash/mtime short‑circuit) reserved; currently no effect (documented as placeholder only).
+  - Planned `INDEX_SERVER_MANIFEST_FASTLOAD` optimization mode (hash/mtime shortΓÇæcircuit) reserved; currently no effect (documented as placeholder only).
 
 ## [1.4.1] - 2025-09-14
 
 ### Fixed (dashboard health accuracy)
 
 - Resolved persistent false positive "Statistics unavailable" issue: local `statsAvailable` shadowed global flag so health card always injected the warning despite successful stats fetches. Now uses `window.statsAvailable` consistently.
-- Restored memory utilization health check (`mem: ok` / fail at ≥90% heap usage) alongside CPU derived check when backend omits explicit entries.
+- Restored memory utilization health check (`mem: ok` / fail at ΓëÑ90% heap usage) alongside CPU derived check when backend omits explicit entries.
 
 ### Changed (UI consistency)
 
-- Unified overview card styling with Real‑time Monitoring card via new shared `.stat-row` styles (consistent spacing, typography, separators).
+- Unified overview card styling with RealΓÇætime Monitoring card via new shared `.stat-row` styles (consistent spacing, typography, separators).
 - Added stronger label/value contrast and tabular numeric alignment across System Statistics, System Health, and Performance cards.
 
 ### Internal (refactor / cleanup)
@@ -812,13 +812,13 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 ### Added (schema v3 & governance)
 
 - Introduced on-disk instruction schemaVersion `3` with new `primaryCategory` field enforcing a single canonical category reference.
-- Automatic migration path (v1→v2→v3) updates existing instruction JSON files in-place; adds `primaryCategory` from first existing category and normalizes category list to include it.
+- Automatic migration path (v1ΓåÆv2ΓåÆv3) updates existing instruction JSON files in-place; adds `primaryCategory` from first existing category and normalizes category list to include it.
 - Added governance justification file `governance/ALLOW_HASH_CHANGE` documenting approved hash shift from structural canonicalization.
 
 ### Changed (migration & normalization)
 
 - `migrateInstructionRecord` now injects `primaryCategory` for v2 records and ensures `schemaVersion` bump with descriptive notes.
-- Runtime handlers enforce invariant: `primaryCategory ∈ categories[]`; fallback category `uncategorized` only when INDEX_SERVER_REQUIRE_CATEGORY unset.
+- Runtime handlers enforce invariant: `primaryCategory Γêê categories[]`; fallback category `uncategorized` only when INDEX_SERVER_REQUIRE_CATEGORY unset.
 - All committed instructions canonicalized (hash drift resolved) to provide stable CI governance baseline.
 
 ### Integrity & Tooling
@@ -834,7 +834,7 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 
 ### Documentation (navigation & migration)
 
-- Updated MIGRATION guidance (v2→v3 path) and added docs index + instruction usage plan for navigation.
+- Updated MIGRATION guidance (v2ΓåÆv3 path) and added docs index + instruction usage plan for navigation.
 
 
 ### Changed (test stability)
@@ -1134,9 +1134,9 @@ No action required. Clients benefit from stricter and more predictable error cod
 
 ### Changed (test gating & stability)
 
-- Segregated nondeterministic / adversarial fuzz & stress specs behind `INDEX_SERVER_STRESS_DIAG=1` (handshake flake, mixed workload health starvation repro, multi‑process health stress, dispatcher stress/flake, concurrency fuzz).
+- Segregated nondeterministic / adversarial fuzz & stress specs behind `INDEX_SERVER_STRESS_DIAG=1` (handshake flake, mixed workload health starvation repro, multiΓÇæprocess health stress, dispatcher stress/flake, concurrency fuzz).
 - Baseline test run (without flag) now deterministic: all core + compliance + governance suites green; stress specs appear as skipped (documented) eliminating prior intermittent CI noise.
-- Added skip pattern helper (`maybeIt`) in gated specs for clear opt‑in semantics.
+- Added skip pattern helper (`maybeIt`) in gated specs for clear optΓÇæin semantics.
 
 ### Added (tooling & scripts)
 
@@ -1201,7 +1201,7 @@ For routine CI or local verification omit the flag for deterministic results.
 ### Changed (test stability & isolation)
 
 - Refactored feedback test suite:
-  - Introduced `feedbackCore.spec.ts` (comprehensive) & `feedbackSimple.spec.ts` (smoke) with per‑test isolated `INDEX_SERVER_FEEDBACK_DIR` directories.
+  - Introduced `feedbackCore.spec.ts` (comprehensive) & `feedbackSimple.spec.ts` (smoke) with perΓÇætest isolated `INDEX_SERVER_FEEDBACK_DIR` directories.
   - Converted brittle absolute "empty list" assertions to delta-based assertions; legacy expectations gated with `it.skip(... // SKIP_OK)` for documentation without flakiness.
   - Added deterministic persistence wait loop for filesystem write visibility.
   - Replaced dynamic requires with explicit static imports (avoids MODULE_NOT_FOUND under variant names).
@@ -1226,7 +1226,7 @@ For routine CI or local verification omit the flag for deterministic results.
 
 - Guarded optional `since` parameter access in feedback list & stats handlers (eliminates TS18048 risk under strict mode).
 - Added commit helper tasks for structured documentation and feature commits.
-- All core + contract tests passing (168 passed / 14 skipped – skips limited to explicitly gated stress & legacy expectations).
+- All core + contract tests passing (168 passed / 14 skipped ΓÇô skips limited to explicitly gated stress & legacy expectations).
 
 ### Notes (stabilization)
 
@@ -1243,10 +1243,10 @@ For routine CI or local verification omit the flag for deterministic results.
 
 - Unified runtime diagnostics guard (`[diag] [ISO] [category]`) capturing uncaught exceptions, unhandled rejections, process warnings, and termination signals with optional exit delay (`INDEX_SERVER_FATAL_EXIT_DELAY_MS`).
 - Real backup system with millisecond precision IDs (`backup_YYYYMMDDTHHMMSS_mmm`), manifest generation (instructionCount, schemaVersion) and safety pre-restore snapshot.
-- Admin dashboard backup listing & one‑click restore UI (auto refresh + schemaVersion display).
+- Admin dashboard backup listing & oneΓÇæclick restore UI (auto refresh + schemaVersion display).
 - WebSocket enhancements: client UUID assignment, connect/disconnect broadcast events, immediate metrics snapshot push, active connection metrics integration.
 - Live synthetic activity per-call trace streaming over WebSocket (`synthetic_trace` messages) with runId, sequence, duration, error, and skipped markers.
-- Synthetic harness expansion to exercise instruction dispatcher CRUD pathways (`add/get/list/query/update/remove`) plus usage tracking; active in‑flight request counter + status endpoint.
+- Synthetic harness expansion to exercise instruction dispatcher CRUD pathways (`add/get/list/query/update/remove`) plus usage tracking; active inΓÇæflight request counter + status endpoint.
 - Instruction editor enrichment: diff view, formatting button, diagnostics panel (validity, size, hash, missing fields), template injection, change detection.
 - HTTP metrics instrumentation aggregating all REST requests into pseudo tool bucket `http/request` (opt-out with `INDEX_SERVER_HTTP_METRICS=0`).
 - Performance detailed endpoint `/api/performance/detailed` (requestThroughput, avg, p95 approximation, errorRate, concurrentConnections, activeSyntheticRequests).
@@ -1255,7 +1255,7 @@ For routine CI or local verification omit the flag for deterministic results.
 
 - Added `httpMetrics.spec.ts` validating HTTP aggregation bucket increments.
 - Hardened PowerShell isolation handshake test with BOM stripping, retry initialize, soft-pass degraded mode and extended deadlines to eliminate flakes.
-- Adaptive sampling + concurrency & duration guard in multi-client feedback reproduction test (dynamic ~0.8% sample, clamped 5–8, 7s hard wallclock) reducing runtime while preserving coverage rotation.
+- Adaptive sampling + concurrency & duration guard in multi-client feedback reproduction test (dynamic ~0.8% sample, clamped 5ΓÇô8, 7s hard wallclock) reducing runtime while preserving coverage rotation.
 - Fast test script (`scripts/test-fast.mjs`) leak guard ensuring slow specs never bleed into fast subset.
 - Pre-push hook (`scripts/pre-push.ps1`) running slow test suite gating pushes.
 
@@ -1370,13 +1370,13 @@ No client changes required. Enable `INDEX_SERVER_MEMOIZE=1` (and optionally `IND
 
 ### Documentation (lifecycle)
 
-- Added `FEEDBACK-DEFECT-LIFECYCLE.md` formalizing feedback → red test → fix → coverage workflow.
+- Added `FEEDBACK-DEFECT-LIFECYCLE.md` formalizing feedback ΓåÆ red test ΓåÆ fix ΓåÆ coverage workflow.
 - Pending README & TOOLS doc updates for enriched add response (will be completed in 1.1.0 minor bump).
 
 ### Internal (stability)
 
 - Introduced ambient module declaration for portable client to resolve TS7016 without expanding `tsconfig` include surface.
-- Eliminated intermittent “No test suite found” flake in portable CRUD atomic spec via stabilization of file export timing.
+- Eliminated intermittent ΓÇ£No test suite foundΓÇ¥ flake in portable CRUD atomic spec via stabilization of file export timing.
 
 ### Versioning Notes (next minor)
 
@@ -1388,32 +1388,32 @@ No client changes required. Enable `INDEX_SERVER_MEMOIZE=1` (and optionally `IND
 
 ### Added (bootstrap gating & safety)
 
-- Bootstrap confirmation gating flow (`requestBootstrapToken` → `finalizeBootstrapToken`) requiring explicit human confirmation artifact before enabling broad mutation operations.
-- Minimal allow‑listed seed instruction IDs (000 / 001) excluded from recursion and leakage risk metrics to guarantee a safe tool discovery baseline.
+- Bootstrap confirmation gating flow (`requestBootstrapToken` ΓåÆ `finalizeBootstrapToken`) requiring explicit human confirmation artifact before enabling broad mutation operations.
+- Minimal allowΓÇælisted seed instruction IDs (000 / 001) excluded from recursion and leakage risk metrics to guarantee a safe tool discovery baseline.
 - Human confirmation persistence (`bootstrap.confirmed.json`) with token TTL enforcement and rejection reasons (`mutation_blocked`, `token_invalid`, `token_expired`).
 
 ### Added (governance & risk instrumentation)
 
-- Recursion/leakage risk metrics capturing self‑referential or cyclic instruction body/category link detection; aggregated risk summary surfaced via governance hash pathways.
+- Recursion/leakage risk metrics capturing selfΓÇæreferential or cyclic instruction body/category link detection; aggregated risk summary surfaced via governance hash pathways.
 - Performance baseline tooling (`perf-baseline.mjs`, compare, trend, summary scripts) now integrated with release workflow enabling drift detection on CPU time & RSS.
 - Baseline auto-confirm test helper (`forceBootstrapConfirmForTests`) gated by `INDEX_SERVER_BOOTSTRAP_AUTOCONFIRM` for legacy suite compatibility without weakening production gating semantics.
 
 ### Changed (test infrastructure)
 
 - Global test setup (`setupDistReady.ts`) defaults `INDEX_SERVER_BOOTSTRAP_AUTOCONFIRM=1` unless explicitly disabled, restoring green for historical mutation suites while preserving a dedicated authentic gating spec.
-- `bootstrapGating.spec.ts` isolated via per‑test temporary `INDEX_SERVER_DIR` ensuring real token lifecycle coverage (block → issue token → finalize → unblocked).
+- `bootstrapGating.spec.ts` isolated via perΓÇætest temporary `INDEX_SERVER_DIR` ensuring real token lifecycle coverage (block ΓåÆ issue token ΓåÆ finalize ΓåÆ unblocked).
 - Dispatcher P1 unit test adapted to force confirmation post dynamic import keeping focus on catalog ordering semantics.
 
 ### Governance (baseline change control)
 
-- Added §14.5 BASELINE-CR (noise‑suppression allow‑list) to `INTERNAL-BASELINE.md` covering bootstrap gating, manifest lifecycle & schema validation, governance recursion guard, search/versioning, graph export enriched/mermaid variants, onboarding helper, and visibility invariant spec (early warning only).
-- Updated baseline sentinel and guard allow-list (noise suppression only; minimal invariant suite unchanged per §6 baseline plan).
+- Added ┬º14.5 BASELINE-CR (noiseΓÇæsuppression allowΓÇælist) to `INTERNAL-BASELINE.md` covering bootstrap gating, manifest lifecycle & schema validation, governance recursion guard, search/versioning, graph export enriched/mermaid variants, onboarding helper, and visibility invariant spec (early warning only).
+- Updated baseline sentinel and guard allow-list (noise suppression only; minimal invariant suite unchanged per ┬º6 baseline plan).
 
 ### Notes (1.5.0)
 
 - Minor release justified by additive safety gating mechanism and new performance & risk instrumentation surfaces; no breaking tool schema changes.
-- Production deployments must perform a one‑time bootstrap confirmation; tests emulate confirmation automatically unless deliberately disabled.
-- Future hardening roadmap: elevate selected noise‑suppression specs (manifest fastload, recursion guard) to minimal invariant status via separate BASELINE-CR once semantics fully stabilized.
+- Production deployments must perform a oneΓÇætime bootstrap confirmation; tests emulate confirmation automatically unless deliberately disabled.
+- Future hardening roadmap: elevate selected noiseΓÇæsuppression specs (manifest fastload, recursion guard) to minimal invariant status via separate BASELINE-CR once semantics fully stabilized.
 
 ### Upgrade Guidance (1.5.0)
 
@@ -1443,4 +1443,3 @@ No client changes required. Enable `INDEX_SERVER_MEMOIZE=1` (and optionally `IND
 ## [1.26.4] - 2026-04-28
 
 ## [1.26.5] - 2026-04-28
-
