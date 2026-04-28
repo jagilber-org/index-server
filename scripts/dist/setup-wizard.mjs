@@ -538,18 +538,25 @@ Non-interactive mode:
 
   // ── Next steps ──────────────────────────────────────────────────────
   const proto = (config.profile === 'enhanced' || config.profile === 'experimental') ? 'https' : 'http';
+  const distExists = fs.existsSync(path.join(ROOT, 'dist', 'server', 'index-server.js'));
+  let step = 1;
+
   console.log('\n╔════════════════════════════════════════════════════════════════╗');
   console.log('║                         Next Steps                            ║');
   console.log('╚════════════════════════════════════════════════════════════════╝\n');
-  console.log('  1. Build the server:');
-  console.log('     npm run build\n');
-  console.log('  2. Copy mcp.json config into your VS Code settings:');
+
+  if (!distExists) {
+    console.log(`  ${step++}. Build the server:`);
+    console.log('     npm run build\n');
+  }
+
+  console.log(`  ${step++}. Copy mcp.json config into your VS Code settings:`);
   console.log(`     ${mcpPath}\n`);
-  console.log(`  3. Open the dashboard:`);
+  console.log(`  ${step++}. Open the dashboard:`);
   console.log(`     ${proto}://localhost:${config.port}\n`);
 
   if (config.profile === 'enhanced' || config.profile === 'experimental') {
-    console.log('  4. First-time semantic search:');
+    console.log(`  ${step++}. First-time semantic search:`);
     console.log('     The MiniLM model (~90MB) will download on first query.');
     console.log(`     Model cache: ${paths.modelCache}\n`);
   }
