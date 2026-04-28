@@ -25,10 +25,27 @@ const LEVEL_MAP: Record<LogLevel, McpLoggingLevel> = {
   ERROR: 'error',
 };
 
-// Singleton instance — intercepts stderr immediately on module load.
+// Bridge default: DISABLED.
+//
+// History: enabling-by-default routed all logs through MCP `notifications/message`
+// and suppressed raw stderr. VS Code Insiders does not surface those notifications
+// in any visible output channel, so the net effect for that client was complete
+// log silence (regression first observed after commit 5de6662 / v1.26.4).
+//
+// Default is now off: stderr flows raw, which every MCP-aware client (including
+// VS Code Insiders' `[server stderr]` rendering) handles. Set
+// INDEX_SERVER_ENABLE_STDERR_BRIDGE=1 to opt in to the protocol-level routing
+// (preferred for clients that render `notifications/message` with proper severity).
+//
+// The legacy INDEX_SERVER_DISABLE_STDERR_BRIDGE variable is now a no-op (the
+// new default already matches what setting it did).
+const STDERR_BRIDGE_ENABLED =
+  process.env.INDEX_SERVER_ENABLE_STDERR_BRIDGE === '1';
+
+// Singleton instance — intercepts stderr only when the bridge is opted in.
 const _logger = new McpStdioLogger({
   serverName: 'index-server',
-  interceptImmediately: process.env.INDEX_SERVER_DISABLE_STDERR_BRIDGE !== '1',
+  interceptImmediately: STDERR_BRIDGE_ENABLED,
   maxBufferSize: 500,
 });
 
@@ -45,26 +62,31 @@ export function registerMcpServer(server: any): void {
  * Activate the bridge so subsequent log calls are routed via MCP protocol.
  * Replays any buffered pre-handshake stderr lines through the protocol.
  * Called from `emitReadyGlobal()` after the handshake completes.
+ *
+ * No-op when STDERR_BRIDGE_ENABLED is false (default).
  */
 export function activateMcpLogBridge(): void {
+  if (!STDERR_BRIDGE_ENABLED) return;
   _logger.activate();
 }
 
 /**
  * Returns true if the bridge is active and logs will be sent via MCP protocol.
+ * Always false when STDERR_BRIDGE_ENABLED is false (default).
  */
 export function isMcpLogBridgeActive(): boolean {
-  return _logger.isActive;
+  return STDERR_BRIDGE_ENABLED && _logger.isActive;
 }
 
 /**
  * Send a log message through the MCP `notifications/message` protocol.
- * No-op if the bridge is not yet active.
+ * No-op if the bridge is not yet active or not enabled.
  *
  * @param level - The index-server log level (TRACE, DEBUG, INFO, WARN, ERROR)
  * @param data  - The log payload (typically the NDJSON string)
  */
 export function sendMcpLog(level: LogLevel, data: string): void {
+  if (!STDERR_BRIDGE_ENABLED) return;
   _logger.log(LEVEL_MAP[level] ?? 'info', data);
 }
 

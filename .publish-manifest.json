@@ -1,11 +1,11 @@
 {
-  "sourceRepo": "index-server",
   "fileCount": 1091,
-  "commitSha": "3f849658e989d2e00ed479505d13332a2a5a5943",
-  "tag": null,
-  "localPath": "c:\\github\\jagilber-org\\index-server",
+  "localPath": "C:\\github\\jagilber-org\\index-server",
+  "commitSha": "3c633828f471cb2b75bf645c7398e945e2a7d8d1",
   "forbiddenArtifactCheck": "passed",
-  "preparedAt": "2026-04-28T03:13:11.2124779Z",
-  "contentHash": "aed09a70d10e0c5cb566b89d115e0912e12e1715be736e2d9df8bbc0a90cdd50",
-  "piiScanPassed": true
+  "tag": "v1.26.5",
+  "sourceRepo": "index-server",
+  "piiScanPassed": true,
+  "preparedAt": "2026-04-28T18:12:51.9992124Z",
+  "contentHash": "a02ffdad4894483c0d6008fa2a5ef7571e9004324146c087cbb9cfa939c5b9f4"
 }

@@ -14,6 +14,8 @@ let _restoreStderr: typeof import('../services/mcpLogBridge')._restoreStderr;
 describe('mcpLogBridge', () => {
   beforeEach(async () => {
     vi.resetModules();
+    // Bridge is opt-in (default OFF). Tests exercise the active path, so opt in.
+    process.env.INDEX_SERVER_ENABLE_STDERR_BRIDGE = '1';
     const mod = await import('../services/mcpLogBridge.js');
     registerMcpServer = mod.registerMcpServer;
     activateMcpLogBridge = mod.activateMcpLogBridge;
@@ -25,6 +27,7 @@ describe('mcpLogBridge', () => {
   afterEach(() => {
     // Always restore original stderr after each test
     _restoreStderr();
+    delete process.env.INDEX_SERVER_ENABLE_STDERR_BRIDGE;
   });
 
   it('bridge is inactive before activation', () => {
