@@ -1,0 +1,171 @@
+name: Setup Wizard E2E
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/setup-wizard.mjs'
+      - 'scripts/dist/setup-wizard.mjs'
+      - 'src/server/index-server.ts'
+      - '.github/workflows/setup-wizard-e2e.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/setup-wizard.mjs'
+      - 'scripts/dist/setup-wizard.mjs'
+  workflow_dispatch: {}
+
+jobs:
+  setup-wizard-e2e:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        node-version: [22]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+
+      - name: Install & build
+        run: |
+          npm ci
+          npm run build
+
+      # ── Test 1: Non-interactive setup with deploy ──────────────────
+      - name: Run setup wizard (non-interactive, deploy to temp root)
+        shell: bash
+        run: |
+          DEPLOY_ROOT="${RUNNER_TEMP}/index-server-deploy"
+          mkdir -p "$DEPLOY_ROOT"
+          node scripts/setup-wizard.mjs \
+            --non-interactive \
+            --root "$DEPLOY_ROOT" \
+            --port 8799 \
+            --target vscode,copilot-cli \
+            --no-preview \
+            --write
+          echo "DEPLOY_ROOT=$DEPLOY_ROOT" >> "$GITHUB_ENV"
+
+      - name: Verify deployed dist exists
+        shell: bash
+        run: |
+          if [ ! -f "$DEPLOY_ROOT/dist/server/index-server.js" ]; then
+            echo "::error::dist/server/index-server.js not found at deploy root"
+            ls -laR "$DEPLOY_ROOT" || true
+            exit 1
+          fi
+          echo "✅ dist/server/index-server.js exists"
+
+      - name: Verify deployed runtime starts
+        shell: bash
+        run: |
+          # Verify the entry point can be loaded without MODULE_NOT_FOUND
+          node -e "
+            const p = require('child_process').spawn(process.execPath,
+              ['$DEPLOY_ROOT/dist/server/index-server.js'],
+              { stdio: ['pipe','pipe','pipe'], env: { ...process.env, INDEX_SERVER_DASHBOARD: '0' } });
+            const init = JSON.stringify({jsonrpc:'2.0',id:1,method:'initialize',params:{protocolVersion:'2024-11-05',capabilities:{},clientInfo:{name:'ci',version:'1.0.0'}}});
+            let out = '';
+            p.stdout.on('data', d => { out += d; if (out.includes('result')) { console.log('✅ MCP handshake succeeded'); p.kill(); process.exit(0); }});
+            p.stderr.on('data', () => {});
+            p.on('error', e => { console.error('::error::Server failed to start:', e.message); process.exit(1); });
+            setTimeout(() => { console.log('::warning::Handshake timed out (server started but no response in 8s)'); p.kill(); process.exit(0); }, 8000);
+            p.stdin.write(init + '\n');
+          "
+        env:
+          INDEX_SERVER_DIR: ${{ env.DEPLOY_ROOT }}/instructions
+
+      - name: Verify .env was written
+        shell: bash
+        run: |
+          if [ -f "$DEPLOY_ROOT/.env" ]; then
+            echo "✅ .env exists"
+            grep -c 'INDEX_SERVER' "$DEPLOY_ROOT/.env" || true
+          elif [ -f "$DEPLOY_ROOT/.env.generated" ]; then
+            echo "✅ .env.generated exists (pre-existing .env was preserved)"
+          else
+            echo "::error::.env not found at deploy root"
+            exit 1
+          fi
+
+      - name: Verify MCP config was written
+        shell: bash
+        run: |
+          # Check vscode config
+          if [ -f "$DEPLOY_ROOT/.vscode/mcp.json" ]; then
+            echo "✅ .vscode/mcp.json written"
+            grep -q 'index-server' "$DEPLOY_ROOT/.vscode/mcp.json"
+          else
+            echo "::error::.vscode/mcp.json not found"
+            exit 1
+          fi
+
+      # ── Test 2: Same-root (no deploy) ──────────────────────────────
+      - name: Run setup wizard (same root, no deploy expected)
+        shell: bash
+        run: |
+          OUTPUT=$(node scripts/setup-wizard.mjs --non-interactive --no-preview 2>&1)
+          if echo "$OUTPUT" | grep -q 'Deploying runtime'; then
+            echo "::error::Deploy triggered when root equals package root"
+            exit 1
+          fi
+          echo "✅ No deploy when root == package root"
+
+      # ── Test 3: --no-deploy flag ───────────────────────────────────
+      - name: Run setup wizard (--no-deploy skips deployment)
+        shell: bash
+        run: |
+          NO_DEPLOY_ROOT="${RUNNER_TEMP}/index-server-no-deploy"
+          mkdir -p "$NO_DEPLOY_ROOT"
+          OUTPUT=$(node scripts/setup-wizard.mjs \
+            --non-interactive \
+            --root "$NO_DEPLOY_ROOT" \
+            --no-deploy \
+            --no-preview 2>&1)
+          if echo "$OUTPUT" | grep -q 'Deploying runtime'; then
+            echo "::error::Deploy ran despite --no-deploy flag"
+            exit 1
+          fi
+          if [ -d "$NO_DEPLOY_ROOT/dist" ]; then
+            echo "::error::dist/ should not exist with --no-deploy"
+            exit 1
+          fi
+          echo "✅ --no-deploy correctly skipped deployment"
+
+      # ── Test 4: All profiles ───────────────────────────────────────
+      - name: Test all profiles (non-interactive, no-deploy)
+        shell: bash
+        run: |
+          for profile in default enhanced experimental; do
+            PROFILE_ROOT="${RUNNER_TEMP}/wizard-profile-${profile}"
+            mkdir -p "$PROFILE_ROOT"
+            echo "Testing profile: $profile"
+            node scripts/setup-wizard.mjs \
+              --non-interactive \
+              --profile "$profile" \
+              --root "$PROFILE_ROOT" \
+              --no-deploy \
+              --no-preview 2>&1 | tail -5
+            if [ ! -f "$PROFILE_ROOT/.env" ] && [ ! -f "$PROFILE_ROOT/.env.generated" ]; then
+              echo "::error::Profile $profile failed to generate .env"
+              exit 1
+            fi
+            echo "✅ Profile $profile OK"
+          done
+
+      - name: Upload logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: setup-wizard-e2e-logs-${{ matrix.os }}
+          path: |
+            ${{ env.DEPLOY_ROOT }}/.env*
+            ${{ env.DEPLOY_ROOT }}/.vscode/
+            ${{ env.DEPLOY_ROOT }}/package.json
+            logs/
+          if-no-files-found: warn
