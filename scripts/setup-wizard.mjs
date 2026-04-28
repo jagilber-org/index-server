@@ -20,6 +20,7 @@
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
+import { execFileSync, execSync } from 'child_process';
 import { fileURLToPath } from 'url';
 import { select, input, confirm, checkbox } from '@inquirer/prompts';
 
@@ -33,15 +34,30 @@ const IS_WINDOWS = process.platform === 'win32';
 /** Normalize to forward slashes for mcp.json compatibility. */
 function fwd(p) { return p.replace(/\\/g, '/'); }
 
-/** Locate the npm CLI script for execFileSync(node, [npmCli, ...]). */
+/** Locate the npm CLI script for execFileSync(node, [npmCli, ...]). Returns null if not found. */
 function findNpmCli() {
   // npm_execpath is set when running via npm/npx
   if (process.env.npm_execpath) return process.env.npm_execpath;
   // Resolve npm relative to the Node.js installation
-  const npmDir = path.join(path.dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npm-cli.js');
-  if (fs.existsSync(npmDir)) return npmDir;
-  // Last resort: hope 'npm' is on PATH (will be called via node, so this is fragile)
-  return 'npm';
+  const candidates = [
+    path.join(path.dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npm-cli.js'),
+    path.join(path.dirname(process.execPath), '..', 'lib', 'node_modules', 'npm', 'bin', 'npm-cli.js'),
+  ];
+  for (const c of candidates) {
+    if (fs.existsSync(c)) return c;
+  }
+  return null;
+}
+
+/** Run an npm command. Uses npm CLI script if found, otherwise shells out to `npm` on PATH. */
+function runNpm(args, opts = {}) {
+  const npmCli = findNpmCli();
+  if (npmCli) {
+    return execFileSync(process.execPath, [npmCli, ...args], opts);
+  }
+  // Fallback: run `npm` as a shell command
+  const cmd = ['npm', ...args].map(a => a.includes(' ') ? `"${a}"` : a).join(' ');
+  return execSync(cmd, opts);
 }
 
 /** Resolve a sub-path under a root, always absolute and forward-slashed. */
@@ -675,7 +691,6 @@ async function deployRuntime(config) {
     console.log(`\n📦 Deploying runtime v${sourceVersion} to ${config.root}...`);
   }
 
-  const { execFileSync } = await import('child_process');
   const pkgName = '@jagilber-org/index-server';
 
   // Strategy: npm install the exact package version into the target directory
@@ -700,23 +715,20 @@ async function deployRuntime(config) {
     // Strategy: pack the current package into a tarball, then install it.
     // This works regardless of whether the version is published to npm,
     // and produces a proper self-contained node_modules tree.
-    const tarballName = execFileSync(
-      process.execPath,
-      [process.env.npm_execpath || findNpmCli(), 'pack', '--pack-destination', targetRoot],
+    const packOutput = runNpm(
+      ['pack', '--pack-destination', targetRoot],
       { cwd: ROOT, stdio: ['pipe', 'pipe', 'inherit'], timeout: 30_000 }
-    ).toString().trim().split('\n').pop();
+    ).toString().trim();
+    const tarballName = packOutput.split('\n').pop();
 
     const tarballPath = path.join(targetRoot, tarballName);
 
     try {
       // Install from the local tarball
-      const npmArgs = ['install', tarballPath, '--omit=dev', '--no-fund', '--no-audit'];
-      const npmCli = process.env.npm_execpath || findNpmCli();
-      execFileSync(process.execPath, [npmCli, ...npmArgs], {
-        cwd: targetRoot,
-        stdio: 'inherit',
-        timeout: 120_000,
-      });
+      runNpm(
+        ['install', tarballPath, '--omit=dev', '--no-fund', '--no-audit'],
+        { cwd: targetRoot, stdio: 'inherit', timeout: 120_000 }
+      );
     } finally {
       // Clean up tarball
       try { fs.unlinkSync(tarballPath); } catch { /* ok */ }
@@ -757,6 +769,8 @@ async function deployRuntime(config) {
     console.error('   To deploy manually, run:');
     console.error(`   cd "${config.root}" && npm install ${pkgName}@${sourceVersion}`);
     console.error('   Then create a symlink: dist -> node_modules/@jagilber-org/index-server/dist');
+    // Exit with error so CI can detect deployment failures
+    process.exitCode = 1;
   }
 }
 
@@ -866,7 +880,6 @@ Non-interactive mode:
   if (config.generateCerts) {
     console.log('\n🔐 Generating TLS certificates...');
     try {
-      const { execFileSync } = await import('child_process');
       const certDir = path.join(config.root, 'certs');
       execFileSync(
         process.execPath,
