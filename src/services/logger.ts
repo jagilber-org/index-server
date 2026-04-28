@@ -55,6 +55,7 @@ export interface LogRecord {
 export function newCorrelationId(){ return crypto.randomBytes(8).toString('hex'); }
 
 let logFileHandle: fs.WriteStream | null = null;
+let logFilePath: string | undefined;
 
 function loggingCfg(){
   return getRuntimeConfig().logging;
@@ -94,7 +95,16 @@ function shouldEmit(level: LogLevel): boolean {
 function initializeFileLogging(): void {
   const cfg = loggingCfg();
   const logFile = cfg.file;
-  if (!logFile || logFileHandle) return; // Already initialized or not requested
+  if (!logFile) return;
+
+  // If file handle exists but path changed (e.g., test reconfiguration), close old and reopen
+  if (logFileHandle && logFilePath !== logFile) {
+    try { logFileHandle.end(); } catch { /* ignore */ }
+    logFileHandle = null;
+    logFilePath = undefined;
+  }
+
+  if (logFileHandle) return; // Already initialized for this path
 
   try {
     // Ensure log directory exists
@@ -108,6 +118,7 @@ function initializeFileLogging(): void {
       flags: 'a',
       encoding: 'utf8'
     });
+    logFilePath = logFile;
 
     // NDJSON session start record
     const sessionStart: LogRecord = {
@@ -185,8 +196,9 @@ function emit(rec: LogRecord){
   if (!shouldEmit(rec.level)) return;
 
   // Initialize file logging on first emit (lazy initialization)
+  // or reinitialize if the configured path has changed (e.g., test reconfiguration)
   const cfg = loggingCfg();
-  if (!logFileHandle && cfg.file) {
+  if (cfg.file && (!logFileHandle || logFilePath !== cfg.file)) {
     initializeFileLogging();
   }
 

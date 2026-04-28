@@ -417,8 +417,11 @@ function applyProfileDefaults(profile: ProfileName): void {
     if (process.env[key] === undefined) process.env[key] = value;
   };
 
-  // All profiles enable dashboard by default
+  // All profiles enable dashboard and file logging by default.
+  // File logging uses the sentinel value '1' which resolves to logs/mcp-server.log.
+  // This ensures logs are always available on disk without requiring mcp.json changes.
   setDefault('INDEX_SERVER_DASHBOARD', '1');
+  setDefault('INDEX_SERVER_LOG_FILE', '1');
 
   if (profile === 'enhanced') {
     setDefault('INDEX_SERVER_SEMANTIC_ENABLED', '1');
