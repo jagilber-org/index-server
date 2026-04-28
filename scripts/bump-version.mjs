@@ -48,6 +48,21 @@ console.log(`Current version: ${current} -> Next: ${next}`);
 pkg.version = next;
 writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + '\n', 'utf8');
 
+// Update server.json (MCP registry manifest) — versions must stay in sync with package.json
+const serverJsonPath = join(root, 'server.json');
+let serverJsonUpdated = false;
+try {
+  const serverJson = JSON.parse(readFileSync(serverJsonPath, 'utf8'));
+  serverJson.version = next;
+  if (Array.isArray(serverJson.packages)) {
+    for (const p of serverJson.packages) {
+      if (p && typeof p === 'object' && 'version' in p) p.version = next;
+    }
+  }
+  writeFileSync(serverJsonPath, JSON.stringify(serverJson, null, 2) + '\n', 'utf8');
+  serverJsonUpdated = true;
+} catch (e) { if (e.code !== 'ENOENT') throw e; }
+
 // Update CHANGELOG.md
 const changelogPath = join(root, 'CHANGELOG.md');
 let changelogUpdated = false;
@@ -63,7 +78,7 @@ try {
 } catch (e) { if (e.code !== 'ENOENT') throw e; }
 
 // Commit and tag
-execSync(`git add package.json${changelogUpdated ? ' CHANGELOG.md' : ''}`, { stdio: 'inherit' });
+execSync(`git add package.json${serverJsonUpdated ? ' server.json' : ''}${changelogUpdated ? ' CHANGELOG.md' : ''}`, { stdio: 'inherit' });
 execSync(`git commit -m "chore(release): v${next}"`, { stdio: 'inherit' });
 execSync(`git tag "v${next}"`, { stdio: 'inherit' });
 

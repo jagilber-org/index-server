@@ -1437,3 +1437,7 @@ No client changes required. Enable `INDEX_SERVER_MEMOIZE=1` (and optionally `IND
 ### Added
 
 - Add --init-cert CLI switch for self-signed dashboard TLS bootstrap (PR #233, issue #232)
+
+## [1.26.2] - 2026-04-27
+
+## [1.26.4] - 2026-04-28

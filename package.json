@@ -1,6 +1,6 @@
 {
   "name": "@jagilber-org/index-server",
-  "version": "1.26.1",
+  "version": "1.26.4",
   "mcpName": "io.github.jagilber-org/index-server",
   "description": "MCP instruction indexing server for AI assistant governance — search, CRUD, schema validation, usage tracking, and cross-repo knowledge promotion.",
   "publishConfig": {
@@ -18,6 +18,7 @@
     "templates/",
     "scripts/copy-dashboard-assets.mjs",
     "scripts/setup-hooks.cjs",
+    "scripts/generate-certs.mjs",
     "scripts/setup-wizard.mjs",
     "server.json",
     "README.md",

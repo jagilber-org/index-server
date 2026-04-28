@@ -1,6 +1,8 @@
 # Pre-commit hooks for index-server
 # Security gates and validation are orchestrated through pre-commit.
 
+default_stages: [pre-commit]
+
 repos:
   # Standard code quality and security checks
   - repo: https://github.com/pre-commit/pre-commit-hooks
@@ -8,16 +10,23 @@ repos:
     hooks:
       - id: trailing-whitespace
         exclude: '\.(md|txt)$'
+        stages: [pre-commit]
       - id: end-of-file-fixer
+        stages: [pre-commit]
       - id: check-yaml
         exclude: '^(.vscode/|config/|\.github/workflows/)'
+        stages: [pre-commit]
       - id: check-json
         exclude: '^(\.vscode/|tsconfig|\.eslintrc\.json|tests/outputs/\.eslintrc\.json)'
+        stages: [pre-commit]
       - id: check-merge-conflict
+        stages: [pre-commit]
       - id: detect-private-key
-        exclude: '^(test/|examples/|__tests__|scripts/pre-commit\.(ps1|mjs)$|docs/prompt_criteria\.json$)'
+        exclude: '^(test/|examples/|__tests__|scripts/pre-commit\.(ps1|mjs)$|docs/prompt_criteria\.json$|\.copilot/skills/secret-handling/SKILL\.md$|\.squad/templates/skills/secret-handling/SKILL\.md$)'
+        stages: [pre-commit]
       - id: no-commit-to-branch
         args: ['--branch', 'main']
+        stages: [pre-commit]
 
 
   # Pre-push guard: blocks pushes to public repos (PB-6)

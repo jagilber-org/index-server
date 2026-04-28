@@ -112,6 +112,16 @@ console.log('Running pre-commit checks (PII + env-var leak scan)...');
 const piiAllowlist = loadPiiAllowlist();
 const PII_FILE_ALLOWLIST = new Set(['package-lock.json', 'security-scan.mjs', 'test_results.txt']);
 
+// Full-path exclusions (normalized to forward slashes) — files that intentionally
+// contain example secret/PII patterns as documentation. Mirrors the
+// detect-private-key exclude list in .pre-commit-config.yaml and the equivalent
+// list in scripts/pre-commit.ps1.
+const PATH_EXCLUSIONS = new Set([
+  '.copilot/skills/secret-handling/SKILL.md',
+  '.squad/templates/skills/secret-handling/SKILL.md',
+  'docs/prompt_criteria.json',
+]);
+
 // ── 1. Static secret patterns ─────────────────────────────────────────────
 const SECRET_PATTERNS = [
   { pat: /AKIA[0-9A-Z]{16}/, label: 'AWS access key' },
@@ -194,6 +204,10 @@ for (const file of targets) {
   }
 
   if (testIsBinaryFile(file)) {
+    continue;
+  }
+
+  if (PATH_EXCLUSIONS.has(normalized)) {
     continue;
   }
 
