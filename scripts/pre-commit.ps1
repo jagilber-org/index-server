@@ -113,6 +113,15 @@ $piiFileAllowlist = @(
   'test-results.json'                        # vitest output with timestamps flagged as credit cards
 )
 
+# Full-path exclusions (normalized to forward slashes) — files that intentionally
+# contain example secret/PII patterns as documentation. Mirrors the
+# detect-private-key exclude list in .pre-commit-config.yaml.
+$pathExclusions = @(
+  '.copilot/skills/secret-handling/SKILL.md',
+  '.squad/templates/skills/secret-handling/SKILL.md',
+  'docs/prompt_criteria.json'
+)
+
 # ── 1. Static secret patterns ──────────────────────────────────────────────
 $secretPatterns = @(
   @{ pat = 'AKIA[0-9A-Z]{16}'; label = 'AWS access key' }
@@ -230,6 +239,10 @@ foreach($file in $targets) {
   $normalized = ($file -replace '\\','/')
   if ($normalized -match '(^|/)\.env$' -or $normalized -match '(^|/)\.env\.(?!example$|sample$|template$|test$)[^/]+$') {
     Fail "Forbidden sensitive file path committed: $file"
+    continue
+  }
+
+  if ($pathExclusions -contains $normalized) {
     continue
   }
 

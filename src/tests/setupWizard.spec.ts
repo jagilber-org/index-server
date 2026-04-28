@@ -197,6 +197,14 @@ describe('Certificate Generation', () => {
   it('should generate CA and server certificates', () => {
     let hasOpenssl = false;
     try { execSync('openssl version', { stdio: 'pipe' }); hasOpenssl = true; } catch { /* ok */ }
+    // Fallback: check well-known Git-bundled OpenSSL on Windows
+    if (!hasOpenssl && process.platform === 'win32') {
+      const gitSslDir = 'C:\\Program Files\\Git\\usr\\bin';
+      if (fs.existsSync(path.join(gitSslDir, 'openssl.exe'))) {
+        process.env.PATH = `${gitSslDir}${path.delimiter}${process.env.PATH}`;
+        hasOpenssl = true;
+      }
+    }
     if (!hasOpenssl) {
       console.log('OpenSSL not available — skipping cert generation test');
       return;
@@ -216,6 +224,14 @@ describe('Certificate Generation', () => {
   it('should create certs with correct SAN entries', () => {
     let hasOpenssl = false;
     try { execSync('openssl version', { stdio: 'pipe' }); hasOpenssl = true; } catch { /* ok */ }
+    // Fallback: check well-known Git-bundled OpenSSL on Windows
+    if (!hasOpenssl && process.platform === 'win32') {
+      const gitSslDir = 'C:\\Program Files\\Git\\usr\\bin';
+      if (fs.existsSync(path.join(gitSslDir, 'openssl.exe'))) {
+        process.env.PATH = `${gitSslDir}${path.delimiter}${process.env.PATH}`;
+        hasOpenssl = true;
+      }
+    }
     if (!hasOpenssl) return;
 
     execSync(
