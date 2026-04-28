@@ -13,13 +13,14 @@ import path from 'path';
 import os from 'os';
 
 const EXEC_OPTS: ExecSyncOptions = { stdio: 'pipe', timeout: 15_000 };
+const DEPLOY_EXEC_OPTS: ExecSyncOptions = { stdio: 'pipe', timeout: 90_000 };
 const ROOT = path.resolve(__dirname, '..', '..');
 const WIZARD_SCRIPT = path.join(ROOT, 'scripts', 'setup-wizard.mjs');
 
-function runWizard(args: string): string {
+function runWizard(args: string, opts?: ExecSyncOptions): string {
   return execSync(
     `node "${WIZARD_SCRIPT}" --non-interactive ${args}`,
-    { ...EXEC_OPTS, cwd: ROOT, env: { ...process.env, HOME: os.tmpdir(), USERPROFILE: os.tmpdir() } }
+    { ...EXEC_OPTS, ...opts, cwd: ROOT, env: { ...process.env, HOME: os.tmpdir(), USERPROFILE: os.tmpdir() } }
   ).toString();
 }
 
@@ -145,7 +146,7 @@ describe('Setup Wizard Multi-Target Config', () => {
   it('should write config files with --write flag', () => {
     fs.mkdirSync(tmpDir, { recursive: true });
     // Use a temporary root so we write .vscode/mcp.json inside tmpDir
-    runWizard(`--root "${tmpDir}" --target vscode --scope repo --write`);
+    runWizard(`--root "${tmpDir}" --target vscode --scope repo --write --no-deploy`);
     const mcpPath = path.join(tmpDir, '.vscode', 'mcp.json');
     expect(fs.existsSync(mcpPath)).toBe(true);
     const content = fs.readFileSync(mcpPath, 'utf8');
@@ -264,6 +265,37 @@ describe('Setup Wizard Next Steps — Build Step Skip', () => {
     expect(output).toContain('First-time semantic search');
     expect(output).toContain('MiniLM model');
   });
+});
+
+describe('Setup Wizard Runtime Deployment', () => {
+  const tmpDir = path.join(os.tmpdir(), `wizard-deploy-${Date.now()}`);
+
+  afterEach(() => {
+    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* ok */ }
+  });
+
+  it('should deploy runtime when root differs from package root', () => {
+    const output = runWizard(`--root "${tmpDir}" --no-preview`, DEPLOY_EXEC_OPTS);
+    expect(output).toContain('Deploying runtime');
+    expect(output).toContain('Runtime deployed');
+    // dist/ should exist at target
+    expect(fs.existsSync(path.join(tmpDir, 'dist', 'server', 'index-server.js'))).toBe(true);
+    // schemas/ should exist
+    expect(fs.existsSync(path.join(tmpDir, 'schemas'))).toBe(true);
+  }, 120_000);
+
+  it('should skip deploy when root equals package root', () => {
+    const output = runWizard('--no-preview');
+    expect(output).not.toContain('Deploying runtime');
+  });
+
+  it('should skip "Build the server" step after successful deploy', () => {
+    const output = runWizard(`--root "${tmpDir}" --no-preview`, DEPLOY_EXEC_OPTS);
+    expect(output).toContain('Runtime deployed');
+    // Next steps should NOT show build step since dist was just deployed
+    expect(output).not.toContain('Build the server');
+    expect(output).not.toContain('npm run build');
+  }, 120_000);
 });
 
 describe('Certificate Generation', () => {

@@ -33,6 +33,17 @@ const IS_WINDOWS = process.platform === 'win32';
 /** Normalize to forward slashes for mcp.json compatibility. */
 function fwd(p) { return p.replace(/\\/g, '/'); }
 
+/** Locate the npm CLI script for execFileSync(node, [npmCli, ...]). */
+function findNpmCli() {
+  // npm_execpath is set when running via npm/npx
+  if (process.env.npm_execpath) return process.env.npm_execpath;
+  // Resolve npm relative to the Node.js installation
+  const npmDir = path.join(path.dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npm-cli.js');
+  if (fs.existsSync(npmDir)) return npmDir;
+  // Last resort: hope 'npm' is on PATH (will be called via node, so this is fragile)
+  return 'npm';
+}
+
 /** Resolve a sub-path under a root, always absolute and forward-slashed. */
 function resolveUnder(root, ...segments) { return fwd(path.resolve(root, ...segments)); }
 
@@ -120,6 +131,7 @@ function parseNonInteractiveArgs() {
     scope: 'repo',           // 'global' or 'repo'
     write: false,            // write to real config files
     preview: true,           // show preview before writing
+    deploy: true,            // deploy runtime to root when needed
   };
 
   for (let i = 0; i < args.length; i++) {
@@ -136,6 +148,7 @@ function parseNonInteractiveArgs() {
     else if (args[i] === '--scope' && args[i + 1]) config.scope = args[++i];
     else if (args[i] === '--write') config.write = true;
     else if (args[i] === '--no-preview') config.preview = false;
+    else if (args[i] === '--no-deploy') config.deploy = false;
   }
 
   // Profile overrides
@@ -253,7 +266,7 @@ async function runInteractiveWizard() {
     default: 'repo',
   });
 
-  return { profile, root, serverName, port, host, mutation, logLevel, generateCerts, targets, scope, write: true, preview: true };
+  return { profile, root, serverName, port, host, mutation, logLevel, generateCerts, targets, scope, write: true, preview: true, deploy: true };
 }
 
 // --------------------------------------------------------------------------
@@ -621,6 +634,133 @@ function printFolderSummary(paths, profile) {
 }
 
 // --------------------------------------------------------------------------
+// Deploy runtime to target root (when different from package root)
+// --------------------------------------------------------------------------
+async function deployRuntime(config) {
+  if (config.deploy === false) return;
+
+  let sourceRoot, targetRoot;
+  try {
+    sourceRoot = fs.realpathSync(ROOT);
+    targetRoot = fs.realpathSync(config.root);
+  } catch {
+    sourceRoot = path.resolve(ROOT);
+    targetRoot = path.resolve(config.root);
+  }
+
+  // Skip when running from the target directory (dev clone / already deployed)
+  if (sourceRoot.toLowerCase() === targetRoot.toLowerCase()) return;
+
+  const entryPoint = path.join(targetRoot, 'dist', 'server', 'index-server.js');
+  const targetPkg = path.join(targetRoot, 'package.json');
+
+  // Read source version for comparison
+  let sourceVersion = 'unknown';
+  try {
+    const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
+    sourceVersion = pkg.version || 'unknown';
+  } catch { /* ok */ }
+
+  // Check if already deployed at this version
+  if (fs.existsSync(entryPoint) && fs.existsSync(targetPkg)) {
+    try {
+      const existing = JSON.parse(fs.readFileSync(targetPkg, 'utf8'));
+      if (existing.version === sourceVersion) {
+        console.log(`\n✅ Runtime v${sourceVersion} already deployed at ${config.root}`);
+        return;
+      }
+      console.log(`\n📦 Upgrading runtime: ${existing.version} → ${sourceVersion}`);
+    } catch { /* ok - redeploy */ }
+  } else {
+    console.log(`\n📦 Deploying runtime v${sourceVersion} to ${config.root}...`);
+  }
+
+  const { execFileSync } = await import('child_process');
+  const pkgName = '@jagilber-org/index-server';
+
+  // Strategy: npm install the exact package version into the target directory
+  // This gives a proper node_modules tree regardless of npx cache layout
+  try {
+    fs.mkdirSync(targetRoot, { recursive: true });
+
+    // Write a minimal package.json if none exists (npm install needs it)
+    if (!fs.existsSync(targetPkg)) {
+      const minPkg = {
+        name: 'index-server-runtime',
+        version: '1.0.0',
+        private: true,
+        type: 'commonjs',
+        scripts: { start: 'node node_modules/@jagilber-org/index-server/dist/server/index-server.js' },
+      };
+      fs.writeFileSync(targetPkg, JSON.stringify(minPkg, null, 2), 'utf8');
+    }
+
+    console.log('   Installing package (this may take a moment)...');
+
+    // Strategy: pack the current package into a tarball, then install it.
+    // This works regardless of whether the version is published to npm,
+    // and produces a proper self-contained node_modules tree.
+    const tarballName = execFileSync(
+      process.execPath,
+      [process.env.npm_execpath || findNpmCli(), 'pack', '--pack-destination', targetRoot],
+      { cwd: ROOT, stdio: ['pipe', 'pipe', 'inherit'], timeout: 30_000 }
+    ).toString().trim().split('\n').pop();
+
+    const tarballPath = path.join(targetRoot, tarballName);
+
+    try {
+      // Install from the local tarball
+      const npmArgs = ['install', tarballPath, '--omit=dev', '--no-fund', '--no-audit'];
+      const npmCli = process.env.npm_execpath || findNpmCli();
+      execFileSync(process.execPath, [npmCli, ...npmArgs], {
+        cwd: targetRoot,
+        stdio: 'inherit',
+        timeout: 120_000,
+      });
+    } finally {
+      // Clean up tarball
+      try { fs.unlinkSync(tarballPath); } catch { /* ok */ }
+    }
+
+    // Create convenience symlinks/junctions so "dist/" at root resolves
+    const installedDist = path.join(targetRoot, 'node_modules', pkgName, 'dist');
+    const targetDist = path.join(targetRoot, 'dist');
+    if (fs.existsSync(installedDist) && !fs.existsSync(targetDist)) {
+      try {
+        // On Windows, directory junctions don't require elevated privileges
+        fs.symlinkSync(installedDist, targetDist, 'junction');
+      } catch {
+        // Fallback: copy dist recursively
+        fs.cpSync(installedDist, targetDist, { recursive: true });
+      }
+    }
+
+    // Copy schemas if not present
+    const installedSchemas = path.join(targetRoot, 'node_modules', pkgName, 'schemas');
+    const targetSchemas = path.join(targetRoot, 'schemas');
+    if (fs.existsSync(installedSchemas) && !fs.existsSync(targetSchemas)) {
+      fs.cpSync(installedSchemas, targetSchemas, { recursive: true });
+    }
+
+    // Update the runtime package.json with correct version/start script
+    try {
+      const runtimePkg = JSON.parse(fs.readFileSync(targetPkg, 'utf8'));
+      runtimePkg.version = sourceVersion;
+      runtimePkg.scripts = runtimePkg.scripts || {};
+      runtimePkg.scripts.start = 'node dist/server/index-server.js';
+      fs.writeFileSync(targetPkg, JSON.stringify(runtimePkg, null, 2) + '\n', 'utf8');
+    } catch { /* ok */ }
+
+    console.log(`   ✅ Runtime deployed to ${config.root}`);
+  } catch (err) {
+    console.error(`\n❌ Runtime deployment failed: ${err.message}`);
+    console.error('   To deploy manually, run:');
+    console.error(`   cd "${config.root}" && npm install ${pkgName}@${sourceVersion}`);
+    console.error('   Then create a symlink: dist -> node_modules/@jagilber-org/index-server/dist');
+  }
+}
+
+// --------------------------------------------------------------------------
 // Main
 // --------------------------------------------------------------------------
 async function main() {
@@ -646,7 +786,8 @@ Non-interactive mode:
     --target <list>     Comma-separated targets: vscode,copilot-cli,claude
     --scope <s>         global | repo (default: repo)
     --write             Write directly to real config files (with backup)
-    --no-preview        Skip config preview in non-interactive mode`);
+    --no-preview        Skip config preview in non-interactive mode
+    --no-deploy         Skip runtime deployment to target root`);
     process.exit(0);
   }
 
@@ -718,6 +859,9 @@ Non-interactive mode:
     }
   }
 
+  // ── Deploy runtime if target root differs from package root ─────────
+  await deployRuntime(config);
+
   // ── Generate TLS certs ──────────────────────────────────────────────
   if (config.generateCerts) {
     console.log('\n🔐 Generating TLS certificates...');
@@ -737,7 +881,8 @@ Non-interactive mode:
 
   // ── Next steps ──────────────────────────────────────────────────────
   const proto = (config.profile === 'enhanced' || config.profile === 'experimental') ? 'https' : 'http';
-  const distExists = fs.existsSync(path.join(ROOT, 'dist', 'server', 'index-server.js'));
+  // Check if dist exists at the target root (where MCP config will look)
+  const distExists = fs.existsSync(path.join(config.root, 'dist', 'server', 'index-server.js'));
   let step = 1;
 
   console.log('\n╔════════════════════════════════════════════════════════════════╗');
