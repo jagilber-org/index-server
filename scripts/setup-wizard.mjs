@@ -20,6 +20,7 @@
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
+import { execFileSync } from 'child_process';
 import { fileURLToPath } from 'url';
 import { select, input, confirm, checkbox } from '@inquirer/prompts';
 
@@ -28,10 +29,88 @@ const ROOT = path.resolve(__dirname, '..');
 const IS_WINDOWS = process.platform === 'win32';
 
 // --------------------------------------------------------------------------
+// Launch spec resolver — determines how to invoke index-server at runtime.
+//
+// Returns { command, args, cwd, source } where source indicates the mode:
+//   'local'    — dist/ found at config.root (dev checkout)
+//   'packaged' — dist/ found in the package ROOT but not config.root (npx install)
+//   'npx'      — fallback when no dist/ found anywhere
+// --------------------------------------------------------------------------
+function resolveServerLaunch(config) {
+  const entryRelative = 'dist/server/index-server.js';
+  const localEntry = path.join(config.root, entryRelative);
+  const packagedEntry = path.join(ROOT, entryRelative);
+
+  // Case 1: config.root is the repo checkout with dist/ present
+  if (fs.existsSync(localEntry)) {
+    return {
+      command: 'node',
+      args: [entryRelative],
+      cwd: config.root,
+      source: 'local',
+    };
+  }
+
+  // Case 2: dist/ exists in the package root (npx cache) but not in config.root
+  if (fs.existsSync(packagedEntry)) {
+    return {
+      command: 'node',
+      args: [fwd(packagedEntry)],
+      cwd: config.root,
+      source: 'packaged',
+    };
+  }
+
+  // Case 3: no dist/ anywhere — use npx as last resort
+  let pkgName = '@jagilber-org/index-server';
+  let pkgVersion = '';
+  try {
+    const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
+    if (pkg.name) pkgName = pkg.name;
+    if (pkg.version) pkgVersion = `@${pkg.version}`;
+  } catch {
+    console.warn('⚠ Could not read package.json — npx will use latest published version');
+  }
+
+  return {
+    command: 'npx',
+    args: ['-y', `${pkgName}${pkgVersion}`],
+    cwd: config.root,
+    source: 'npx',
+  };
+}
+
+// --------------------------------------------------------------------------
 // Path helpers
 // --------------------------------------------------------------------------
 /** Normalize to forward slashes for mcp.json compatibility. */
 function fwd(p) { return p.replace(/\\/g, '/'); }
+
+/** Locate the npm CLI script for execFileSync(node, [npmCli, ...]). Returns null if not found. */
+function findNpmCli() {
+  // npm_execpath is set when running via npm/npx
+  if (process.env.npm_execpath) return process.env.npm_execpath;
+  // Resolve npm relative to the Node.js installation
+  const candidates = [
+    path.join(path.dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npm-cli.js'),
+    path.join(path.dirname(process.execPath), '..', 'lib', 'node_modules', 'npm', 'bin', 'npm-cli.js'),
+  ];
+  for (const c of candidates) {
+    if (fs.existsSync(c)) return c;
+  }
+  return null;
+}
+
+/** Run an npm command. Uses npm CLI script if found, otherwise shells out to `npm` on PATH. */
+function runNpm(args, opts = {}) {
+  const npmCli = findNpmCli();
+  if (npmCli) {
+    return execFileSync(process.execPath, [npmCli, ...args], opts);
+  }
+  // Fallback: invoke `npm` directly via execFileSync (uses npm.cmd on Windows).
+  const npmBin = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+  return execFileSync(npmBin, args, opts);
+}
 
 /** Resolve a sub-path under a root, always absolute and forward-slashed. */
 function resolveUnder(root, ...segments) { return fwd(path.resolve(root, ...segments)); }
@@ -120,6 +199,7 @@ function parseNonInteractiveArgs() {
     scope: 'repo',           // 'global' or 'repo'
     write: false,            // write to real config files
     preview: true,           // show preview before writing
+    deploy: true,            // deploy runtime to root when needed
   };
 
   for (let i = 0; i < args.length; i++) {
@@ -136,6 +216,7 @@ function parseNonInteractiveArgs() {
     else if (args[i] === '--scope' && args[i + 1]) config.scope = args[++i];
     else if (args[i] === '--write') config.write = true;
     else if (args[i] === '--no-preview') config.preview = false;
+    else if (args[i] === '--no-deploy') config.deploy = false;
   }
 
   // Profile overrides
@@ -253,7 +334,7 @@ async function runInteractiveWizard() {
     default: 'repo',
   });
 
-  return { profile, root, serverName, port, host, mutation, logLevel, generateCerts, targets, scope, write: true, preview: true };
+  return { profile, root, serverName, port, host, mutation, logLevel, generateCerts, targets, scope, write: true, preview: true, deploy: true };
 }
 
 // --------------------------------------------------------------------------
@@ -362,15 +443,17 @@ function getEnvCatalog(config, paths) {
 function generateMcpJson(config, paths) {
   const catalog = getEnvCatalog(config, paths);
   const indent = '\t\t\t\t';
+  const launch = resolveServerLaunch(config);
+  const argsJson = JSON.stringify(launch.args);
 
   const lines = [
     '{',
     '\t"servers": {',
     `\t\t"${config.serverName}": {`,
     '\t\t\t"type": "stdio",',
-    `\t\t\t"cwd": "${fwd(config.root)}",`,
-    '\t\t\t"command": "node",',
-    '\t\t\t"args": ["dist/server/index-server.js"],',
+    `\t\t\t"cwd": "${fwd(launch.cwd)}",`,
+    `\t\t\t"command": "${launch.command}",`,
+    `\t\t\t"args": ${argsJson},`,
     '\t\t\t"env": {',
   ];
 
@@ -412,11 +495,16 @@ function generateCopilotCliJson(config, paths) {
     if (entry.section) continue;
     if (entry.active) env[entry.key] = entry.value;
   }
+  const launch = resolveServerLaunch(config);
+  // copilot-cli doesn't reliably inherit cwd — use absolute args for local/packaged
+  const args = launch.source === 'local'
+    ? [fwd(path.resolve(launch.cwd, launch.args[0]))]
+    : launch.args;
   const obj = {
     mcpServers: {
       [config.serverName]: {
-        command: 'node',
-        args: [path.join(fwd(config.root), 'dist/server/index-server.js')],
+        command: launch.command,
+        args,
         env,
       },
     },
@@ -434,11 +522,16 @@ function generateClaudeDesktopJson(config, paths) {
     if (entry.section) continue;
     if (entry.active) env[entry.key] = entry.value;
   }
+  const launch = resolveServerLaunch(config);
+  // Claude Desktop doesn't support cwd — use absolute args for local/packaged
+  const args = launch.source === 'local'
+    ? [fwd(path.resolve(launch.cwd, launch.args[0]))]
+    : launch.args;
   const obj = {
     mcpServers: {
       [config.serverName]: {
-        command: 'node',
-        args: [path.join(fwd(config.root), 'dist/server/index-server.js')],
+        command: launch.command,
+        args,
         env,
       },
     },
@@ -621,6 +714,140 @@ function printFolderSummary(paths, profile) {
 }
 
 // --------------------------------------------------------------------------
+// Deploy runtime to target root (when different from package root)
+// --------------------------------------------------------------------------
+async function deployRuntime(config) {
+  if (config.deploy === false) return;
+
+  let sourceRoot, targetRoot;
+  try {
+    sourceRoot = fs.realpathSync(ROOT);
+    targetRoot = fs.realpathSync(config.root);
+  } catch {
+    sourceRoot = path.resolve(ROOT);
+    targetRoot = path.resolve(config.root);
+  }
+
+  // Skip when running from the target directory (dev clone / already deployed)
+  if (sourceRoot.toLowerCase() === targetRoot.toLowerCase()) return;
+
+  const entryPoint = path.join(targetRoot, 'dist', 'server', 'index-server.js');
+  const targetPkg = path.join(targetRoot, 'package.json');
+
+  // Read source version for comparison
+  let sourceVersion = 'unknown';
+  try {
+    const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
+    sourceVersion = pkg.version || 'unknown';
+  } catch { /* ok */ }
+
+  // Check if already deployed at this version
+  if (fs.existsSync(entryPoint) && fs.existsSync(targetPkg)) {
+    try {
+      const existing = JSON.parse(fs.readFileSync(targetPkg, 'utf8'));
+      if (existing.version === sourceVersion) {
+        console.log(`\n✅ Runtime v${sourceVersion} already deployed at ${config.root}`);
+        return;
+      }
+      console.log(`\n📦 Upgrading runtime: ${existing.version} → ${sourceVersion}`);
+    } catch { /* ok - redeploy */ }
+  } else {
+    console.log(`\n📦 Deploying runtime v${sourceVersion} to ${config.root}...`);
+  }
+
+  const pkgName = '@jagilber-org/index-server';
+
+  // Strategy: npm install the exact package version into the target directory
+  // This gives a proper node_modules tree regardless of npx cache layout
+  try {
+    fs.mkdirSync(targetRoot, { recursive: true });
+
+    // Write a minimal package.json if none exists (npm install needs it)
+    if (!fs.existsSync(targetPkg)) {
+      const minPkg = {
+        name: 'index-server-runtime',
+        version: '1.0.0',
+        private: true,
+        type: 'commonjs',
+        scripts: { start: 'node node_modules/@jagilber-org/index-server/dist/server/index-server.js' },
+      };
+      fs.writeFileSync(targetPkg, JSON.stringify(minPkg, null, 2), 'utf8');
+    }
+
+    console.log('   Installing package (this may take a moment)...');
+
+    // Strategy: pack the current package into a tarball, then install it.
+    // This works regardless of whether the version is published to npm,
+    // and produces a proper self-contained node_modules tree.
+    const packOutput = runNpm(
+      ['pack', '--pack-destination', targetRoot],
+      { cwd: ROOT, stdio: ['pipe', 'pipe', 'inherit'], timeout: 30_000 }
+    ).toString().trim();
+    const tarballName = packOutput.split('\n').pop();
+
+    const tarballPath = path.join(targetRoot, tarballName);
+
+    try {
+      // Install from the local tarball
+      runNpm(
+        ['install', tarballPath, '--omit=dev', '--no-fund', '--no-audit'],
+        { cwd: targetRoot, stdio: 'inherit', timeout: 120_000 }
+      );
+    } finally {
+      // Clean up tarball
+      try { fs.unlinkSync(tarballPath); } catch { /* ok */ }
+    }
+
+    // Create convenience symlinks/junctions so "dist/" at root resolves
+    const installedDist = path.join(targetRoot, 'node_modules', pkgName, 'dist');
+    const targetDist = path.join(targetRoot, 'dist');
+    if (fs.existsSync(installedDist) && !fs.existsSync(targetDist)) {
+      try {
+        // On Windows, directory junctions don't require elevated privileges
+        fs.symlinkSync(installedDist, targetDist, 'junction');
+      } catch {
+        // Fallback: copy dist recursively
+        fs.cpSync(installedDist, targetDist, { recursive: true });
+      }
+    }
+
+    // Copy schemas if not present
+    const installedSchemas = path.join(targetRoot, 'node_modules', pkgName, 'schemas');
+    const targetSchemas = path.join(targetRoot, 'schemas');
+    if (fs.existsSync(installedSchemas) && !fs.existsSync(targetSchemas)) {
+      fs.cpSync(installedSchemas, targetSchemas, { recursive: true });
+    }
+
+    // Update the runtime package.json with correct version/start script
+    try {
+      const runtimePkg = JSON.parse(fs.readFileSync(targetPkg, 'utf8'));
+      runtimePkg.version = sourceVersion;
+      runtimePkg.scripts = runtimePkg.scripts || {};
+      runtimePkg.scripts.start = 'node dist/server/index-server.js';
+      fs.writeFileSync(targetPkg, JSON.stringify(runtimePkg, null, 2) + '\n', 'utf8');
+    } catch { /* ok */ }
+
+    // Verify the deployed server is actually runnable
+    const deployedEntry = path.join(targetRoot, 'dist', 'server', 'index-server.js');
+    if (!fs.existsSync(deployedEntry)) {
+      throw new Error(
+        `dist/server/index-server.js not found after deployment. ` +
+        `Build the project first: cd "${ROOT}" && npm run build`
+      );
+    }
+
+    console.log(`   ✅ Runtime deployed to ${config.root}`);
+  } catch (err) {
+    console.error(`\n❌ Runtime deployment failed: ${err.message}`);
+    console.error('   To deploy manually, run:');
+    console.error(`   cd "${config.root}" && npm install ${pkgName}@${sourceVersion}`);
+    console.error('   Then create a symlink: dist -> node_modules/@jagilber-org/index-server/dist');
+    // Exit with error so CI can detect deployment failures
+    process.exitCode = 1;
+  }
+}
+
+// --------------------------------------------------------------------------
 // Main
 // --------------------------------------------------------------------------
 async function main() {
@@ -646,7 +873,8 @@ Non-interactive mode:
     --target <list>     Comma-separated targets: vscode,copilot-cli,claude
     --scope <s>         global | repo (default: repo)
     --write             Write directly to real config files (with backup)
-    --no-preview        Skip config preview in non-interactive mode`);
+    --no-preview        Skip config preview in non-interactive mode
+    --no-deploy         Skip runtime deployment to target root`);
     process.exit(0);
   }
 
@@ -718,11 +946,13 @@ Non-interactive mode:
     }
   }
 
+  // ── Deploy runtime if target root differs from package root ─────────
+  await deployRuntime(config);
+
   // ── Generate TLS certs ──────────────────────────────────────────────
   if (config.generateCerts) {
     console.log('\n🔐 Generating TLS certificates...');
     try {
-      const { execFileSync } = await import('child_process');
       const certDir = path.join(config.root, 'certs');
       execFileSync(
         process.execPath,
@@ -737,16 +967,27 @@ Non-interactive mode:
 
   // ── Next steps ──────────────────────────────────────────────────────
   const proto = (config.profile === 'enhanced' || config.profile === 'experimental') ? 'https' : 'http';
+  const launch = resolveServerLaunch(config);
   console.log('\n╔════════════════════════════════════════════════════════════════╗');
   console.log('║                         Next Steps                            ║');
   console.log('╚════════════════════════════════════════════════════════════════╝\n');
-  console.log('  1. Build the server:');
-  console.log('     npm run build\n');
+
+  let step = 1;
+  if (launch.source === 'local') {
+    console.log(`  ${step}. Build the server:`);
+    console.log('     npm run build\n');
+    step++;
+  } else if (launch.source === 'npx') {
+    console.log(`  ${step}. The server will be fetched via npx on first start.\n`);
+    step++;
+  }
 
   if (config.write) {
-    console.log('  2. Config files have been written. Restart your MCP client.\n');
+    console.log(`  ${step}. Config files have been written. Restart your MCP client.\n`);
+    step++;
   } else {
-    console.log('  2. Copy generated config into your MCP client settings.');
+    console.log(`  ${step}. Copy generated config into your MCP client settings.`);
+
     for (const ct of configTargets) {
       const genPath = ct.format === 'vscode' || ct.format === 'vscode-global'
         ? path.join(config.root, '.vscode', 'mcp.json.generated')
@@ -754,15 +995,18 @@ Non-interactive mode:
       console.log(`     ${ct.target}: ${genPath}`);
     }
     console.log('');
+    step++;
   }
 
-  console.log(`  3. Open the dashboard:`);
+  console.log(`  ${step}. Open the dashboard:`);
   console.log(`     ${proto}://localhost:${config.port}\n`);
+  step++;
 
   if (config.profile === 'enhanced' || config.profile === 'experimental') {
-    console.log('  4. First-time semantic search:');
+    console.log(`  ${step}. First-time semantic search:`);
     console.log('     The MiniLM model (~90MB) will download on first query.');
     console.log(`     Model cache: ${paths.modelCache}\n`);
+    step++;
   }
 
   if (config.profile === 'experimental') {

@@ -183,7 +183,7 @@ describe('Persistence Validation Tests (previously reported issues)', () => {
       body: 'TRACKER ENRICHED: Enumerate sensitive classes missing patterns (financial tokens, extended GUID variants, proprietary session IDs, edge PII). For each: risk, sample, proposed regex, false-positive mitigation, owner, ETA. Update monthly after diff against live pattern registry. GOVERNANCE: owner assigned, P2, 30d review cadence.',
       rationale: 'Reduce unnoticed PII leakage by closing pattern gaps.',
       priority: 76,
-      audience: 'security' as const,
+      audience: 'all' as const,
       requirement: 'mandatory' as const,
       categories: ['security','obfuscation','pii','tracking'],
       riskScore: 52,

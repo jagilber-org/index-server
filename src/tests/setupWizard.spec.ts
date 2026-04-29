@@ -13,13 +13,14 @@ import path from 'path';
 import os from 'os';
 
 const EXEC_OPTS: ExecSyncOptions = { stdio: 'pipe', timeout: 15_000 };
+const DEPLOY_EXEC_OPTS: ExecSyncOptions = { stdio: 'pipe', timeout: 90_000 };
 const ROOT = path.resolve(__dirname, '..', '..');
 const WIZARD_SCRIPT = path.join(ROOT, 'scripts', 'setup-wizard.mjs');
 
-function runWizard(args: string): string {
+function runWizard(args: string, opts?: ExecSyncOptions): string {
   return execSync(
     `node "${WIZARD_SCRIPT}" --non-interactive ${args}`,
-    { ...EXEC_OPTS, cwd: ROOT, env: { ...process.env, HOME: os.tmpdir(), USERPROFILE: os.tmpdir() } }
+    { ...EXEC_OPTS, ...opts, cwd: ROOT, env: { ...process.env, HOME: os.tmpdir(), USERPROFILE: os.tmpdir() } }
   ).toString();
 }
 
@@ -145,7 +146,7 @@ describe('Setup Wizard Multi-Target Config', () => {
   it('should write config files with --write flag', () => {
     fs.mkdirSync(tmpDir, { recursive: true });
     // Use a temporary root so we write .vscode/mcp.json inside tmpDir
-    runWizard(`--root "${tmpDir}" --target vscode --scope repo --write`);
+    runWizard(`--root "${tmpDir}" --target vscode --scope repo --write --no-deploy`);
     const mcpPath = path.join(tmpDir, '.vscode', 'mcp.json');
     expect(fs.existsSync(mcpPath)).toBe(true);
     const content = fs.readFileSync(mcpPath, 'utf8');
@@ -185,6 +186,153 @@ describe('Setup Wizard Multi-Target Config', () => {
     }
   });
 });
+
+describe('Setup Wizard Next Steps — Build Step Skip', () => {
+  const distFile = path.join(ROOT, 'dist', 'server', 'index-server.js');
+
+  afterEach(() => {
+    try { fs.unlinkSync(path.join(ROOT, '.env.generated')); } catch { /* ok */ }
+  });
+
+  it('should skip "Build the server" step when dist exists', () => {
+    // In a dev repo after `npm run build`, dist/server/index-server.js exists
+    if (!fs.existsSync(distFile)) {
+      console.log('dist not built — skipping (run npm run build first)');
+      return;
+    }
+    const output = runWizard('');
+    expect(output).toContain('Next Steps');
+    expect(output).not.toContain('Build the server');
+    expect(output).not.toContain('npm run build');
+  });
+
+  it('should show "Build the server" step when dist is missing', () => {
+    // Use a temp directory as root so we don't touch real dist/ files
+    const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'wizard-test-'));
+    try {
+      const output = runWizard(`--root "${tmpRoot}"`);
+      expect(output).toContain('Build the server');
+      expect(output).toContain('npm run build');
+    } finally {
+      fs.rmSync(tmpRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('should number steps correctly when build step is skipped', () => {
+    if (!fs.existsSync(distFile)) {
+      console.log('dist not built — skipping');
+      return;
+    }
+    const output = runWizard('');
+    // Without build step, first step should be "1. Copy generated config" or "1. Config files"
+    // and dashboard should be "2. Open the dashboard"
+    expect(output).toMatch(/1\.\s+(Copy generated config|Config files have been written)/);
+    expect(output).toMatch(/2\.\s+Open the dashboard/);
+  });
+
+  it('should number steps correctly when build step is shown', () => {
+    // Use a temp directory as root so we don't touch real dist/ files
+    const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'wizard-test-'));
+    try {
+      const output = runWizard(`--root "${tmpRoot}"`);
+      // With build step: 1=Build, 2=Copy/Config, 3=Dashboard
+      expect(output).toMatch(/1\.\s+Build the server/);
+      expect(output).toMatch(/2\.\s+(Copy generated config|Config files have been written)/);
+      expect(output).toMatch(/3\.\s+Open the dashboard/);
+    } finally {
+      fs.rmSync(tmpRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('should show semantic search step for enhanced profile regardless of dist', () => {
+    const output = runWizard('--profile enhanced');
+    expect(output).toContain('First-time semantic search');
+    expect(output).toContain('MiniLM model');
+  });
+});
+
+describe('Setup Wizard Runtime Deployment', () => {
+  const tmpDir = path.join(os.tmpdir(), `wizard-deploy-${Date.now()}`);
+
+  afterEach(() => {
+    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* ok */ }
+  });
+
+  it('should deploy runtime when root differs from package root', () => {
+    const output = runWizard(`--root "${tmpDir}" --no-preview`, DEPLOY_EXEC_OPTS);
+    expect(output).toContain('Deploying runtime');
+    expect(output).toContain('Runtime deployed');
+    // dist/ should exist at target
+    expect(fs.existsSync(path.join(tmpDir, 'dist', 'server', 'index-server.js'))).toBe(true);
+    // schemas/ should exist
+    expect(fs.existsSync(path.join(tmpDir, 'schemas'))).toBe(true);
+  }, 120_000);
+
+  it('should skip deploy when root equals package root', () => {
+    const output = runWizard('--no-preview');
+    expect(output).not.toContain('Deploying runtime');
+  });
+
+  it('should skip "Build the server" step after successful deploy', () => {
+    const output = runWizard(`--root "${tmpDir}" --no-preview`, DEPLOY_EXEC_OPTS);
+    expect(output).toContain('Runtime deployed');
+    // Next steps should NOT show build step since dist was just deployed
+    expect(output).not.toContain('Build the server');
+    expect(output).not.toContain('npm run build');
+  }, 120_000);
+});
+
+describe('Setup Wizard Launch Resolution', () => {
+  const dataDir = path.join(os.tmpdir(), `wizard-launch-${Date.now()}`);
+
+  afterEach(() => {
+    try { fs.rmSync(dataDir, { recursive: true, force: true }); } catch { /* ok */ }
+    try { fs.unlinkSync(path.join(ROOT, '.env.generated')); } catch { /* ok */ }
+  });
+
+  it('should use absolute path to dist/ when --root is a data-only directory', () => {
+    fs.mkdirSync(dataDir, { recursive: true });
+    const output = runWizard(`--root "${dataDir}" --target vscode --scope repo --write`);
+    const mcpPath = path.join(dataDir, '.vscode', 'mcp.json');
+    expect(fs.existsSync(mcpPath)).toBe(true);
+    const content = fs.readFileSync(mcpPath, 'utf8');
+    // Should NOT contain bare relative dist path since dataDir has no dist/
+    expect(content).not.toContain('"args": ["dist/server/index-server.js"]');
+    // Should contain absolute path to the actual dist or npx command
+    const hasAbsoluteDist = content.includes('dist/server/index-server.js') && !content.includes('"args": ["dist/server/index-server.js"]');
+    const hasNpx = content.includes('"command": "npx"');
+    expect(hasAbsoluteDist || hasNpx).toBe(true);
+  });
+
+  it('should use relative dist path when running from dev checkout root', () => {
+    // When root = ROOT (the repo itself with dist/), command should be node + relative path
+    const output = runWizard('');
+    // Preview output should contain the relative dist path since ROOT has dist/
+    expect(output).toContain('dist/server/index-server.js');
+  });
+
+  it('should generate working copilot-cli config for external data directory', () => {
+    fs.mkdirSync(dataDir, { recursive: true });
+    const output = runWizard(`--root "${dataDir}" --target copilot-cli`);
+    // Preview should show mcpServers with absolute path or npx, not relative dist
+    expect(output).toContain('mcpServers');
+    // The args should not be the bare relative path
+    const previewSection = output.split('copilot-cli')[1] || '';
+    if (previewSection.includes('dist/server/index-server.js')) {
+      // If it has dist path, it should be absolute (contains the ROOT path)
+      expect(previewSection).toContain(ROOT.replace(/\\/g, '/'));
+    }
+  });
+
+  it('should set cwd to data root in generated vscode config', () => {
+    fs.mkdirSync(dataDir, { recursive: true });
+    const output = runWizard(`--root "${dataDir}" --target vscode --scope repo --write`);
+    const mcpPath = path.join(dataDir, '.vscode', 'mcp.json');
+    const content = fs.readFileSync(mcpPath, 'utf8');
+    expect(content).toContain(`"cwd": "${dataDir.replace(/\\/g, '/')}"`);
+  });
+});
+
 
 describe('Certificate Generation', () => {
   const certDir = path.join(os.tmpdir(), `cert-test-${Date.now()}`);
