@@ -313,7 +313,7 @@ describe('Setup Wizard Launch Resolution', () => {
 
   it('should generate working copilot-cli config for external data directory', () => {
     fs.mkdirSync(dataDir, { recursive: true });
-    const output = runWizard(`--root "${dataDir}" --target copilot-cli`);
+    const output = runWizard(`--root "${dataDir}" --target copilot-cli --no-deploy`);
     // Preview should show mcpServers with absolute path or npx, not relative dist
     expect(output).toContain('mcpServers');
     // The args should not be the bare relative path
