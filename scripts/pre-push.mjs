@@ -30,11 +30,15 @@ if (typeof guard.status === 'number' && guard.status !== 0) {
 }
 
 // Invoke pre-commit pre-push stage so configured semgrep/gitleaks hooks actually run.
+// Use 'pipe' instead of 'inherit' to prevent Python pre-commit from crashing
+// when git's stdout pipe is closed (OSError: Bad file descriptor on Windows).
 const preCommit = spawnSync('pre-commit', ['run', '--hook-stage', 'pre-push', '--all-files'], {
-	stdio: 'inherit',
+	stdio: ['inherit', 'pipe', 'pipe'],
 	env: process.env,
 	shell: process.platform === 'win32',
 });
+if (preCommit.stdout?.length) process.stdout.write(preCommit.stdout);
+if (preCommit.stderr?.length) process.stderr.write(preCommit.stderr);
 if (preCommit.error && preCommit.error.code === 'ENOENT') {
 	console.warn('[pre-push] pre-commit not installed; skipping pre-push hook stage.');
 	process.exit(0);

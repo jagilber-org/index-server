@@ -91,6 +91,9 @@ function shouldEmit(level: LogLevel): boolean {
   return recordPriority >= threshold;
 }
 
+// Single exit handler — registered once to avoid listener accumulation on re-init
+let exitHandlerRegistered = false;
+
 // Initialize file logging if INDEX_SERVER_LOG_FILE is specified
 function initializeFileLogging(): void {
   const cfg = loggingCfg();
@@ -120,6 +123,14 @@ function initializeFileLogging(): void {
     });
     logFilePath = logFile;
 
+    // Graceful fallback: if the stream hits EPERM/EACCES, disable file logging
+    logFileHandle.on('error', (err: NodeJS.ErrnoException) => {
+      process.stderr.write(`[logger] File logging error (${err.code ?? err.message}), falling back to stderr-only\n`);
+      try { logFileHandle?.end(); } catch { /* ignore */ }
+      logFileHandle = null;
+      logFilePath = undefined;
+    });
+
     // NDJSON session start record
     const sessionStart: LogRecord = {
       ts: new Date().toISOString(),
@@ -130,19 +141,22 @@ function initializeFileLogging(): void {
     const startLine = JSON.stringify(sessionStart);
     logFileHandle.write(startLine + '\n');
 
-    // Cleanup on process exit
-    process.on('exit', () => {
-      if (logFileHandle && !logFileHandle.destroyed) {
-        const sessionEnd: LogRecord = {
-          ts: new Date().toISOString(),
-          level: 'INFO',
-          msg: '[logger] Session ended',
-          pid: process.pid,
-        };
-        logFileHandle.write(JSON.stringify(sessionEnd) + '\n');
-        logFileHandle.end();
-      }
-    });
+    // Cleanup on process exit — register only once
+    if (!exitHandlerRegistered) {
+      exitHandlerRegistered = true;
+      process.on('exit', () => {
+        if (logFileHandle && !logFileHandle.destroyed) {
+          const sessionEnd: LogRecord = {
+            ts: new Date().toISOString(),
+            level: 'INFO',
+            msg: '[logger] Session ended',
+            pid: process.pid,
+          };
+          logFileHandle.write(JSON.stringify(sessionEnd) + '\n');
+          logFileHandle.end();
+        }
+      });
+    }
 
     // Emit NDJSON init diagnostic
     try {

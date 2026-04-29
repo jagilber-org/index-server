@@ -137,8 +137,7 @@ describe('index_add NEGATIVE tests — failure paths', () => {
     expect(resp?.created, 'server must reject oversized body').toBe(false);
     expect(resp?.error, 'oversized body should return a clear error').toBe('body_too_large');
     const getResp = await client.read(id);
-    const item = getResp?.item || getResp;
-    expect(item?.id, 'oversized body must not be persisted').not.toBe(id);
+    expect(getResp?.notFound || !getResp?.item, 'oversized body must not be persisted').toBeTruthy();
   }, 30000);
 
   // --- Invalid semver ---

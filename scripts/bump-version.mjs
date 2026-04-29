@@ -7,6 +7,14 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { execSync } from 'node:child_process';
 
+/**
+ * Normalize EOL to LF and ensure exactly one trailing newline.
+ * Mirrors Write-ChangelogEntryNormalized from bump-version.ps1.
+ */
+function normalizeLF(text) {
+  return text.replace(/\r\n/g, '\n').replace(/\n+$/, '') + '\n';
+}
+
 const VALID_TYPES = ['major', 'minor', 'patch'];
 const type = process.argv[2];
 const changelogMessage = process.argv.slice(3).join(' ') || '';
@@ -46,7 +54,7 @@ console.log(`Current version: ${current} -> Next: ${next}`);
 
 // Update package.json
 pkg.version = next;
-writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + '\n', 'utf8');
+writeFileSync(pkgPath, normalizeLF(JSON.stringify(pkg, null, 2)), 'utf8');
 
 // Update server.json (MCP registry manifest) — versions must stay in sync with package.json
 const serverJsonPath = join(root, 'server.json');
@@ -59,21 +67,24 @@ try {
       if (p && typeof p === 'object' && 'version' in p) p.version = next;
     }
   }
-  writeFileSync(serverJsonPath, JSON.stringify(serverJson, null, 2) + '\n', 'utf8');
+  writeFileSync(serverJsonPath, normalizeLF(JSON.stringify(serverJson, null, 2)), 'utf8');
   serverJsonUpdated = true;
 } catch (e) { if (e.code !== 'ENOENT') throw e; }
 
-// Update CHANGELOG.md
+// Update CHANGELOG.md — normalize EOL and preserve blank line between entries
 const changelogPath = join(root, 'CHANGELOG.md');
 let changelogUpdated = false;
 try {
   const existing = readFileSync(changelogPath, 'utf8');
   const date = new Date().toISOString().slice(0, 10);
-  let entry = `\n## [${next}] - ${date}\n`;
+  let entry = `## [${next}] - ${date}\n`;
   if (changelogMessage) {
     entry += `\n### Added\n\n- ${changelogMessage}\n`;
   }
-  writeFileSync(changelogPath, existing + entry, 'utf8');
+  // Mirror PS1: normalize CRLF→LF, trim trailing newlines, join with blank line, single trailing \n
+  const normalized = existing.replace(/\r\n/g, '\n').replace(/\n+$/, '');
+  const entryNormalized = entry.replace(/\r\n/g, '\n').replace(/\n+$/, '');
+  writeFileSync(changelogPath, normalized + '\n\n' + entryNormalized + '\n', 'utf8');
   changelogUpdated = true;
 } catch (e) { if (e.code !== 'ENOENT') throw e; }
 
