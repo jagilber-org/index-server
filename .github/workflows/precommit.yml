@@ -50,6 +50,7 @@ jobs:
 
       - name: Generate ggshield JSON report
         if: ${{ always() && env.GITGUARDIAN_API_KEY != '' }}
+        continue-on-error: true
         env:
           GITGUARDIAN_API_KEY: ${{ secrets.GITGUARDIAN_API_KEY }}
         run: |

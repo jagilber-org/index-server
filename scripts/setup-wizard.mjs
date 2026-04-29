@@ -973,7 +973,7 @@ Non-interactive mode:
   console.log('╚════════════════════════════════════════════════════════════════╝\n');
 
   let step = 1;
-  if (launch.source === 'local') {
+  if (launch.source === 'packaged') {
     console.log(`  ${step}. Build the server:`);
     console.log('     npm run build\n');
     step++;

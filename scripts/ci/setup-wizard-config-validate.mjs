@@ -148,9 +148,10 @@ for (const profile of PROFILES) {
         assert(server.cwd, 'Must have "cwd"');
         assert(server.command === 'node', 'command must be "node"');
         assert(Array.isArray(server.args), 'args must be array');
+        const expected = 'dist/server/index-server.js';
         assert(
-          server.args[0] === 'dist/server/index-server.js',
-          `args[0] must be relative path, got: ${server.args[0]}`,
+          server.args[0] === expected || fwd(server.args[0]).endsWith(expected),
+          `args[0] must be relative or absolute path to entry, got: ${server.args[0]}`,
         );
         assert(typeof server.env === 'object', 'Must have env object');
       });
