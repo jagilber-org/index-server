@@ -210,7 +210,7 @@ describe('Setup Wizard Next Steps — Build Step Skip', () => {
     // Use a temp directory as root so we don't touch real dist/ files
     const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'wizard-test-'));
     try {
-      const output = runWizard(`--root "${tmpRoot}"`);
+      const output = runWizard(`--root "${tmpRoot}" --no-deploy`);
       expect(output).toContain('Build the server');
       expect(output).toContain('npm run build');
     } finally {
@@ -234,7 +234,7 @@ describe('Setup Wizard Next Steps — Build Step Skip', () => {
     // Use a temp directory as root so we don't touch real dist/ files
     const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'wizard-test-'));
     try {
-      const output = runWizard(`--root "${tmpRoot}"`);
+      const output = runWizard(`--root "${tmpRoot}" --no-deploy`);
       // With build step: 1=Build, 2=Copy/Config, 3=Dashboard
       expect(output).toMatch(/1\.\s+Build the server/);
       expect(output).toMatch(/2\.\s+(Copy generated config|Config files have been written)/);
@@ -292,7 +292,7 @@ describe('Setup Wizard Launch Resolution', () => {
 
   it('should use absolute path to dist/ when --root is a data-only directory', () => {
     fs.mkdirSync(dataDir, { recursive: true });
-    const output = runWizard(`--root "${dataDir}" --target vscode --scope repo --write`);
+    const output = runWizard(`--root "${dataDir}" --target vscode --scope repo --write --no-deploy`);
     const mcpPath = path.join(dataDir, '.vscode', 'mcp.json');
     expect(fs.existsSync(mcpPath)).toBe(true);
     const content = fs.readFileSync(mcpPath, 'utf8');
@@ -326,7 +326,7 @@ describe('Setup Wizard Launch Resolution', () => {
 
   it('should set cwd to data root in generated vscode config', () => {
     fs.mkdirSync(dataDir, { recursive: true });
-    const output = runWizard(`--root "${dataDir}" --target vscode --scope repo --write`);
+    const output = runWizard(`--root "${dataDir}" --target vscode --scope repo --write --no-deploy`);
     const mcpPath = path.join(dataDir, '.vscode', 'mcp.json');
     const content = fs.readFileSync(mcpPath, 'utf8');
     expect(content).toContain(`"cwd": "${dataDir.replace(/\\/g, '/')}"`);
