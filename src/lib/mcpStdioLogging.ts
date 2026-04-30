@@ -155,6 +155,7 @@ export class McpStdioLogger {
   private readonly _serverName: string;
   private readonly _maxBufferSize: number;
   private readonly _inferLevel: (line: string) => McpLoggingLevel;
+  private readonly _exitHandler: () => void;
 
   constructor(options: McpStdioLoggerOptions = {}) {
     this._serverName = options.serverName ?? 'mcp-server';
@@ -165,6 +166,17 @@ export class McpStdioLogger {
     if (options.interceptImmediately !== false) {
       this.interceptStderr();
     }
+
+    // Issue #234: if the process exits before the MCP handshake completes
+    // (e.g. --help, --init-cert, fatal startup error), drain buffered stderr
+    // so the user actually sees what was logged. Inactive bridge only —
+    // once activated, the buffer is already replayed via sendLoggingMessage.
+    this._exitHandler = () => {
+      if (!this._active && this._buffer.length > 0) {
+        this.flushToStderr();
+      }
+    };
+    process.on('exit', this._exitHandler);
   }
 
   // -----------------------------------------------------------------------
@@ -285,6 +297,29 @@ export class McpStdioLogger {
   }
 
   /**
+   * Drain the pre-handshake buffer to the ORIGINAL stderr without requiring
+   * an MCP server activation. Used when the process is about to exit before
+   * the MCP handshake completes (e.g., `--help`, `--init-cert`, or a fatal
+   * startup error). Without this, buffered diagnostic lines would be silently
+   * discarded — see issue #234.
+   *
+   * Safe to call repeatedly; a no-op when the buffer is empty. Does not change
+   * `isActive` and does not require a registered server.
+   */
+  flushToStderr(): void {
+    if (this._buffer.length === 0) return;
+    for (const entry of this._buffer) {
+      const data = entry.data;
+      try {
+        this._originalStderrWrite(data.endsWith('\n') ? data : data + '\n');
+      } catch {
+        /* ignore — best-effort drain */
+      }
+    }
+    this._buffer.length = 0;
+  }
+
+  /**
    * Restore original stderr and deactivate the bridge.
    * Useful for testing cleanup or graceful shutdown.
    */
@@ -293,6 +328,7 @@ export class McpStdioLogger {
     this._active = false;
     this._intercepting = false;
     this._buffer.length = 0;
+    try { process.removeListener('exit', this._exitHandler); } catch { /* ignore */ }
   }
 
   /**

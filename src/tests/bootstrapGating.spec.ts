@@ -40,6 +40,7 @@ describe('bootstrap gating', () => {
     const isolated = fs.mkdtempSync(path.join(os.tmpdir(), 'bootstrap-gating-'));
     // Explicitly disable auto-confirm so we validate genuine gating behavior.
   proc = spawn('node',[path.join(__dirname,'../../dist/server/index-server.js')], { stdio:['pipe','pipe','pipe'], env:{ ...process.env, INDEX_SERVER_MUTATION:'1', INDEX_SERVER_BOOTSTRAP_AUTOCONFIRM:'0', INDEX_SERVER_DIR: isolated } });
+    proc.stderr?.on('data', () => { /* drain to prevent stderr pipe backpressure stalling server */ });
     // Handshake
     send(proc,{ jsonrpc:'2.0', id:1, method:'initialize', params:{ protocolVersion:'2025-06-18', clientInfo:{ name:'bootstrap-test', version:'0.0.0' }, capabilities:{ tools:{} } } });
     await waitForId(proc,1);
@@ -72,6 +73,7 @@ describe('bootstrap gating', () => {
     // bleed-over from earlier tests.
     const isolated = fs.mkdtempSync(path.join(os.tmpdir(), 'bootstrap-gating-expire-'));
   proc = spawn('node',[path.join(__dirname,'../../dist/server/index-server.js')], { stdio:['pipe','pipe','pipe'], env:{ ...process.env, INDEX_SERVER_MUTATION:'1', INDEX_SERVER_BOOTSTRAP_TOKEN_TTL_SEC:'1', INDEX_SERVER_BOOTSTRAP_AUTOCONFIRM:'0', INDEX_SERVER_DIR: isolated } });
+    proc.stderr?.on('data', () => { /* drain stderr */ });
     send(proc,{ jsonrpc:'2.0', id:11, method:'initialize', params:{ protocolVersion:'2025-06-18', clientInfo:{ name:'bootstrap-expire', version:'0.0.0' }, capabilities:{ tools:{} } } });
     await waitForId(proc,11);
     send(proc,{ jsonrpc:'2.0', id:12, method:'tools/call', params:{ name:'bootstrap_request', arguments:{ rationale:'expire test' } } });
@@ -90,6 +92,7 @@ describe('bootstrap gating', () => {
     // Reference mode test
     const isolatedRef = fs.mkdtempSync(path.join(os.tmpdir(), 'bootstrap-gating-ref-'));
     const procRef = spawn('node',[path.join(__dirname,'../../dist/server/index-server.js')], { stdio:['pipe','pipe','pipe'], env:{ ...process.env, INDEX_SERVER_REFERENCE_MODE:'1', INDEX_SERVER_MUTATION:'1', INDEX_SERVER_BOOTSTRAP_AUTOCONFIRM:'0', INDEX_SERVER_DIR: isolatedRef } });
+    procRef.stderr?.on('data', () => { /* drain stderr */ });
     send(procRef,{ jsonrpc:'2.0', id:21, method:'initialize', params:{ protocolVersion:'2025-06-18', clientInfo:{ name:'bootstrap-ref', version:'0.0.0' }, capabilities:{ tools:{} } } });
     await waitForId(procRef,21);
     send(procRef,{ jsonrpc:'2.0', id:22, method:'tools/call', params:{ name:'index_dispatch', arguments:{ action:'add', entry:{ id:'ref-block-test', title:'ref', body:'r', priority:1, audience:'agents', requirement:'optional', categories:['test'] }, overwrite:true, lax:true } } });

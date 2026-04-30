@@ -1449,3 +1449,15 @@ No client changes required. Enable `INDEX_SERVER_MEMOIZE=1` (and optionally `IND
 ## [1.26.4] - 2026-04-28
 
 ## [1.26.5] - 2026-04-28
+
+## [1.26.7] - 2026-04-30
+
+### Added
+
+- fix(wizard): correct Build prompt logic
+
+## [1.26.8] - 2026-04-30
+
+### Added
+
+- Test stability + version parity tooling (PR #261)

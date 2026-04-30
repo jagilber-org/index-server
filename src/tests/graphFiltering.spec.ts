@@ -1,5 +1,21 @@
 import { describe, it, expect } from 'vitest';
+import * as fs from 'fs';
+import * as path from 'path';
+import * as os from 'os';
 import { startDashboardServer } from './util/waitForDashboard';
+
+function seedFixtureDir(): string {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'graphfilter-'));
+  const entries = [
+    { id: 'gf-alpha', title: 'Alpha', body: 'Alpha body content for graph filtering test.', priority: 50, audience: 'all', requirement: 'optional', categories: ['testing'], schemaVersion: '0.6.2' },
+    { id: 'gf-beta', title: 'Beta', body: 'Beta body content for graph filtering test.', priority: 50, audience: 'all', requirement: 'optional', categories: ['governance'], schemaVersion: '0.6.2' },
+    { id: 'gf-gamma', title: 'Gamma', body: 'Gamma body content for graph filtering test.', priority: 50, audience: 'all', requirement: 'optional', categories: ['testing','governance'], schemaVersion: '0.6.2' },
+  ];
+  for (const e of entries) {
+    fs.writeFileSync(path.join(dir, `${e.id}.json`), JSON.stringify(e, null, 2));
+  }
+  return dir;
+}
 
 // Verifies that the /api/graph/mermaid endpoint applies server-side filtering
 // when selectedIds (or later selectedCategories) are provided and that the
@@ -9,9 +25,10 @@ import { startDashboardServer } from './util/waitForDashboard';
 // covered by an automated test. Fast runtime (< 2s typical).
 describe('graph filtering (mermaid)', () => {
   it('returns reduced mermaid + scoped meta when filtered by selectedIds', async () => {
+    const fixtureDir = seedFixtureDir();
     let dash: Awaited<ReturnType<typeof startDashboardServer>> | undefined;
     try {
-      dash = await startDashboardServer();
+      dash = await startDashboardServer({ INDEX_SERVER_DIR: fixtureDir });
     } catch (e) {
       return expect.fail((e as Error).message || 'dashboard failed to start');
     }
