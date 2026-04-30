@@ -30,10 +30,17 @@ interface DashboardHttpConfig {
   verboseLogging: boolean;
   mutationEnabled: boolean;
   adminApiKey?: string;
-  rateLimitEnabled: boolean;
-  rateLimitWindowMs: number;
-  rateLimitMax: number;
-  rateLimitMutationMax: number;
+  /**
+   * Dashboard HTTP API rate limit, in requests per minute.
+   *
+   * - `0` (default) disables rate limiting entirely (HTTP API + usage tracking).
+   * - Any positive integer N enforces N requests/min globally with a fixed
+   *   60-second window. Bulk import/export/backup/restore routes are
+   *   unconditionally exempt regardless of this value.
+   *
+   * Configured via the `INDEX_SERVER_RATE_LIMIT` environment variable.
+   */
+  rateLimitPerMinute: number;
   tls: DashboardTlsConfig;
 }
 
@@ -84,10 +91,7 @@ export function parseDashboardConfig(mutationEnabled: boolean, instructionsBaseD
       verboseLogging: getBooleanEnv('INDEX_SERVER_VERBOSE_LOGGING'),
       mutationEnabled,
       adminApiKey: process.env.INDEX_SERVER_ADMIN_API_KEY || undefined,
-      rateLimitEnabled: !getBooleanEnv('INDEX_SERVER_DISABLE_RATE_LIMIT'),
-      rateLimitWindowMs: Math.max(1, numberFromEnv('INDEX_SERVER_RATE_LIMIT_WINDOW_MS', 60_000)),
-      rateLimitMax: Math.max(0, numberFromEnv('INDEX_SERVER_RATE_LIMIT_MAX', 100)),
-      rateLimitMutationMax: Math.max(0, numberFromEnv('INDEX_SERVER_RATE_LIMIT_MUTATION_MAX', 20)),
+      rateLimitPerMinute: Math.max(0, numberFromEnv('INDEX_SERVER_RATE_LIMIT', 0)),
       tls: {
         enabled: getBooleanEnv('INDEX_SERVER_DASHBOARD_TLS'),
         certPath: process.env.INDEX_SERVER_DASHBOARD_TLS_CERT || undefined,

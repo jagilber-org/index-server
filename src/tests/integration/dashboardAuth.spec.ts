@@ -106,7 +106,6 @@ describe('Dashboard auth integration (with INDEX_SERVER_ADMIN_API_KEY)', () => {
 
   beforeAll(async () => {
     process.env.INDEX_SERVER_ADMIN_API_KEY = ADMIN_KEY;
-    process.env.INDEX_SERVER_DISABLE_RATE_LIMIT = '1';
     reloadRuntimeConfig();
 
     const app = buildTestApp();
@@ -120,7 +119,6 @@ describe('Dashboard auth integration (with INDEX_SERVER_ADMIN_API_KEY)', () => {
   afterAll(async () => {
     await new Promise<void>((resolve) => server?.close(() => resolve()));
     delete process.env.INDEX_SERVER_ADMIN_API_KEY;
-    delete process.env.INDEX_SERVER_DISABLE_RATE_LIMIT;
     reloadRuntimeConfig();
   });
 
@@ -182,7 +180,6 @@ describe('Dashboard auth integration (without INDEX_SERVER_ADMIN_API_KEY — loc
   beforeAll(async () => {
     // Ensure no admin key is set so middleware falls through to loopback check
     delete process.env.INDEX_SERVER_ADMIN_API_KEY;
-    process.env.INDEX_SERVER_DISABLE_RATE_LIMIT = '1';
     reloadRuntimeConfig();
 
     const app = buildTestApp();
@@ -195,7 +192,6 @@ describe('Dashboard auth integration (without INDEX_SERVER_ADMIN_API_KEY — loc
 
   afterAll(async () => {
     await new Promise<void>((resolve) => server?.close(() => resolve()));
-    delete process.env.INDEX_SERVER_DISABLE_RATE_LIMIT;
     reloadRuntimeConfig();
   });
 

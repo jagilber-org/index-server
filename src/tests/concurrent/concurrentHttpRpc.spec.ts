@@ -36,7 +36,6 @@ describe('Concurrent HTTP RPC', { timeout: 120_000 }, () => {
 			instructionsDir: ctx.instructionsDir,
 			stateDir: ctx.stateDir,
 			extraEnv: {
-				INDEX_SERVER_DISABLE_RATE_LIMIT: '1',
 			},
 		});
 		clients = createHttpRpcClients(leader.dashUrl, HTTP_CLIENT_COUNT);

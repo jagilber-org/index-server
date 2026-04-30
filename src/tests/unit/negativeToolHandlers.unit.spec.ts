@@ -35,7 +35,6 @@ describe('negative tool handler coverage', () => {
     process.env.INDEX_SERVER_FEEDBACK_DIR = FEEDBACK_DIR;
     process.env.INDEX_SERVER_USAGE_SNAPSHOT_PATH = USAGE_SNAPSHOT_PATH;
     process.env.INDEX_SERVER_FEATURES = 'usage';
-    process.env.INDEX_SERVER_DISABLE_RATE_LIMIT = '1';
     reloadRuntimeConfig();
     enableFeature('usage');
     forceBootstrapConfirmForTests('negative-tool-handlers');
@@ -56,7 +55,6 @@ describe('negative tool handler coverage', () => {
     delete process.env.INDEX_SERVER_FEEDBACK_DIR;
     delete process.env.INDEX_SERVER_USAGE_SNAPSHOT_PATH;
     delete process.env.INDEX_SERVER_FEATURES;
-    delete process.env.INDEX_SERVER_DISABLE_RATE_LIMIT;
     reloadRuntimeConfig();
   });
 

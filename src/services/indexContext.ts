@@ -7,7 +7,6 @@ import { hasFeature, incrementCounter } from './features';
 import { atomicCreateJson, atomicCreateJsonAsync, atomicWriteJson, atomicWriteJsonAsync } from './atomicFs';
 import { ClassificationService } from './classificationService';
 import { resolveOwner } from './ownershipService';
-import { getBooleanEnv } from '../utils/envUtils';
 import { getRuntimeConfig } from '../config/runtimeConfig';
 import { createStore } from './storage/factory';
 import type { IInstructionStore } from './storage/types';
@@ -145,10 +144,11 @@ function restoreLastUsedInvariant(e: InstructionEntry){
 const USAGE_RATE_LIMIT_PER_SECOND = 10; // max increments per id per second
 const usageRateLimiter = new Map<string, { count: number; windowStart: number }>();
 function checkUsageRateLimit(id: string): boolean {
-  // Rate limiting is enabled by default. Set INDEX_SERVER_DISABLE_RATE_LIMIT=1 to disable all rate limiting.
-  if(getBooleanEnv('INDEX_SERVER_DISABLE_RATE_LIMIT')) return true;
-  // Legacy per-subsystem override (backward compat / deterministic tests).
-  if(getBooleanEnv('INDEX_SERVER_DISABLE_USAGE_RATE_LIMIT')) return true;
+  // Rate limiting is opt-in. INDEX_SERVER_RATE_LIMIT=0 (default) or unset
+  // disables both the dashboard HTTP limiter and this usage limiter.
+  // Any positive integer enables both.
+  const rl = Number(process.env.INDEX_SERVER_RATE_LIMIT);
+  if (!Number.isFinite(rl) || rl <= 0) return true;
   const now = Date.now();
   const windowStart = Math.floor(now / 1000) * 1000; // 1-second windows
 

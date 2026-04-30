@@ -1,6 +1,6 @@
 {
-  "version": "1.22.0",
-  "generatedAt": "2026-04-20T17:46:00.924Z",
+  "version": "1.26.11",
+  "generatedAt": "2026-04-30T21:14:01.841Z",
   "trackedDir": "schemas",
   "distDir": "dist/schemas",
   "jsonSchemas": [
@@ -67,7 +67,7 @@
       "src",
       "scripts"
     ],
-    "fileCount": 224,
+    "fileCount": 245,
     "features": {
       "jsdoc": true,
       "lineNumbers": true,

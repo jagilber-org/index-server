@@ -1371,8 +1371,7 @@ export class IndexServerClient extends MCPClient {
 | `INDEX_SERVER_MEMOIZE` | Cache Index in-memory to reduce file IO. | disabled |
 | `INDEX_SERVER_DIAG` | Verbose Index diagnostics to stderr. | `0` |
 | `INDEX_SERVER_FILE_TRACE` | Trace file load sequence. | `0` |
-| `INDEX_SERVER_DISABLE_RATE_LIMIT` | Disable all rate limiting (dashboard HTTP API and usage tracking). Rate limiting is enabled by default. | `0` |
-| `INDEX_SERVER_DISABLE_USAGE_RATE_LIMIT` | (Deprecated) Legacy override to disable usage rate limit when master flag is on. | `0` |
+| `INDEX_SERVER_RATE_LIMIT` | Dashboard HTTP API and usage-tracking rate limit, in requests per minute. `0` (default) disables rate limiting; positive integer N enforces N req/min (fixed 60s window). Bulk import/export/backup/restore routes are unconditionally exempt. | `0` |
 | `INDEX_SERVER_DISABLE_USAGE_CLAMP` | Disable clamp of usage increments. | `0` |
 | `INDEX_SERVER_USAGE_FLUSH_MS` | Delay (ms) for batching usage snapshot writes. | `75` |
 | `INDEX_SERVER_FEATURES` | Feature flags (comma list): `usage,window,hotness,drift,risk`. Required for `usage_track`/`usage_hotset`. | none |

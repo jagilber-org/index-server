@@ -35,17 +35,49 @@ import { logError } from '../../services/logger.js';
 
 export interface ApiRoutesOptions {
   enableCors?: boolean;
-  rateLimit?: {
-    windowMs: number;
-    max: number;
-  };
+  /**
+   * Optional override for the rate-limit (requests per 60s window).
+   * `0` disables. When omitted, falls back to `httpCfg.rateLimitPerMinute`.
+   */
+  rateLimitPerMinute?: number;
+}
+
+/**
+ * Path prefixes whose endpoints are *unconditionally* exempt from the dashboard
+ * HTTP rate limiter. These are bulk-shaped, operator-driven operations
+ * (backup, restore, import/export, normalize) where the size of a single
+ * request — not the *frequency* of requests — is the natural cost driver.
+ *
+ * Matching is done with `req.path.startsWith(prefix)` against the path *as
+ * mounted on the /api router* (so prefixes do not include the leading "/api").
+ *
+ * Note: the MCP tool surface (index_import / index_export / promote_from_repo
+ * / restore handlers) is already outside this HTTP limiter, so no entries are
+ * needed for those.
+ */
+const BULK_EXEMPT_PREFIXES: readonly string[] = [
+  '/admin/maintenance/normalize',
+  '/admin/maintenance/backup',          // covers backup, backup/import, backup/:id, backup/:id/export
+  '/admin/maintenance/backups',         // covers backups, backups/prune
+  '/admin/maintenance/restore',
+  '/charts/export',
+  '/sqlite/backup',                     // covers /sqlite/backup and /sqlite/backups
+  '/sqlite/restore',
+  '/sqlite/export',
+];
+
+function isBulkExempt(reqPath: string): boolean {
+  for (const prefix of BULK_EXEMPT_PREFIXES) {
+    if (reqPath === prefix || reqPath.startsWith(prefix + '/')) return true;
+  }
+  return false;
 }
 
 export function createApiRoutes(options: ApiRoutesOptions = {}): Router {
   const router = Router();
   const metricsCollector = getMetricsCollector();
   const httpCfg = getRuntimeConfig().dashboard.http;
-  const rateLimitOpts = options.rateLimit ?? { windowMs: httpCfg.rateLimitWindowMs, max: httpCfg.rateLimitMax };
+  const perMinute = options.rateLimitPerMinute ?? httpCfg.rateLimitPerMinute;
 
   // CORS middleware (if enabled)
   // Security: only allow loopback origins (localhost, 127.0.0.1, [::1]) to prevent
@@ -66,54 +98,28 @@ export function createApiRoutes(options: ApiRoutesOptions = {}): Router {
   // JSON middleware
   router.use(express.json());
 
-  const rateLimitEnabled = httpCfg.rateLimitEnabled;
-  if (rateLimitEnabled && rateLimitOpts.max > 0 && rateLimitOpts.windowMs > 0) {
-    // Global rate limit for all routes (reads + mutations)
+  // Rate limit (single tier, fixed 60s window). Disabled when perMinute === 0.
+  // Bulk routes (backup/restore/import/export/normalize) are unconditionally
+  // exempt via BULK_EXEMPT_PREFIXES — see `skip` below.
+  if (perMinute > 0) {
+    const windowMs = 60_000;
     router.use(expressRateLimit({
-      windowMs: rateLimitOpts.windowMs,
-      max: rateLimitOpts.max,
+      windowMs,
+      max: perMinute,
       standardHeaders: true,
       legacyHeaders: true,
       validate: { ip: false },
-      skip: (req: Request) => req.method === 'OPTIONS',
+      skip: (req: Request) => req.method === 'OPTIONS' || isBulkExempt(req.path),
       keyGenerator: (req: Request) => {
         const clientIp = req.ip || req.socket.remoteAddress;
         return clientIp ? ipKeyGenerator(clientIp) : 'unknown';
       },
       handler: (_req: Request, res: Response) => {
-        const retryAfter = Number(res.getHeader('Retry-After') || Math.ceil(rateLimitOpts.windowMs / 1000));
+        const retryAfter = Number(res.getHeader('Retry-After') || Math.ceil(windowMs / 1000));
         res.status(429).json({
           error: 'Too Many Requests',
           message: `Rate limit exceeded. Try again in ${retryAfter} second(s).`,
           retryAfterSeconds: retryAfter,
-          tier: 'global',
-          timestamp: Date.now(),
-        });
-      },
-    }));
-
-    // Stricter rate limit for mutation endpoints (POST/PUT/PATCH/DELETE).
-    // Defaults to runtimeConfig httpCfg.rateLimitMutationMax (env-configurable),
-    // bounded by the global per-window cap so mutation-tier never exceeds global.
-    const mutationMax = Math.max(1, Math.min(httpCfg.rateLimitMutationMax, rateLimitOpts.max));
-    router.use(expressRateLimit({
-      windowMs: rateLimitOpts.windowMs,
-      max: mutationMax,
-      standardHeaders: true,
-      legacyHeaders: false,
-      validate: { ip: false },
-      skip: (req: Request) => req.method === 'OPTIONS' || req.method === 'GET' || req.method === 'HEAD',
-      keyGenerator: (req: Request) => {
-        const clientIp = req.ip || req.socket.remoteAddress;
-        return `mutation:${clientIp ? ipKeyGenerator(clientIp) : 'unknown'}`;
-      },
-      handler: (_req: Request, res: Response) => {
-        const retryAfter = Number(res.getHeader('Retry-After') || Math.ceil(rateLimitOpts.windowMs / 1000));
-        res.status(429).json({
-          error: 'Too Many Requests',
-          message: `Mutation rate limit exceeded. Try again in ${retryAfter} second(s).`,
-          retryAfterSeconds: retryAfter,
-          tier: 'mutation',
           timestamp: Date.now(),
         });
       },

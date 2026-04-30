@@ -150,17 +150,14 @@ async function runBash(args: string, timeoutMs = 20_000): Promise<string> {
 describe('Client Scripts E2E', () => {
   let server: DashboardServer | null = null;
   let originalMutation: string | undefined;
-  let originalRateLimit: string | undefined;
   let originalIndexDir: string | undefined;
 
   beforeAll(async () => {
     originalMutation = process.env.INDEX_SERVER_MUTATION;
-    originalRateLimit = process.env.INDEX_SERVER_DISABLE_RATE_LIMIT;
     originalIndexDir = process.env.INDEX_SERVER_DIR;
     process.env.INDEX_SERVER_MUTATION = '1';
     // Disable rate limiting — E2E tests issue many sequential requests
     // (warmup loop + PS1/bash client invocations) and will exceed the default limit.
-    process.env.INDEX_SERVER_DISABLE_RATE_LIMIT = '1';
     process.env.INDEX_SERVER_DIR = CLIENT_E2E_INDEX_DIR;
     reloadRuntimeConfig();
     try {
@@ -183,7 +180,6 @@ describe('Client Scripts E2E', () => {
       try { await server.stop(); } catch { /* ok */ }
     }
     process.env.INDEX_SERVER_MUTATION = originalMutation;
-    process.env.INDEX_SERVER_DISABLE_RATE_LIMIT = originalRateLimit;
     process.env.INDEX_SERVER_DIR = originalIndexDir;
     try { fs.rmSync(CLIENT_E2E_INDEX_DIR, { recursive: true, force: true }); } catch { /* ok */ }
   });
