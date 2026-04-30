@@ -6,7 +6,31 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 
 ## [Unreleased]
 
-## [1.26.11] - 2026-04-30
+## [1.27.0] - 2026-04-30
+
+### Changed (BREAKING)
+
+- **Rate limiting is now opt-in** and consolidated behind a single environment variable, `INDEX_SERVER_RATE_LIMIT` (#270).
+  - `INDEX_SERVER_RATE_LIMIT=0` (default, or unset) — rate limiting is **disabled**.
+  - `INDEX_SERVER_RATE_LIMIT=N` (positive integer) — enforces **N requests per minute** with a fixed 60-second window.
+  - Bulk import/export/backup/restore routes (`/api/admin/maintenance/normalize`, `/api/admin/maintenance/backup`, `/api/admin/maintenance/backups`, `/api/admin/maintenance/restore`, `/api/charts/export`, `/api/sqlite/backup`, `/api/sqlite/restore`, `/api/sqlite/export`) are **unconditionally exempt**, so dashboard bulk operations no longer trigger 429 responses.
+  - The 429 response body shape simplifies to `{ error, message, retryAfterSeconds, timestamp }`. The previous `tier` field (global vs. mutation) has been removed; there is now a single tier.
+
+### Removed (BREAKING)
+
+The following environment variables have been **removed with no back-compat aliases**. Replace them with `INDEX_SERVER_RATE_LIMIT`:
+
+| Removed variable | Replacement |
+|------------------|-------------|
+| `INDEX_SERVER_DISABLE_RATE_LIMIT` | unset / `INDEX_SERVER_RATE_LIMIT=0` (default) |
+| `INDEX_SERVER_DISABLE_USAGE_RATE_LIMIT` | unset / `INDEX_SERVER_RATE_LIMIT=0` (default) |
+| `INDEX_SERVER_RATE_LIMIT_MAX` | `INDEX_SERVER_RATE_LIMIT=<N>` |
+| `INDEX_SERVER_RATE_LIMIT_WINDOW_MS` | _removed; window is fixed at 60 seconds_ |
+| `INDEX_SERVER_RATE_LIMIT_MUTATION_MAX` | _removed; single tier only_ |
+
+Also removed: `DashboardHttpConfig.rateLimitEnabled / rateLimitWindowMs / rateLimitMax / rateLimitMutationMax` (replaced by `rateLimitPerMinute: number`); `ApiRoutesOptions.rateLimit` (replaced by `rateLimitPerMinute?: number`); `AdminConfig.serverSettings.rateLimit` reduced to `{ perMinute: number }`.
+
+
 
 ### Fixed
 

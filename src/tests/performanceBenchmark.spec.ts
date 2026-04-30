@@ -221,7 +221,6 @@ describe('Performance: Dashboard HTTP', () => {
   beforeAll(async () => {
     // Disable rate limiting — performance tests issue hundreds of requests
     // in rapid succession and will exceed the default 100/min limit.
-    process.env.INDEX_SERVER_DISABLE_RATE_LIMIT = '1';
     reloadRuntimeConfig();
     try {
       server = createDashboardServer({
@@ -239,7 +238,6 @@ describe('Performance: Dashboard HTTP', () => {
     if (server) {
       try { await server.stop(); } catch { /* ok */ }
     }
-    delete process.env.INDEX_SERVER_DISABLE_RATE_LIMIT;
   });
 
   it('status endpoint should respond within 100ms (p95)', async () => {

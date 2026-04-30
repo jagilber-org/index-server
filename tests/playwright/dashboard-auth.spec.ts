@@ -74,7 +74,6 @@ function startServer(port: number): ChildProcess {
       INDEX_SERVER_DASHBOARD: '1',
       INDEX_SERVER_DASHBOARD_PORT: String(port),
       INDEX_SERVER_ADMIN_API_KEY: TEST_API_KEY,
-      INDEX_SERVER_DISABLE_RATE_LIMIT: '1',
       INDEX_SERVER_DIR: path.join(root, 'devinstructions'),
       NODE_ENV: 'test',
     },

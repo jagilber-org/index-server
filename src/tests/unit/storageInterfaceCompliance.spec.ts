@@ -60,7 +60,6 @@ describe.skipIf(!hasSqlite)('Storage Interface Compliance - SQLite', () => {
     process.env.INDEX_SERVER_SQLITE_PATH = DB_PATH;
     process.env.INDEX_SERVER_USAGE_SNAPSHOT_PATH = SNAP_PATH;
     process.env.INDEX_SERVER_FEATURES = 'usage';
-    process.env.INDEX_SERVER_DISABLE_RATE_LIMIT = '1';
     reloadRuntimeConfig();
     await import('../../services/handlers.instructions.js');
     forceBootstrapConfirmForTests('storage-compliance');
@@ -76,7 +75,6 @@ describe.skipIf(!hasSqlite)('Storage Interface Compliance - SQLite', () => {
     delete process.env.INDEX_SERVER_MUTATION;
     delete process.env.INDEX_SERVER_USAGE_SNAPSHOT_PATH;
     delete process.env.INDEX_SERVER_FEATURES;
-    delete process.env.INDEX_SERVER_DISABLE_RATE_LIMIT;
   });
 
   it('index_add persists to SQLite store', async () => {

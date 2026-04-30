@@ -99,19 +99,21 @@ export function renderPanelMarkdownHtml(name: string, markdown: string): string 
  * Called once during DashboardServer construction after middleware is set up.
  */
 export function mountDashboardRoutes(app: Express, ctx: DashboardRoutesContext): void {
-  // Build a per-route rate limiter using the same dashboard.http.rateLimit*
-  // configuration as the /api router. Re-uses the same window/max so behavior
-  // is consistent across the dashboard. Disabled if rateLimitEnabled is false.
+  // Build a per-route rate limiter using the same dashboard.http.rateLimit
+  // configuration as the /api router. Re-uses the same per-minute cap so
+  // behavior is consistent across the dashboard. Disabled when
+  // rateLimitPerMinute === 0 (the default).
   const httpCfg = getRuntimeConfig().dashboard.http;
+  const perMinute = httpCfg.rateLimitPerMinute;
   const dashboardLimiter = expressRateLimit({
-    windowMs: Math.max(1, httpCfg.rateLimitWindowMs),
-    max: Math.max(1, httpCfg.rateLimitMax),
+    windowMs: 60_000,
+    max: perMinute > 0 ? perMinute : 1,
     standardHeaders: true,
     legacyHeaders: false,
     validate: { ip: false },
-    skip: () => !httpCfg.rateLimitEnabled,
+    skip: () => perMinute <= 0,
     handler: (_req, res) => {
-      const retryAfter = Number(res.getHeader('Retry-After') || Math.ceil(httpCfg.rateLimitWindowMs / 1000));
+      const retryAfter = Number(res.getHeader('Retry-After') || 60);
       res.status(429).json({
         error: 'Too Many Requests',
         message: `Rate limit exceeded. Try again in ${retryAfter} second(s).`,
@@ -214,8 +216,8 @@ export function mountDashboardRoutes(app: Express, ctx: DashboardRoutesContext):
     }
   });
 
-  // API sub-routes (mounted at /api). Rate limits sourced from runtimeConfig
-  // (INDEX_SERVER_RATE_LIMIT_*) — see ApiRoutes.createApiRoutes.
+  // API sub-routes (mounted at /api). Rate limit sourced from runtimeConfig
+  // (INDEX_SERVER_RATE_LIMIT) — see ApiRoutes.createApiRoutes.
   app.use('/api', createApiRoutes({ enableCors: ctx.enableCors }));
 
   // Back-compat: legacy tests expect /tools.json at dashboard root

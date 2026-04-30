@@ -104,7 +104,6 @@ describe.skipIf(!hasSqlite)('Backend Isolation — SQLite mode (no instruction .
     process.env.INDEX_SERVER_SQLITE_PATH = DB_PATH;
     process.env.INDEX_SERVER_USAGE_SNAPSHOT_PATH = SNAP_PATH;
     process.env.INDEX_SERVER_FEATURES = 'usage';
-    process.env.INDEX_SERVER_DISABLE_RATE_LIMIT = '1';
     reloadRuntimeConfig();
     await import('../../../services/handlers.instructions.js');
     forceBootstrapConfirmForTests('isolation-sqlite');
@@ -120,7 +119,6 @@ describe.skipIf(!hasSqlite)('Backend Isolation — SQLite mode (no instruction .
     delete process.env.INDEX_SERVER_MUTATION;
     delete process.env.INDEX_SERVER_USAGE_SNAPSHOT_PATH;
     delete process.env.INDEX_SERVER_FEATURES;
-    delete process.env.INDEX_SERVER_DISABLE_RATE_LIMIT;
   });
 
   // ── Baseline ────────────────────────────────────────────────────────
@@ -300,7 +298,6 @@ describe('Backend Isolation — JSON mode (no .db files on disk)', () => {
     delete process.env.INDEX_SERVER_SQLITE_PATH;
     process.env.INDEX_SERVER_USAGE_SNAPSHOT_PATH = SNAP_PATH;
     process.env.INDEX_SERVER_FEATURES = 'usage';
-    process.env.INDEX_SERVER_DISABLE_RATE_LIMIT = '1';
     reloadRuntimeConfig();
     await import('../../../services/handlers.instructions.js');
     forceBootstrapConfirmForTests('isolation-json');
@@ -316,7 +313,6 @@ describe('Backend Isolation — JSON mode (no .db files on disk)', () => {
     delete process.env.INDEX_SERVER_MUTATION;
     delete process.env.INDEX_SERVER_USAGE_SNAPSHOT_PATH;
     delete process.env.INDEX_SERVER_FEATURES;
-    delete process.env.INDEX_SERVER_DISABLE_RATE_LIMIT;
   });
 
   // ── Baseline ────────────────────────────────────────────────────────

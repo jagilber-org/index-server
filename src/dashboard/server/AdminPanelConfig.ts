@@ -14,8 +14,7 @@ export interface AdminConfig {
     enableVerboseLogging: boolean;
     enableMutation: boolean;
     rateLimit: {
-      windowMs: number;
-      maxRequests: number;
+      perMinute: number;
     };
   };
   indexSettings: {
@@ -48,8 +47,7 @@ export class AdminPanelConfig {
         enableVerboseLogging: !!serverHttp?.verboseLogging,
         enableMutation: runtimeConfig.mutation.enabled,
         rateLimit: {
-          windowMs: 60000,
-          maxRequests: 100
+          perMinute: serverHttp?.rateLimitPerMinute ?? 0
         }
       },
       indexSettings: {

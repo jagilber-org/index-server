@@ -802,10 +802,9 @@ Rationale: a single execution pathway (tools/call) eliminates duplicate validati
 | Flag | Default | Scope | Description |
 |------|---------|-------|-------------|
 | `INDEX_SERVER_AUTO_USAGE_TRACK` | on | runtime | Auto-track usage on get/search responses. |
-| `INDEX_SERVER_DISABLE_RATE_LIMIT` | off | runtime | Disable all rate limiting (dashboard HTTP API and usage tracking). Rate limiting is enabled by default. Replaces the removed `INDEX_SERVER_RATE_LIMIT_ENABLED`. |
+| `INDEX_SERVER_RATE_LIMIT` | `0` | runtime | Dashboard HTTP API and usage-tracking rate limit, in requests per minute. `0` (default) disables rate limiting; any positive integer N enforces N requests/minute (fixed 60-second window). Bulk import/export/backup/restore routes are unconditionally exempt — see issue #270. |
 | `INDEX_SERVER_USAGE_FLUSH_MS` | (none) | runtime | Usage data flush interval (ms). |
 | `INDEX_SERVER_DISABLE_USAGE_CLAMP` | off | runtime | Disable usage rate clamping. |
-| `INDEX_SERVER_DISABLE_USAGE_RATE_LIMIT` | off | runtime | (Deprecated) Legacy override to disable usage rate limit when master flag is on. |
 | `INDEX_SERVER_USAGE_SNAPSHOT_PATH` | (none) | runtime | Override path for usage snapshot file (used by tests for isolation). |
 
 #### Storage Backend

@@ -46,7 +46,6 @@ describe('index_add validation cluster (#194 #193 #192)', () => {
   beforeAll(async () => {
     process.env.INDEX_SERVER_MUTATION = '1';
     process.env.INDEX_SERVER_DIR = INSTRUCTIONS_DIR;
-    process.env.INDEX_SERVER_DISABLE_RATE_LIMIT = '1';
     reloadRuntimeConfig();
     forceBootstrapConfirmForTests('add-validation-cluster');
     await import('../../services/handlers/instructions.add.js');
@@ -61,7 +60,6 @@ describe('index_add validation cluster (#194 #193 #192)', () => {
     fs.rmSync(TMP_ROOT, { recursive: true, force: true });
     delete process.env.INDEX_SERVER_MUTATION;
     delete process.env.INDEX_SERVER_DIR;
-    delete process.env.INDEX_SERVER_DISABLE_RATE_LIMIT;
     reloadRuntimeConfig();
   });
 

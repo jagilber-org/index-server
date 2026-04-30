@@ -79,7 +79,6 @@ describe('Follower Usage & Feedback (stdio)', { timeout: 120_000 }, () => {
 				INDEX_SERVER_FEEDBACK_DIR: feedbackDir(),
 				INDEX_SERVER_HEARTBEAT_MS: '500',
 				INDEX_SERVER_FEATURES: 'usage',
-				INDEX_SERVER_DISABLE_RATE_LIMIT: '1',
 			},
 		});
 
@@ -257,7 +256,6 @@ describe('Concurrent Feedback & Usage (HTTP)', { timeout: 120_000 }, () => {
 			extraEnv: {
 				INDEX_SERVER_FEEDBACK_DIR: feedbackDir(),
 				INDEX_SERVER_FEATURES: 'usage',
-				INDEX_SERVER_DISABLE_RATE_LIMIT: '1',
 			},
 		});
 

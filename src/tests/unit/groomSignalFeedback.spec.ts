@@ -41,7 +41,6 @@ describe('index_groom - signal feedback loop', () => {
     process.env.INDEX_SERVER_MUTATION = '1';
     process.env.INDEX_SERVER_DIR = TMP_DIR;
     process.env.INDEX_SERVER_USAGE_SNAPSHOT_PATH = SNAP_PATH;
-    process.env.INDEX_SERVER_DISABLE_RATE_LIMIT = '1';
     reloadRuntimeConfig();
 
     fs.rmSync(TMP_DIR, { recursive: true, force: true });
