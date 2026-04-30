@@ -44,6 +44,14 @@ export default class RunSentinelReporter implements Reporter {
     };
     const uniqueName = `.test-run-complete.${end}.marker`;
     try {
+      // Purge stale markers from prior runs so the repo root doesn't accumulate them.
+      try {
+        for (const entry of fs.readdirSync(root)) {
+          if (entry.startsWith('.test-run-complete.') && entry.endsWith('.marker')) {
+            try { fs.unlinkSync(path.join(root, entry)); } catch { /* ignore */ }
+          }
+        }
+      } catch { /* ignore */ }
       fs.writeFileSync(path.join(root, uniqueName), JSON.stringify(summary,null,2));
       fs.writeFileSync(path.join(root, '.test-run-complete.latest'), uniqueName,'utf8');
       fs.writeFileSync(path.join(root, '.test-run-status.json'), JSON.stringify(summary,null,2));

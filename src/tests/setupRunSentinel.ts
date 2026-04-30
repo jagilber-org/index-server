@@ -33,6 +33,14 @@ if(!g.__RUN_SENTINEL_INSTALLED){
       const markerName = `.test-run-complete.${Date.now()}.marker`;
       const markerPath = path.join(root, markerName);
       const latestPath = path.join(root, '.test-run-complete.latest');
+      // Purge stale markers from prior runs so the repo root doesn't accumulate them.
+      try {
+        for (const entry of fs.readdirSync(root)) {
+          if (entry.startsWith('.test-run-complete.') && entry.endsWith('.marker')) {
+            try { fs.unlinkSync(path.join(root, entry)); } catch { /* ignore */ }
+          }
+        }
+      } catch { /* ignore */ }
       const payload = {
         code,
         ended,

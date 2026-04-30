@@ -6,6 +6,20 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 
 ## [Unreleased]
 
+## [1.26.11] - 2026-04-30
+
+### Fixed
+
+- **Release**: `server.json` now ends with exactly one trailing LF. The v1.26.10 release was published with two trailing LFs (artefact of an earlier `Set-Content -NoNewline` pipeline), which caused the mirror PR to fail CI on the `end-of-file-fixer` framework hook.
+- **Pre-commit (prevention)**: `scripts/pre-commit.mjs` now invokes the `pre-commit` framework on staged files for an explicit fast-hook allowlist (`end-of-file-fixer`, `trailing-whitespace`, `check-json`, `check-yaml`, `check-merge-conflict`, `detect-private-key`). Previously these framework hooks only ran in CI, so auto-fixable formatting issues silently passed local commits and broke PR builds. Slow security hooks (`gitleaks`, `semgrep`, `ggshield`, `detect-secrets`) deliberately remain in their own CI workflows / pre-push stage. Honours `SKIP_PRE_COMMIT_FRAMEWORK=1` and skips gracefully when `pre-commit` is not on PATH (#266).
+
+## [1.26.10] - 2026-04-30
+
+### Fixed
+
+- **CI**: `.github/workflows/precommit.yml` checkout now uses `fetch-depth: 0` so `pre-commit run --from-ref BASE --to-ref HEAD` (diff-only mode introduced in v1.26.9) can resolve the PR base SHA. Previous default `fetch-depth: 1` caused `git diff BASE..HEAD` to exit 3 with `CalledProcessError` on every PR (#264).
+- **Tests**: `skippedTestsAudit.spec.ts` env-check allowlist now recognizes platform identifiers (`isWindows`, `isLinux`, `isMac`, `isDarwin`, `process.platform`) so the new `ggshieldWithRetry.spec.ts` Windows-skip from v1.26.9 passes the audit (#264).
+
 ## [1.26.6] - 2026-04-28
 
 ### Fixed
@@ -1449,3 +1463,15 @@ No client changes required. Enable `INDEX_SERVER_MEMOIZE=1` (and optionally `IND
 ## [1.26.4] - 2026-04-28
 
 ## [1.26.5] - 2026-04-28
+
+## [1.26.7] - 2026-04-30
+
+### Added
+
+- fix(wizard): correct Build prompt logic
+
+## [1.26.8] - 2026-04-30
+
+### Added
+
+- Test stability + version parity tooling (PR #261)

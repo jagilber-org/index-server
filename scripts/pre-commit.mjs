@@ -267,6 +267,70 @@ for (const file of targets) {
   }
 }
 
+// ── Run fast formatter/sanity hooks from the pre-commit framework ──────────
+// RCA: mirror PR #37 failed on `end-of-file-fixer` because local commits never
+// invoked `pre-commit run` — only this PII script ran. The slow security hooks
+// (gitleaks, semgrep, ggshield, detect-secrets, prompt-injection, hallucinations,
+// repo-local-security-gates, version-parity, validate-agent-trailers) already
+// run in their own CI workflows and/or in pre-push, so we explicitly run ONLY
+// the fast auto-fixers/syntax checks here. This keeps local commits fast while
+// catching the formatting/EOF/JSON-syntax issues that block CI.
+//
+// Honours SKIP_PRE_COMMIT_FRAMEWORK=1 escape hatch. Skipped gracefully when
+// pre-commit is not on PATH (fresh clones, CI environments).
+const FAST_LOCAL_HOOKS = [
+  'end-of-file-fixer',
+  'trailing-whitespace',
+  'check-json',
+  'check-yaml',
+  'check-merge-conflict',
+  'detect-private-key',
+];
+if (process.env.SKIP_PRE_COMMIT_FRAMEWORK !== '1') {
+  let preCommitAvailable = false;
+  try {
+    execSync(process.platform === 'win32' ? 'where pre-commit' : 'command -v pre-commit', {
+      stdio: 'ignore',
+    });
+    preCommitAvailable = true;
+  } catch {
+    info('pre-commit framework not on PATH; skipping framework hooks (CI will catch).');
+  }
+
+  if (preCommitAvailable) {
+    let stagedFiles = targets;
+    if (!stagedFiles || stagedFiles.length === 0) {
+      try {
+        stagedFiles = execSync('git diff --cached --name-only --diff-filter=ACMR', {
+          encoding: 'utf8',
+        })
+          .split('\n')
+          .map(line => line.trim())
+          .filter(Boolean);
+      } catch {
+        stagedFiles = [];
+      }
+    }
+
+    if (stagedFiles && stagedFiles.length > 0) {
+      info(`Running fast framework hooks on ${stagedFiles.length} staged file(s)...`);
+      const fileArgs = stagedFiles.map(f => `"${f}"`).join(' ');
+      let hadFailure = false;
+      for (const hookId of FAST_LOCAL_HOOKS) {
+        try {
+          execSync(`pre-commit run ${hookId} --files ${fileArgs}`, { stdio: 'inherit' });
+        } catch {
+          hadFailure = true;
+          // Continue running other hooks so the developer sees ALL fixes at once.
+        }
+      }
+      if (hadFailure) {
+        fail('Fast framework hook(s) modified files or failed — re-stage and retry');
+      }
+    }
+  }
+}
+
 // ── Result ────────────────────────────────────────────────────────────────
 if (errors > 0) {
   console.error('');

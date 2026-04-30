@@ -73,7 +73,10 @@ if(Test-Path $changelogPath){
 }
 
 git add package.json server.json CHANGELOG.md
-git commit -m "chore(release): v$next" --author='mcp-bot <mcp-bot@example.local>' | Out-Null # pii-allowlist: bot placeholder
-git tag "v$next"
+# `--no-gpg-sign` / `--no-sign` prevent GPG passphrase prompts from hanging
+# release scripts on Windows where pinentry may pop a TTY-only dialog.
+# See issue #235.
+git commit --no-gpg-sign -m "chore(release): v$next" --author='mcp-bot <mcp-bot@example.local>' | Out-Null # pii-allowlist: bot placeholder
+git tag --no-sign -a "v$next" -m "v$next"
 
 Write-Host "Version bumped to $next and tagged. Push with: git push --follow-tags"
