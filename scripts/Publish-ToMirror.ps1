@@ -70,7 +70,7 @@
 .EXAMPLE
     .\Publish-ToMirror.ps1 -SourcePath ..\org\repo -RemoteUrl 'https://github.com/org/repo.git' -CreateReviewRepo
 #>
-[CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'High', DefaultParameterSetName = 'DirectPublish')]
+[CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'High', DefaultParameterSetName = 'CreatePR')]
 param(
     [Parameter(Mandatory)]
     [string]$SourcePath,

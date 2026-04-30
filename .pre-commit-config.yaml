@@ -63,6 +63,13 @@ repos:
         language: system
         always_run: true
         stages: [pre-push]
+      - id: version-parity
+        name: Check package.json / server.json version parity (#248)
+        entry: node scripts/check-version-parity.mjs
+        language: system
+        files: '^(package\.json|server\.json)$'
+        pass_filenames: false
+        stages: [pre-commit, pre-push]
       - id: check-prompt-injection
         name: Prompt-injection scanning (SH-10)
         entry: pwsh -NoProfile -File hooks/check-prompt-injection.ps1

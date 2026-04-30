@@ -58,6 +58,7 @@ describe('invalid existing instruction collision reporting', () => {
     const proc = startServer(dir);
     const out: string[] = [];
     proc.stdout.on('data', (d) => out.push(...d.toString().trim().split(/\n+/)));
+    proc.stderr?.on('data', () => { /* drain to prevent stderr pipe backpressure stalling server */ });
     await new Promise((resolve) => setTimeout(resolve, 120));
     send(proc, { jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18', clientInfo: { name: 'invalid-existing-test', version: '0' }, capabilities: { tools: {} } } });
     await waitFor(() => !!findLine(out, 1));

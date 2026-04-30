@@ -801,7 +801,9 @@ async function deployRuntime(config) {
     // Create convenience symlinks/junctions so "dist/" at root resolves
     const installedDist = path.join(targetRoot, 'node_modules', pkgName, 'dist');
     const targetDist = path.join(targetRoot, 'dist');
-    if (fs.existsSync(installedDist) && !fs.existsSync(targetDist)) {
+    if (fs.existsSync(installedDist)) {
+      // Remove stale junction/directory before (re)creating — handles broken junctions on Windows
+      try { fs.rmSync(targetDist, { recursive: true, force: true }); } catch { /* ok if absent */ }
       try {
         // On Windows, directory junctions don't require elevated privileges
         fs.symlinkSync(installedDist, targetDist, 'junction');
@@ -811,10 +813,11 @@ async function deployRuntime(config) {
       }
     }
 
-    // Copy schemas if not present
+    // Copy schemas — refresh on redeploy/upgrade
     const installedSchemas = path.join(targetRoot, 'node_modules', pkgName, 'schemas');
     const targetSchemas = path.join(targetRoot, 'schemas');
-    if (fs.existsSync(installedSchemas) && !fs.existsSync(targetSchemas)) {
+    if (fs.existsSync(installedSchemas)) {
+      try { fs.rmSync(targetSchemas, { recursive: true, force: true }); } catch { /* ok if absent */ }
       fs.cpSync(installedSchemas, targetSchemas, { recursive: true });
     }
 
@@ -973,11 +976,11 @@ Non-interactive mode:
   console.log('╚════════════════════════════════════════════════════════════════╝\n');
 
   let step = 1;
-  if (launch.source === 'packaged') {
-    console.log(`  ${step}. Build the server:`);
-    console.log('     npm run build\n');
-    step++;
-  } else if (launch.source === 'npx') {
+  // Note: `packaged` source means dist/ ships with the wizard package — nothing to
+  // build. The packaged-runtime info banner below covers it. Issue #260: do NOT
+  // print "npm run build" here because config.root is typically a data-only
+  // directory with no package.json (npm run build → ENOENT).
+  if (launch.source === 'npx') {
     console.log(`  ${step}. The server will be fetched via npx on first start.\n`);
     step++;
   }
@@ -1012,6 +1015,11 @@ Non-interactive mode:
   if (config.profile === 'experimental') {
     console.log('  ⚠️  SQLite backend is experimental. Your data is in:');
     console.log(`     ${paths.sqliteDb}\n`);
+  }
+
+  if (launch.source === 'packaged') {
+    console.log('  ℹ️  Using packaged runtime from current installation.');
+    console.log('     Rerun without --no-deploy for a self-contained install.\n');
   }
 
   console.log(`  Targets: ${(config.targets || ['vscode']).join(', ')} | Scope: ${config.scope || 'repo'}`);
