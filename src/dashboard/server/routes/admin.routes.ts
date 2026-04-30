@@ -324,7 +324,9 @@ export function createAdminRoutes(metricsCollector: MetricsCollector): Router {
   router.post('/admin/maintenance/restore', (req: Request, res: Response) => {
     try {
       const { backupId } = req.body || {};
+      process.stderr.write(`[admin] restore requested backupId=${backupId}\n`);
       const result = adminPanel.restoreBackup(backupId);
+      process.stderr.write(`[admin] restore result success=${result.success} restored=${result.restored ?? 0} msg=${result.message}\n`);
       if (result.success) {
         res.json({ success: true, message: result.message, restored: result.restored, timestamp: Date.now() });
       } else {
@@ -405,28 +407,44 @@ export function createAdminRoutes(metricsCollector: MetricsCollector): Router {
   /**
    * POST /api/admin/maintenance/backup/import - Import backup from uploaded JSON bundle or zip archive
    * body: { manifest?: object, files: { [filename]: content } } or raw zip bytes
+   * query: ?restore=1  - if set, immediately restore the imported backup (one-click "Restore from File")
    */
   router.post('/admin/maintenance/backup/import', raw({ type: ['application/zip', 'application/octet-stream'], limit: '100mb' }), (req: Request, res: Response) => { // lgtm[js/missing-rate-limiting] — parent router applies rate-limit
+    const wantRestore = String(req.query?.restore || '') === '1' || String(req.query?.restore || '').toLowerCase() === 'true';
+    const ctype = req.header('content-type') || '';
+    const bodyKind = Buffer.isBuffer(req.body) ? `buffer:${req.body.length}` : (req.body && typeof req.body === 'object') ? `json:keys=${Object.keys(req.body).length}` : typeof req.body;
+    process.stderr.write(`[admin] backup/import received ctype=${ctype} body=${bodyKind} restore=${wantRestore}\n`);
     try {
+      let importResult: { success: boolean; message: string; backupId?: string; files?: number };
       if (Buffer.isBuffer(req.body) && req.body.length > 0) {
         const sourceName = req.header('x-backup-filename') || req.header('x-file-name') || undefined;
-        const result = adminPanel.importZipBackup(req.body, sourceName);
-        if (result.success) {
-          return res.json({ success: true, message: result.message, backupId: result.backupId, files: result.files, timestamp: Date.now() });
+        importResult = adminPanel.importZipBackup(req.body, sourceName);
+      } else {
+        const bundle = req.body;
+        if (!bundle || typeof bundle !== 'object' || !bundle.files) {
+          process.stderr.write(`[admin] backup/import rejected: missing files object\n`);
+          return res.status(400).json({ success: false, error: 'Request body must contain a "files" object', timestamp: Date.now() });
         }
-        return res.status(400).json({ success: false, error: result.message, timestamp: Date.now() });
+        importResult = adminPanel.importBackup(bundle);
       }
 
-      const bundle = req.body;
-      if (!bundle || typeof bundle !== 'object' || !bundle.files) {
-        return res.status(400).json({ success: false, error: 'Request body must contain a "files" object', timestamp: Date.now() });
+      if (!importResult.success) {
+        process.stderr.write(`[admin] backup/import failed: ${importResult.message}\n`);
+        return res.status(400).json({ success: false, error: importResult.message, timestamp: Date.now() });
       }
-      const result = adminPanel.importBackup(bundle);
-      if (result.success) {
-        res.json({ success: true, message: result.message, backupId: result.backupId, files: result.files, timestamp: Date.now() });
-      } else {
-        res.status(400).json({ success: false, error: result.message, timestamp: Date.now() });
+      process.stderr.write(`[admin] backup/import ok backupId=${importResult.backupId} files=${importResult.files}\n`);
+
+      if (wantRestore && importResult.backupId) {
+        process.stderr.write(`[admin] backup/import auto-restore start backupId=${importResult.backupId}\n`);
+        const restoreResult = adminPanel.restoreBackup(importResult.backupId);
+        process.stderr.write(`[admin] backup/import auto-restore result success=${restoreResult.success} restored=${restoreResult.restored ?? 0} msg=${restoreResult.message}\n`);
+        if (!restoreResult.success) {
+          return res.status(500).json({ success: false, error: `Imported as ${importResult.backupId} but restore failed: ${restoreResult.message}`, backupId: importResult.backupId, files: importResult.files, restored: 0, timestamp: Date.now() });
+        }
+        return res.json({ success: true, message: `Imported and restored ${importResult.backupId} (${restoreResult.restored ?? 0} files)`, backupId: importResult.backupId, files: importResult.files, restored: restoreResult.restored ?? 0, restored_applied: true, timestamp: Date.now() });
       }
+
+      return res.json({ success: true, message: importResult.message, backupId: importResult.backupId, files: importResult.files, timestamp: Date.now() });
     } catch (error) {
       logError('[API] Import backup error:', error);
       res.status(500).json({ success: false, error: 'Failed to import backup' });
