@@ -81,7 +81,10 @@ Review the output at the local path before proceeding to Step 2.
 Delivers prepared content to the public mirror with content-hash verification. **Requires human confirmation.**
 
 ```powershell
-# Deliver to mirror (verifies content hash, enforces sanctioned remote)
+# Default: open a publish/<tag> PR against the public mirror's main (recommended)
+.\scripts\Publish-ToMirror.ps1 -SourcePath ..\jagilber-org\index-server -RemoteUrl 'https://github.com/jagilber-org/index-server.git' -CreatePR -Tag v1.0.0
+
+# Force-push directly to the public mirror (opt-in, requires explicit -DirectPublish)
 .\scripts\Publish-ToMirror.ps1 -SourcePath ..\jagilber-org\index-server -RemoteUrl 'https://github.com/jagilber-org/index-server.git' -DirectPublish
 
 # Create review repo instead of direct publish

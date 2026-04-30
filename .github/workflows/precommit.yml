@@ -36,26 +36,44 @@ jobs:
           python -m pip install --upgrade pip
           pip install pre-commit detect-secrets ggshield
 
-      - name: Run pre-commit policy
+      - name: Run pre-commit policy (diff-only on PRs)
         env:
           GITGUARDIAN_API_KEY: ${{ secrets.GITGUARDIAN_API_KEY }}
-        run: pre-commit run --all-files
+          # On PRs we honor quota errors so a billing-side outage does
+          # not block merges. Push-to-main remains strict.
+          GGSHIELD_SKIP_ON_QUOTA: ${{ github.event_name == 'pull_request' && '1' || '0' }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            # Diff-only run avoids burning ggshield API quota on full-repo
+            # rescans when the PR only touches a few files.
+            pre-commit run --from-ref "$BASE_SHA" --to-ref "$HEAD_SHA"
+          else
+            pre-commit run --all-files
+          fi
         continue-on-error: ${{ secrets.GITGUARDIAN_API_KEY == '' }}
 
       - name: Run pre-push security policy replay
         env:
           GITGUARDIAN_API_KEY: ${{ secrets.GITGUARDIAN_API_KEY }}
+          GGSHIELD_SKIP_ON_QUOTA: ${{ github.event_name == 'pull_request' && '1' || '0' }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          pre-commit run --all-files --hook-stage pre-push
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            pre-commit run --from-ref "$BASE_SHA" --to-ref "$HEAD_SHA" --hook-stage pre-push
+          else
+            pre-commit run --all-files --hook-stage pre-push
+          fi
 
-      - name: Generate ggshield JSON report
-        if: ${{ always() && env.GITGUARDIAN_API_KEY != '' }}
-        continue-on-error: true
+      - name: Generate ggshield JSON report (push-to-main only; PR scan covered by ggshield-pr workflow)
+        if: ${{ github.event_name == 'push' && env.GITGUARDIAN_API_KEY != '' }}
         env:
           GITGUARDIAN_API_KEY: ${{ secrets.GITGUARDIAN_API_KEY }}
         run: |
           mkdir -p reports
-          ggshield secret scan path . --recursive -y --use-gitignore --format json --output reports/ggshield-report.json --exit-zero
+          bash scripts/ggshield-with-retry.sh secret scan path . --recursive -y --use-gitignore --format json --output reports/ggshield-report.json --exit-zero
 
       - name: Upload ggshield JSON report
         if: ${{ always() }}

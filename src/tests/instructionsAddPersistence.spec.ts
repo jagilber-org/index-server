@@ -9,7 +9,7 @@ import { waitForDist } from './distReady';
 const ISOLATED_DIR = fs.mkdtempSync(path.join(os.tmpdir(),'instr-persist-'));
 async function ensureDist(){ await waitForDist(); }
 function startServer(){
-  return spawn('node', [path.join(__dirname, '../../dist/server/index-server.js')], { stdio:['pipe','pipe','pipe'], env:{ ...process.env, INDEX_SERVER_MUTATION:'1', INDEX_SERVER_DIR: ISOLATED_DIR } });
+  return spawn('node', [path.join(__dirname, '../../dist/server/index-server.js')], { stdio:['pipe','pipe','pipe'], env:{ ...process.env, INDEX_SERVER_MUTATION:'1', INDEX_SERVER_DIR: ISOLATED_DIR, INDEX_SERVER_AUTO_BACKUP:'0', INDEX_SERVER_DASHBOARD:'0' } });
 }
 function send(proc: ReturnType<typeof startServer>, msg: Record<string, unknown>){ proc.stdin?.write(JSON.stringify(msg)+'\n'); }
 
@@ -28,6 +28,10 @@ describe('index_add persistence & governance coverage', () => {
   await ensureDist();
   const server = startServer();
     const out: string[] = []; server.stdout.on('data', d=> out.push(...d.toString().trim().split(/\n+/)));
+    // Drain stderr to prevent OS pipe buffer (~64KB) backpressure stalling the server's
+    // synchronous logging writes (which would freeze the event loop and block subsequent
+    // stdin processing). Pre-existing failure root cause discovered while triaging.
+    server.stderr?.on('data', () => { /* drain */ });
     // initialize
     await new Promise(r=> setTimeout(r,120));
     send(server,{ jsonrpc:'2.0', id:1, method:'initialize', params:{ protocolVersion:'2025-06-18', clientInfo:{ name:'coverage', version:'0' }, capabilities:{ tools:{} } } });

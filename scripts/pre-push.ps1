@@ -1,5 +1,24 @@
 Param()
 
+# Always validate .pre-commit-config.yaml syntax via pre-commit/check-yaml when
+# the file exists, regardless of bypass flags. Catches duplicate-key bugs
+# (e.g., #261's duplicate `stages:` regression) that the docs-only fast-path
+# would otherwise let through.
+$preCommitYaml = Join-Path (git rev-parse --show-toplevel 2>$null) '.pre-commit-config.yaml'
+if (Test-Path $preCommitYaml) {
+  $preCommitCmd = Get-Command pre-commit -ErrorAction SilentlyContinue
+  if ($preCommitCmd) {
+    Write-Host '[pre-push] Running pre-commit/check-yaml on .pre-commit-config.yaml' -ForegroundColor DarkCyan
+    & $preCommitCmd.Source run check-yaml --files .pre-commit-config.yaml 2>&1 | Write-Host
+    if ($LASTEXITCODE -ne 0) {
+      Write-Host '[pre-push] check-yaml failed on .pre-commit-config.yaml. Aborting push.' -ForegroundColor Red
+      exit $LASTEXITCODE
+    }
+  } else {
+    Write-Host '[pre-push] pre-commit not on PATH; skipping yaml syntax check.' -ForegroundColor DarkYellow
+  }
+}
+
 # Optional bypass for infrastructure / documentation only commits.
 # Set ALLOW_FAILING_SLOW=1 in the environment to skip executing slow regression suite.
 if ($env:ALLOW_FAILING_SLOW -eq '1') {

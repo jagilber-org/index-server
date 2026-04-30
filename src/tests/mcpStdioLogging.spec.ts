@@ -260,6 +260,60 @@ describe('McpStdioLogger (generalized)', () => {
     expect(logger.bufferSize).toBe(0);
   });
 
+  // --- flushToStderr (issue #234) ---
+  // Pre-handshake stderr must remain visible when no MCP handshake completes
+  // (e.g. --help, --init-cert, fatal startup error). flushToStderr drains the
+  // buffer to the original process.stderr so users actually see the output.
+
+  it('flushToStderr writes buffered lines to the original stderr (#234)', () => {
+    logger = new McpStdioLogger({ serverName: 'test' });
+    process.stderr.write('hello world\n');
+    process.stderr.write('init-cert: missing openssl\n');
+    expect(logger.bufferSize).toBe(2);
+
+    // Capture writes that reach the ORIGINAL stderr (we have to peek at the
+    // private original). Easiest: temporarily swap the original by extracting
+    // through restore(); but restore wipes the buffer, so we instead spy on
+    // the captured original via the logger's exposed writeOriginalStderr path.
+    // Implementation detail: writeOriginalStderr already routes to the original
+    // bound write; flushToStderr should reuse that path. We assert side effects
+    // by stubbing the underlying fd write.
+    const originalWrite = (process.stderr as unknown as {
+      // The interceptor swapped process.stderr.write; the underlying fd write is unchanged.
+      [k: string]: unknown;
+    });
+    const fdWriteSpy = vi.spyOn(process.stderr as unknown as { write: (chunk: any) => boolean }, 'write');
+    // The interceptor wraps process.stderr.write; flushToStderr must NOT go
+    // through the wrapper (else it would just re-buffer). Instead it must call
+    // the captured original. We verify by counting calls on the SDK fd:
+    const restored = (logger as unknown as { _originalStderrWrite: (s: string) => boolean })._originalStderrWrite;
+    const origSpy = vi.fn(restored);
+    (logger as unknown as { _originalStderrWrite: (s: string) => boolean })._originalStderrWrite = origSpy;
+
+    logger.flushToStderr();
+
+    expect(origSpy).toHaveBeenCalled();
+    const allWrites = origSpy.mock.calls.map((c) => String(c[0])).join('');
+    expect(allWrites).toContain('hello world');
+    expect(allWrites).toContain('init-cert: missing openssl');
+    expect(logger.bufferSize).toBe(0);
+    void originalWrite; void fdWriteSpy;
+  });
+
+  it('flushToStderr is a no-op when buffer is empty (#234)', () => {
+    logger = new McpStdioLogger({ serverName: 'test' });
+    expect(() => logger.flushToStderr()).not.toThrow();
+    expect(logger.bufferSize).toBe(0);
+  });
+
+  it('flushToStderr leaves the bridge inactive (does not require server) (#234)', () => {
+    logger = new McpStdioLogger({ serverName: 'test' });
+    process.stderr.write('no-handshake output\n');
+    logger.flushToStderr();
+    expect(logger.isActive).toBe(false);
+    expect(logger.bufferSize).toBe(0);
+  });
+
   // --- defaultInferLevel standalone ---
 
   describe('defaultInferLevel', () => {
