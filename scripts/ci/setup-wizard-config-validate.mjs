@@ -148,10 +148,15 @@ for (const profile of PROFILES) {
         assert(server.cwd, 'Must have "cwd"');
         assert(server.command === 'node', 'command must be "node"');
         assert(Array.isArray(server.args), 'args must be array');
-        const expected = 'dist/server/index-server.js';
+        // The wizard emits either a relative path (when launched from the
+        // index-server source repo) or an absolute path (packaged install
+        // case where dist/ lives outside the consumer project). Accept
+        // both — only require the path to point at the entrypoint.
+        const entry = String(server.args[0] ?? '');
+        const normalized = entry.replace(/\\/g, '/');
         assert(
-          server.args[0] === expected || fwd(server.args[0]).endsWith(expected),
-          `args[0] must be relative or absolute path to entry, got: ${server.args[0]}`,
+          normalized.endsWith('dist/server/index-server.js'),
+          `args[0] must point at dist/server/index-server.js, got: ${server.args[0]}`,
         );
         assert(typeof server.env === 'object', 'Must have env object');
       });

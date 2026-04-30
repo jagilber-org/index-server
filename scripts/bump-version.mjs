@@ -88,9 +88,12 @@ try {
   changelogUpdated = true;
 } catch (e) { if (e.code !== 'ENOENT') throw e; }
 
-// Commit and tag
+// Commit and tag.
+// `--no-gpg-sign` and `-a -m` prevent the GPG passphrase prompt from hanging
+// release scripts on Windows where pinentry may pop a TTY-only dialog.
+// See issue #235.
 execSync(`git add package.json${serverJsonUpdated ? ' server.json' : ''}${changelogUpdated ? ' CHANGELOG.md' : ''}`, { stdio: 'inherit' });
-execSync(`git commit -m "chore(release): v${next}"`, { stdio: 'inherit' });
-execSync(`git tag "v${next}"`, { stdio: 'inherit' });
+execSync(`git commit --no-gpg-sign -m "chore(release): v${next}"`, { stdio: 'inherit' });
+execSync(`git tag --no-sign -a "v${next}" -m "v${next}"`, { stdio: 'inherit' });
 
 console.log(`Version bumped to ${next} and tagged. Push with: git push --follow-tags`);

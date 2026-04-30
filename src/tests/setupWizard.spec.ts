@@ -206,13 +206,18 @@ describe('Setup Wizard Next Steps — Build Step Skip', () => {
     expect(output).not.toContain('npm run build');
   });
 
-  it('should show "Build the server" step when dist is missing', () => {
-    // Use a temp directory as root so we don't touch real dist/ files
+  it('should NOT show "Build the server" step when --root is a data-only directory (#260)', () => {
+    // Issue #260: when --root points to a data-only directory (no package.json),
+    // the build prompt is unreachable (`npm run build` ENOENTs there). The wizard
+    // is using a packaged runtime — there is nothing for the user to build at the
+    // data root. Show the packaged-runtime info banner instead.
     const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'wizard-test-'));
     try {
       const output = runWizard(`--root "${tmpRoot}" --no-deploy`);
-      expect(output).toContain('Build the server');
-      expect(output).toContain('npm run build');
+      expect(output).not.toContain('Build the server');
+      expect(output).not.toContain('npm run build');
+      // Should mention the packaged runtime so the user knows nothing more is needed.
+      expect(output).toContain('packaged runtime');
     } finally {
       fs.rmSync(tmpRoot, { recursive: true, force: true });
     }
@@ -230,15 +235,15 @@ describe('Setup Wizard Next Steps — Build Step Skip', () => {
     expect(output).toMatch(/2\.\s+Open the dashboard/);
   });
 
-  it('should number steps correctly when build step is shown', () => {
-    // Use a temp directory as root so we don't touch real dist/ files
+  it('should number steps correctly when --root is a data-only directory (#260)', () => {
+    // Issue #260: with packaged runtime there is no build step, so step 1 is the
+    // copy/config step and step 2 is the dashboard URL.
     const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'wizard-test-'));
     try {
       const output = runWizard(`--root "${tmpRoot}" --no-deploy`);
-      // With build step: 1=Build, 2=Copy/Config, 3=Dashboard
-      expect(output).toMatch(/1\.\s+Build the server/);
-      expect(output).toMatch(/2\.\s+(Copy generated config|Config files have been written)/);
-      expect(output).toMatch(/3\.\s+Open the dashboard/);
+      expect(output).toMatch(/1\.\s+(Copy generated config|Config files have been written)/);
+      expect(output).toMatch(/2\.\s+Open the dashboard/);
+      expect(output).not.toMatch(/Build the server/);
     } finally {
       fs.rmSync(tmpRoot, { recursive: true, force: true });
     }

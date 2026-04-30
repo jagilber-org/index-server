@@ -86,10 +86,13 @@ describe('Skipped tests audit (Issue #129)', () => {
     }
 
     // All skipIf conditions should reference environment/tool checks
-    // (has*, !has*, HAS_*, !HAS_*, FAST_*, enabled, etc.)
+    // (has*, !has*, HAS_*, !HAS_*, FAST_*, enabled, platform checks, etc.)
     for (const cond of skipIfConditions) {
       const inner = cond.replace('skipIf(', '').replace(')', '');
-      const isEnvCheck = /has|HAS_|FAST_|enabled|backend|DEPLOY|hasCopilot/i.test(inner);
+      const isEnvCheck =
+        /has|HAS_|FAST_|enabled|backend|DEPLOY|hasCopilot|isWindows|isLinux|isMac|isDarwin|process\.platform/i.test(
+          inner,
+        );
       expect(isEnvCheck, `skipIf condition should be an environment check: ${cond}`).toBe(true);
     }
   });

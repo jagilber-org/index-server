@@ -6,6 +6,13 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 
 ## [Unreleased]
 
+## [1.26.10] - 2026-04-30
+
+### Fixed
+
+- **CI**: `.github/workflows/precommit.yml` checkout now uses `fetch-depth: 0` so `pre-commit run --from-ref BASE --to-ref HEAD` (diff-only mode introduced in v1.26.9) can resolve the PR base SHA. Previous default `fetch-depth: 1` caused `git diff BASE..HEAD` to exit 3 with `CalledProcessError` on every PR (#264).
+- **Tests**: `skippedTestsAudit.spec.ts` env-check allowlist now recognizes platform identifiers (`isWindows`, `isLinux`, `isMac`, `isDarwin`, `process.platform`) so the new `ggshieldWithRetry.spec.ts` Windows-skip from v1.26.9 passes the audit (#264).
+
 ## [1.26.6] - 2026-04-28
 
 ### Fixed
@@ -1449,3 +1456,15 @@ No client changes required. Enable `INDEX_SERVER_MEMOIZE=1` (and optionally `IND
 ## [1.26.4] - 2026-04-28
 
 ## [1.26.5] - 2026-04-28
+
+## [1.26.7] - 2026-04-30
+
+### Added
+
+- fix(wizard): correct Build prompt logic
+
+## [1.26.8] - 2026-04-30
+
+### Added
+
+- Test stability + version parity tooling (PR #261)

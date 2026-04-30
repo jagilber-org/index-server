@@ -9,6 +9,7 @@
  * client scripts sent flat params instead of { entry: { ... } }.
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import os from 'os';
 import path from 'path';
 import fs from 'fs';
 
@@ -37,25 +38,26 @@ async function invokeHandler(name: string, params: Record<string, unknown>): Pro
 
 describe('CRUD Matrix', () => {
   const originalMutation = process.env.INDEX_SERVER_MUTATION;
+  const originalIndexDir = process.env.INDEX_SERVER_DIR;
   const createdIds: string[] = [];
+  let TMP_DIR = '';
 
   beforeAll(() => {
+    // Isolate to a temp dir so we never pollute the workspace's instructions/ folder.
+    TMP_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'index-server-crud-matrix-'));
+    process.env.INDEX_SERVER_DIR = TMP_DIR;
     process.env.INDEX_SERVER_MUTATION = '1';
     reloadRuntimeConfig();
     invalidate();
-    const dir = getInstructionsDir();
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    if (!fs.existsSync(TMP_DIR)) fs.mkdirSync(TMP_DIR, { recursive: true });
   });
 
   afterAll(() => {
-    for (const id of createdIds) {
-      try {
-        const dir = getInstructionsDir();
-        const file = path.join(dir, `${id}.json`);
-        if (fs.existsSync(file)) fs.unlinkSync(file);
-      } catch { /* ok */ }
-    }
-    process.env.INDEX_SERVER_MUTATION = originalMutation;
+    try { fs.rmSync(TMP_DIR, { recursive: true, force: true }); } catch { /* ok */ }
+    if (originalIndexDir === undefined) delete process.env.INDEX_SERVER_DIR;
+    else process.env.INDEX_SERVER_DIR = originalIndexDir;
+    if (originalMutation === undefined) delete process.env.INDEX_SERVER_MUTATION;
+    else process.env.INDEX_SERVER_MUTATION = originalMutation;
     reloadRuntimeConfig();
     invalidate();
   });
