@@ -661,16 +661,37 @@ try {
                             }
                             else {
                                 Write-Host "[publish] Tag '$Tag' -> $mergeCommitSha created on $prRepo." -ForegroundColor Green
+                                Write-Host ''
+                                Write-Host '------------------------------------------------------------' -ForegroundColor Cyan
+                                Write-Host ' KICK OFF GITHUB RELEASE' -ForegroundColor Cyan
+                                Write-Host '------------------------------------------------------------' -ForegroundColor Cyan
+                                Write-Host "  gh release create $Tag --repo $prRepo --target main --title '$Tag' --generate-notes" -ForegroundColor Yellow
+                                Write-Host '------------------------------------------------------------' -ForegroundColor Cyan
                             }
                         }
                     }
                 }
             }
             else {
-                Write-Host "  After merge: re-run with -WaitForMerge or tag manually:" -ForegroundColor DarkGray
+                Write-Host '------------------------------------------------------------' -ForegroundColor Cyan
+                Write-Host ' NEXT STEPS (after PR is merged)' -ForegroundColor Cyan
+                Write-Host '------------------------------------------------------------' -ForegroundColor Cyan
                 if ($Tag) {
-                    Write-Host "    gh api -X POST repos/$prRepo/git/refs -f ref='refs/tags/$Tag' -f sha=<merge-commit-sha>" -ForegroundColor DarkGray
+                    Write-Host '  1. Capture the merge commit SHA on main:' -ForegroundColor White
+                    Write-Host "       `$sha = gh api repos/$prRepo/commits/main --jq .sha" -ForegroundColor Yellow
+                    Write-Host '  2. Create the annotated tag at that commit:' -ForegroundColor White
+                    Write-Host "       gh api -X POST repos/$prRepo/git/refs -f ref='refs/tags/$Tag' -f sha=`$sha" -ForegroundColor Yellow
+                    Write-Host '  3. Kick off the GitHub Release (auto-generated notes):' -ForegroundColor White
+                    Write-Host "       gh release create $Tag --repo $prRepo --target main --title '$Tag' --generate-notes" -ForegroundColor Yellow
+                    Write-Host ''
+                    Write-Host "  Or skip steps 1-3 next time by re-running this script with: -WaitForMerge -Tag $Tag" -ForegroundColor DarkGray
+                } else {
+                    Write-Host '  No -Tag was supplied; tag/release skipped. To tag manually:' -ForegroundColor White
+                    Write-Host "       `$sha = gh api repos/$prRepo/commits/main --jq .sha" -ForegroundColor Yellow
+                    Write-Host "       gh api -X POST repos/$prRepo/git/refs -f ref='refs/tags/<vX.Y.Z>' -f sha=`$sha" -ForegroundColor Yellow
+                    Write-Host "       gh release create <vX.Y.Z> --repo $prRepo --target main --generate-notes" -ForegroundColor Yellow
                 }
+                Write-Host '------------------------------------------------------------' -ForegroundColor Cyan
             }
         }
     }
