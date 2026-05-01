@@ -10,7 +10,7 @@ import { reloadRuntimeConfig } from '../config/runtimeConfig';
 let add: any;
 
 function readManifest(){
-  const fp = path.join(process.cwd(),'snapshots','index-manifest.json');
+  const fp = process.env.INDEX_SERVER_MANIFEST_PATH || path.join(process.cwd(),'snapshots','index-manifest.json');
   if(!fs.existsSync(fp)) return null;
   return JSON.parse(fs.readFileSync(fp,'utf8'));
 }
@@ -20,6 +20,8 @@ describe('manifest fastload shortcut', () => {
   process.env.INDEX_SERVER_MUTATION = '1';
     process.env.INDEX_SERVER_MANIFEST_WRITE = '1';
     const TMP = path.join(process.cwd(),'tmp','manifest-fastload');
+    // Isolate manifest path so parallel forks don't race on shared snapshot.
+    process.env.INDEX_SERVER_MANIFEST_PATH = path.join(TMP,'index-manifest.json');
     reloadRuntimeConfig(); // Reload config after setting env vars
     fs.rmSync(TMP, { recursive: true, force: true });
     fs.mkdirSync(TMP, { recursive: true });

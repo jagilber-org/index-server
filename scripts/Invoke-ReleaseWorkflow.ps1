@@ -18,9 +18,10 @@
     No flag bypasses any security gate.
 
 .PARAMETER CleanRoomPath
-    Absolute path where the clean-room copy will be written. Defaults to a
-    sibling clone path resolved from the publish config + repo name; pass
-    explicitly to override.
+    Absolute path where the clean-room copy will be written. Defaults to
+    'C:\github\jagilber-org\index-server' (the canonical clean-room
+    location for this repo: the public-mirror sibling clone).
+    Pass explicitly only when intentionally overriding.
 
 .PARAMETER RemoteUrl
     Public mirror URL for the echoed Publish-ToMirror command. Defaults to
@@ -39,8 +40,12 @@
     already up to date.
 
 .EXAMPLE
+    pwsh -File scripts/Invoke-ReleaseWorkflow.ps1
+    # Uses the default CleanRoomPath 'C:\github\jagilber-org\index-server'.
+
+.EXAMPLE
     pwsh -File scripts/Invoke-ReleaseWorkflow.ps1 `
-        -CleanRoomPath '<absolute-clean-room-path>'
+        -CleanRoomPath 'C:\github\jagilber-org\index-server'
 
 .NOTES
     Author: index-server release workflow automation.
@@ -59,6 +64,10 @@ $ErrorActionPreference = 'Stop'
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
 Set-Location $repoRoot
+
+# Load repo-root .env (silent if missing). Existing $env values are not
+# overwritten, so explicit shell exports always win.
+. (Join-Path $PSScriptRoot 'Load-RepoEnv.ps1') | Out-Null
 
 function Write-Phase {
     param([string]$Title)
@@ -84,27 +93,43 @@ function Invoke-Step {
 # --- Resolve defaults --------------------------------------------------------
 
 if (-not $Tag) {
-    $pkg = Get-Content (Join-Path $repoRoot 'package.json') -Raw | ConvertFrom-Json
-    $Tag = "v$($pkg.version)"
-    Write-Host "[release] Tag defaulted to $Tag (package.json version)"
+    if ($env:RELEASE_TAG) {
+        $Tag = $env:RELEASE_TAG
+        Write-Host "[release] Tag defaulted to $Tag (.env RELEASE_TAG)"
+    } else {
+        $pkg = Get-Content (Join-Path $repoRoot 'package.json') -Raw | ConvertFrom-Json
+        $Tag = "v$($pkg.version)"
+        Write-Host "[release] Tag defaulted to $Tag (package.json version)"
+    }
 }
 
 if (-not $RemoteUrl) {
-    $configPath = Join-Path $repoRoot '.publish-config.json'
-    if (Test-Path $configPath) {
-        $publishConfig = Get-Content $configPath -Raw | ConvertFrom-Json
-        if ($publishConfig.sanctionedRemotes.Count -gt 0) {
-            $RemoteUrl = $publishConfig.sanctionedRemotes[0]
-            Write-Host "[release] RemoteUrl defaulted to $RemoteUrl (.publish-config.json)"
+    if ($env:REMOTE_URL) {
+        $RemoteUrl = $env:REMOTE_URL
+        Write-Host "[release] RemoteUrl defaulted to $RemoteUrl (.env REMOTE_URL)"
+    } else {
+        $configPath = Join-Path $repoRoot '.publish-config.json'
+        if (Test-Path $configPath) {
+            $publishConfig = Get-Content $configPath -Raw | ConvertFrom-Json
+            if ($publishConfig.sanctionedRemotes.Count -gt 0) {
+                $RemoteUrl = $publishConfig.sanctionedRemotes[0]
+                Write-Host "[release] RemoteUrl defaulted to $RemoteUrl (.publish-config.json)"
+            }
         }
-    }
-    if (-not $RemoteUrl) {
-        throw "[release] RemoteUrl not provided and not found in .publish-config.json"
+        if (-not $RemoteUrl) {
+            throw "[release] RemoteUrl not provided and not found in .env / .publish-config.json"
+        }
     }
 }
 
 if (-not $CleanRoomPath) {
-    throw "[release] -CleanRoomPath is required (no safe default; specify the absolute clean-room target path)"
+    if ($env:CLEANROOM_PATH) {
+        $CleanRoomPath = $env:CLEANROOM_PATH
+        Write-Host "[release] CleanRoomPath defaulted to $CleanRoomPath (.env CLEANROOM_PATH)"
+    } else {
+        $CleanRoomPath = 'C:\github\jagilber-org\index-server'
+        Write-Host "[release] CleanRoomPath defaulted to $CleanRoomPath (canonical clean-room location for this repo)"
+    }
 }
 
 # --- Phase 2: Build & Deploy Locally ----------------------------------------

@@ -58,6 +58,7 @@ logs/trace/*.jsonl
 Thumbs.db
 /.env
 /.env.*
+!/.env.example
 /.vscode/*.log
 /npm-debug.log*
 /yarn-error.log
@@ -234,3 +235,6 @@ governance/
 test-results.json
 test_results.txt
 findings-triage.csv
+
+# CodeQL local scan artifacts (template-repo#77)
+.codeql/

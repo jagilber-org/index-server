@@ -76,25 +76,43 @@
     }
 
     async function restoreSelectedBackup() {
+        const statusEl = document.getElementById('backup-restore-status');
+        const sel = document.getElementById('backup-select');
         try {
-            const sel = document.getElementById('backup-select');
-            const statusEl = document.getElementById('backup-restore-status');
-            if (!sel || !sel.value) { if (statusEl) statusEl.textContent = 'Select a backup first'; return; }
+            if (!sel || !sel.value) {
+                if (statusEl) statusEl.textContent = 'Select a backup first';
+                console.warn('[restore] aborted: no backup selected');
+                return;
+            }
             const choice = sel.value;
-            if (!confirm(`Restore backup ${choice}? Current instructions will be safety-backed up first.`)) return;
+            if (!confirm(`Restore backup ${choice}? Current instructions will be safety-backed up first.`)) {
+                console.info('[restore] aborted: user cancelled confirm dialog for', choice);
+                if (statusEl) statusEl.textContent = 'Restore cancelled';
+                return;
+            }
             if (statusEl) statusEl.textContent = 'Restoring...';
+            console.info('[restore] POST /api/admin/maintenance/restore', { backupId: choice });
             const res = await adminAuth.adminFetch('/api/admin/maintenance/restore', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ backupId: choice }) });
-            const data = await res.json();
-            if (data.success) {
+            console.info('[restore] response status', res.status);
+            const data = await res.json().catch(function(e){ console.error('[restore] failed to parse JSON', e); return { success: false, error: 'invalid JSON response' }; });
+            console.info('[restore] response body', data);
+            if (res.ok && data.success) {
                 if (statusEl) statusEl.textContent = `Restored ${choice} (${data.restored || 0} files)`;
+                if (typeof showSuccess === 'function') showSuccess(`Restored ${choice} (${data.restored || 0} files)`);
                 // Re-load stats & instructions to reflect changes
                 if (typeof loadOverviewData === 'function') loadOverviewData();
                 if (typeof currentSection !== 'undefined' && currentSection === 'instructions' && typeof loadInstructions === 'function') loadInstructions();
+                loadBackups();
             } else {
-                if (statusEl) statusEl.textContent = `Restore failed: ${data.error || data.message || 'unknown'}`;
+                const msg = `Restore failed: ${data.error || data.message || ('HTTP ' + res.status)}`;
+                if (statusEl) statusEl.textContent = msg;
+                console.error('[restore]', msg);
+                alert(msg);
             }
         } catch (err) {
-            if (statusEl) statusEl.textContent = 'Error restoring backup';
+            console.error('[restore] exception', err);
+            if (statusEl) statusEl.textContent = 'Error restoring backup: ' + (err && err.message || err);
+            alert('Error restoring backup: ' + (err && err.message || err));
         }
     }
 
@@ -350,18 +368,36 @@
 
     async function handleBackupFileSelected(ev){
         const file = ev.target && ev.target.files && ev.target.files[0];
-        if(!file) return;
+        if(!file) {
+            console.warn('[restore-from-file] no file selected');
+            return;
+        }
+        const statusEl = document.getElementById('backup-restore-status');
         try {
             const lowerName = file.name.toLowerCase();
             const arrayBuffer = await file.arrayBuffer();
             const bytes = new Uint8Array(arrayBuffer);
             const zipBackup = looksLikeZip(bytes) || lowerName.endsWith('.zip');
+            console.info('[restore-from-file] selected', { name: file.name, size: file.size, zip: zipBackup });
 
             if(!zipBackup && !lowerName.endsWith('.json')){ alert('Please select a .json or .zip backup file'); return; }
 
+            // "Restore from File" performs import + restore in one shot via ?restore=1.
+            // The current instructions/ are safety-backed up by the server before overwrite.
+            const fileCount = zipBackup ? null : (function(){ try { return Object.keys(JSON.parse(new TextDecoder('utf-8').decode(bytes)).files || {}).length; } catch { return null; } })();
+            const promptMsg = 'Restore from ' + file.name + '?\n\nThis will overwrite the live instructions. A safety backup of the current state will be taken first.' + (fileCount != null ? '\n\nFile count in bundle: ' + fileCount : '');
+            if(!confirm(promptMsg)) {
+                console.info('[restore-from-file] cancelled by user');
+                if (statusEl) statusEl.textContent = 'Restore cancelled';
+                return;
+            }
+
+            if (statusEl) statusEl.textContent = 'Importing & restoring ' + file.name + '...';
+
+            let res;
             if(zipBackup){
-                if(!confirm('Import backup from ' + file.name + '? (zip archive)')) return;
-                const res = await adminAuth.adminFetch('/api/admin/maintenance/backup/import', {
+                console.info('[restore-from-file] POST /api/admin/maintenance/backup/import?restore=1 (zip)', { bytes: arrayBuffer.byteLength });
+                res = await adminAuth.adminFetch('/api/admin/maintenance/backup/import?restore=1', {
                     method:'POST',
                     headers:{
                         'Content-Type':'application/zip',
@@ -369,29 +405,35 @@
                     },
                     body: arrayBuffer,
                 });
-                const data = await res.json();
-                if(data.success){
-                    if(typeof showSuccess === 'function') showSuccess(data.message || 'Imported');
-                    loadMaintenanceStatus(); loadBackups();
-                } else {
-                    alert('Import failed: '+(data.error||'unknown'));
-                }
-                return;
-            }
-
-            const text = new TextDecoder('utf-8').decode(bytes);
-            const bundle = JSON.parse(text);
-            if(!bundle.files || typeof bundle.files !== 'object'){ alert('Invalid backup file: must contain a "files" object'); return; }
-            if(!confirm('Import backup from ' + file.name + '? (' + Object.keys(bundle.files).length + ' files)')) return;
-            const res = await adminAuth.adminFetch('/api/admin/maintenance/backup/import', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(bundle) });
-            const data = await res.json();
-            if(data.success){
-                if(typeof showSuccess === 'function') showSuccess(data.message || 'Imported');
-                loadMaintenanceStatus(); loadBackups();
             } else {
-                alert('Import failed: '+(data.error||'unknown'));
+                const text = new TextDecoder('utf-8').decode(bytes);
+                const bundle = JSON.parse(text);
+                if(!bundle.files || typeof bundle.files !== 'object'){ alert('Invalid backup file: must contain a "files" object'); return; }
+                console.info('[restore-from-file] POST /api/admin/maintenance/backup/import?restore=1 (json)', { files: Object.keys(bundle.files).length });
+                res = await adminAuth.adminFetch('/api/admin/maintenance/backup/import?restore=1', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(bundle) });
             }
-        } catch(e){ alert('Import error: '+(e.message||e)); }
+            console.info('[restore-from-file] response status', res.status);
+            const data = await res.json().catch(function(e){ console.error('[restore-from-file] failed to parse JSON', e); return { success: false, error: 'invalid JSON response' }; });
+            console.info('[restore-from-file] response body', data);
+            if(res.ok && data.success){
+                const msg = data.message || ('Imported and restored ' + (data.backupId || ''));
+                if(typeof showSuccess === 'function') showSuccess(msg);
+                if (statusEl) statusEl.textContent = msg;
+                loadMaintenanceStatus();
+                loadBackups();
+                if (typeof loadOverviewData === 'function') loadOverviewData();
+                if (typeof currentSection !== 'undefined' && currentSection === 'instructions' && typeof loadInstructions === 'function') loadInstructions();
+            } else {
+                const errMsg = 'Restore failed: ' + (data.error || data.message || ('HTTP ' + res.status));
+                console.error('[restore-from-file]', errMsg, data);
+                if (statusEl) statusEl.textContent = errMsg;
+                alert(errMsg);
+            }
+        } catch(e){
+            console.error('[restore-from-file] exception', e);
+            if (statusEl) statusEl.textContent = 'Error: ' + (e.message||e);
+            alert('Restore-from-file error: '+(e.message||e));
+        }
     }
 
     // Signal Groom: apply usage signals to instruction priority/requirement

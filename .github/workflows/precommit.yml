@@ -55,7 +55,10 @@ jobs:
             # rescans when the PR only touches a few files.
             pre-commit run --from-ref "$BASE_SHA" --to-ref "$HEAD_SHA"
           else
-            pre-commit run --all-files
+            # Push-to-main: skip no-commit-to-branch (designed for local devs)
+            # via SKIP env var honored by pre-commit framework. The branch
+            # protection rule on main covers the policy this hook enforces.
+            SKIP=no-commit-to-branch pre-commit run --all-files
           fi
         continue-on-error: ${{ secrets.GITGUARDIAN_API_KEY == '' }}
 

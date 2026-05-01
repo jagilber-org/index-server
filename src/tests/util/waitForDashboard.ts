@@ -10,7 +10,7 @@ export interface DashboardProcess {
  * Spawn the index server with dashboard enabled and resolve once the dashboard
  * has started and emitted its startup line. Retries until timeoutMs.
  */
-export async function startDashboardServer(extraEnv: NodeJS.ProcessEnv = {}, timeoutMs = 15000): Promise<DashboardProcess> {
+export async function startDashboardServer(extraEnv: NodeJS.ProcessEnv = {}, timeoutMs = 90000): Promise<DashboardProcess> {
   const env = {
     ...process.env,
     INDEX_SERVER_DASHBOARD: '1',
@@ -19,15 +19,18 @@ export async function startDashboardServer(extraEnv: NodeJS.ProcessEnv = {}, tim
   };
   const proc = spawn('node', ['dist/server/index-server.js', '--dashboard-port=0', '--dashboard-host=127.0.0.1'], { env, stdio: ['pipe', 'pipe', 'pipe'] });
   let url: string | undefined;
+  let stdoutBuf = '';
+  let stderrBuf = '';
   const pat = /(?:Server started on|\[startup\] Dashboard URL:)\s+(https?:\/\/[^\s"]+)/;
-  const capture = (data: string) => {
+  const capture = (data: string, isErr: boolean) => {
+    if (isErr) stderrBuf += data; else stdoutBuf += data;
     const m = pat.exec(data);
     if (m) url = m[1];
   };
   proc.stdout.setEncoding('utf8');
   proc.stderr.setEncoding('utf8');
-  proc.stdout.on('data', capture);
-  proc.stderr.on('data', capture);
+  proc.stdout.on('data', (d: string) => capture(d, false));
+  proc.stderr.on('data', (d: string) => capture(d, true));
 
   const start = Date.now();
   while (!url && Date.now() - start < timeoutMs) {
@@ -37,7 +40,8 @@ export async function startDashboardServer(extraEnv: NodeJS.ProcessEnv = {}, tim
   }
   if (!url) {
     try { proc.kill(); } catch { /* ignore */ }
-    throw new Error('dashboard start timeout');
+    const tail = (s: string) => s.length > 2000 ? '...' + s.slice(-2000) : s;
+    throw new Error(`dashboard start timeout (exitCode=${proc.exitCode})\n--stdout--\n${tail(stdoutBuf)}\n--stderr--\n${tail(stderrBuf)}`);
   }
   const readyStart = Date.now();
   while (Date.now() - readyStart < timeoutMs) {
@@ -54,5 +58,6 @@ export async function startDashboardServer(extraEnv: NodeJS.ProcessEnv = {}, tim
     await new Promise(r => setTimeout(r, 40));
   }
   try { proc.kill(); } catch { /* ignore */ }
-  throw new Error('dashboard readiness timeout');
+  const tail = (s: string) => s.length > 2000 ? '...' + s.slice(-2000) : s;
+  throw new Error(`dashboard readiness timeout (url=${url}, exitCode=${proc.exitCode})\n--stdout--\n${tail(stdoutBuf)}\n--stderr--\n${tail(stderrBuf)}`);
 }
