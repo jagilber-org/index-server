@@ -134,6 +134,15 @@
     "ws": "^8.19.0",
     "zod": "^3.23.8"
   },
+  "overrides": {
+    "mermaid": {
+      "uuid": "^14.0.0"
+    },
+    "@mermaid-js/layout-elk": {
+      "uuid": "^14.0.0"
+    },
+    "@types/express-serve-static-core": "5.0.7"
+  },
   "optionalScripts": {},
   "promptReviewCriteriaVersion": "1.0.0",
   "license": "MIT",

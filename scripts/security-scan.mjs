@@ -132,7 +132,7 @@ const PII_PATTERNS = [
 ];
 
 // Generated/runtime state lives outside the source review surface for this manual scan.
-const EXCLUDE = ['node_modules', 'tmp', 'test-results', 'coverage', 'dist', '.git', 'data', 'metrics', 'backups', '.private', '.squad', '.squad-templates'];
+const EXCLUDE = ['node_modules', 'tmp', 'test-results', 'coverage', 'dist', '.git', 'data', 'metrics', 'backups', '.private', '.squad', '.squad-templates', '.codeql'];
 const EXTENSIONS = new Set([
   '.ts', '.js', '.mjs', '.cjs',
   '.md', '.txt', '.json',

@@ -12,6 +12,8 @@ beforeAll(async () => {
   process.env.INDEX_SERVER_MUTATION = '1';
   process.env.INDEX_SERVER_MANIFEST_WRITE = '1';
   process.env.INDEX_SERVER_DIR = MANIFEST_TEST_DIR; // must be set before handler imports
+  // Isolate manifest path so parallel forks don't race on shared snapshot.
+  process.env.INDEX_SERVER_MANIFEST_PATH = path.join(MANIFEST_TEST_DIR,'index-manifest.json');
   reloadRuntimeConfig(); // Reload config after setting env vars
   fs.rmSync(MANIFEST_TEST_DIR, { recursive: true, force: true });
   fs.mkdirSync(MANIFEST_TEST_DIR, { recursive: true });

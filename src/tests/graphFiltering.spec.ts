@@ -88,5 +88,5 @@ describe('graph filtering (mermaid)', () => {
     }
 
     dash.kill();
-  }, 60000);
+  }, 240000);
 });

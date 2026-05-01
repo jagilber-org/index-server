@@ -228,7 +228,7 @@ Write-Host "Copying repo to $tempDir ..."
 # Copy repo to temp using the same include/exclude semantics as publish-direct-to-remote.cjs:
 # strip only known private root dot-items and defer all other selection to .publish-exclude.
 $privateRootDotItems = @(
-    '.certs', '.copilot', '.env', '.private', '.specify', '.squad',
+    '.certs', '.codeql', '.copilot', '.env', '.private', '.specify', '.squad',
     '.squad-templates', '.vscode', '.publish-exclude'
 )
 New-Item -ItemType Directory -Path $tempDir -Force | Out-Null

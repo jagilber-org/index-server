@@ -57,6 +57,16 @@
 .PARAMETER PrBranch
     Branch name for the PR. Defaults to publish/<Tag> (or publish/latest if no tag).
 
+.PARAMETER WaitForMerge
+    CreatePR mode only. After opening the PR, poll until it is merged, then
+    create and push the release tag (annotated, name = -Tag) pointing at the
+    merge commit on main. Without this switch the operator must tag manually
+    after merging.
+
+.PARAMETER WaitForMergeTimeoutMinutes
+    Maximum minutes to wait for the PR to be merged when -WaitForMerge is set.
+    Default 60.
+
 .PARAMETER AllowTagOverwrite
     Break-glass switch that allows overwriting an existing local or remote tag.
     By default, existing tags are treated as immutable and publish aborts.
@@ -94,6 +104,12 @@ param(
 
     [Parameter(ParameterSetName = 'CreatePR')]
     [string]$PrBranch,
+
+    [Parameter(ParameterSetName = 'CreatePR')]
+    [switch]$WaitForMerge,
+
+    [Parameter(ParameterSetName = 'CreatePR')]
+    [int]$WaitForMergeTimeoutMinutes = 60,
 
     [switch]$Force,
 
@@ -578,6 +594,84 @@ try {
             Write-Host '  Review the PR, then merge via GitHub web UI.' -ForegroundColor White
             Write-Host '============================================================' -ForegroundColor Cyan
             Write-Host ''
+
+            if ($WaitForMerge) {
+                if (-not $Tag) {
+                    Write-Warning '-WaitForMerge requested but -Tag was not provided; skipping post-merge tagging.'
+                }
+                else {
+                    # Extract PR number from the URL gh just printed (e.g. https://github.com/org/repo/pull/40).
+                    $prUrlText = ($prUrl | Out-String).Trim()
+                    $prNumber = $null
+                    if ($prUrlText -match '/pull/(\d+)\s*$') { $prNumber = [int]$Matches[1] }
+                    if (-not $prNumber) {
+                        Write-Warning "Could not parse PR number from '$prUrlText'; skipping post-merge tagging."
+                    }
+                    else {
+                        Write-Host "[publish] Waiting for PR #$prNumber to be merged (timeout: $WaitForMergeTimeoutMinutes min)..." -ForegroundColor Cyan
+
+                        $deadline = (Get-Date).AddMinutes($WaitForMergeTimeoutMinutes)
+                        $mergeCommitSha = $null
+                        while ((Get-Date) -lt $deadline) {
+                            $prJson = & gh pr view $prNumber --repo $prRepo --json state,mergeCommit 2>$null
+                            if ($LASTEXITCODE -eq 0 -and $prJson) {
+                                try {
+                                    $prState = ($prJson | ConvertFrom-Json)
+                                    if ($prState.state -eq 'MERGED' -and $prState.mergeCommit -and $prState.mergeCommit.oid) {
+                                        $mergeCommitSha = $prState.mergeCommit.oid
+                                        break
+                                    }
+                                    elseif ($prState.state -eq 'CLOSED') {
+                                        Write-Warning "PR #$prNumber was closed without merging; skipping tag."
+                                        break
+                                    }
+                                }
+                                catch {
+                                    # Ignore parse error and retry.
+                                }
+                            }
+                            Start-Sleep -Seconds 30
+                        }
+
+                        if (-not $mergeCommitSha) {
+                            Write-Warning "PR #$prNumber not merged within $WaitForMergeTimeoutMinutes min; tag '$Tag' was not created."
+                        }
+                        else {
+                            Write-Host "[publish] PR #$prNumber merged at $mergeCommitSha; creating tag '$Tag'..." -ForegroundColor Cyan
+
+                            # Verify tag does not already exist (or remove if -AllowTagOverwrite).
+                            $existingTag = & gh api "repos/$prRepo/git/refs/tags/$Tag" 2>$null
+                            $tagExists = ($LASTEXITCODE -eq 0 -and $existingTag -and $existingTag -notmatch 'Not Found')
+                            if ($tagExists -and -not $AllowTagOverwrite) {
+                                Write-Error "Tag '$Tag' already exists on $prRepo. Re-run with -AllowTagOverwrite to replace it."
+                                return
+                            }
+                            if ($tagExists -and $AllowTagOverwrite) {
+                                Write-Warning "Overwriting existing tag '$Tag' on $prRepo (-AllowTagOverwrite)."
+                                & gh api -X DELETE "repos/$prRepo/git/refs/tags/$Tag" 2>&1 | Out-Null
+                            }
+
+                            $tagPayload = @{
+                                ref = "refs/tags/$Tag"
+                                sha = $mergeCommitSha
+                            } | ConvertTo-Json -Compress
+                            $tagResult = $tagPayload | & gh api -X POST "repos/$prRepo/git/refs" --input - 2>&1
+                            if ($LASTEXITCODE -ne 0) {
+                                Write-Warning "Failed to create tag '$Tag' on $prRepo via gh api: $tagResult"
+                            }
+                            else {
+                                Write-Host "[publish] Tag '$Tag' -> $mergeCommitSha created on $prRepo." -ForegroundColor Green
+                            }
+                        }
+                    }
+                }
+            }
+            else {
+                Write-Host "  After merge: re-run with -WaitForMerge or tag manually:" -ForegroundColor DarkGray
+                if ($Tag) {
+                    Write-Host "    gh api -X POST repos/$prRepo/git/refs -f ref='refs/tags/$Tag' -f sha=<merge-commit-sha>" -ForegroundColor DarkGray
+                }
+            }
         }
     }
     else {

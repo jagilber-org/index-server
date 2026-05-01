@@ -135,4 +135,159 @@ describe('Dashboard backup file import', () => {
       await server.stop();
     }
   }, 15000);
+
+  it('one-shot Restore from File via ?restore=1 imports + restores in a single request', async () => {
+    vi.resetModules();
+
+    // Seed instructions/ with two pre-existing files (the "live" state before restore).
+    const preExistingA = { id: 'pre-a', title: 'Pre A', body: 'pre-existing A' };
+    const preExistingB = { id: 'pre-b', title: 'Pre B', body: 'pre-existing B' };
+    fs.writeFileSync(path.join(INSTRUCTIONS_DIR, 'pre-a.json'), JSON.stringify(preExistingA), 'utf8');
+    fs.writeFileSync(path.join(INSTRUCTIONS_DIR, 'pre-b.json'), JSON.stringify(preExistingB), 'utf8');
+
+    // Build the upload payload: three new instructions in a zip backup.
+    const uploaded = [
+      { id: 'restored-1', title: 'Restored 1', body: 'one' },
+      { id: 'restored-2', title: 'Restored 2', body: 'two' },
+      { id: 'restored-3', title: 'Restored 3', body: 'three' },
+    ];
+    for (const inst of uploaded) {
+      fs.writeFileSync(path.join(UPLOAD_SOURCE_DIR, `${inst.id}.json`), JSON.stringify(inst), 'utf8');
+    }
+    const uploadedBackupPath = path.join(TMP_ROOT, 'backup_20260430T120000_001.zip');
+
+    const { reloadRuntimeConfig } = await import('../config/runtimeConfig.js');
+    reloadRuntimeConfig();
+
+    const { createZipBackupWithManifest } = await import('../services/backupZip.js');
+    createZipBackupWithManifest(UPLOAD_SOURCE_DIR, uploadedBackupPath, {
+      type: 'admin-backup',
+      createdAt: '2026-04-30T12:00:00.001Z',
+      instructionCount: uploaded.length,
+    });
+
+    // BEFORE: 2 pre-existing instructions, 0 backup zips.
+    const beforeFiles = new Set(fs.readdirSync(INSTRUCTIONS_DIR).filter(f => f.toLowerCase().endsWith('.json')));
+    expect(beforeFiles.has('pre-a.json')).toBe(true);
+    expect(beforeFiles.has('pre-b.json')).toBe(true);
+    expect(fs.readdirSync(BACKUPS_DIR).filter(f => f.endsWith('.zip')).length).toBe(0);
+
+    const { createDashboardServer } = await import('../dashboard/server/DashboardServer.js');
+    const server = createDashboardServer({
+      port: 0,
+      host: '127.0.0.1',
+      enableWebSockets: false,
+      maxPortTries: 2,
+    });
+    const started = await server.start();
+    const baseUrl = started.url.replace(/\/$/, '');
+    const readyDeadline = Date.now() + 5000;
+    while (Date.now() < readyDeadline) {
+      try {
+        const statusResponse = await fetch(`${baseUrl}/api/status`);
+        if (statusResponse.ok) break;
+      } catch { /* retry */ }
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+
+    try {
+      const response = await fetch(`${baseUrl}/api/admin/maintenance/backup/import?restore=1`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/zip',
+          'X-Backup-Filename': path.basename(uploadedBackupPath),
+        },
+        body: fs.readFileSync(uploadedBackupPath),
+      });
+      expect(response.ok).toBe(true);
+      const payload = await response.json() as {
+        success: boolean;
+        backupId?: string;
+        files?: number;
+        restored?: number;
+        restored_applied?: boolean;
+      };
+      expect(payload.success).toBe(true);
+      expect(payload.restored_applied).toBe(true);
+      expect(payload.files).toBe(uploaded.length);
+      expect(payload.restored).toBe(uploaded.length);
+      expect(payload.backupId).toMatch(/^backup_\d{8}T\d{6}_\d{3}$/);
+
+      // AFTER: each restored instruction file is present with the uploaded body.
+      for (const inst of uploaded) {
+        const target = path.join(INSTRUCTIONS_DIR, `${inst.id}.json`);
+        expect(fs.existsSync(target), `expected ${inst.id}.json to be restored`).toBe(true);
+        expect(JSON.parse(fs.readFileSync(target, 'utf8')).body).toBe(inst.body);
+      }
+
+      // The pre-restore safety backup must exist (proves restore path ran, not just import).
+      const backupZips = fs.readdirSync(BACKUPS_DIR).filter(f => f.endsWith('.zip'));
+      const safetyZip = backupZips.find(f => f.startsWith('pre_restore_'));
+      expect(safetyZip, `expected a pre_restore_*.zip in ${backupZips.join(', ')}`).toBeDefined();
+
+      // The imported backup zip is also present and addressable by backupId.
+      const importedZip = backupZips.find(f => f === `${payload.backupId}.zip`);
+      expect(importedZip, `expected ${payload.backupId}.zip in ${backupZips.join(', ')}`).toBeDefined();
+    } finally {
+      await server.stop();
+    }
+  }, 15000);
+
+  it('one-shot ?restore=1 with a JSON bundle imports + restores and returns combined counts', async () => {
+    vi.resetModules();
+
+    const { reloadRuntimeConfig } = await import('../config/runtimeConfig.js');
+    reloadRuntimeConfig();
+
+    const { createDashboardServer } = await import('../dashboard/server/DashboardServer.js');
+    const server = createDashboardServer({ port: 0, host: '127.0.0.1', enableWebSockets: false, maxPortTries: 2 });
+    const started = await server.start();
+    const baseUrl = started.url.replace(/\/$/, '');
+    const readyDeadline = Date.now() + 5000;
+    while (Date.now() < readyDeadline) {
+      try {
+        const statusResponse = await fetch(`${baseUrl}/api/status`);
+        if (statusResponse.ok) break;
+      } catch { /* retry */ }
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+
+    try {
+      const bundle = {
+        manifest: { type: 'admin-backup', createdAt: '2026-04-30T13:00:00.000Z', instructionCount: 2 },
+        files: {
+          'json-bundle-a.json': { id: 'json-bundle-a', title: 'JSON A', body: 'A' },
+          'json-bundle-b.json': { id: 'json-bundle-b', title: 'JSON B', body: 'B' },
+        },
+      };
+
+      const beforeFiles = new Set(fs.readdirSync(INSTRUCTIONS_DIR).filter(f => f.toLowerCase().endsWith('.json')));
+      // Pre-condition: the two files we are about to restore must NOT already be present
+      // (otherwise the test would be trivially satisfied by ambient state).
+      expect(beforeFiles.has('json-bundle-a.json')).toBe(false);
+      expect(beforeFiles.has('json-bundle-b.json')).toBe(false);
+
+      const response = await fetch(`${baseUrl}/api/admin/maintenance/backup/import?restore=1`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(bundle),
+      });
+      expect(response.ok).toBe(true);
+      const payload = await response.json() as { success: boolean; restored?: number; restored_applied?: boolean; files?: number; backupId?: string };
+      expect(payload.success).toBe(true);
+      expect(payload.restored_applied).toBe(true);
+      expect(payload.files).toBe(2);
+      expect(payload.restored).toBe(2);
+
+      // AFTER: the two restored files exist with the uploaded contents, and the dir grew by exactly 2 .json files.
+      expect(fs.existsSync(path.join(INSTRUCTIONS_DIR, 'json-bundle-a.json'))).toBe(true);
+      expect(fs.existsSync(path.join(INSTRUCTIONS_DIR, 'json-bundle-b.json'))).toBe(true);
+      expect(JSON.parse(fs.readFileSync(path.join(INSTRUCTIONS_DIR, 'json-bundle-a.json'), 'utf8')).body).toBe('A');
+      expect(JSON.parse(fs.readFileSync(path.join(INSTRUCTIONS_DIR, 'json-bundle-b.json'), 'utf8')).body).toBe('B');
+      const afterFiles = new Set(fs.readdirSync(INSTRUCTIONS_DIR).filter(f => f.toLowerCase().endsWith('.json')));
+      expect(afterFiles.size - beforeFiles.size).toBe(2);
+    } finally {
+      await server.stop();
+    }
+  }, 15000);
 });

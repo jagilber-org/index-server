@@ -10,6 +10,7 @@ export default tseslint.config(
       'node_modules/**',
       'release/**',
       '**/tmp/**',
+      '.codeql/**',
       '.copilot/**',
       '.squad/**',
       '.squad-templates/**',

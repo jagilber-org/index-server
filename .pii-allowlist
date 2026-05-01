@@ -3,7 +3,7 @@
 ## Documentation placeholder emails
 
 ^.*@contoso\.com$
-^.*@example\.(com|net|org)$
+^.*@(.+\.)?example\.(com|net|org)$
 ^.*@company\.com$
 # GitHub Copilot bot noreply address — mandated trailer per .github/copilot-instructions.md
 ^223556219\+Copilot@users\.noreply\.github\.com$

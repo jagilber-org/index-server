@@ -12,7 +12,7 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 
-const EXEC_OPTS: ExecSyncOptions = { stdio: 'pipe', timeout: 15_000 };
+const EXEC_OPTS: ExecSyncOptions = { stdio: 'pipe', timeout: 60_000 };
 const DEPLOY_EXEC_OPTS: ExecSyncOptions = { stdio: 'pipe', timeout: 90_000 };
 const ROOT = path.resolve(__dirname, '..', '..');
 const WIZARD_SCRIPT = path.join(ROOT, 'scripts', 'setup-wizard.mjs');

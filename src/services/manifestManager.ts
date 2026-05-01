@@ -37,7 +37,16 @@ export interface ManifestEntry { id: string; sourceHash?: string; bodyHash?: str
 export interface IndexManifest { $schema?: string; version: 1; generatedAt: string; count: number; entries: ManifestEntry[] }
 
 const MANIFEST_RELATIVE = path.join('snapshots','index-manifest.json');
-function getManifestPath(){ return path.join(process.cwd(), MANIFEST_RELATIVE); }
+function getManifestPath(){
+  // Tests run in parallel forks (vitest pool=forks, maxWorkers=4) and each fork
+  // shares the same process.cwd(); without an override, multiple test files that
+  // enable manifest write race on the same on-disk file. Honor an explicit path
+  // override so test setup can isolate per-spec output. Production leaves this
+  // unset and continues to use the canonical snapshot path.
+  const override = process.env.INDEX_SERVER_MANIFEST_PATH;
+  if(override && override.trim()) return path.isAbsolute(override) ? override : path.join(process.cwd(), override);
+  return path.join(process.cwd(), MANIFEST_RELATIVE);
+}
 
 /**
  * Load the manifest from disk.

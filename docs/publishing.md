@@ -45,6 +45,8 @@ This repository is in a staged migration from the legacy VSIX distribution story
 
 | Script | Role | Who Can Run |
 |--------|------|-------------|
+| `Invoke-ReleaseWorkflow.ps1` | Phase 2 + 3 wrapper. Loads `.env`, runs build + deploy + cleanroom, prints Phase 4 handoff. | Agents or humans |
+| `Load-RepoEnv.ps1` | Sources `<repo-root>/.env` into the current process env (only sets unset keys). | Helper, sourced by other scripts |
 | `New-CleanRoomCopy.ps1` | Safe content preparation — no remote operations | Agents or humans |
 | `Publish-ToMirror.ps1` | Remote delivery with sanctioned-remote enforcement | **Humans only** (`ConfirmImpact=High`) |
 | `publish-direct-to-remote.cjs` | Direct push to public remote with tag | Automated releases |
@@ -52,7 +54,28 @@ This repository is in a staged migration from the legacy VSIX distribution story
 
 ## Recommended Workflow
 
-### Step 1: Prepare Clean Content (New-CleanRoomCopy.ps1)
+### Step 0 (one-time per clone): Configure `.env`
+
+Repo-local paths and secrets live in a gitignored `.env`. Bootstrap from the committed template:
+
+```powershell
+Copy-Item .env.example .env
+# edit .env to set CLEANROOM_PATH, deploy roots, INDEX_SERVER_ADMIN_API_KEY, etc.
+```
+
+`.env` is excluded from commits (`.gitignore` + `pre-commit.ps1`) and from cleanroom copies (`New-CleanRoomCopy.ps1`).
+
+### Step 1: Run Phases 2 + 3 via the wrapper (recommended)
+
+For most releases, invoke the wrapper instead of calling individual scripts. It loads `.env`, runs `npm run build` + `deploy-local.ps1`, then `New-CleanRoomCopy.ps1`, then prints the exact human-only Phase 4 command:
+
+```powershell
+pwsh -NoProfile -File scripts\Invoke-ReleaseWorkflow.ps1
+```
+
+Resolution precedence (highest → lowest): CLI arg → shell env → `.env` → repo config → hardcoded canonical default. Override via `-CleanRoomPath`, `-RemoteUrl`, `-Tag`, `-SkipBuild`, `-SkipDeploy` only when intentionally deviating.
+
+### Step 1 (manual): Prepare Clean Content (New-CleanRoomCopy.ps1)
 
 Creates a cleaned snapshot with integrity manifest. **No remote operations occur.** Safe for agents to invoke.
 
