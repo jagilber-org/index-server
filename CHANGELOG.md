@@ -6,6 +6,19 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 
 ## [Unreleased]
 
+## [1.27.1] - 2026-05-01
+
+### Changed
+
+- **Security**: pin `mermaid` and `@mermaid-js/layout-elk` transitive `uuid` to `^14.0.0` via npm overrides to clear GHSA-w5hq-g745-h8pq. Server-side bundle has no mermaid imports; dashboard remains lazy-loaded.
+- **Build**: pin `@types/express-serve-static-core` to `5.0.7` to keep dashboard route handler signatures stable after lockfile regen pulled `5.1.1` (which changed `req.params` typing).
+
+### Fixed
+
+- **Deploy** (`scripts/deploy-local.ps1`): runtime `package.json` written to the deploy target now preserves the `overrides` block from the source manifest. Without it, `npm ci --omit=dev` failed with `EUSAGE Missing: uuid@11.1.1 from lock file` because the override-resolved lockfile didn't match the unstripped manifest.
+- **CodeQL pre-push gate** (`scripts/run-codeql-pre-push.ps1`): now sources `scripts/Load-RepoEnv.ps1` and honors absolute paths from `.env` (`CODEQL_DB_PATH`, `CODEQL_LOG_DIR`, `CODEQL_OUTPUT_PATH`, `CODEQL_LANGUAGE`, `CODEQL_THREADS`, `CODEQL_RAM`). Reuses pre-built databases instead of always rebuilding in-repo.
+- **Publish workflow** (`scripts/Publish-ToMirror.ps1`): after opening a publish PR via `-CreatePR`, now prints a copy-pasteable next-steps block (`gh api …/git/refs` + `gh release create --generate-notes`) so the operator can tag the merge commit and kick off the GitHub release in one shot. The `-WaitForMerge` success path also surfaces the `gh release create` command.
+
 ## [1.27.0] - 2026-04-30
 
 ### Changed (BREAKING)
