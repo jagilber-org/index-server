@@ -680,6 +680,34 @@
           "exceptions": [
             "Expected operational states handled via try/catch for control flow (e.g., optional resource probing with FileNotFoundException, validation parsing, feature detection, retry intermediate failures) may log at DEBUG level if the absence or failure is documented as expected and the condition is fully handled without user impact."
           ]
+        },
+        {
+          "id": "OB-6",
+          "severity": "error",
+          "rule": "Repeating per-record diagnostic logs MUST be deduplicated per process, and CI MUST scan collected logs for repeat-spam, stack-traced WARNs, and known chronic-issue patterns.",
+          "rationale": "Per-entry exhausted-repair WARNs and per-request migration retries can dump hundreds of stack-traced records into the events ring per dashboard call, dominating CPU and masking real issues. The fix is twofold: in-process dedup latches keyed by id (or by operation key), and a CI gate that crawls collected logs and fails the build when the same WARN/ERROR signature repeats above a budget or carries a JS stack trace at WARN level.",
+          "required": [
+            "Diagnostic emissions in hot paths (per-entry, per-request, per-tick) MUST guard the WARN/ERROR call with a process-scoped Set or LRU keyed by the offending identifier so repeats over the lifetime of one process collapse to one log line per id. Counters and audit-log entries continue to increment on every call.",
+            "CI workflows that run vitest, integration tests, or stress tests MUST execute scripts/crawl-logs.mjs --strict against collected NDJSON logs (and captured stderr) after the test step, and fail when the per-signature repeat budget or the WARN-with-stack-trace budget is breached.",
+            "Test-controlled output directories (test-results/, test-artifacts/, data/test-tmp/) MUST be size-gated by scripts/validate-no-test-artifacts.mjs to catch unbounded growth (e.g., a migration loop ballooning a sqlite WAL).",
+            "When an allowlist entry is added to .crawl-logs-allowlist, the same change MUST include a one-line rationale comment above the regex."
+          ],
+          "prohibited": [
+            "Do not emit a WARN-level record carrying a JS stack trace from a hot path that runs more than once per process invocation.",
+            "Do not silence dedup violations by raising the threshold; either fix the underlying loop or quarantine via an audited allowlist entry.",
+            "Do not skip the crawl-logs gate via --no-verify, --skip-*, or environment overrides."
+          ],
+          "evidence": [
+            "Process-scoped latch / LRU exists for any per-entry WARN whose source set is unbounded",
+            "scripts/crawl-logs.mjs is invoked with --strict in every test-running CI workflow",
+            "scripts/validate-no-test-artifacts.mjs enforces size limits on test-controlled directories"
+          ],
+          "enforcedBy": [
+            "scripts/crawl-logs.mjs",
+            "scripts/validate-no-test-artifacts.mjs",
+            ".github/workflows/ci.yml",
+            ".github/workflows/ci-enhanced.yml"
+          ]
         }
       ]
     },

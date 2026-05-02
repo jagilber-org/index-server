@@ -236,7 +236,11 @@ export function autoSeedBootstrap(): SeedSummary {
     // Directory empty OR missing seed triggers creation.
     try {
       const tmp = path.join(dir, `.${seed.file}.tmp-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}`);
-      fs.writeFileSync(tmp, JSON.stringify(seed.json, null, 2), { encoding: 'utf8' });
+      // Inject timestamps at write time so loaders never trigger
+      // [invariant-repair] firstSeenTs WARN noise on subsequent reads.
+      const nowIso = new Date().toISOString();
+      const stamped = { createdAt: nowIso, firstSeenTs: nowIso, ...seed.json };
+      fs.writeFileSync(tmp, JSON.stringify(stamped, null, 2), { encoding: 'utf8' });
       fs.renameSync(tmp, target);
       summary.created.push(seed.file);
     } catch (e){

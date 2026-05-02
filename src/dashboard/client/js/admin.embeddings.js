@@ -378,8 +378,61 @@
   var origShowSection = window.showSection;
   window.showSection = function (name) {
     if (origShowSection) origShowSection(name);
-    if (name === 'embeddings' && !embData) {
-      setTimeout(init, 50);
+    if (name === 'embeddings') {
+      window.loadEmbeddingsStatus();
+      if (!embData) setTimeout(init, 50);
+    }
+  };
+
+  function escapeHtml(s) {
+    if (s == null) return '';
+    return String(s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  function renderStatusBanner(status) {
+    var banner = document.getElementById('emb-status-banner');
+    if (!banner) return;
+    banner.className = 'emb-status-banner';
+    if (!status || status.success === false) {
+      banner.classList.add('hidden');
+      return;
+    }
+    var state = status.state || 'unknown';
+    var titleText = '', icon = '';
+    if (state === 'disabled') { icon = '🚫'; titleText = 'Semantic embeddings are disabled'; }
+    else if (state === 'missing') { icon = '⛔'; titleText = 'Model not available — compute will fail'; }
+    else if (state === 'will-download') { icon = '⬇️'; titleText = 'Model will download on first compute'; }
+    else if (state === 'no-embeddings') { icon = '⚠️'; titleText = 'No embeddings computed yet'; }
+    else if (state === 'ready') { icon = '✅'; titleText = 'Embeddings ready'; }
+    else { icon = 'ℹ️'; titleText = 'Embeddings status'; }
+    banner.classList.add('state-' + state);
+    var parts = [];
+    parts.push('<div class="title">' + icon + ' <span>' + escapeHtml(titleText) + '</span></div>');
+    if (status.message) parts.push('<div>' + escapeHtml(status.message) + '</div>');
+    var meta = [];
+    if (status.model) meta.push('model=' + status.model);
+    if (status.device) meta.push('device=' + status.device);
+    if (typeof status.localOnly === 'boolean') meta.push('localOnly=' + status.localOnly);
+    if (typeof status.modelCached === 'boolean') meta.push('modelCached=' + status.modelCached);
+    if (typeof status.embeddingsCount === 'number') meta.push('embeddings=' + status.embeddingsCount);
+    if (status.cacheDir) meta.push('cacheDir=' + status.cacheDir);
+    if (status.embeddingPath) meta.push('embeddingPath=' + status.embeddingPath);
+    if (meta.length) parts.push('<div class="meta">' + escapeHtml(meta.join(' · ')) + '</div>');
+    banner.innerHTML = parts.join('');
+    banner.classList.remove('hidden');
+  }
+
+  window.loadEmbeddingsStatus = async function loadEmbeddingsStatus() {
+    try {
+      var res = await adminAuth.adminFetch('/api/embeddings/status');
+      if (!res.ok) { renderStatusBanner(null); return; }
+      var data = await res.json();
+      renderStatusBanner(data);
+    } catch (_err) {
+      void _err;
+      renderStatusBanner(null);
     }
   };
 
@@ -391,12 +444,18 @@
       var res = await adminAuth.adminFetch('/api/embeddings/compute', { method: 'POST', headers: { 'Content-Type': 'application/json' } });
       if (!res.ok) {
         var err = await res.json().catch(function () { return {}; });
-        if (statusEl) statusEl.textContent = 'Error: ' + (err.error || res.statusText) + (err.hint ? ' — ' + err.hint : '');
+        var detail = err.error || res.statusText;
+        if (err.hint) detail += ' — ' + err.hint;
+        else if (err.message) detail += ' — ' + err.message;
+        if (statusEl) statusEl.textContent = 'Error: ' + detail;
+        // Refresh banner so user sees the actionable state machine.
+        window.loadEmbeddingsStatus();
         return;
       }
       var result = await res.json();
       if (statusEl) statusEl.textContent = 'Computed ' + result.count + ' embeddings (' + result.model + ', ' + result.elapsedMs + 'ms). Loading visualization…';
-      // Auto-load the projection after compute
+      // Auto-load the projection + refresh banner
+      window.loadEmbeddingsStatus();
       await window.loadEmbeddings();
     } catch (e) {
       if (statusEl) statusEl.textContent = 'Compute failed: ' + e.message;

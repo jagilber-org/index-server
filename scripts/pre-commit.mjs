@@ -110,7 +110,7 @@ function getRegexMatches(line, pattern) {
 console.log('Running pre-commit checks (PII + env-var leak scan)...');
 
 const piiAllowlist = loadPiiAllowlist();
-const PII_FILE_ALLOWLIST = new Set(['package-lock.json', 'security-scan.mjs', 'test_results.txt']);
+const PII_FILE_ALLOWLIST = new Set(['package-lock.json', 'security-scan.mjs', 'test_results.txt', '.pii-allowlist']);
 
 // Full-path exclusions (normalized to forward slashes) — files that intentionally
 // contain example secret/PII patterns as documentation. Mirrors the
@@ -180,6 +180,13 @@ for (const [key, value] of Object.entries(process.env)) {
     continue;
   }
 
+  // Skip npm-internal env vars (npm_package_*, npm_config_*, npm_lifecycle_*, npm_node_*).
+  // These are auto-set by npm during script execution and contain public package
+  // metadata (package name, version, script names) -- never secrets.
+  if (/^npm_(package|config|lifecycle|node)_/.test(key)) {
+    continue;
+  }
+
   const isSensitive =
     SENSITIVE_ENV_PREFIXES.some(prefix => key.startsWith(prefix)) ||
     SENSITIVE_ENV_EXACT.includes(key) ||
@@ -190,7 +197,59 @@ for (const [key, value] of Object.entries(process.env)) {
   }
 }
 
-info(`Monitoring ${envLeakMap.size} sensitive env var values for leaks`);
+// ── 3a. Augment env-leak map from local .env file ─────────────────────────
+// Catches accidental copy of local-machine values into tracked files. Tokens
+// come from KEY=VALUE pairs in .env and reuse the same scan/allowlist logic.
+// Allowlist via .env-leak-allowlist (one `literal:<value>` per line).
+const dotenvPath = process.env.INDEX_SERVER_PRECOMMIT_DOTENV
+  ? process.env.INDEX_SERVER_PRECOMMIT_DOTENV
+  : path.join(__dirname, '..', '.env');
+const envLeakAllowPath = process.env.INDEX_SERVER_PRECOMMIT_ENVLEAK_ALLOWLIST
+  ? process.env.INDEX_SERVER_PRECOMMIT_ENVLEAK_ALLOWLIST
+  : path.join(__dirname, '..', '.env-leak-allowlist');
+let envLeakLiteralAllow = [];
+if (existsSync(envLeakAllowPath)) {
+  envLeakLiteralAllow = readFileSync(envLeakAllowPath, 'utf8')
+    .split(/\r?\n/)
+    .map(l => l.trim())
+    .filter(l => l && !l.startsWith('#') && l.startsWith('literal:'))
+    .map(l => l.substring('literal:'.length));
+}
+let dotenvAdded = 0;
+if (existsSync(dotenvPath)) {
+  const minDotenvTokenLen = 16;
+  const userPathPatterns = [
+    /C:[\\/]Users[\\/]([^\\/'"\s]+)/i,
+    /\/home\/([^/'"\s]+)/,
+    /\/Users\/([^/'"\s]+)/,
+  ];
+  const dotenvText = readFileSync(dotenvPath, 'utf8');
+  for (const dotenvLine of dotenvText.split(/\r?\n/)) {
+    const match = dotenvLine.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)\s*$/);
+    if (!match) continue;
+    const dotenvKey = match[1];
+    const dotenvVal = match[2].trim().replace(/^["']|["']$/g, '');
+    if (!dotenvVal) continue;
+    if (VALUE_ALLOWLIST.has(dotenvVal.toLowerCase())) continue;
+    if (dotenvVal.length >= minDotenvTokenLen && !envLeakLiteralAllow.includes(dotenvVal)) {
+      if (!envLeakMap.has(dotenvVal)) {
+        envLeakMap.set(dotenvVal, `${dotenvKey} (.env)`);
+        dotenvAdded++;
+      }
+    }
+    for (const pat of userPathPatterns) {
+      const m = dotenvVal.match(pat);
+      if (m && m[1] && m[1].length >= 3 && !envLeakLiteralAllow.includes(m[1])) {
+        if (!envLeakMap.has(m[1])) {
+          envLeakMap.set(m[1], `${dotenvKey} (.env user-segment)`);
+          dotenvAdded++;
+        }
+      }
+    }
+  }
+}
+
+info(`Monitoring ${envLeakMap.size} sensitive env var values for leaks (${dotenvAdded} from .env)`);
 
 // ── 4. Scan target files ──────────────────────────────────────────────────
 const targets = getTargetFiles(process.argv.slice(2));

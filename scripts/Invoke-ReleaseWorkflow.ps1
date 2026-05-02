@@ -132,6 +132,23 @@ if (-not $CleanRoomPath) {
     }
 }
 
+# --- Integrity guard: tag must match package.json version -------------------
+# Without this, a stale package.json version inside the published tag silently
+# defeats the npmjs `Check npmjs version status` gate (npm view finds the OLD
+# version already on the registry and the publish step is skipped). v1.27.1
+# was tagged with a 1.27.0 package.json and never reached npmjs because of
+# this. Fail fast here so the operator catches it before clean-room copy.
+$pkgManifest = Get-Content (Join-Path $repoRoot 'package.json') -Raw | ConvertFrom-Json
+$srvManifest = Get-Content (Join-Path $repoRoot 'server.json') -Raw | ConvertFrom-Json
+$expectedVersion = $Tag -replace '^v', ''
+if ($pkgManifest.version -ne $expectedVersion) {
+    throw "[release] package.json version ($($pkgManifest.version)) does not match -Tag $Tag (expected $expectedVersion). Bump package.json before tagging."
+}
+if ($srvManifest.version -ne $expectedVersion) {
+    throw "[release] server.json version ($($srvManifest.version)) does not match -Tag $Tag (expected $expectedVersion). Bump server.json before tagging."
+}
+Write-Host "[release] Version parity OK: package.json=$($pkgManifest.version) server.json=$($srvManifest.version) tag=$Tag" -ForegroundColor Green
+
 # --- Phase 2: Build & Deploy Locally ----------------------------------------
 
 Write-Phase 'Phase 2: Build & Deploy Locally'

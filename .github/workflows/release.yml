@@ -59,7 +59,21 @@ jobs:
         run: npm run build
 
       - name: Unit test gate
-        run: npm run test:unit
+        run: |
+          mkdir -p test-results
+          npm run test:unit 2>&1 | tee test-results/test-output.log
+
+      - name: Crawl test logs (hygiene gate)
+        if: always()
+        # Defaults (max-repeat=25, max-stack-warn=25). Known operational
+        # categories are signature-allowlisted in .crawl-logs-allowlist.
+        run: |
+          node scripts/crawl-logs.mjs \
+            --dir logs \
+            --file test-results/test-output.log \
+            --allowlist .crawl-logs-allowlist \
+            --summary test-results/log-hygiene.json \
+            --strict
 
       - name: Upload test results
         if: always()
@@ -239,6 +253,46 @@ jobs:
         uses: actions/attest-build-provenance@v4
         with:
           subject-path: '*.tgz'
+
+      # ──────────────────────────────────────────────────────────────────
+      # Publish to GitHub Packages npm registry (parallel target to npmjs).
+      # Auth uses the workflow's GITHUB_TOKEN (no extra secret). The package
+      # name @jagilber-org/index-server already aligns with the org owner,
+      # so no rename is needed.
+      # ──────────────────────────────────────────────────────────────────
+      - name: Configure GitHub Packages registry
+        if: env.ALLOW_EXTERNAL_PUBLISH == 'true'
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          registry-url: 'https://npm.pkg.github.com'
+          scope: '@jagilber-org'
+
+      - name: Check GitHub Packages version status
+        id: gpr_status
+        if: env.ALLOW_EXTERNAL_PUBLISH == 'true'
+        run: |
+          PKG=$(node -p "require('./package.json').name")
+          VERSION="${{ steps.version.outputs.version }}"
+          if npm view "$PKG@$VERSION" version --registry=https://npm.pkg.github.com >/dev/null 2>&1; then
+            echo "already_published=true" >> $GITHUB_OUTPUT
+          else
+            echo "already_published=false" >> $GITHUB_OUTPUT
+          fi
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish to GitHub Packages
+        if: env.ALLOW_EXTERNAL_PUBLISH == 'true' && steps.gpr_status.outputs.already_published != 'true'
+        run: |
+          TARBALL=$(ls *.tgz 2>/dev/null | head -1)
+          if [ -n "$TARBALL" ]; then
+            npm publish "$TARBALL" --registry=https://npm.pkg.github.com
+          else
+            npm publish --ignore-scripts --registry=https://npm.pkg.github.com
+          fi
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Install mcp-publisher
         if: env.ALLOW_EXTERNAL_PUBLISH == 'true' && (env.MCP_USE_GITHUB_OIDC == 'true' || env.HAS_MCP_GITHUB_TOKEN == 'true')

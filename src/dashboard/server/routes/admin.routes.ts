@@ -19,9 +19,11 @@ import { getAdminPanel } from '../AdminPanel.js';
 import { getWebSocketManager } from '../WebSocketManager.js';
 import { dumpFlags, updateFlags } from '../../../services/featureFlags.js';
 import { getFlagRegistrySnapshot } from '../../../services/handlers.dashboardConfig.js';
+import { reloadRuntimeConfig } from '../../../config/runtimeConfig.js';
+import { listEvents, eventCounts, clearEvents } from '../../../services/eventBuffer.js';
 import { getLocalHandler } from '../../../server/registry.js';
 import { dashboardAdminAuth } from './adminAuth.js';
-import { logError, logWarn } from '../../../services/logger.js';
+import { logError, logInfo, logWarn } from '../../../services/logger.js';
 
 export function createAdminRoutes(metricsCollector: MetricsCollector): Router {
   const router = Router();
@@ -78,9 +80,35 @@ export function createAdminRoutes(metricsCollector: MetricsCollector): Router {
     try {
       const updates = req.body;
       const result = adminPanel.updateAdminConfig(updates);
-      // Feature flag persistence (optional field featureFlags { name:boolean })
+      // Feature flag persistence: split incoming flags into
+      //  (a) namespace flags (e.g. response_envelope_v1) — persisted to flags.json
+      //  (b) INDEX_SERVER_* boolean toggles — routed to process.env + reloadRuntimeConfig()
+      // so dashboard toggles actually take effect at runtime (issue #282 / fix #4).
       if (updates.featureFlags && typeof updates.featureFlags === 'object') {
-        try { updateFlags(updates.featureFlags); } catch (e) { logWarn('[API] feature flag update failed:', e instanceof Error ? e.message : e); }
+        try {
+          const knownEnv = new Set(getFlagRegistrySnapshot().filter(f => f.type === 'boolean').map(f => f.name));
+          const namespaceFlags: Record<string, boolean> = {};
+          let envChanged = 0;
+          const appliedEnv: string[] = [];
+          for (const [k, v] of Object.entries(updates.featureFlags)) {
+            if (typeof v !== 'boolean') continue;
+            const upper = String(k).toUpperCase();
+            if (upper.startsWith('INDEX_SERVER_') && knownEnv.has(upper)) {
+              process.env[upper] = v ? '1' : '0';
+              appliedEnv.push(upper);
+              envChanged++;
+            } else {
+              namespaceFlags[k] = v;
+            }
+          }
+          if (envChanged > 0) {
+            reloadRuntimeConfig();
+            logInfo(`[admin] applied ${envChanged} INDEX_SERVER_* toggle(s): ${appliedEnv.join(', ')}`);
+          }
+          if (Object.keys(namespaceFlags).length > 0) updateFlags(namespaceFlags);
+        } catch (e) {
+          logWarn('[API] feature flag update failed:', e instanceof Error ? e.message : e);
+        }
       }
 
       if (result.success) {
@@ -324,9 +352,9 @@ export function createAdminRoutes(metricsCollector: MetricsCollector): Router {
   router.post('/admin/maintenance/restore', (req: Request, res: Response) => {
     try {
       const { backupId } = req.body || {};
-      process.stderr.write(`[admin] restore requested backupId=${backupId}\n`);
+      logInfo('[admin] restore requested', { backupId });
       const result = adminPanel.restoreBackup(backupId);
-      process.stderr.write(`[admin] restore result success=${result.success} restored=${result.restored ?? 0} msg=${result.message}\n`);
+      logInfo('[admin] restore result', { backupId, success: result.success, restored: result.restored ?? 0, message: result.message });
       if (result.success) {
         res.json({ success: true, message: result.message, restored: result.restored, timestamp: Date.now() });
       } else {
@@ -436,7 +464,7 @@ export function createAdminRoutes(metricsCollector: MetricsCollector): Router {
         : bodyObject !== null
           ? 'json'
           : typeof rawBody;
-    process.stderr.write(`[admin] backup/import received ctype=${ctype} body=${bodyKind} restore=${wantRestore}\n`);
+    logInfo('[admin] backup/import received', { ctype, body: bodyKind, restore: wantRestore });
     try {
       let importResult: { success: boolean; message: string; backupId?: string; files?: number };
       if (bodyBuffer !== null && bodyBuffer.length > 0) {
@@ -445,13 +473,13 @@ export function createAdminRoutes(metricsCollector: MetricsCollector): Router {
         importResult = adminPanel.importZipBackup(bodyBuffer, sourceName);
       } else {
         if (bodyObject === null) {
-          process.stderr.write(`[admin] backup/import rejected: body is not a JSON object\n`);
+          logWarn('[admin] backup/import rejected', { reason: 'body-not-json-object', ctype });
           return res.status(400).json({ success: false, error: 'Request body must be a JSON object containing a "files" object', timestamp: Date.now() });
         }
         const bundle = bodyObject;
         const files = bundle.files;
         if (!files || typeof files !== 'object' || Array.isArray(files)) {
-          process.stderr.write(`[admin] backup/import rejected: missing or invalid files object\n`);
+          logWarn('[admin] backup/import rejected', { reason: 'missing-or-invalid-files-object' });
           return res.status(400).json({ success: false, error: 'Request body must contain a "files" object', timestamp: Date.now() });
         }
         importResult = adminPanel.importBackup({
@@ -463,15 +491,15 @@ export function createAdminRoutes(metricsCollector: MetricsCollector): Router {
       }
 
       if (!importResult.success) {
-        process.stderr.write(`[admin] backup/import failed: ${importResult.message}\n`);
+        logWarn('[admin] backup/import failed', { message: importResult.message });
         return res.status(400).json({ success: false, error: importResult.message, timestamp: Date.now() });
       }
-      process.stderr.write(`[admin] backup/import ok backupId=${importResult.backupId} files=${importResult.files}\n`);
+      logInfo('[admin] backup/import ok', { backupId: importResult.backupId, files: importResult.files });
 
       if (wantRestore && importResult.backupId) {
-        process.stderr.write(`[admin] backup/import auto-restore start backupId=${importResult.backupId}\n`);
+        logInfo('[admin] backup/import auto-restore start', { backupId: importResult.backupId });
         const restoreResult = adminPanel.restoreBackup(importResult.backupId);
-        process.stderr.write(`[admin] backup/import auto-restore result success=${restoreResult.success} restored=${restoreResult.restored ?? 0} msg=${restoreResult.message}\n`);
+        logInfo('[admin] backup/import auto-restore result', { backupId: importResult.backupId, success: restoreResult.success, restored: restoreResult.restored ?? 0, message: restoreResult.message });
         if (!restoreResult.success) {
           return res.status(500).json({ success: false, error: `Imported as ${importResult.backupId} but restore failed: ${restoreResult.message}`, backupId: importResult.backupId, files: importResult.files, restored: 0, timestamp: Date.now() });
         }
@@ -605,6 +633,56 @@ export function createAdminRoutes(metricsCollector: MetricsCollector): Router {
       res.status(500).json({
         error: 'Failed to clear metrics',
       });
+    }
+  });
+
+  /**
+   * GET /api/admin/events - Recent WARN/ERROR events from the in-memory ring buffer
+   * Query: ?since=<id>&level=WARN|ERROR&limit=<n>
+   */
+  router.get('/admin/events', (req: Request, res: Response) => {
+    try {
+      const since = req.query.since !== undefined ? parseInt(String(req.query.since), 10) : undefined;
+      const limit = req.query.limit !== undefined ? parseInt(String(req.query.limit), 10) : undefined;
+      const levelRaw = String(req.query.level || '').toUpperCase();
+      const level = (levelRaw === 'WARN' || levelRaw === 'ERROR') ? levelRaw : undefined;
+      const events = listEvents({
+        sinceId: Number.isFinite(since) ? since : undefined,
+        limit: Number.isFinite(limit) ? limit : undefined,
+        level,
+      });
+      const counts = eventCounts(0);
+      res.json({ success: true, events, counts, timestamp: Date.now() });
+    } catch (error) {
+      logError('[API] Get events error:', error);
+      res.status(500).json({ success: false, error: 'Failed to read events' });
+    }
+  });
+
+  /**
+   * GET /api/admin/events/counts - Lightweight counts for nav-bubble polling
+   */
+  router.get('/admin/events/counts', (req: Request, res: Response) => {
+    try {
+      const since = req.query.since !== undefined ? parseInt(String(req.query.since), 10) : 0;
+      const counts = eventCounts(Number.isFinite(since) ? since : 0);
+      res.json({ success: true, counts, timestamp: Date.now() });
+    } catch (error) {
+      logError('[API] Get event counts error:', error);
+      res.status(500).json({ success: false, error: 'Failed to read event counts' });
+    }
+  });
+
+  /**
+   * DELETE /api/admin/events - Clear the buffer (also acts as "mark all read")
+   */
+  router.delete('/admin/events', (_req: Request, res: Response) => {
+    try {
+      clearEvents();
+      res.json({ success: true, message: 'Events cleared', timestamp: Date.now() });
+    } catch (error) {
+      logError('[API] Clear events error:', error);
+      res.status(500).json({ success: false, error: 'Failed to clear events' });
     }
   });
 

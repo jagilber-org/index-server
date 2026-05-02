@@ -14,6 +14,15 @@ import type { IInstructionStore, IEmbeddingStore } from './types.js';
 
 export type StorageBackend = 'json' | 'sqlite';
 
+/** Process-scoped flag so the EXPERIMENTAL SQLite warning is emitted once,
+ *  not per-store-creation (which floods the events ring on every request). */
+let sqliteExperimentalWarned = false;
+
+/** Test-only: reset the warn-once latch. */
+export function _resetSqliteExperimentalWarning(): void {
+    sqliteExperimentalWarned = false;
+}
+
 /**
  * Check that the current Node.js version meets the minimum requirement.
  * Throws a clear error if the version is too old.
@@ -50,9 +59,12 @@ export function createStore(backend?: StorageBackend, dir?: string, sqlitePath?:
   switch (resolvedBackend) {
     case 'sqlite': {
       checkNodeVersion('22.5.0', 'SQLite storage backend (node:sqlite)');
-      logWarn(
-        '[storage] ⚠️  EXPERIMENTAL: SQLite backend is enabled. This feature has limited testing and may have data-loss or compatibility issues. Not recommended for production use.',
-      );
+      if (!sqliteExperimentalWarned) {
+        sqliteExperimentalWarned = true;
+        logWarn(
+          '[storage] ⚠️  EXPERIMENTAL: SQLite backend is enabled. This feature has limited testing and may have data-loss or compatibility issues. Not recommended for production use.',
+        );
+      }
       const dbPath = sqlitePath ?? config.storage?.sqlitePath ?? 'data/index.db';
       return new SqliteStore(dbPath);
     }

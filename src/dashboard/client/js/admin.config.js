@@ -90,10 +90,8 @@
                 + '<div class="form-group"><label class="form-label">Enable Mutation</label>'
                 + '<select class="form-input" id="cfg-mutation"><option value="1"' + (cfg.serverSettings.enableMutation ? ' selected' : '') + '>Enabled</option>'
                 + '<option value="0"' + (!cfg.serverSettings.enableMutation ? ' selected' : '') + '>Disabled</option></select></div>'
-                + '<div class="form-group"><label class="form-label">Rate Limit Window (ms)</label>'
-                + '<input class="form-input" type="number" id="cfg-windowMs" value="' + cfg.serverSettings.rateLimit.windowMs + '" /></div>'
-                + '<div class="form-group"><label class="form-label">Rate Limit Max Requests</label>'
-                + '<input class="form-input" type="number" id="cfg-maxRequests" value="' + cfg.serverSettings.rateLimit.maxRequests + '" /></div>'
+                + '<div class="form-group"><label class="form-label">Rate Limit (req/min, 0 = off)</label>'
+                + '<input class="form-input" type="number" min="0" id="cfg-rateLimitPerMinute" value="' + (cfg.serverSettings.rateLimit && cfg.serverSettings.rateLimit.perMinute != null ? cfg.serverSettings.rateLimit.perMinute : 0) + '" /></div>'
                 + '</div>'
                 + '<div class="cfg-save-row"><button class="action-btn" type="submit">💾 Save Config</button></div>'
                 + '</form>'
@@ -173,8 +171,7 @@
                 enableVerboseLogging: document.getElementById('cfg-verbose').value === '1',
                 enableMutation: document.getElementById('cfg-mutation').value === '1',
                 rateLimit: {
-                    windowMs: parseInt(document.getElementById('cfg-windowMs').value),
-                    maxRequests: parseInt(document.getElementById('cfg-maxRequests').value)
+                    perMinute: parseInt(document.getElementById('cfg-rateLimitPerMinute').value) || 0
                 }
             },
             featureFlags: featureFlags

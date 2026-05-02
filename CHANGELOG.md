@@ -6,6 +6,21 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 
 ## [Unreleased]
 
+## [1.27.2] - 2026-05-01
+
+### Fixed
+
+- **Release workflow** (`.github/workflows/release.yml`): trim `description` in `package.json` and `server.json` from 146 to 98 chars to satisfy the MCP Registry validator (`expected length <= 100` on `body.description`). The MCP Registry publish step had been failing on every release since v1.26.3 with HTTP 422.
+- **Release workflow** (`scripts/Invoke-ReleaseWorkflow.ps1`): add a fail-fast parity guard that aborts before tagging when `package.json.version` does not match the `-Tag` argument (sans `v` prefix). The v1.27.1 release shipped a tag whose `package.json` still said `1.27.0`, which caused the `Check npmjs version status` step to skip publish (it found `1.27.0` already on npmjs and set `already_published=true`). This guard prevents the same class of mismatch from reaching the public mirror again.
+
+### Added
+
+- **Release workflow** (`.github/workflows/release.yml`): publish to the GitHub Packages npm registry (`https://npm.pkg.github.com`) in addition to npmjs, so `https://github.com/jagilber-org/index-server/pkgs/npm/index-server` populates on each release. Auth uses the workflow-scoped `GITHUB_TOKEN` (no extra secret needed).
+
+### Notes
+
+- v1.27.1 was tagged on the public mirror but is **incomplete**: the npmjs publish step was skipped (stale version in tag), the GitHub Packages registry was never wired (now fixed), and the MCP Registry rejected the description (now fixed). v1.27.2 is the corrected release. v1.27.1 will not be retroactively republished.
+
 ## [1.27.1] - 2026-05-01
 
 ### Changed

@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import { getRuntimeConfig } from '../config/runtimeConfig';
-import { logError } from './logger.js';
+import { logDebug } from './logger.js';
 
 export type TraceLevel = 0|1|2|3|4;
 
@@ -197,8 +197,10 @@ export function emitTrace(label: string, data: unknown, min: TraceLevel = 1): vo
 
   pushBuffer(rec, tracing.buffer);
 
+  // Trace records are diagnostic, not errors. Route through DEBUG so they do
+  // not pollute the WARN/ERROR events ring buffer surfaced to the dashboard.
   try {
-    logError(label, JSON.stringify(rec));
+    logDebug(label, JSON.stringify(rec));
   } catch { /* ignore */ }
 
   if (!(tracing.persist || tracing.file)) return;

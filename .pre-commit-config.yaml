@@ -103,6 +103,19 @@ repos:
         pass_filenames: false
         stages: [pre-push]
 
+      # Log-hygiene parity with CI's scripts/crawl-logs.mjs --strict gate.
+      # Skips harmlessly when no local logs/ are present; fails fast when a
+      # recent local test run produced WARN-with-stack / repeat-spam / chronic
+      # patterns that would also break CI. Catches the class of regression
+      # that broke PR #286 (logWarn() auto-stack busting max-stack-warn=5).
+      - id: log-hygiene-pre-push
+        name: Log hygiene (crawl-logs --strict)
+        entry: pwsh -NoProfile -File scripts/pre-push-log-hygiene.ps1
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
+
       # Template v1.25.0: mandatory ESLint pre-push gate (CD-1 / GW-1 / TS-4).
       # JS/TS-aware (no-op without ESLint config + `lint` script). Honors only
       # explicit TEMPLATE_SKIP_LINT=1 emergency override (separate from any

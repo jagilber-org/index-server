@@ -13,13 +13,23 @@ import path from 'path';
 import v8 from 'v8';
 import { getRuntimeConfig } from '../../config/runtimeConfig';
 import { getMetricsCollector, ToolMetrics } from './MetricsCollector';
-import { getIndexState, ensureLoaded } from '../../services/indexContext';
+import { getIndexState, ensureLoaded, invalidate, touchIndexVersion } from '../../services/indexContext';
 import { AdminPanelConfig } from './AdminPanelConfig';
 import type { AdminConfig } from './AdminPanelConfig';
 import { AdminPanelState } from './AdminPanelState';
 import type { AdminSession, AdminSessionHistoryEntry } from './AdminPanelState';
 import { createZipBackupWithManifest, extractZipBackup, readZipManifest, listZipInstructionFiles, isZipBackup } from '../../services/backupZip';
 import { logAudit } from '../../services/auditLog';
+import { logInfo, logError, log } from '../../services/logger';
+
+// Stackless WARN: the log-hygiene gate (scripts/crawl-logs.mjs --strict)
+// treats WARN-with-stack as a budget violation (max-stack-warn=5). logWarn()
+// auto-captures a JS stack via captureCallStack(), so for routine admin
+// rejection paths use log('WARN', ...) directly with a serialized detail.
+const warnStruct = (msg: string, detail?: unknown) =>
+  log('WARN', msg, { detail: detail === undefined ? undefined : typeof detail === 'string' ? detail : JSON.stringify(detail) });
+import { scheduleEmbeddingComputeAfterImport } from '../../services/embeddingTrigger';
+import { migrateJsonToSqlite } from '../../services/storage/migrationEngine';
 import AdmZip from 'adm-zip';
 
 // Re-export for consumers that import these types from AdminPanel
@@ -319,7 +329,7 @@ export class AdminPanel {
           source: safeId,
           originalCount: existing.length,
         });
-        process.stderr.write(`[admin] Pre-restore safety backup created: ${safetyId}.zip\n`);
+        logInfo('[admin] pre-restore safety backup created', { safetyId, originalCount: existing.length });
       }
 
       let restored = 0;
@@ -337,10 +347,50 @@ export class AdminPanel {
       }
 
       this.indexStatsCache = null;
-      process.stderr.write(`[admin] Restored backup ${safeId} (${restored} instruction files)\n`);
+      // Restore wrote JSON files to instructionsDir, but the live index may
+      // not be sourcing from disk:
+      //  - JSON backend: IndexContext re-reads on next ensureLoaded() because
+      //    instructionsDir mtime changed (no .index-version file in dev).
+      //  - SQLite backend: source of truth is the .db at storage.sqlitePath,
+      //    NOT the JSON files. Without re-ingesting, the dashboard keeps
+      //    showing the pre-restore row count (RCA 2026-05-01: 702-file zip
+      //    restored, Overview kept showing 2 seed-bootstrap entries).
+      // Therefore: re-ingest into SQLite when applicable, then invalidate the
+      // in-memory cache so the next read reflects the restored set.
+      const backend = getRuntimeConfig().storage?.backend ?? 'json';
+      let sqliteIngest: { migrated: number; errors: number } | undefined;
+      if (backend === 'sqlite') {
+        try {
+          const dbPath = getRuntimeConfig().storage?.sqlitePath
+            ?? path.join(process.cwd(), 'data', 'index.db');
+          const mr = migrateJsonToSqlite(instructionsDir, dbPath);
+          sqliteIngest = { migrated: mr.migrated, errors: mr.errors.length };
+          logInfo('[admin] post-restore sqlite re-ingest', { backupId: safeId, ...sqliteIngest });
+        } catch (err) {
+          logError('[admin] post-restore sqlite re-ingest failed', {
+            backupId: safeId,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }
+      }
+      touchIndexVersion();
+      invalidate();
+      let afterCount = -1;
+      try { afterCount = Object.keys(ensureLoaded().byId || {}).length; } catch (reloadErr) {
+        logError('[admin] post-restore reload failed', {
+          backupId: safeId,
+          error: reloadErr instanceof Error ? reloadErr.message : String(reloadErr),
+        });
+      }
+      logInfo('[admin] backup restored', { backupId: safeId, restored, source: isZip ? 'zip' : 'dir', backend, afterCount, ...(sqliteIngest ? { sqliteIngest } : {}) });
+      // Fire-and-forget embedding compute when semantic is enabled — addresses
+      // post-import gap where embeddings file is missing until manually triggered.
+      try { scheduleEmbeddingComputeAfterImport(`restore:${safeId}`); } catch { /* never block restore */ }
       return { success: true, message: `Backup ${safeId} restored`, restored };
     } catch (error) {
       const errMsg = error instanceof Error ? error.message : String(error);
+      const stack = error instanceof Error ? error.stack : undefined;
+      logError('[admin] backup restore failed', { backupId, error: errMsg, stack });
       logAudit('admin/backup/restore_failed', backupId ? [String(backupId)] : undefined, { error: errMsg }, 'mutation');
       return { success: false, message: `Restore failed: ${errMsg}` };
     }
@@ -545,10 +595,12 @@ export class AdminPanel {
       zip.addFile('manifest.json', Buffer.from(JSON.stringify(manifest, null, 2)));
       zip.writeZip(zipPath);
 
-      process.stderr.write(`[admin] Imported backup from file: ${backupId}.zip (${written} files)\n`);
+      logInfo('[admin] importBackup complete', { backupId, files: written, mode: 'json' });
       return { success: true, message: `Imported ${written} files as ${backupId}`, backupId, files: written };
     } catch (error) {
       const errMsg = error instanceof Error ? error.message : String(error);
+      const stack = error instanceof Error ? error.stack : undefined;
+      logError('[admin] importBackup failed', { error: errMsg, stack, mode: 'json' });
       logAudit('admin/backup/import_failed', undefined, { error: errMsg, mode: 'json' }, 'mutation');
       return { success: false, message: `Import failed: ${errMsg}` };
     }
@@ -556,20 +608,38 @@ export class AdminPanel {
 
   /** Import a zip backup uploaded by the client without rewriting its contents. */
   importZipBackup(zipBuffer: Buffer, sourceName?: string): { success: boolean; message: string; backupId?: string; files?: number } {
+    // CodeQL: Array.isArray is the negative pattern recognized by the
+    // js/type-confusion-through-parameter-tampering query. Buffer.isBuffer
+    // alone is not treated as narrowing, so guard before any .length read.
+    const sizeBytes = !Array.isArray(zipBuffer) && Buffer.isBuffer(zipBuffer) ? zipBuffer.length : 0;
+    const safeSource: string | undefined =
+      typeof sourceName === 'string' && !Array.isArray(sourceName) ? sourceName : undefined;
+    logInfo('[admin] importZipBackup start', { sourceName: safeSource ? path.basename(safeSource) : undefined, sizeBytes });
     try {
-      if (!Buffer.isBuffer(zipBuffer) || zipBuffer.length === 0) {
+      if (Array.isArray(zipBuffer) || !Buffer.isBuffer(zipBuffer) || zipBuffer.length === 0) {
         const msg = 'Invalid zip backup: upload was empty';
+        warnStruct('[admin] importZipBackup rejected', { reason: 'empty-buffer', sizeBytes });
         logAudit('admin/backup/import_failed', undefined, { error: msg, mode: 'zip' }, 'mutation');
         return { success: false, message: msg };
       }
 
-      const zip = new AdmZip(zipBuffer);
+      let zip: AdmZip;
+      try {
+        zip = new AdmZip(zipBuffer);
+      } catch (e) {
+        const errMsg = e instanceof Error ? e.message : String(e);
+        logError('[admin] importZipBackup zip-parse-error', { error: errMsg, sizeBytes });
+        logAudit('admin/backup/import_failed', undefined, { error: errMsg, mode: 'zip' }, 'mutation');
+        return { success: false, message: `Import failed: ${errMsg}` };
+      }
+      const allEntries = zip.getEntries().map(e => e.entryName);
       const instructionFiles = zip.getEntries()
         .map(entry => path.basename(entry.entryName))
         .filter(name => name.toLowerCase().endsWith('.json') && name === path.basename(name) && name !== 'manifest.json');
 
       if (!instructionFiles.length) {
         const msg = 'Invalid zip backup: contains no instruction files';
+        warnStruct('[admin] importZipBackup rejected', { reason: 'no-instruction-files', entryCount: allEntries.length, sample: allEntries.slice(0, 10) });
         logAudit('admin/backup/import_failed', undefined, { error: msg, mode: 'zip' }, 'mutation');
         return { success: false, message: msg };
       }
@@ -584,12 +654,12 @@ export class AdminPanel {
       fs.writeFileSync(zipPath, zipBuffer); // lgtm[js/http-to-file-access] — zipPath is generated under controlled backupRoot; admin endpoint behind dashboardAdminAuth
 
       const safeSourceName = sourceName ? path.basename(sourceName) : undefined;
-      process.stderr.write(
-        `[admin] Imported zip backup from file: ${backupId}.zip (${instructionFiles.length} files${safeSourceName ? `, source=${safeSourceName}` : ''})\n`,
-      );
+      logInfo('[admin] importZipBackup complete', { backupId, files: instructionFiles.length, source: safeSourceName, zipPath });
       return { success: true, message: `Imported ${instructionFiles.length} files as ${backupId}`, backupId, files: instructionFiles.length };
     } catch (error) {
       const errMsg = error instanceof Error ? error.message : String(error);
+      const stack = error instanceof Error ? error.stack : undefined;
+      logError('[admin] importZipBackup failed', { error: errMsg, stack, sourceName: sourceName ? path.basename(sourceName) : undefined, sizeBytes });
       logAudit('admin/backup/import_failed', undefined, { error: errMsg, mode: 'zip' }, 'mutation');
       return { success: false, message: `Import failed: ${errMsg}` };
     }

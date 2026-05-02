@@ -42,13 +42,30 @@ jobs:
           # on main pushes (event_name != 'pull_request'). The slow concurrent /
           # stress / multi-instance suites have their own dedicated workflows
           # (multi-agent-concurrency.yml, stress-nightly.yml, multi-instance-validation.yml).
+          mkdir -p test-results
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             echo "PR run: using test:fast (no coverage) to conserve minutes"
-            npm test --if-present
+            npm test --if-present 2>&1 | tee test-results/test-output.log
           else
             echo "Push/dispatch run: full coverage suite"
-            npm run coverage:ci --if-present || npm test --if-present
+            (npm run coverage:ci --if-present || npm test --if-present) 2>&1 | tee test-results/test-output.log
           fi
+      - name: Validate test artifacts (no leakage, no oversized files)
+        if: always()
+        run: node scripts/validate-no-test-artifacts.mjs
+      - name: Crawl test logs (hygiene gate — fail on repeat-spam / WARN+stack)
+        if: always()
+        # Per-signature repeat threshold and stack-warn budget both default to 25.
+        # Known operational categories (search input validation, embedding fallback,
+        # invariant-repair fixtures, etc.) are signature-allowlisted in
+        # .crawl-logs-allowlist with one-line rationales per OB-6.
+        run: |
+          node scripts/crawl-logs.mjs \
+            --dir logs \
+            --file test-results/test-output.log \
+            --allowlist .crawl-logs-allowlist \
+            --summary test-results/log-hygiene.json \
+            --strict
       - name: Upload coverage to Codecov
         if: always()
         uses: codecov/codecov-action@v6

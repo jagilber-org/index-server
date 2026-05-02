@@ -198,25 +198,39 @@ export function checkModelReadiness(
   modelName: string,
   cacheDir: string,
   localOnly: boolean,
-): { ready: boolean; message?: string } {
-  if (!localOnly) {
-    return { ready: true }; // Model can be downloaded on demand
-  }
-
+): { ready: boolean; cached: boolean; modelPath: string; message?: string } {
   // HuggingFace transformers caches models as: models--<org>--<name>
   const modelDirName = `models--${modelName.replace(/\//g, '--')}`;
   const modelPath = path.join(cacheDir, modelDirName);
 
+  let cached = false;
   try {
     if (fs.existsSync(modelPath) && fs.readdirSync(modelPath).length > 0) {
-      return { ready: true };
+      cached = true;
     }
   } catch {
     // Directory doesn't exist or can't be read
   }
 
+  if (cached) {
+    return { ready: true, cached: true, modelPath };
+  }
+
+  if (!localOnly) {
+    return {
+      ready: true,
+      cached: false,
+      modelPath,
+      message:
+        `Embedding model '${modelName}' is not yet cached. ` +
+        `It will be downloaded to '${cacheDir}' on first compute (~25 MB).`,
+    };
+  }
+
   return {
     ready: false,
+    cached: false,
+    modelPath,
     message:
       `Embedding model '${modelName}' not found in cache (${cacheDir}). ` +
       `LOCAL_ONLY is enabled, so the model cannot be downloaded automatically. ` +

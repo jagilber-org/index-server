@@ -122,7 +122,8 @@
             const data = await response.json();
 
             if (data.success) {
-                if (typeof displayMaintenanceStatus === 'function') displayMaintenanceStatus(data.maintenance); // lgtm[js/unneeded-defensive-code] — global may load asynchronously across dashboard panels
+                // displayMaintenanceStatus is declared in this same module (function declaration, hoisted).
+                displayMaintenanceStatus(data.maintenance);
             } else {
                 if (typeof showError === 'function') showError('Failed to load maintenance status');
             }

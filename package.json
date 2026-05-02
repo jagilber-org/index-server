@@ -1,8 +1,8 @@
 {
   "name": "@jagilber-org/index-server",
-  "version": "1.27.1",
+  "version": "1.27.2",
   "mcpName": "io.github.jagilber-org/index-server",
-  "description": "MCP instruction indexing server for AI assistant governance — search, CRUD, schema validation, usage tracking, and cross-repo knowledge promotion.",
+  "description": "MCP instruction indexing server with search, CRUD, validation, and cross-repo knowledge promotion.",
   "publishConfig": {
     "registry": "https://registry.npmjs.org/",
     "access": "public"
@@ -62,6 +62,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint .",
     "lint:instructions": "node scripts/lint-instructions.mjs",
+    "lint:logs": "node scripts/crawl-logs.mjs --dir logs --file test-results/test-output.log --allowlist .crawl-logs-allowlist --strict",
     "format": "prettier --write .",
     "prepare": "node scripts/setup-hooks.cjs",
     "audit": "npm audit --omit=dev --audit-level=high",

@@ -147,7 +147,7 @@
                 if (connEl) connEl.innerHTML = '<div class="error-message">Error loading active connections</div>';
             }
 
-            try { if (typeof loadSessionHistory === 'function') loadSessionHistory(parseInt(document.getElementById('session-history-limit')?.value || '50', 10)); } catch {} // lgtm[js/unneeded-defensive-code] — global may load asynchronously across dashboard panels
+            try { loadSessionHistory(parseInt(document.getElementById('session-history-limit')?.value || '50', 10)); } catch {}
             window.__lastSessionsCount = sessionsCount;
             window.__lastConnectionsCount = connectionsCount;
             updateSessionsNavBadge();

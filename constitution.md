@@ -72,6 +72,7 @@
 | OB-3 | Exceptions, failed operations, and unexpected states MUST be logged with enough stack or call-site context to support direct troubleshooting when the runtime can provide it. | error |
 | OB-4 | Structured logging defaults SHOULD include stable fields for timestamp, severity, message, and optional execution context such as module, request, process, or port identifiers. | warning |
 | OB-5 | Error handlers, catch blocks, and fallback paths MUST log at a severity visible under the application's default log level, not at DEBUG or TRACE where default configuration silently drops the message. | error |
+| OB-6 | Repeating per-record diagnostic logs MUST be deduplicated per process, and CI MUST scan collected logs for repeat-spam, stack-traced WARNs, and known chronic-issue patterns. | error |
 
 ### VII. Testing And Validation Strategy
 
