@@ -75,6 +75,35 @@ function trackInvariantRepair(id: string, field: string, source: string) {
   if (invariantRepairLog.length > MAX_REPAIR_LOG) invariantRepairLog.shift();
 }
 
+// ── Process-scoped latches for noise + work suppression ──────────
+// Symptom that motivated these latches (observed live on dev port 8687,
+// 2026-05-01): every dashboard request triggered ensureLoaded() →
+// migrateJsonToSqlite() because jsonFiles.length > sqliteRowCount was
+// permanently true (a few JSON files failed loader validation), and every
+// /api/admin/stats request emitted hundreds of stack-traced WARN entries
+// from restoreFirstSeenInvariant for entries whose firstSeenTs was
+// genuinely unrecoverable. Both of those are infinite-cost loops once the
+// process is up. We dedupe both per-process here.
+const autoMigrationAttempted = new Set<string>();
+const firstSeenExhaustedReported = new Set<string>();
+/**
+ * Test-only hook — reset process-scoped latches between vitest specs.
+ * @internal Not part of the public API.
+ */
+export function _resetIndexContextProcessLatches(): void {
+  autoMigrationAttempted.clear();
+  firstSeenExhaustedReported.clear();
+}
+
+/**
+ * Test-only hook — reset the module-scoped index state cache.
+ * @internal Not part of the public API.
+ */
+export function _resetIndexContextStateForTests(): void {
+  state = null;
+  dirty = false;
+}
+
 /** Returns a summary of invariant repairs for health check visibility. */
 export function getInvariantRepairSummary(): { totalRepairs: number; recentRepairs: typeof invariantRepairLog } {
   return { totalRepairs: invariantRepairLog.length, recentRepairs: invariantRepairLog.slice(-20) };
@@ -86,14 +115,37 @@ export function getInvariantRepairSummary(): { totalRepairs: number; recentRepai
 function restoreFirstSeenInvariant(e: InstructionEntry){
   if(e.firstSeenTs) return;
   const auth = firstSeenAuthority[e.id];
-  if(auth){ e.firstSeenTs = auth; incrementCounter('usage:firstSeenAuthorityRepair'); trackInvariantRepair(e.id, 'firstSeenTs', 'authority'); logWarn(`[invariant-repair] firstSeenTs restored from authority for ${e.id}`); return; }
+  if(auth){ e.firstSeenTs = auth; incrementCounter('usage:firstSeenAuthorityRepair'); trackInvariantRepair(e.id, 'firstSeenTs', 'authority'); logDebug(`[invariant-repair] firstSeenTs restored from authority for ${e.id}`); return; }
   const ep = ephemeralFirstSeen[e.id];
-  if(ep){ e.firstSeenTs = ep; incrementCounter('usage:firstSeenInvariantRepair'); trackInvariantRepair(e.id, 'firstSeenTs', 'ephemeral'); logWarn(`[invariant-repair] firstSeenTs restored from ephemeral cache for ${e.id}`); return; }
+  if(ep){ e.firstSeenTs = ep; incrementCounter('usage:firstSeenInvariantRepair'); trackInvariantRepair(e.id, 'firstSeenTs', 'ephemeral'); logDebug(`[invariant-repair] firstSeenTs restored from ephemeral cache for ${e.id}`); return; }
   const snap = (lastGoodUsageSnapshot as Record<string, UsagePersistRecord>)[e.id];
-  if(snap?.firstSeenTs){ e.firstSeenTs = snap.firstSeenTs; incrementCounter('usage:firstSeenInvariantRepair'); trackInvariantRepair(e.id, 'firstSeenTs', 'snapshot'); logWarn(`[invariant-repair] firstSeenTs restored from snapshot for ${e.id}`); }
-  // If still missing after all repair sources, track an exhausted repair attempt (extremely rare diagnostic)
-  if(!e.firstSeenTs){ incrementCounter('usage:firstSeenRepairExhausted'); trackInvariantRepair(e.id, 'firstSeenTs', 'exhausted'); logWarn(`[invariant-repair] firstSeenTs repair exhausted — no source found for ${e.id}`); }
+  if(snap?.firstSeenTs){ e.firstSeenTs = snap.firstSeenTs; incrementCounter('usage:firstSeenInvariantRepair'); trackInvariantRepair(e.id, 'firstSeenTs', 'snapshot'); logDebug(`[invariant-repair] firstSeenTs restored from snapshot for ${e.id}`); return; }
+  // Final fallback: createdAt. By definition firstSeenTs ≤ createdAt is impossible
+  // (the index can never have observed an entry before it was created). For
+  // freshly-imported / freshly-added entries with no usage history yet, this is
+  // the correct answer; for legacy on-disk entries written before write-path
+  // populated firstSeenTs, it heals them silently. Repaired silently (no WARN)
+  // because this is the documented authoritative semantic, not a defect.
+  if(e.createdAt){ e.firstSeenTs = e.createdAt; firstSeenAuthority[e.id] = e.createdAt; incrementCounter('usage:firstSeenCreatedAtFallback'); trackInvariantRepair(e.id, 'firstSeenTs', 'createdAt'); return; }
+  // If still missing after all repair sources, track an exhausted repair attempt (extremely rare diagnostic).
+  // Dedup the WARN per-id-per-process: a permanently unrecoverable id otherwise spams hundreds of
+  // stack-traced WARNs per dashboard poll (RCA 2026-05-01, dev port 8687). The counter and audit
+  // trail still increment on every call so health metrics remain accurate.
+  if(!e.firstSeenTs){
+    incrementCounter('usage:firstSeenRepairExhausted');
+    trackInvariantRepair(e.id, 'firstSeenTs', 'exhausted');
+    if(!firstSeenExhaustedReported.has(e.id)){
+      firstSeenExhaustedReported.add(e.id);
+      logWarn(`[invariant-repair] firstSeenTs repair exhausted — no source found for ${e.id}`);
+    }
+  }
 }
+
+/**
+ * Internal handles for unit tests only. Not part of the public API.
+ * @internal
+ */
+export const _internal = { restoreFirstSeenInvariant };
 
 // Usage invariant repair (mirrors firstSeen invariant strategy). Extremely rare reload races in CI produced
 // states where a freshly re-materialized InstructionEntry temporarily lacked its prior usageCount (observed
@@ -298,7 +350,7 @@ export function getInstructionsDir(){
 }
 // Centralized tracing utilities
 import { emitTrace, traceEnabled } from './tracing';
-import { logError, logInfo, logWarn } from './logger.js';
+import { logError, logInfo, logWarn, logDebug } from './logger.js';
 // Throttled file trace emission (avoid per-get amplification). We emit per-file decisions only
 // on true reloads AND if file signature changed OR time since last emission > threshold.
 // (legacy file-level trace removed in simplified loader)
@@ -328,7 +380,28 @@ export function touchIndexVersion(){
     fs.writeFileSync(vf, token);
   } catch { /* ignore */ }
 }
-function readVersionMTime(): number { try { const vf=getVersionFile(); if(fs.existsSync(vf)){ const st = fs.statSync(vf); return st.mtimeMs || 0; } } catch { /* ignore */ } return 0; }
+function readVersionMTime(): number {
+  try {
+    const vf = getVersionFile();
+    if (fs.existsSync(vf)) {
+      const st = fs.statSync(vf);
+      return st.mtimeMs || 0;
+    }
+  } catch { /* ignore */ }
+  // Fallback: when no .index-version file exists, use the instructions
+  // directory's own mtime so the ensureLoaded() cache short-circuit can still
+  // recognize an unchanged source. RCA 2026-05-01 (live dev port 8787 vs an
+  // operator-explored repo with no version file): readVersionMTime() returned
+  // 0, the falsy short-circuit `if (currentVersionMTime && ...)` always failed,
+  // every dashboard poll triggered a full disk reload + simple-reload trace,
+  // saturating the event loop and breaking dashboard imports.
+  try {
+    const baseDir = getInstructionsDir();
+    const st = fs.statSync(baseDir);
+    return st.mtimeMs || 0;
+  } catch { /* ignore */ }
+  return 0;
+}
 function readVersionToken(): string { try { const vf=getVersionFile(); if(fs.existsSync(vf)){ return fs.readFileSync(vf,'utf8').trim(); } } catch { /* ignore */ } return ''; }
 export function markindexDirty(){ dirty = true; }
 function syncTouchedVersionIntoState(){
@@ -375,25 +448,45 @@ export function ensureLoaded(): IndexState {
   const backend = getRuntimeConfig().storage?.backend ?? 'json';
   const store = backend === 'sqlite' ? getStoreForDir(baseDir) : null;
   let result = store ? store.load() : new IndexLoader(baseDir).load();
-  // Auto-migrate JSON → SQLite when JSON files on disk outnumber SQLite rows
+  // Auto-migrate JSON → SQLite when JSON files on disk outnumber SQLite rows.
+  // Per-process latch (RCA 2026-05-01): without this, mismatched counts caused by
+  // a few unparseable JSON files (jsonFiles.length permanently > sqlite rows) made
+  // ensureLoaded() re-invoke migrateJsonToSqlite() on every reload tick, causing
+  // INSERT-OR-REPLACE storms and unbounded WAL growth (~1.21 GB observed in dev
+  // before the fix). One attempt per (baseDir, dbPath) per process is enough; if
+  // an operator truly needs a re-migrate, they restart the server.
   if (store && getRuntimeConfig().storage?.sqliteMigrateOnStart) {
-    const jsonFiles = fs.existsSync(baseDir) ? fs.readdirSync(baseDir).filter(f => f.endsWith('.json') && !f.startsWith('_')) : [];
-    if (jsonFiles.length > result.entries.length) {
-      try {
-        const dbPath = getRuntimeConfig().storage?.sqlitePath ?? path.join(process.cwd(), 'data', 'index.db');
-        const mr = migrateJsonToSqlite(baseDir, dbPath);
-        if (mr.migrated > 0) {
-          logInfo(`[storage] Auto-migrated ${mr.migrated} instruction(s) from JSON → SQLite`);
-          result = store.load();
-        }
-      } catch (err) { logWarn('[storage] Auto-migration failed:', err); }
+    const dbPath = getRuntimeConfig().storage?.sqlitePath ?? path.join(process.cwd(), 'data', 'index.db');
+    const latchKey = `${baseDir}|${dbPath}`;
+    if (!autoMigrationAttempted.has(latchKey)) {
+      autoMigrationAttempted.add(latchKey);
+      const jsonFiles = fs.existsSync(baseDir) ? fs.readdirSync(baseDir).filter(f => f.endsWith('.json') && !f.startsWith('_')) : [];
+      if (jsonFiles.length > result.entries.length) {
+        try {
+          const mr = migrateJsonToSqlite(baseDir, dbPath);
+          if (mr.migrated > 0) {
+            logInfo(`[storage] Auto-migrated ${mr.migrated} instruction(s) from JSON → SQLite`);
+            result = store.load();
+          }
+        } catch (err) { logWarn('[storage] Auto-migration failed:', err); }
+      }
     }
   }
   const byId = new Map<string, InstructionEntry>(); result.entries.forEach(e=>byId.set(e.id,e));
   // Deduplicate list using byId so two on-disk files with the same id field never produce duplicate
   // search results. byId already uses last-write-wins semantics; list must be consistent with it.
   const deduplicatedList = Array.from(byId.values());
-  state = { loadedAt: new Date().toISOString(), hash: result.hash, byId, list: deduplicatedList, fileCount: deduplicatedList.length, versionMTime: currentVersionMTime, versionToken: currentVersionToken, loadErrors: result.errors, loadDebug: result.debug, loadSummary: result.summary };
+  // RCA 2026-05-01 (live dev port 8787): IndexLoader.load() writes _manifest.json
+  // and _skipped.json into baseDir as a side-effect, which bumps the directory's
+  // mtime. If we cached the pre-load mtime here, the very next ensureLoaded()
+  // call would observe a newer mtime, miss the cache, and reload again — an
+  // unbounded loop that emitted [trace:ensureLoaded:simple-reload] hundreds of
+  // times per second and saturated the event loop (dashboard imports failed).
+  // Re-read the mtime AFTER load so the cached value reflects the post-write
+  // state; subsequent calls without source changes will then short-circuit.
+  const postLoadVersionMTime = readVersionMTime();
+  const postLoadVersionToken = readVersionToken();
+  state = { loadedAt: new Date().toISOString(), hash: result.hash, byId, list: deduplicatedList, fileCount: deduplicatedList.length, versionMTime: postLoadVersionMTime || currentVersionMTime, versionToken: postLoadVersionToken || currentVersionToken, loadErrors: result.errors, loadDebug: result.debug, loadSummary: result.summary };
   dirty = false;
   // Overlay usage snapshot (simplified; no spin/repair loops here—existing invariant repairs still occur in getIndexState)
   try {
@@ -431,7 +524,11 @@ export async function ensureLoadedAsync(): Promise<IndexState> {
   const result = await new IndexLoader(baseDir).loadAsync();
   const byId = new Map<string, InstructionEntry>(); result.entries.forEach(e=>byId.set(e.id,e));
   const deduplicatedList = Array.from(byId.values());
-  state = { loadedAt: new Date().toISOString(), hash: result.hash, byId, list: deduplicatedList, fileCount: deduplicatedList.length, versionMTime: currentVersionMTime, versionToken: currentVersionToken, loadErrors: result.errors, loadDebug: result.debug, loadSummary: result.summary };
+  // See RCA comment in ensureLoaded() above: re-read mtime AFTER load to absorb
+  // _manifest.json / _skipped.json side-effect writes.
+  const postLoadVersionMTime = readVersionMTime();
+  const postLoadVersionToken = readVersionToken();
+  state = { loadedAt: new Date().toISOString(), hash: result.hash, byId, list: deduplicatedList, fileCount: deduplicatedList.length, versionMTime: postLoadVersionMTime || currentVersionMTime, versionToken: postLoadVersionToken || currentVersionToken, loadErrors: result.errors, loadDebug: result.debug, loadSummary: result.summary };
   dirty = false;
   try {
     const snap = loadUsageSnapshot();
@@ -641,6 +738,12 @@ export function isDuplicateInstructionWriteError(error: unknown): boolean {
 
 export function writeEntry(entry: InstructionEntry, opts?: { createOnly?: boolean }){
   const file = path.join(getInstructionsDir(), `${entry.id}.json`);
+  // Establish firstSeenTs at the write boundary if the caller omitted it.
+  // Semantically firstSeenTs ≤ createdAt always — for fresh entries this is
+  // the correct value, and persisting it on disk avoids spurious
+  // [invariant-repair] WARN spam on every subsequent getIndexState() poll
+  // (RCA 2026-05-01 dev port 8687, third loop in chain after PR #285/#286).
+  if(!entry.firstSeenTs){ entry.firstSeenTs = entry.createdAt || new Date().toISOString(); firstSeenAuthority[entry.id] = entry.firstSeenTs; }
   const classifier = new ClassificationService();
   let record = classifier.normalize(entry);
   if(record.owner === 'unowned'){ const auto = resolveOwner(record.id); if(auto){ record.owner = auto; record.updatedAt = new Date().toISOString(); } }
@@ -687,6 +790,8 @@ export function writeEntry(entry: InstructionEntry, opts?: { createOnly?: boolea
 
 export async function writeEntryAsync(entry: InstructionEntry, opts?: { createOnly?: boolean }){
   const file = path.join(getInstructionsDir(), `${entry.id}.json`);
+  // See writeEntry: establish firstSeenTs at the write boundary if missing.
+  if(!entry.firstSeenTs){ entry.firstSeenTs = entry.createdAt || new Date().toISOString(); firstSeenAuthority[entry.id] = entry.firstSeenTs; }
   const classifier = new ClassificationService();
   let record = classifier.normalize(entry);
   if(record.owner === 'unowned'){ const auto = resolveOwner(record.id); if(auto){ record.owner = auto; record.updatedAt = new Date().toISOString(); } }

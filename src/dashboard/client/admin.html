@@ -10,6 +10,7 @@
     <script defer src="js/admin.overview.js"></script>
     <script defer src="js/admin.sessions.js"></script>
     <script defer src="js/admin.monitor.js"></script>
+    <script defer src="js/admin.events.js"></script>
     <script defer src="js/admin.graph.js"></script>
     <script defer src="js/marked.umd.js"></script>
     <script defer src="js/admin.instructions.js"></script>
@@ -47,7 +48,7 @@
                 <button class="nav-btn" data-section="config" onclick="window.showSection && window.showSection('config')">Configuration</button>
                 <button id="nav-sessions" class="nav-btn" data-section="sessions" onclick="window.showSection && window.showSection('sessions')">Sessions</button>
                 <button class="nav-btn" data-section="maintenance" onclick="window.showSection && window.showSection('maintenance')">Maintenance</button>
-                <button class="nav-btn" data-section="monitoring" onclick="window.showSection && window.showSection('monitoring')">Monitoring</button>
+                <button class="nav-btn" data-section="monitoring" onclick="window.showSection && window.showSection('monitoring')">Monitoring<span id="nav-events-bubble" class="nav-bubble" hidden></span></button>
                 <button class="nav-btn" data-section="instructions" onclick="window.showSection && window.showSection('instructions')">Instructions</button>
                 <button class="nav-btn" data-section="graph" onclick="window.showSection && window.showSection('graph')">Graph</button>
                 <button class="nav-btn" data-section="embeddings" onclick="window.showSection && window.showSection('embeddings')">Embeddings</button>
@@ -328,6 +329,34 @@
         <div id="monitoring-section" class="admin-section hidden">
             <div class="admin-card">
                 <div class="card-header">
+                    <div class="card-icon">⚠️</div>
+                    <div class="card-title">Recent Events <span id="events-counts-summary" class="muted small"></span></div>
+                    <div class="card-actions">
+                        <input id="events-search" class="form-input form-input-sm events-search" type="search" placeholder="Search msg/detail…" />
+                        <select id="events-level-filter" class="form-input form-input-sm">
+                            <option value="">All severities</option>
+                            <option value="WARN">WARN only</option>
+                            <option value="ERROR">ERROR only</option>
+                        </select>
+                        <select id="events-page-size" class="form-input form-input-sm" title="Page size">
+                            <option value="25">25 / page</option>
+                            <option value="50" selected>50 / page</option>
+                            <option value="100">100 / page</option>
+                            <option value="200">200 / page</option>
+                        </select>
+                        <button id="events-refresh-btn" class="action-btn-sm" onclick="window.loadEvents && window.loadEvents()">Refresh</button>
+                        <button id="events-clear-btn" class="action-btn-sm" onclick="window.clearEvents && window.clearEvents()">Mark All Read</button>
+                    </div>
+                </div>
+                <div id="events-panel" class="loading">Loading events…</div>
+                <div id="events-pager" class="events-pager hidden">
+                    <button id="events-prev" class="action-btn-sm" type="button">‹ Newer</button>
+                    <span id="events-page-info" class="muted small"></span>
+                    <button id="events-next" class="action-btn-sm" type="button">Older ›</button>
+                </div>
+            </div>
+            <div class="admin-card mt-xxl">
+                <div class="card-header">
                     <div class="card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 14 10 14 12 10 16 20 18 14 22 14"/><circle cx="6" cy="6" r="2"/></svg></div>
                     <div class="card-title">Real-time Monitoring <a class="doc-link" href="/api/docs/monitoring" target="_blank" title="Panel documentation">?</a></div>
                 </div>
@@ -403,6 +432,7 @@
 
         <!-- Embeddings Visualization Section -->
         <div id="embeddings-section" class="admin-section hidden">
+            <div id="emb-status-banner" class="emb-status-banner hidden" role="status" aria-live="polite"></div>
             <div class="admin-card" style="padding:0;overflow:hidden">
                 <div class="emb-layout">
                     <!-- Sidebar -->

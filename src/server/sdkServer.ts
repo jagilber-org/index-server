@@ -14,6 +14,7 @@ import { getHandler } from './registry';
 import { z } from 'zod';
 import { getRuntimeConfig } from '../config/runtimeConfig';
 import { registerMcpServer } from '../services/mcpLogBridge';
+import { logInfo, logError } from '../services/logger';
 import {
   isHandshakeFallbacksEnabled,
   record,
@@ -219,6 +220,8 @@ export function createSdkServer(ServerClass: any) {
     const name = p.name ?? '';
     const args = p.arguments || {};
     if(name === 'health_check') record('tools_call_health');
+    const __callStart = Date.now();
+    logInfo('[rpc] tools/call', { tool: name, id: (req as any)?.id ?? null });
     try {
       if(getRuntimeConfig().logging.verbose) process.stderr.write(`[rpc] call method=tools/call tool=${name} id=${(req as any)?.id ?? 'n/a'}\n`);
     } catch { /* ignore */ }
@@ -228,18 +231,23 @@ export function createSdkServer(ServerClass: any) {
     }
     try {
       const result = await Promise.resolve(handler(args));
-      try { if(getRuntimeConfig().logging.verbose) process.stderr.write(`[rpc] tool_result tool=${name} bytes=${Buffer.byteLength(JSON.stringify(result),'utf8')}\n`); } catch { /* ignore */ }
+      const bytes = Buffer.byteLength(JSON.stringify(result), 'utf8');
+      logInfo('[rpc] tools/call ok', { tool: name, ms: Date.now() - __callStart, bytes });
+      try { if(getRuntimeConfig().logging.verbose) process.stderr.write(`[rpc] tool_result tool=${name} bytes=${bytes}\n`); } catch { /* ignore */ }
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
     } catch(e){
       const code = (e as any)?.code;
       const sem = (e as any)?.__semantic === true;
+      const msgRaw = e instanceof Error ? e.message : String(e);
+      const stack = e instanceof Error ? e.stack : undefined;
       if(Number.isSafeInteger(code)){
+        logError('[rpc] tools/call error', { tool: name, ms: Date.now() - __callStart, code, semantic: sem, message: msgRaw, stack });
         try { if(getRuntimeConfig().logging.verbose) process.stderr.write(`[rpc] tool_error_passthru tool=${name} code=${code} semantic=${sem?'1':'0'} msg=${(e as any)?.message || ''}\n`); } catch { /* ignore */ }
         throw e;
       }
-      const msg = e instanceof Error ? e.message : String(e);
-      try { if(getRuntimeConfig().logging.verbose) process.stderr.write(`[rpc] tool_error_wrap tool=${name} msg=${msg.replace(/\s+/g,' ')} code=${code ?? 'n/a'}\n`); } catch { /* ignore */ }
-      throw { code: -32603, message: 'Tool execution failed', data: { message: msg, method: name } };
+      logError('[rpc] tools/call error', { tool: name, ms: Date.now() - __callStart, code: code ?? null, message: msgRaw, stack });
+      try { if(getRuntimeConfig().logging.verbose) process.stderr.write(`[rpc] tool_error_wrap tool=${name} msg=${msgRaw.replace(/\s+/g,' ')} code=${code ?? 'n/a'}\n`); } catch { /* ignore */ }
+      throw { code: -32603, message: 'Tool execution failed', data: { message: msgRaw, method: name } };
     }
   });
 

@@ -41,7 +41,7 @@ function main() {
   // Verify instructions directory exists
   if (!fs.existsSync(instructionsDir)) {
     console.log('⏭️  instructions/ directory not found — skipping artifact check (CI without local instructions)');
-    process.exit(0);
+    return;
   }
 
   // Read all files
@@ -54,7 +54,7 @@ function main() {
 
   if (artifacts.length === 0) {
     console.log('✅ No test artifacts found in instructions/ directory');
-    process.exit(0);
+    return;
   }
 
   // Report failures
@@ -97,4 +97,70 @@ function main() {
   process.exit(1);
 }
 
+/**
+ * Size gate — fails CI when the dev/test sqlite database or its WAL grows
+ * unreasonably large. Symptom seen 2026-05-01: `data/index.db` ballooned to
+ * 1.21 GB because a migration loop was running per request. This catches
+ * that class of regression in CI artifact reviews.
+ *
+ * Limits intentionally generous so a normal full-coverage run does not trip:
+ *   - sqlite db: 100 MB
+ *   - sqlite-wal / -shm: 25 MB
+ *   - any single .log: 50 MB
+ */
+const SIZE_LIMITS_MB = {
+  '.db': 100,
+  '.db-wal': 25,
+  '.db-shm': 25,
+  '.log': 50,
+  '.jsonl': 50,
+};
+// Only scan directories produced/owned by the test suite. The long-running
+// runtime `logs/` directory accumulates across many sessions in dev and is
+// not a per-CI-run artifact, so it is intentionally excluded here.
+const SIZE_SCAN_DIRS = ['test-results', 'test-artifacts', 'data/test-tmp'];
+
+function checkSizes() {
+  const offenders = [];
+  for (const rel of SIZE_SCAN_DIRS) {
+    const dir = path.join(process.cwd(), rel);
+    if (!fs.existsSync(dir)) continue;
+    const stack = [dir];
+    while (stack.length) {
+      const cur = stack.pop();
+      let entries = [];
+      try { entries = fs.readdirSync(cur, { withFileTypes: true }); }
+      catch { continue; }
+      for (const ent of entries) {
+        const full = path.join(cur, ent.name);
+        if (ent.isDirectory()) { stack.push(full); continue; }
+        const ext = Object.keys(SIZE_LIMITS_MB).find(k => ent.name.endsWith(k));
+        if (!ext) continue;
+        let size = 0;
+        try { size = fs.statSync(full).size; } catch { continue; }
+        const limit = SIZE_LIMITS_MB[ext] * 1024 * 1024;
+        if (size > limit) {
+          offenders.push({ file: path.relative(process.cwd(), full), size, limit, ext });
+        }
+      }
+    }
+  }
+  if (offenders.length > 0) {
+    console.error('');
+    console.error('❌ SIZE GATE: artifact(s) exceeded permitted size — runtime regression suspected');
+    for (const o of offenders) {
+      const sizeMb = (o.size / 1024 / 1024).toFixed(1);
+      const limitMb = (o.limit / 1024 / 1024).toFixed(0);
+      console.error(`   ${o.file} = ${sizeMb} MB (limit ${limitMb} MB for ${o.ext})`);
+    }
+    console.error('');
+    console.error('Common causes:');
+    console.error('  - storage auto-migration loop (indexContext.ts) re-running per request');
+    console.error('  - logger emitting stack traces in a hot path without dedup');
+    console.error('  - WAL not checkpointed before test cleanup');
+    process.exit(1);
+  }
+}
+
 main();
+checkSizes();

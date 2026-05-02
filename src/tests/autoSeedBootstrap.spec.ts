@@ -33,6 +33,23 @@ describe('autoSeedBootstrap', () => {
     }
   });
 
+  // Regression: seed files written without createdAt/firstSeenTs trigger
+  // [invariant-repair] firstSeenTs WARNs on every subsequent load. The write
+  // path MUST stamp both fields so loaders observe a valid invariant.
+  // (RCA 2026-05-01, dev port 8687, fix/ensure-loaded-cache-no-version-file)
+  it('seed files include createdAt and firstSeenTs to avoid invariant-repair WARN spam', () => {
+    const dir = makeTempDir();
+    process.env.INDEX_SERVER_DIR = dir;
+    autoSeedBootstrap();
+    for(const s of seeds){
+      const data = JSON.parse(fs.readFileSync(path.join(dir, s.file),'utf8'));
+      expect(typeof data.createdAt).toBe('string');
+      expect(typeof data.firstSeenTs).toBe('string');
+      expect(Date.parse(data.createdAt)).toBeGreaterThan(0);
+      expect(Date.parse(data.firstSeenTs)).toBeGreaterThan(0);
+    }
+  });
+
   it('is idempotent (second call creates nothing)', () => {
     const dir = makeTempDir();
     process.env.INDEX_SERVER_DIR = dir;

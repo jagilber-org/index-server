@@ -149,6 +149,8 @@ const PII_FILE_ALLOWLIST = [
   '.publish-manifest.json',
   'security-scan.mjs',
   'test_results.txt',
+  // The allowlist file itself catalogs the very patterns it allows -- skip self-match.
+  '.pii-allowlist',
 ];
 // Generated instruction manifests and materialized test artifacts contain stable IDs that
 // can trip the manual scan's heuristic detectors without representing actionable secrets.
@@ -156,6 +158,8 @@ const PII_PATH_ALLOWLIST = [
   /(?:^|\/)instructions\/_manifest\.json$/,
   /(?:^|\/)instructions\/(?:conc-sem|crud-test)-\d+-.*\.json$/,
   /(?:^|\/)instructions\/unit_p0_materialize_\d+\.json$/,
+  // Generated build artifacts mirroring scripts/*.mjs (duplicate findings on TOCTOU patterns).
+  /(?:^|\/)scripts\/dist\//,
 ];
 const piiAllowlist = loadPiiAllowlist();
 

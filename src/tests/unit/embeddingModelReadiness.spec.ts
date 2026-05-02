@@ -34,6 +34,19 @@ describe('checkModelReadiness', () => {
   it('returns ready=true when localOnly is false (can download on demand)', () => {
     const result = checkModelReadiness('Xenova/all-MiniLM-L6-v2', tmpDir, false);
     expect(result.ready).toBe(true);
+    expect(result.cached).toBe(false);
+    // Informational message present when uncached (model will download on first use).
+    expect(result.message).toBeDefined();
+    expect(result.message).toContain('not yet cached');
+  });
+
+  it('returns ready=true with no message when model is cached and localOnly=false', () => {
+    const modelDir = path.join(tmpDir, 'models--Xenova--all-MiniLM-L6-v2');
+    fs.mkdirSync(modelDir, { recursive: true });
+    fs.writeFileSync(path.join(modelDir, 'config.json'), '{}');
+    const result = checkModelReadiness('Xenova/all-MiniLM-L6-v2', tmpDir, false);
+    expect(result.ready).toBe(true);
+    expect(result.cached).toBe(true);
     expect(result.message).toBeUndefined();
   });
 

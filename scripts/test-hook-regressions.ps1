@@ -80,7 +80,10 @@ $repoRoot = Split-Path -Parent $PSScriptRoot
 $preCommitScript = Join-Path $repoRoot 'scripts/pre-commit.ps1'
 
 $tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("index-server-hook-tests-" + [guid]::NewGuid().ToString('N'))
-$managedEnv = @('UNIT_TEST_SECRET_TOKEN', 'GITHUB_WORKFLOW', 'GITHUB_TOKEN')
+$managedEnv = @(
+    'UNIT_TEST_SECRET_TOKEN', 'GITHUB_WORKFLOW', 'GITHUB_TOKEN',
+    'INDEX_SERVER_PRECOMMIT_DOTENV', 'INDEX_SERVER_PRECOMMIT_ENVLEAK_ALLOWLIST'
+)
 $originalEnv = @{}
 
 foreach ($name in $managedEnv) {
@@ -145,6 +148,60 @@ try {
     Assert-ExitCode -Name 'pre-commit still protects GITHUB_TOKEN' -Expected 1 -Result $githubTokenHit
     Assert-OutputContains -Name 'pre-commit still protects GITHUB_TOKEN' -Needle 'GITHUB_TOKEN' -Result $githubTokenHit
     Write-Host 'PASS: pre-commit still protects GITHUB_TOKEN.' -ForegroundColor Green
+
+    # ── Dotenv-derived env-leak detection ──────────────────────────────────
+    # Verifies that values copied from a local .env into tracked files are
+    # caught even if the value is not present in process environment.
+    $fixtureDotenv = Join-Path $tempRoot '.env.fixture'
+    $fixtureAllow = Join-Path $tempRoot '.env-leak-allowlist.fixture'
+    Set-Content -Path $fixtureDotenv -Value @(
+        'CLEANROOM_PATH=C:\Users\hookfixture\private\machine\specific\path',
+        'DEPLOY_ROOT=C:\disjoint-allowlisted-path-12345',
+        'TINY=ok'
+    )
+    Set-Content -Path $fixtureAllow -Value @(
+        '# fixture allowlist',
+        'literal:C:\disjoint-allowlisted-path-12345'
+    )
+    Set-Item -Path env:INDEX_SERVER_PRECOMMIT_DOTENV -Value $fixtureDotenv
+    Set-Item -Path env:INDEX_SERVER_PRECOMMIT_ENVLEAK_ALLOWLIST -Value $fixtureAllow
+
+    # Red: a tracked file containing the dotenv value must fail.
+    $dotenvLeakHitPath = Join-Path $tempRoot 'dotenv-leak-hit.txt'
+    New-TestFile -Path $dotenvLeakHitPath -Lines @('cleanroom: C:\Users\hookfixture\private\machine\specific\path')
+    $dotenvLeakHit = Invoke-PreCommitScript -ScriptPath $preCommitScript -Arguments @($dotenvLeakHitPath)
+    Assert-ExitCode -Name 'pre-commit flags dotenv-derived value leak' -Expected 1 -Result $dotenvLeakHit
+    Assert-OutputContains -Name 'pre-commit flags dotenv-derived value leak' -Needle 'CLEANROOM_PATH (.env)' -Result $dotenvLeakHit
+    Write-Host 'PASS: pre-commit flags dotenv-derived value leak.' -ForegroundColor Green
+
+    # Red: dotenv user-segment token is also flagged.
+    $userSegLeakPath = Join-Path $tempRoot 'dotenv-userseg-leak.txt'
+    New-TestFile -Path $userSegLeakPath -Lines @('owner=hookfixture')
+    $userSegLeak = Invoke-PreCommitScript -ScriptPath $preCommitScript -Arguments @($userSegLeakPath)
+    Assert-ExitCode -Name 'pre-commit flags dotenv user-segment token' -Expected 1 -Result $userSegLeak
+    Assert-OutputContains -Name 'pre-commit flags dotenv user-segment token' -Needle 'CLEANROOM_PATH (.env user-segment)' -Result $userSegLeak
+    Write-Host 'PASS: pre-commit flags dotenv user-segment token.' -ForegroundColor Green
+
+    # Green: the same file with `# env-leak-allowlist` inline marker passes.
+    $dotenvLeakAllowedInlinePath = Join-Path $tempRoot 'dotenv-leak-inline.txt'
+    New-TestFile -Path $dotenvLeakAllowedInlinePath -Lines @('cleanroom: C:\Users\hookfixture\private\machine\specific\path # env-leak-allowlist')
+    $dotenvLeakInline = Invoke-PreCommitScript -ScriptPath $preCommitScript -Arguments @($dotenvLeakAllowedInlinePath)
+    Assert-ExitCode -Name 'pre-commit respects inline env-leak-allowlist for dotenv' -Expected 0 -Result $dotenvLeakInline
+    Write-Host 'PASS: pre-commit respects inline env-leak-allowlist for dotenv.' -ForegroundColor Green
+
+    # Green: a value in the allowlist FILE (literal:...) passes.
+    $dotenvLeakAllowFilePath = Join-Path $tempRoot 'dotenv-leak-file.txt'
+    New-TestFile -Path $dotenvLeakAllowFilePath -Lines @('deploy: C:\disjoint-allowlisted-path-12345')
+    $dotenvLeakFile = Invoke-PreCommitScript -ScriptPath $preCommitScript -Arguments @($dotenvLeakAllowFilePath)
+    Assert-ExitCode -Name 'pre-commit respects literal: in .env-leak-allowlist' -Expected 0 -Result $dotenvLeakFile
+    Write-Host 'PASS: pre-commit respects literal: in .env-leak-allowlist.' -ForegroundColor Green
+
+    # Green: short dotenv values (<16 chars) are not promoted to leak tokens.
+    $tinyValueLeakPath = Join-Path $tempRoot 'tiny-value.txt'
+    New-TestFile -Path $tinyValueLeakPath -Lines @('value=ok')
+    $tinyValueLeak = Invoke-PreCommitScript -ScriptPath $preCommitScript -Arguments @($tinyValueLeakPath)
+    Assert-ExitCode -Name 'pre-commit ignores tiny dotenv values' -Expected 0 -Result $tinyValueLeak
+    Write-Host 'PASS: pre-commit ignores tiny dotenv values.' -ForegroundColor Green
 }
 finally {
     foreach ($name in $managedEnv) {

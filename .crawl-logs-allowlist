@@ -1,0 +1,48 @@
+# crawl-logs allowlist — one regex per line.
+# Lines starting with '#' are comments. Matched WARN/ERROR signatures
+# are excluded from the per-signature repeat-count threshold so we
+# don't fail CI on benign first-time-only operator notices.
+#
+# Add an entry only with a one-line rationale comment above it.
+
+# SQLite EXPERIMENTAL operator notice (warn-once latch enforces single emission per process,
+# but parallel vitest workers each emit once → can exceed maxRepeat with no actual bug).
+EXPERIMENTAL: SQLite (storage )?backend
+
+# Prompt review service operates with an optional config file; absence is expected
+# in CI and unit tests. Logged at WARN with stack but is a benign operational miss.
+\[promptReviewService\] WARN: Could not locate PROMPT-CRITERIA\.json
+
+# Embedding store rebuild on corruption is a self-healing path tests intentionally
+# trigger via "file is not a database" fixtures. Counted but not a regression signal.
+\[embedding-store\] (Integrity check error|Rebuilding corrupt database|Search query dimension mismatch)
+
+# Test fixtures inject deliberate registry tool errors to exercise error paths.
+\[registry\] Tool error: (messaging_|feedback_)
+
+# Negative test: index loader is fed instructions with intentionally bad sourceHash to
+# verify schema rejection. Counted but expected.
+\[index:skip\] test-<n>\.json: schema: /sourceHash:
+
+# Auto-migration failure path test fixture. The fix-loop-guard ensures it fires once
+# per process; the test triggers it deliberately. Real regressions would repeat per request.
+\[storage\] Auto-migration failed:
+
+# CI workflow plants a minimal ci-seed.json that intentionally doesn't match the full
+# instruction schema (it's a placeholder so instructions/ is non-empty for the loader test).
+\[index:skip\] ci-seed\.json:
+
+# Node.js process-level warnings (MaxListenersExceededWarning, ExperimentalWarning, etc.)
+# are logged by the indexServer adapter; tests deliberately exercise high-fanout paths.
+\[indexServer\] Process warning
+
+# Input-validation surface: search service logs invalid keyword/regex/limit attempts at
+# WARN with the parsing Error stack. Tests exercise every validation branch.
+\[search\] Search error:
+
+# CI runners don't have DirectML/CUDA; embedding service falls back to CPU and warns.
+\[embeddingService\] dml provider not available
+
+# Invariant-repair fixture entries (salvage-* / failover-seed-*) are deliberate test
+# inputs missing usageCount/firstSeenTs to verify the repair WARN dedup latch.
+\[invariant-repair\] (firstSeenTs repair exhausted|usageCount defaulted)

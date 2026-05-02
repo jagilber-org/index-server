@@ -90,12 +90,28 @@ jobs:
         run: npm run guard:skips
 
       - name: Run tests
-        run: npm test
+        run: |
+          mkdir -p test-results
+          npm test 2>&1 | tee test-results/test-output.log
+        shell: bash
         env:
           SKIP_PRETEST_BUILD: '1'  # Skip since we already built
 
       - name: Run contract tests
         run: npm run test:contracts
+
+      - name: Crawl test logs (hygiene gate — fail on repeat-spam / WARN+stack)
+        if: always()
+        shell: bash
+        # Defaults (max-repeat=25, max-stack-warn=25). Known operational categories
+        # are signature-allowlisted in .crawl-logs-allowlist.
+        run: |
+          node scripts/crawl-logs.mjs \
+            --dir logs \
+            --file test-results/test-output.log \
+            --allowlist .crawl-logs-allowlist \
+            --summary test-results/log-hygiene.json \
+            --strict
 
       - name: Flake Sentinel (rerun failing files)
         if: always()

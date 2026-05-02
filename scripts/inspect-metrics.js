@@ -114,7 +114,7 @@ function inspectMetricsCollector() {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars -- exported utility for manual diagnostics
-function disableMetricsCollection() { // lgtm[js/unused-local-variable] — exported diagnostic helper retained for manual REPL use
+function disableMetricsCollection() {
     console.log('\n🛑 DISABLING METRICS COLLECTION...');
     try {
         const collector = require('../dashboard/server/MetricsCollector.js').getMetricsCollector();
@@ -124,6 +124,11 @@ function disableMetricsCollection() { // lgtm[js/unused-local-variable] — expo
     } catch (e) {
         console.log('❌ Failed to stop collection:', e.message);
     }
+}
+// Export so codeql/eslint don't flag as unused; this file is a manual REPL diagnostic helper.
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports.disableMetricsCollection = disableMetricsCollection;
+    module.exports.inspectMetricsCollector = inspectMetricsCollector;
 }
 
 // Run initial inspection

@@ -76,8 +76,8 @@ describe('dashboardConfigPanel – flag registry snapshot', () => {
 
   it('categories are consistent with known set', () => {
     const knownCategories = new Set([
-      'auth', 'index', 'core', 'dashboard', 'deprecated', 'diagnostics',
-      'instructions', 'manifest', 'metrics', 'multi-instance', 'stress',
+      'auth', 'bootstrap', 'feedback', 'index', 'core', 'dashboard', 'deprecated', 'diagnostics',
+      'instructions', 'manifest', 'messaging', 'metrics', 'multi-instance', 'semantic', 'storage', 'stress',
       'tracing', 'usage', 'validation',
     ]);
     const flags = getFlagRegistrySnapshot();

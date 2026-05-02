@@ -110,7 +110,8 @@ $piiFileAllowlist = @(
   'mermaid.min.js', 'elk.bundled.js',       # vendored dashboard libraries
   'copilot-ui.json',                         # dashboard UI config
   'pre-commit.ps1',                          # contains PII regex patterns themselves
-  'test-results.json'                        # vitest output with timestamps flagged as credit cards
+  'test-results.json',                       # vitest output with timestamps flagged as credit cards
+  '.pii-allowlist'                           # allowlist file itself contains the patterns it allows
 )
 
 # Full-path exclusions (normalized to forward slashes) — files that intentionally
@@ -178,6 +179,12 @@ foreach($item in (Get-ChildItem env:)) {
   $value = $item.Value
   if (-not $value -or $value.Length -lt 8) { continue }
   if ($valueAllowlist -contains $value.ToLower()) { continue }
+  # Skip npm-internal env vars (npm_package_*, npm_config_*, npm_lifecycle_*).
+  # These are auto-set by npm during script execution and contain public package
+  # metadata (package name, version, script names) -- never secrets. Without this
+  # skip, the NPM_ sensitive prefix produces false-positive leak findings against
+  # CHANGELOG.md, Dockerfile, and any file mentioning the package name.
+  if ($key -match '^npm_(package|config|lifecycle|node)_') { continue }
 
   $isSensitive = $false
   foreach($prefix in $sensitivePrefixes) {
@@ -204,7 +211,68 @@ foreach($item in (Get-ChildItem env:)) {
     $envLeakMap[$value] = $key
   }
 }
-Info "Monitoring $($envLeakMap.Count) sensitive env var values for leaks"
+
+# ── 3a. Augment env-leak map from local .env file ──────────────────────────
+# Catches accidental copy of local-machine values into tracked files like
+# .env.example. Tokens come from KEY=VALUE pairs in .env and are scanned the
+# same way as process-env values. Allowlist via .env-leak-allowlist (one
+# `literal:<value>` per line) for values intentionally referenced in the repo.
+$dotenvPath = if ($env:INDEX_SERVER_PRECOMMIT_DOTENV) {
+  $env:INDEX_SERVER_PRECOMMIT_DOTENV
+} else {
+  Join-Path $PSScriptRoot '..' '.env'
+}
+$envLeakAllowPath = if ($env:INDEX_SERVER_PRECOMMIT_ENVLEAK_ALLOWLIST) {
+  $env:INDEX_SERVER_PRECOMMIT_ENVLEAK_ALLOWLIST
+} else {
+  Join-Path $PSScriptRoot '..' '.env-leak-allowlist'
+}
+$envLeakLiteralAllow = @()
+if (Test-Path $envLeakAllowPath) {
+  $envLeakLiteralAllow = Get-Content $envLeakAllowPath |
+    Where-Object { $_ -and -not $_.TrimStart().StartsWith('#') } |
+    ForEach-Object { $_.Trim() } |
+    Where-Object { $_.StartsWith('literal:') } |
+    ForEach-Object { $_.Substring(8) }
+}
+$dotenvAdded = 0
+if (Test-Path $dotenvPath) {
+  $minDotenvTokenLen = 16
+  $userPathPatterns = @(
+    '(?i)C:[\\/]Users[\\/]([^\\/''"\s]+)',
+    '/home/([^/''"\s]+)',
+    '/Users/([^/''"\s]+)'
+  )
+  foreach ($dotenvLine in (Get-Content $dotenvPath -ErrorAction SilentlyContinue)) {
+    if ($dotenvLine -match '^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)\s*$') {
+      $dotenvKey = $matches[1]
+      $dotenvVal = $matches[2].Trim().Trim('"').Trim("'")
+      if (-not $dotenvVal) { continue }
+      # Skip commented continuations / structural tokens already handled.
+      if ($valueAllowlist -contains $dotenvVal.ToLower()) { continue }
+      # Full-value token: catches paths, secrets, anything ≥16 chars.
+      if ($dotenvVal.Length -ge $minDotenvTokenLen -and $envLeakLiteralAllow -notcontains $dotenvVal) {
+        if (-not $envLeakMap.ContainsKey($dotenvVal)) {
+          $envLeakMap[$dotenvVal] = "$dotenvKey (.env)"
+          $dotenvAdded++
+        }
+      }
+      # Username-segment token from path shapes.
+      foreach ($pat in $userPathPatterns) {
+        if ($dotenvVal -match $pat) {
+          $userTok = $matches[1]
+          if ($userTok -and $userTok.Length -ge 3 -and $envLeakLiteralAllow -notcontains $userTok) {
+            if (-not $envLeakMap.ContainsKey($userTok)) {
+              $envLeakMap[$userTok] = "$dotenvKey (.env user-segment)"
+              $dotenvAdded++
+            }
+          }
+        }
+      }
+    }
+  }
+}
+Info "Monitoring $($envLeakMap.Count) sensitive env var values for leaks ($dotenvAdded from .env)"
 
 # ── 3b. Username-in-path detection ─────────────────────────────────────────
 $currentUser = $env:USERNAME
@@ -319,6 +387,7 @@ foreach($file in $targets) {
         foreach($scanLine in $lines) {
           $lineNumber++
           if ($scanLine.Contains($entry.Key)) {
+            if ($scanLine -match 'env-leak-allowlist') { continue }
             Fail ('ENV VAR LEAK: Value of ${0} found in {1}:{2}' -f $entry.Value, $file, $lineNumber)
           }
         }

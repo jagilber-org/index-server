@@ -17,22 +17,27 @@ describe('usageFirstSeen', () => {
 		process.env.INDEX_SERVER_FEATURES = 'usage';
 		process.env.INDEX_SERVER_DIR = TEST_DIR;
 		fs.mkdirSync(TEST_DIR, { recursive: true });
+		const createdAt = new Date().toISOString();
 		fs.writeFileSync(path.join(TEST_DIR, TEST_ID + '.json'), JSON.stringify({
 			id: TEST_ID, title: 'FirstSeen Test', body: 'body', schemaVersion: '1',
-			createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+			createdAt, updatedAt: createdAt
 		}));
 
 		const { incrementUsage, invalidate } = await import('../services/indexContext.js');
 		invalidate();
-		const before = new Date().toISOString();
 		const result = incrementUsage(TEST_ID);
-		const after = new Date().toISOString();
 
 		expect(result).not.toBeNull();
 		if (result && 'firstSeenTs' in result) {
 			expect(result.firstSeenTs).toBeDefined();
-			expect(result.firstSeenTs! >= before).toBe(true);
-			expect(result.firstSeenTs! <= after).toBe(true);
+			// Semantic (RCA 2026-05-01, dev port 8687, fix for invariant-repair WARN spam):
+			// when an entry has createdAt, firstSeenTs is established at load time
+			// from createdAt (firstSeenTs ≤ createdAt is impossible by definition).
+			// The previous behaviour — only setting firstSeenTs at first usage_track —
+			// caused [invariant-repair] firstSeenTs repair exhausted WARNs to flood the
+			// log on every getIndexState() poll for any entry that was ever imported
+			// but never used. See firstSeenCreatedAtFallback.spec.ts.
+			expect(result.firstSeenTs).toBe(createdAt);
 		}
 	});
 

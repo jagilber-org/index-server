@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { getRuntimeConfig } from '../config/runtimeConfig';
 import { isMcpLogBridgeActive, sendMcpLog } from './mcpLogBridge';
+import { recordEvent } from './eventBuffer';
 
 // ── NDJSON Log Schema ───────────────────────────────────────────
 // Compliant with typescript-schema-viewer log analysis format.
@@ -252,6 +253,12 @@ function emit(rec: LogRecord){
         try { fs.fsyncSync((logFileHandle as unknown as { fd: number }).fd); } catch { /* ignore fsync errors */ }
       }
     } catch { /* ignore file write failures */ }
+  }
+
+  // Surface WARN/ERROR into the in-process events ring buffer so the dashboard
+  // Monitoring panel can display them without log-file tailing (OB-3, OB-5).
+  if (rec.level === 'WARN' || rec.level === 'ERROR') {
+    try { recordEvent(rec.level, rec.msg, rec.detail, rec.pid); } catch { /* never let buffer failure break logging */ }
   }
 }
 

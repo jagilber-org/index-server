@@ -186,6 +186,20 @@ export class DashboardServer {
       next();
     });
 
+    // Structured request logger — every dashboard HTTP hit lands in mcp-server.log.
+    // Critical for diagnosing import/restore failures where stderr output is lost
+    // when the MCP server runs under stdio transport without an attached TTY.
+    this.app.use((req, res, next) => {
+      const start = Date.now();
+      const ctype = req.header('content-type') || '';
+      const clen = req.header('content-length') || '';
+      logInfo('[http] request', { method: req.method, url: req.originalUrl || req.url, ctype, clen });
+      res.on('finish', () => {
+        logInfo('[http] response', { method: req.method, url: req.originalUrl || req.url, status: res.statusCode, ms: Date.now() - start });
+      });
+      next();
+    });
+
     this.app.use(express.json());
     this.app.use(express.static(path.join(__dirname, '..', 'client'), {
       etag: true,

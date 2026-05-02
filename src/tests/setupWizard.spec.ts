@@ -297,7 +297,7 @@ describe('Setup Wizard Launch Resolution', () => {
 
   it('should use absolute path to dist/ when --root is a data-only directory', () => {
     fs.mkdirSync(dataDir, { recursive: true });
-    const output = runWizard(`--root "${dataDir}" --target vscode --scope repo --write --no-deploy`);
+    runWizard(`--root "${dataDir}" --target vscode --scope repo --write --no-deploy`);
     const mcpPath = path.join(dataDir, '.vscode', 'mcp.json');
     expect(fs.existsSync(mcpPath)).toBe(true);
     const content = fs.readFileSync(mcpPath, 'utf8');
@@ -331,7 +331,7 @@ describe('Setup Wizard Launch Resolution', () => {
 
   it('should set cwd to data root in generated vscode config', () => {
     fs.mkdirSync(dataDir, { recursive: true });
-    const output = runWizard(`--root "${dataDir}" --target vscode --scope repo --write --no-deploy`);
+    runWizard(`--root "${dataDir}" --target vscode --scope repo --write --no-deploy`);
     const mcpPath = path.join(dataDir, '.vscode', 'mcp.json');
     const content = fs.readFileSync(mcpPath, 'utf8');
     expect(content).toContain(`"cwd": "${dataDir.replace(/\\/g, '/')}"`);

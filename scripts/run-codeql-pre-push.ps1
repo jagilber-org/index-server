@@ -135,8 +135,26 @@ if ($rebuild) {
         $createArgs += @('--codescanning-config', $configFile)
     }
     Write-Host "[codeql-pre-push] codeql $($createArgs -join ' ')"
-    & codeql @createArgs 2>&1 | Out-File (Join-Path $LogDir 'build.log') -Encoding utf8
-    if ($LASTEXITCODE -ne 0) {
+    # CodeQL's TRAP-import phase can fail on Windows when its own cache\working
+    # directory cleanup races with file-system handles still held by the JVM
+    # (or by Defender's real-time scan). Retry up to 2 times on the
+    # well-known "process cannot access the file" cleanup error before failing.
+    $maxAttempts = 3
+    $attempt = 0
+    $buildOk = $false
+    while ($attempt -lt $maxAttempts -and -not $buildOk) {
+        $attempt++
+        if (Test-Path -LiteralPath $DbPath) { Remove-Item -LiteralPath $DbPath -Recurse -Force -ErrorAction SilentlyContinue }
+        & codeql @createArgs 2>&1 | Out-File (Join-Path $LogDir 'build.log') -Encoding utf8
+        if ($LASTEXITCODE -eq 0) { $buildOk = $true; break }
+        $logTail = (Get-Content (Join-Path $LogDir 'build.log') -Tail 20 -ErrorAction SilentlyContinue) -join "`n"
+        $isWindowsCacheLock = ($logTail -match 'Could not clear working directory') -or
+                              ($logTail -match 'cache\\working' -and $logTail -match 'fatal error')
+        if (-not $isWindowsCacheLock) { break }
+        Write-Host "[codeql-pre-push] transient Windows cache\working file lock detected (attempt $attempt/$maxAttempts) -- waiting 5s and retrying"
+        Start-Sleep -Seconds 5
+    }
+    if (-not $buildOk) {
         [Console]::Error.WriteLine("[codeql-pre-push] DB build FAILED -- see $LogDir\build.log")
         exit 1
     }

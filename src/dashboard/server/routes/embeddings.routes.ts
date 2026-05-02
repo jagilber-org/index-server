@@ -6,7 +6,7 @@
 import { Router, Request, Response } from 'express';
 import fs from 'node:fs';
 import { getRuntimeConfig } from '../../../config/runtimeConfig.js';
-import { getInstructionEmbeddings } from '../../../services/embeddingService.js';
+import { getInstructionEmbeddings, checkModelReadiness } from '../../../services/embeddingService.js';
 import type { IEmbeddingStore } from '../../../services/storage/types.js';
 import type { IndexLocals } from '../middleware/ensureLoadedMiddleware.js';
 import { dashboardAdminAuth } from './adminAuth.js';
@@ -252,6 +252,86 @@ export function createEmbeddingsRoutes(embeddingPathOverride?: string, embedding
     }
   });
 
+  // GET /embeddings/status — surface model + cache state for the Embeddings tab
+  router.get('/embeddings/status', (_req: Request, res: Response) => {
+    try {
+      const config = getRuntimeConfig();
+      const sem = config.semantic;
+
+      if (!sem.enabled) {
+        return res.json({
+          success: true,
+          enabled: false,
+          ready: false,
+          state: 'disabled',
+          message:
+            'Semantic embeddings are disabled. Set INDEX_SERVER_SEMANTIC_ENABLED=1 and restart to enable.',
+        });
+      }
+
+      const readiness = checkModelReadiness(sem.model, sem.cacheDir, sem.localOnly);
+
+      let embeddingsFileExists = false;
+      let embeddingsCount = 0;
+      let embeddingsModelName: string | undefined;
+      try {
+        if (embeddingStore) {
+          const loaded = embeddingStore.load();
+          if (loaded) {
+            embeddingsFileExists = true;
+            embeddingsCount = Object.keys(loaded.embeddings || {}).length;
+            embeddingsModelName = loaded.modelName ?? undefined;
+          }
+        } else {
+          const file = embeddingPathOverride ?? sem.embeddingPath;
+          if (file && fs.existsSync(file)) {
+            embeddingsFileExists = true;
+            const raw = fs.readFileSync(file, 'utf8');
+            const parsed = JSON.parse(raw) as Partial<EmbeddingsFile>;
+            embeddingsCount = parsed.embeddings ? Object.keys(parsed.embeddings).length : 0;
+            embeddingsModelName = parsed.modelName ?? undefined;
+          }
+        }
+      } catch { /* tolerate parse / read failures — surface as not present */ }
+
+      // State machine for the dashboard banner.
+      let state: 'ready' | 'will-download' | 'missing' | 'no-embeddings';
+      if (!readiness.ready) {
+        state = 'missing'; // localOnly=true and model not cached
+      } else if (!readiness.cached) {
+        state = 'will-download';
+      } else if (!embeddingsFileExists || embeddingsCount === 0) {
+        state = 'no-embeddings';
+      } else {
+        state = 'ready';
+      }
+
+      return res.json({
+        success: true,
+        enabled: true,
+        ready: readiness.ready && embeddingsFileExists && embeddingsCount > 0,
+        state,
+        model: sem.model,
+        device: sem.device,
+        cacheDir: sem.cacheDir,
+        localOnly: sem.localOnly,
+        modelCached: readiness.cached,
+        modelPath: readiness.modelPath,
+        embeddingPath: sem.embeddingPath,
+        embeddingsFileExists,
+        embeddingsCount,
+        embeddingsModelName,
+        message: readiness.message,
+      });
+    } catch (err) {
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to compute embeddings status',
+        message: (err as Error).message,
+      });
+    }
+  });
+
   // POST /embeddings/compute — trigger embedding computation for all instructions
   router.post('/embeddings/compute', dashboardAdminAuth, async (_req: Request, res: Response) => {
     try {
@@ -290,10 +370,22 @@ export function createEmbeddingsRoutes(embeddingPathOverride?: string, embedding
         embeddingPath: sem.embeddingPath,
       });
     } catch (err) {
+      const msg = (err as Error).message ?? String(err);
+      // Detect the canonical "model not cached locally" signature from
+      // @huggingface/transformers and translate to an actionable hint so
+      // the dashboard can surface a useful banner.
+      const isLocalOnlyMiss =
+        /local_files_only=true/i.test(msg) ||
+        /allowRemoteModels=false/i.test(msg) ||
+        /file was not found locally/i.test(msg);
       return res.status(500).json({
         success: false,
         error: 'Failed to compute embeddings',
-        message: (err as Error).message,
+        message: msg,
+        hint: isLocalOnlyMiss
+          ? 'The embedding model is not cached locally and remote downloads are disabled. ' +
+            'Set INDEX_SERVER_SEMANTIC_LOCAL_ONLY=0 and restart, or pre-stage the model in INDEX_SERVER_SEMANTIC_CACHE_DIR.'
+          : undefined,
       });
     }
   });

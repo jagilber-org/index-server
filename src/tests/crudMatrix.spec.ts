@@ -18,7 +18,7 @@ import '../services/handlers.search';
 import '../services/instructions.dispatcher';
 
 import { getHandler } from '../server/registry';
-import { invalidate, ensureLoaded, getInstructionsDir } from '../services/indexContext';
+import { invalidate, ensureLoaded } from '../services/indexContext';
 import { reloadRuntimeConfig } from '../config/runtimeConfig';
 
 function uniqueId(): string {
