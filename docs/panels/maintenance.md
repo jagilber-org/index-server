@@ -46,7 +46,7 @@ Select a backup snapshot from the dropdown and click Restore to replace the curr
 
 ```powershell
 # Restore latest backup
-pwsh scripts/restore-instructions.ps1 -Destination C:\mcp\index-server
+pwsh scripts/restore-instructions.ps1 -Destination <production-install-root>
 
 # Restore from specific zip
 pwsh scripts/restore-instructions.ps1 -BackupPath path/to/backup.zip -Force

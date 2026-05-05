@@ -5,6 +5,7 @@
  * and the monitoring event bus. Depends on EndpointManager for endpoint config.
  */
 
+import crypto from 'crypto';
 import type { EndpointManager, APIAuthentication, RetryConfig, DataMapping } from './api.instructions.routes.js';
 import { logError, logWarn } from '../../../services/logger.js';
 
@@ -57,7 +58,7 @@ export class UsageManager {
       throw new Error(`Rate limit exceeded for endpoint: ${endpointId}`);
     }
 
-    const requestId = `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const requestId = `req_${Date.now()}_${crypto.randomBytes(6).toString('hex')}`;
     const request: APIRequest = {
       id: requestId,
       endpointId,

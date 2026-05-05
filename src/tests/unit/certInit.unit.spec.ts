@@ -133,7 +133,7 @@ describe('certInit / parseSan', () => {
   });
 
   it('trims surrounding whitespace around each entry', () => {
-    expect(parseSan(' DNS:a , IP:192.0.2.4 ')).toEqual(['DNS:a', 'IP:192.0.2.4']);
+    expect(parseSan(' DNS:a , IP:192.0.2.4 ')).toEqual(['DNS:a', 'IP:192.0.2.4']); // # pii-allowlist: RFC 5737 documentation IP
   });
 
   it('rejects bare tokens without DNS:/IP: prefix with INVALID_SAN', () => {

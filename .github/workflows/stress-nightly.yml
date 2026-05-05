@@ -30,7 +30,7 @@ jobs:
         if: always()
         run: |
           echo 'Collecting diagnostics pack (stress context)'
-          node scripts/diagnostics-pack.mjs || echo 'diagnostics pack script failed'
+          node scripts/diagnostics/diagnostics-pack.mjs || echo 'diagnostics pack script failed'
       - name: Archive stress artifacts
         if: always()
         uses: actions/upload-artifact@v7

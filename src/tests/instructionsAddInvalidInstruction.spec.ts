@@ -144,7 +144,7 @@ describe('index_add invalid instruction rejection', () => {
       audience: 'all',
       requirement: 'optional',
       categories: ['test'],
-      contentType: 'workflow',
+      contentType: 'agent-session',
     }, { expectedField: 'contentType' });
   });
 

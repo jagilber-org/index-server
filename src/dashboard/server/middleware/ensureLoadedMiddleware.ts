@@ -8,7 +8,7 @@
  * Mutation handlers that call invalidate() must still call ensureLoaded()
  * explicitly after invalidation to pick up their own changes.
  *
- * See: https://github.com/jagilber-dev/index-server/issues/45
+ * See internal tracker #45.
  */
 
 import { Request, Response, NextFunction } from 'express';

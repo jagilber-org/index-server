@@ -93,6 +93,67 @@ describe('contentType preservation on add/import', () => {
     expect(diskEntry.contentType).toBe('template');
   });
 
+  it('preserves contentType: "workflow" through add → get round-trip', async () => {
+    const dispatch = getHandler('index_dispatch')!;
+    const id = 'test-workflow-content-type';
+
+    const addResult = await dispatch({
+      action: 'add',
+      entry: {
+        id,
+        title: 'Test Workflow',
+        body: 'This is a workflow-type entry.',
+        priority: 50,
+        audience: 'all',
+        requirement: 'optional',
+        categories: ['workflows'],
+        contentType: 'workflow',
+      },
+      lax: true,
+      overwrite: true,
+    }) as Record<string, unknown>;
+
+    expect(addResult.error).toBeFalsy();
+
+    const getResult = await dispatch({ action: 'get', id }) as Record<string, unknown>;
+    const item = getResult.item as Record<string, unknown>;
+    expect(item.contentType).toBe('workflow');
+
+    const diskEntry = JSON.parse(fs.readFileSync(path.join(TMP_DIR, `${id}.json`), 'utf8'));
+    expect(diskEntry.contentType).toBe('workflow');
+  });
+
+  it('normalizes legacy contentType: "chat-session" writes to "workflow"', async () => {
+    const dispatch = getHandler('index_dispatch')!;
+    const id = 'test-chat-session-content-type';
+
+    const addResult = await dispatch({
+      action: 'add',
+      entry: {
+        id,
+        title: 'Test Legacy Chat Session',
+        body: 'This legacy chat-session entry should persist as workflow.',
+        priority: 50,
+        audience: 'all',
+        requirement: 'optional',
+        categories: ['workflows'],
+        contentType: 'chat-session',
+      },
+      lax: true,
+      overwrite: true,
+    }) as Record<string, unknown>;
+
+    expect(addResult.error).toBeFalsy();
+
+    const getResult = await dispatch({ action: 'get', id }) as Record<string, unknown>;
+    const item = getResult.item as Record<string, unknown>;
+    expect(item.contentType).toBe('workflow');
+
+    const diskEntry = JSON.parse(fs.readFileSync(path.join(TMP_DIR, `${id}.json`), 'utf8'));
+    expect(diskEntry.contentType).toBe('workflow');
+    expect(diskEntry.schemaVersion).toBe('5');
+  });
+
   it('overwrites contentType when updating an existing entry', async () => {
     const dispatch = getHandler('index_dispatch')!;
     const id = 'test-overwrite-content-type';

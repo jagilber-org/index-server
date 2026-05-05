@@ -58,7 +58,7 @@ export function createScriptsRoutes(): Router {
     }
 
     try {
-      const scriptsDir = path.join(process.cwd(), 'scripts');
+      const scriptsDir = path.join(process.cwd(), 'scripts', 'dist');
       const filePath = path.join(scriptsDir, meta.file); // nosemgrep: javascript.express.security.audit.express-path-join-resolve-traversal.express-path-join-resolve-traversal -- path validated below via startsWith check
 
       let resolved: string;

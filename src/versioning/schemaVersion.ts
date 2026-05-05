@@ -2,7 +2,7 @@
 // Bump this when making a backward-incompatible on-disk schema change that
 // requires a migration rewrite. Migration logic should detect older versions
 // and transform + persist them once.
-export const SCHEMA_VERSION = '4';
+export const SCHEMA_VERSION = '5';
 
 import { RequirementLevel } from '../models/instruction';
 
@@ -61,6 +61,15 @@ export function migrateInstructionRecord(rec: Record<string, unknown>): Migratio
     notes.push('v3→v4: added optional metadata fields to schema');
   }
 
+  // v4 → v5 migration: public persisted contentType "chat-session" was renamed
+  // to "workflow". Preserve the workflow/runbook semantics instead of falling
+  // through the generic invalid-enum fallback to "instruction".
+  if (prevVersion === '4' && rec.contentType === 'chat-session') {
+    rec.contentType = 'workflow';
+    changed = true;
+    notes.push('v4→v5: migrated legacy contentType "chat-session" to "workflow"');
+  }
+
   // Clean optional nullable fields that upstream tools may emit as null
   // (riskScore must be number or absent — null causes AJV rejection)
   if ('riskScore' in rec && rec.riskScore === null) {
@@ -81,13 +90,51 @@ export function migrateInstructionRecord(rec: Record<string, unknown>): Migratio
     categories: [],
     priority: 50,
     audience: 'all',
-    requirement: 'optional'
+    requirement: 'recommended'
   };
   for (const [key, defaultValue] of Object.entries(requiredDefaults)) {
     if (!(key in rec) || rec[key] === undefined || rec[key] === null) {
       rec[key] = defaultValue;
       changed = true;
       notes.push(`added required field ${key} with default value`);
+    }
+  }
+
+  // Validate and coerce enum fields to prevent invalid values from persisting.
+  // Legacy alias maps mirror indexLoader.ts coercion — try known aliases first,
+  // only fall back to defaults for truly unknown values. Keep in sync with indexLoader.ts.
+  const legacyStatusMap: Record<string, string> = { active: 'approved' };
+  const legacyAudienceMap: Record<string, string> = {
+    system: 'all', developers: 'group', developer: 'individual',
+    team: 'group', teams: 'group', users: 'group', dev: 'individual',
+    devs: 'group', testers: 'group', administrators: 'group',
+    admins: 'group', agents: 'group', 'powershell script authors': 'group',
+  };
+  const legacyRequirementMap: Record<string, string> = {
+    MUST: 'mandatory', SHOULD: 'recommended', MAY: 'optional',
+    CRITICAL: 'critical', OPTIONAL: 'optional', MANDATORY: 'mandatory',
+    DEPRECATED: 'deprecated', REQUIRED: 'mandatory',
+  };
+  const legacyContentTypeMap: Record<string, string> = {
+    'chat-session': 'workflow',
+  };
+  const enumDefaults: Record<string, { valid: readonly string[]; fallback: string; legacy?: Record<string, string> }> = {
+    audience: { valid: ['individual', 'group', 'all'], fallback: 'all', legacy: legacyAudienceMap },
+    requirement: { valid: ['mandatory', 'critical', 'recommended', 'optional', 'deprecated'], fallback: 'optional', legacy: legacyRequirementMap },
+    contentType: { valid: ['instruction', 'template', 'workflow', 'reference', 'example', 'agent'], fallback: 'instruction', legacy: legacyContentTypeMap },
+    status: { valid: ['draft', 'review', 'approved', 'deprecated'], fallback: 'draft', legacy: legacyStatusMap },
+    priorityTier: { valid: ['P1', 'P2', 'P3', 'P4'], fallback: 'P3' },
+    classification: { valid: ['public', 'internal', 'restricted'], fallback: 'internal' },
+  };
+  for (const [field, { valid, fallback, legacy }] of Object.entries(enumDefaults)) {
+    if (typeof rec[field] === 'string' && !(valid as readonly string[]).includes(rec[field] as string)) {
+      const val = rec[field] as string;
+      // Try legacy alias maps (exact match then case-insensitive) before falling back to default
+      const resolved = legacy?.[val] ?? legacy?.[val.toLowerCase()] ?? legacy?.[val.toUpperCase()];
+      const target = resolved ?? (field === 'requirement' && /\s/.test(val) && val.length < 300 ? 'recommended' : fallback);
+      notes.push(`corrected invalid ${field} "${val}" → "${target}"`);
+      rec[field] = target;
+      changed = true;
     }
   }
 

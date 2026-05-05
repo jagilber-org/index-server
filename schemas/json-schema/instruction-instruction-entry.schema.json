@@ -200,7 +200,7 @@
       "enum": [
         "instruction",
         "template",
-        "chat-session",
+        "workflow",
         "reference",
         "example",
         "agent"

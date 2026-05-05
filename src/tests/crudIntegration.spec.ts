@@ -81,7 +81,7 @@ describe('Instruction CRUD Full Lifecycle', () => {
       title: 'Test Create Read',
       body: 'Body content for create-read test',
       priority: 50,
-      audience: 'developer',
+      audience: 'individual',
       requirement: 'optional',
     });
     expect(addResult).toBeDefined();
@@ -108,7 +108,7 @@ describe('Instruction CRUD Full Lifecycle', () => {
       title: 'Before Update',
       body: 'Original body',
       priority: 50,
-      audience: 'developer',
+      audience: 'individual',
       requirement: 'optional',
     });
 
@@ -119,7 +119,7 @@ describe('Instruction CRUD Full Lifecycle', () => {
       title: 'After Update',
       body: 'Updated body content',
       priority: 50,
-      audience: 'developer',
+      audience: 'individual',
       requirement: 'optional',
       overwrite: true,
     });
@@ -146,7 +146,7 @@ describe('Instruction CRUD Full Lifecycle', () => {
       title: 'To Be Deleted',
       body: 'This will be deleted',
       priority: 50,
-      audience: 'developer',
+      audience: 'individual',
       requirement: 'optional',
     });
 
@@ -174,7 +174,7 @@ describe('Instruction CRUD Full Lifecycle', () => {
       title: 'List Test Entry',
       body: 'Entry for listing test',
       priority: 50,
-      audience: 'developer',
+      audience: 'individual',
       requirement: 'optional',
     });
 
@@ -197,7 +197,7 @@ describe('Instruction CRUD Full Lifecycle', () => {
       title: `Search Test with ${uniqueKeyword}`,
       body: `Body containing ${uniqueKeyword} for search validation`,
       priority: 50,
-      audience: 'developer',
+      audience: 'individual',
       requirement: 'optional',
     });
 
@@ -228,7 +228,7 @@ describe('Instruction CRUD Full Lifecycle', () => {
         title: 'Oversized Body Test',
         body: oversizedBody,
         priority: 50,
-        audience: 'developer',
+        audience: 'individual',
         requirement: 'optional',
         categories: ['crud'],
       },
@@ -262,7 +262,7 @@ describe('Instruction CRUD Full Lifecycle', () => {
       title: 'Governance Hash Test',
       body: 'Testing governance hash tracking',
       priority: 50,
-      audience: 'developer',
+      audience: 'individual',
       requirement: 'optional',
     });
 
@@ -286,7 +286,7 @@ describe('Instruction CRUD Full Lifecycle', () => {
       title: 'Persistence Test',
       body: 'Verify this persists to disk',
       priority: 50,
-      audience: 'developer',
+      audience: 'individual',
       requirement: 'optional',
     });
 
@@ -308,7 +308,7 @@ describe('Instruction CRUD Full Lifecycle', () => {
         title: `Concurrent Test ${id}`,
         body: `Concurrent body ${id}`,
         priority: 50,
-        audience: 'developer',
+        audience: 'individual',
         requirement: 'optional',
       })
     );

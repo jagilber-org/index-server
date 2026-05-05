@@ -57,10 +57,10 @@ describe('parseArgs / --init-cert family', () => {
     const cfg = parse([
       '--init-cert',
       '--cn', 'host.local',
-      '--san', 'DNS:host.local,IP:192.0.2.4',
+      '--san', 'DNS:host.local,IP:192.0.2.4', // # pii-allowlist: RFC 5737 documentation IP
     ]);
     expect(cfg.certCn).toBe('host.local');
-    expect(cfg.certSan).toBe('DNS:host.local,IP:192.0.2.4');
+    expect(cfg.certSan).toBe('DNS:host.local,IP:192.0.2.4'); // # pii-allowlist: RFC 5737 documentation IP
   });
 
   it('--days and --key-bits coerce to integers', () => {

@@ -1,6 +1,6 @@
 # Mandatory PR Review Checklist — AI Agent-Generated Code & Tests
 
-> Policy reference: [issue #152](https://github.com/jagilber-dev/index-server/issues/152)
+> Policy reference: internal policy tracker #152
 >
 > **Status:** Active — this document is the authoritative source for AI-agent PR review requirements.
 
@@ -167,7 +167,7 @@ The `validate-agent-trailers` pre-commit hook (`hooks/validate-agent-trailers.ps
 Every commit produced by GitHub Copilot (CLI, coding agent, or IDE) **must** carry the canonical trailer at the end of the commit message:
 
 ```
-Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+Co-authored-by: Copilot <copilot-noreply-email>
 ```
 
 **How to check:**
@@ -278,7 +278,7 @@ A `constitution.json` change with stale `.md` renderings is a **blocking reject*
 
 ### 15. Security-Sensitive Changes Have Multi-Agent Consensus
 
-Changes that touch any of the following surfaces require **explicit consensus from both Morpheus (security) and Tank (testing)** before merge:
+Changes that touch any of the following surfaces require **explicit consensus from security and testing reviewers** before merge:
 
 - Pre-commit, pre-push, or commit-msg hook logic (`hooks/`, `.pre-commit-config.yaml`, `scripts/test-hook-regressions.ps1`)
 - Secret-scanning, PII, or env-leak rule sets and their allowlists
@@ -341,10 +341,10 @@ These automated gates catch **some** checklist violations before code reaches PR
 
 ## Related Issues
 
-- [#147](https://github.com/jagilber-dev/index-server/issues/147) — 18 placeholder test files that test nothing
-- [#148](https://github.com/jagilber-dev/index-server/issues/148) — 12 tests skipped instead of reported
-- [#149](https://github.com/jagilber-dev/index-server/issues/149) — `expect(true).toBe(true)` in 9+ files
-- [#150](https://github.com/jagilber-dev/index-server/issues/150) — Zero negative tests in entire codebase
-- [#151](https://github.com/jagilber-dev/index-server/issues/151) — No body size validation on core add handler
-- [#119](https://github.com/jagilber-dev/index-server/issues/119) — `index_add` noop path returns `verified: true` without verifying
-- [#129](https://github.com/jagilber-dev/index-server/issues/129) — 10+ skipped tests document known broken functionality
+- Internal tracker #147 — 18 placeholder test files that test nothing
+- Internal tracker #148 — 12 tests skipped instead of reported
+- Internal tracker #149 — `expect(true).toBe(true)` in 9+ files
+- Internal tracker #150 — Zero negative tests in entire codebase
+- Internal tracker #151 — No body size validation on core add handler
+- Internal tracker #119 — `index_add` noop path returns `verified: true` without verifying
+- Internal tracker #129 — 10+ skipped tests document known broken functionality

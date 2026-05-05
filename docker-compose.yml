@@ -26,13 +26,13 @@ services:
       - "${INDEX_SERVER_PORT_BIND_HOST:-127.0.0.1}:${INDEX_SERVER_DASHBOARD_PORT:-8787}:8787"
     volumes:
       - index-data:/app/data
-      - index-instructions:/app/instructions
+      - index-instructions:${INDEX_SERVER_CONTAINER_ROOT:-/app}/instructions
       - index-logs:/app/logs
-      - index-metrics:/app/metrics
-      - index-feedback:/app/feedback
+      - index-metrics:${INDEX_SERVER_CONTAINER_ROOT:-/app}/metrics
+      - index-feedback:${INDEX_SERVER_CONTAINER_ROOT:-/app}/feedback
     environment:
       - NODE_ENV=production
-      - INDEX_SERVER_DIR=/app/instructions
+      - INDEX_SERVER_DIR=${INDEX_SERVER_CONTAINER_ROOT:-/app}/instructions
       - INDEX_SERVER_DASHBOARD=1
       - INDEX_SERVER_DASHBOARD_PORT=8787
       - INDEX_SERVER_DASHBOARD_HOST=0.0.0.0
@@ -46,8 +46,8 @@ services:
       - INDEX_SERVER_SQLITE_MIGRATE_ON_START=${INDEX_SERVER_SQLITE_MIGRATE_ON_START:-1}
       # Uncomment to enable sqlite-vec vector embedding storage (requires node:22-slim for glibc):
       # - INDEX_SERVER_SQLITE_VEC_ENABLED=1
-      - INDEX_SERVER_METRICS_DIR=/app/metrics
-      - INDEX_SERVER_FEEDBACK_DIR=/app/feedback
+      - INDEX_SERVER_METRICS_DIR=${INDEX_SERVER_CONTAINER_ROOT:-/app}/metrics
+      - INDEX_SERVER_FEEDBACK_DIR=${INDEX_SERVER_CONTAINER_ROOT:-/app}/feedback
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:8787/api/status"]
       interval: 30s
@@ -82,14 +82,14 @@ services:
       - "${INDEX_SERVER_PORT_BIND_HOST:-127.0.0.1}:${INDEX_SERVER_DASHBOARD_PORT:-8787}:8787"
     volumes:
       - index-data:/app/data
-      - index-instructions:/app/instructions
+      - index-instructions:${INDEX_SERVER_CONTAINER_ROOT:-/app}/instructions
       - index-logs:/app/logs
-      - index-metrics:/app/metrics
-      - index-feedback:/app/feedback
+      - index-metrics:${INDEX_SERVER_CONTAINER_ROOT:-/app}/metrics
+      - index-feedback:${INDEX_SERVER_CONTAINER_ROOT:-/app}/feedback
       - ./certs:/app/certs:ro
     environment:
       - NODE_ENV=production
-      - INDEX_SERVER_DIR=/app/instructions
+      - INDEX_SERVER_DIR=${INDEX_SERVER_CONTAINER_ROOT:-/app}/instructions
       - INDEX_SERVER_DASHBOARD=1
       - INDEX_SERVER_DASHBOARD_PORT=8787
       - INDEX_SERVER_DASHBOARD_HOST=0.0.0.0
@@ -106,8 +106,8 @@ services:
       - INDEX_SERVER_SQLITE_MIGRATE_ON_START=${INDEX_SERVER_SQLITE_MIGRATE_ON_START:-1}
       # Uncomment to enable sqlite-vec vector embedding storage (requires node:22-slim for glibc):
       # - INDEX_SERVER_SQLITE_VEC_ENABLED=1
-      - INDEX_SERVER_METRICS_DIR=/app/metrics
-      - INDEX_SERVER_FEEDBACK_DIR=/app/feedback
+      - INDEX_SERVER_METRICS_DIR=${INDEX_SERVER_CONTAINER_ROOT:-/app}/metrics
+      - INDEX_SERVER_FEEDBACK_DIR=${INDEX_SERVER_CONTAINER_ROOT:-/app}/feedback
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--no-check-certificate", "--spider", "https://127.0.0.1:8787/api/status"]
       interval: 30s

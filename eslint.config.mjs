@@ -22,7 +22,7 @@ export default tseslint.config(
       'scripts/guard-declarations.mjs',
       'scripts/purge-extra-decls.mjs',
       'scripts/performanceBaseline.ts',
-      'scripts/analyze-traces.js',
+      'scripts/analyze-traces.mjs',
       '*.log',
       // Vendored/minified client libraries
       'src/dashboard/client/js/chart.umd.js',

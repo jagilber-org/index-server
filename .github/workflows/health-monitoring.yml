@@ -31,7 +31,7 @@ jobs:
         timeout-minutes: 2
         run: |
           echo 'Running JSON-RPC health check (initialize -> health/check)...'
-          timeout 60 node scripts/health-check.mjs || (echo 'Health check failed or timed out'; cat health_response.json || true; exit 1)
+          timeout 60 node scripts/diagnostics/health-check.mjs || (echo 'Health check failed or timed out'; cat health_response.json || true; exit 1)
 
       - name: Check for error logs
         run: |
@@ -66,7 +66,7 @@ jobs:
         if: always()
         run: |
           echo 'Collecting diagnostics pack...'
-          node scripts/diagnostics-pack.mjs || echo 'diagnostics pack script failed (continuing)'
+          node scripts/diagnostics/diagnostics-pack.mjs || echo 'diagnostics pack script failed (continuing)'
 
       - name: Upload diagnostics artifact
         if: always()

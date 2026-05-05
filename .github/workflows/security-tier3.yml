@@ -78,7 +78,7 @@ jobs:
 
       # --- Security header validation (HTTPS) ---
       - name: Validate security headers (HTTPS)
-        run: node scripts/validate-security-headers.mjs https://127.0.0.1:$DASHBOARD_PORT
+        run: node scripts/governance/validate-security-headers.mjs https://127.0.0.1:$DASHBOARD_PORT
 
       # --- TLS cipher analysis ---
       - name: Install testssl.sh

@@ -63,7 +63,7 @@ jobs:
 
       # --- Security header validation ---
       - name: Validate security headers
-        run: node scripts/validate-security-headers.mjs http://127.0.0.1:$DASHBOARD_PORT
+        run: node scripts/governance/validate-security-headers.mjs http://127.0.0.1:$DASHBOARD_PORT
 
       # --- ZAP Baseline Scan ---
       - name: ZAP Baseline Scan
@@ -115,7 +115,7 @@ jobs:
         run: docker build -t index-server:scan .
 
       - name: Trivy container scan
-        uses: aquasecurity/trivy-action@v0.35.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: 'index-server:scan'
           format: 'sarif'

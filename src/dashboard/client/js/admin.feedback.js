@@ -4,7 +4,7 @@
  * Human-operator surface for browsing, creating, editing, and deleting
  * persisted feedback entries, plus a client-side GitHub issue handoff.
  *
- * Design constraints (Morpheus architecture review / decisions.md G-1..G-8):
+ * Design constraints (architecture review / decisions.md G-1..G-8):
  *   - CRUD against /api/admin/feedback (operator-tier, NOT the MCP surface)
  *   - GitHub handoff is client-side ONLY — window.open with pre-filled URL
  *   - No server-side GitHub API calls, no token handling, no OAuth

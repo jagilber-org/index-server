@@ -13,7 +13,7 @@ import path from 'path';
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
 const DIST_DIR = path.join(REPO_ROOT, 'dist');
-const CJS_PATH = path.join(REPO_ROOT, 'scripts', 'publish-direct-to-remote.cjs');
+const CJS_PATH = path.join(REPO_ROOT, 'scripts', 'build', 'publish-direct-to-remote.cjs');
 const HAS_PUBLISH_EXCLUDE = fs.existsSync(path.join(REPO_ROOT, '.publish-exclude'));
 
 const EXEC_OPTS = {

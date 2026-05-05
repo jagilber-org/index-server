@@ -52,7 +52,7 @@ jobs:
           fi
       - name: Validate test artifacts (no leakage, no oversized files)
         if: always()
-        run: node scripts/validate-no-test-artifacts.mjs
+        run: node scripts/governance/validate-no-test-artifacts.mjs
       - name: Crawl test logs (hygiene gate — fail on repeat-spam / WARN+stack)
         if: always()
         # Per-signature repeat threshold and stack-warn budget both default to 25.
@@ -60,7 +60,7 @@ jobs:
         # invariant-repair fixtures, etc.) are signature-allowlisted in
         # .crawl-logs-allowlist with one-line rationales per OB-6.
         run: |
-          node scripts/crawl-logs.mjs \
+          node scripts/diagnostics/crawl-logs.mjs \
             --dir logs \
             --file test-results/test-output.log \
             --allowlist .crawl-logs-allowlist \

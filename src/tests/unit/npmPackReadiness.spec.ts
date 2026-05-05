@@ -93,7 +93,7 @@ describe('npm publish readiness', () => {
     });
 
     it('files array does NOT include scripts/ build helpers (except allowed helpers)', () => {
-      const allowedScripts = ['scripts/copy-dashboard-assets.mjs', 'scripts/setup-hooks.cjs', 'scripts/generate-certs.mjs', 'scripts/setup-wizard.mjs'];
+      const allowedScripts = ['scripts/build/copy-dashboard-assets.mjs', 'scripts/hooks/setup-hooks.cjs', 'scripts/build/generate-certs.mjs', 'scripts/build/setup-wizard.mjs'];
       const hasDisallowedScripts = pkg.files.some(
         (f: string) => f.startsWith('scripts/') && !allowedScripts.includes(f)
       );
@@ -105,12 +105,12 @@ describe('npm publish readiness', () => {
     });
 
     // Regression: #239 — generate-certs.mjs must ship so npx --setup TLS works
-    it('files array includes scripts/generate-certs.mjs (issue #239)', () => {
-      expect(pkg.files).toContain('scripts/generate-certs.mjs');
+    it('files array includes scripts/build/generate-certs.mjs (issue #239)', () => {
+      expect(pkg.files).toContain('scripts/build/generate-certs.mjs');
     });
 
-    it('files array includes scripts/setup-wizard.mjs', () => {
-      expect(pkg.files).toContain('scripts/setup-wizard.mjs');
+    it('files array includes scripts/build/setup-wizard.mjs', () => {
+      expect(pkg.files).toContain('scripts/build/setup-wizard.mjs');
     });
   });
 
@@ -164,12 +164,12 @@ describe('npm publish readiness', () => {
     });
 
     // Regression: #239 — generate-certs.mjs must appear in npm pack output
-    it('pack includes scripts/generate-certs.mjs (issue #239)', () => {
-      expect(packOutput).toContain('scripts/generate-certs.mjs');
+    it('pack includes scripts/build/generate-certs.mjs (issue #239)', () => {
+      expect(packOutput).toContain('scripts/build/generate-certs.mjs');
     });
 
-    it('pack includes scripts/setup-wizard.mjs', () => {
-      expect(packOutput).toContain('scripts/setup-wizard.mjs');
+    it('pack includes scripts/build/setup-wizard.mjs', () => {
+      expect(packOutput).toContain('scripts/build/setup-wizard.mjs');
     });
 
     it('total file count is under 800', () => {

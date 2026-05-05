@@ -152,7 +152,7 @@ Artifacts: `dist/server/index-server.js` plus dashboard assets (copied by `scrip
 Use provided PowerShell script:
 
 ```powershell
-pwsh -File scripts/deploy-local.ps1 -Rebuild -Overwrite -TargetDir C:\mcp\index-server
+pwsh -File scripts/deploy-local.ps1 -Rebuild -Overwrite -TargetDir <production-install-root>
 ```
  
 Flags:
@@ -237,7 +237,7 @@ Verify logs (stderr) contain:
 You mentioned copying production instructions into dev to reproduce an issue. Recommended steps:
 
 1. Decide isolation path: create `devinstructions-prod-clone/`.
-2. Copy: `robocopy C:\mcp\index-server\instructions <root>\index-server\devinstructions /E`
+2. Copy: `robocopy <production-install-root>\instructions <root>\index-server\devinstructions /E`
 3. Point dev config (`.vscode/mcp.json`) `INDEX_SERVER_DIR` to cloned folder.
 4. Start server with verbose flags: `INDEX_SERVER_VERBOSE_LOGGING=1 INDEX_SERVER_LOG_DIAG=1`.
 5. Run targeted test or reproduce workflow.
@@ -320,7 +320,7 @@ Aggregate or forward these into your logging system for RUM or audit trails. Cor
  
 ```powershell
 # Build & deploy (local prod)
-pwsh -File scripts\deploy-local.ps1 -Rebuild -Overwrite -TargetDir C:\mcp\index-server
+pwsh -File scripts\deploy-local.ps1 -Rebuild -Overwrite -TargetDir <production-install-root>
 
 # Start dev with verbose logging
 $env:INDEX_SERVER_DIR='<root>/index-server/devinstructions'; \

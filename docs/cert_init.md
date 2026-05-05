@@ -200,7 +200,7 @@ The new cert will have a different serial number and `notBefore` timestamp.
 | Symptom | Cause | Fix |
 |---|---|---|
 | `[init-cert] FAILED (code=OPENSSL_NOT_FOUND)` | `openssl` not on `PATH` | Install OpenSSL (see Requirements) and reopen your shell. |
-| `[init-cert] FAILED (code=INVALID_SAN)` | SAN entry missing `DNS:`/`IP:` prefix | Use `--san DNS:host,IP:192.0.2.4` (each entry needs the prefix). |
+| `[init-cert] FAILED (code=INVALID_SAN)` | SAN entry missing `DNS:`/`IP:` prefix | Use `--san DNS:host,IP:192.0.2.4` (each entry needs the prefix). <!-- # pii-allowlist: RFC 5737 documentation IP --> |
 | `[init-cert] FAILED (code=PATH_OUTSIDE_CERT_DIR)` | `--cert-file` / `--key-file` escapes `--cert-dir` | Pass an explicit `--cert-dir` that contains both paths. |
 | Browser still warns after using `--start` | Self-signed cert is not trusted by your OS | Either trust the cert in the OS store, or accept the browser's "proceed" dialog (loopback only). |
 | `openssl req failed (status=…): unable to write 'random state'` | OpenSSL home dir not writable | Set `OPENSSL_CONF` / `RANDFILE` env vars to a writable path, or run as a user with write access to the OpenSSL home. |

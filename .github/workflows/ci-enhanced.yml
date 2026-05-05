@@ -74,7 +74,7 @@ jobs:
           fi
 
       - name: Validate no test artifacts in instructions
-        run: node scripts/validate-no-test-artifacts.mjs
+        run: node scripts/governance/validate-no-test-artifacts.mjs
 
       - name: Verify build artifacts
         shell: bash
@@ -106,7 +106,7 @@ jobs:
         # Defaults (max-repeat=25, max-stack-warn=25). Known operational categories
         # are signature-allowlisted in .crawl-logs-allowlist.
         run: |
-          node scripts/crawl-logs.mjs \
+          node scripts/diagnostics/crawl-logs.mjs \
             --dir logs \
             --file test-results/test-output.log \
             --allowlist .crawl-logs-allowlist \
@@ -115,14 +115,14 @@ jobs:
 
       - name: Flake Sentinel (rerun failing files)
         if: always()
-        run: node scripts/flake-sentinel.mjs
+        run: node scripts/governance/flake-sentinel.mjs
         env:
           FLAKE_RERUNS: '2'
           ALLOW_FLAKY: '0'
 
       - name: Flake Trend Aggregation
         if: always()
-        run: node scripts/flake-trend.mjs
+        run: node scripts/governance/flake-trend.mjs
         env:
           FLAKE_TREND_MAX: '75'
 
@@ -130,7 +130,7 @@ jobs:
         if: always()
         run: |
           echo "[flake-gate] Using thresholds: files=${FLAKE_GATE_MAX_FILES:-0} occ=${FLAKE_GATE_MAX_OCCURRENCES:-0} enabled=${FLAKE_GATE_ENABLED:-0}";
-          node scripts/flake-gate.mjs
+          node scripts/governance/flake-gate.mjs
         env:
           # Static defaults; set to 1 and thresholds in future via repo-level env or inline edits.
           FLAKE_GATE_ENABLED: '0'

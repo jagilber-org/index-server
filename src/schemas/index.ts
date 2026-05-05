@@ -42,7 +42,7 @@ export const instructionEntry = {
   ,workspaceId: { type: 'string' }
   ,userId: { type: 'string' }
   ,teamIds: { type: 'array', items: { type: 'string' } }
-  ,contentType: { enum: ['instruction','template','chat-session','reference','example','agent'] }
+  ,contentType: { enum: ['instruction','template','workflow','reference','example','agent'] }
   ,version: { type: 'string' }
   ,status: { enum: ['draft','review','approved','deprecated'] }
   ,owner: { type: 'string' }

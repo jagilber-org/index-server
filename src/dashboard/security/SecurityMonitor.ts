@@ -577,12 +577,12 @@ export class SecurityMonitor {
 
   private getCPUUsage(): number {
     // Simulate CPU usage between 10-80%
-    return Math.random() * 70 + 10;
+    return Math.random() * 70 + 10; // nosemgrep: insecure-randomness — simulated metric, not security context
   }
 
   private getAverageAPILatency(): number {
     // Simulate API latency between 50-300ms
-    return Math.random() * 250 + 50;
+    return Math.random() * 250 + 50; // nosemgrep: insecure-randomness — simulated metric, not security context
   }
 
   private checkForSuspiciousPatterns(patterns: string[], _caseSensitive: boolean): {

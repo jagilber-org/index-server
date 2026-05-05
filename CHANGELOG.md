@@ -6,6 +6,40 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 
 ## [Unreleased]
 
+### Added
+
+- **Release workflow**: added `scripts/Invoke-ReleaseWorkflow.ps1` as the canonical release/publish front door. It loads `.env`, resolves tag/remote/clean-room defaults, runs release preflight checks, optionally pushes and verifies the internal branch/tags, waits for internal GitHub Actions checks, prepares the clean-room mirror copy, and either prints or explicitly invokes the human-only public mirror delivery path.
+
+### Changed
+
+- **Publish scripts**: restored root-level entrypoints for `New-CleanRoomCopy.ps1`, `Publish-ToMirror.ps1`, and `publish-direct-to-remote.cjs` after the scripts reorganization so documented/template paths continue to work without introducing alternate release workflow names.
+- **Public publish/security gates**: clean-room publish now keeps ambient exact env-value leak detection active, GitHub Action scanner uploads fail visibly instead of being hidden, ggshield quota exhaustion fails closed, and internal release branch/tag verification compares exact local/remote SHAs.
+- **Tool classification docs**: clarified that registry `stable` vs `mutation` is a visibility/gating contract, so `feedback_submit` remains stable/core while still persisting feedback and audit entries.
+- **Instruction content type migration**: bumped instruction schema version to v5 and added a compatibility path mapping legacy `contentType: "chat-session"` records and writes to `workflow`, preserving workflow/runbook semantics instead of falling back to `instruction`.
+
+## [1.28.0] - 2026-05-04
+
+### Added
+
+- **Integrity probes**: pre-push hook runs 12-probe mutation integrity test and 4-client concurrent SQLite write test before every push (`scripts/hooks/pre-push-integrity.ps1`). Skip with `SKIP_INTEGRITY_PREPUSH=1`.
+- **Adhoc diagnostics**: disk-state monitor (`scripts/diagnostics/adhoc-disk-state-monitor.mjs`), mutation integrity probe (`scripts/diagnostics/adhoc-mutation-integrity.mjs`), and concurrent write test (`scripts/perf/adhoc-concurrent-integrity.mjs`) for ad-hoc and CI use.
+- **SQLite validation endpoint**: `/sqlite/validate` dashboard route and client script (`scripts/diagnostics/sqlite-validate.ps1`) for on-demand WAL integrity checks.
+- **Enum validation in migration**: `migrateInstructionRecord()` now validates all 6 enum fields (audience, requirement, contentType, status, priorityTier, classification) with legacy coercion maps aligned with the loader, falling back to safe defaults for truly unknown values.
+- **Negative enum tests**: 19 unit tests covering input-surface rejection and migration correction of invalid enum values.
+
+### Fixed
+
+- **Lax mode defaults** (`instructions.add`): `contentType` now defaults to `"instruction"` in lax mode so agents omitting it no longer fail silently (#312).
+- **Enum coercion ordering**: legacy enum values (e.g., `audience:"developers"`, `requirement:"SHOULD"`) are now coerced before validation instead of being rejected at the input surface (#312).
+- **Scripts reorg paths**: fixed `$PSScriptRoot` references across 10+ PowerShell scripts after `scripts/` subdirectory reorganization (#311). Fixed Dockerfile, `.dockerignore`, `sync-constitution.ps1`, and `setup-wizard-config-validate.mjs` paths.
+- **PII scanner self-detection**: added pre-commit hook files to `PII_FILE_ALLOWLIST` so SAS-token regex definitions aren't flagged as leaks.
+- **Constitution sync**: regenerated `constitution.md` and `.specify/memory/constitution.md` from `constitution.json`.
+
+### Changed
+
+- **Scripts reorganization**: all scripts moved from `scripts/` root into purpose-based subdirectories (`build/`, `client/`, `deploy/`, `diagnostics/`, `governance/`, `hooks/`, `migration/`, `perf/`, `testing/`, `ci/`) (#311).
+- **Security hardening**: input validation hardening for `index_add` (#307), security triage blockers (#309), CodeQL and Trivy dependency bumps (#298, #299).
+
 ## [1.27.2] - 2026-05-01
 
 ### Fixed
@@ -105,7 +139,7 @@ Also removed: `DashboardHttpConfig.rateLimitEnabled / rateLimitWindowMs / rateLi
 
 ### Removed (breaking — MCP feedback surface)
 
-- **MCP feedback tools collapsed to `feedback_submit` only (#111)**. The following MCP tools have been removed with no deprecation alias and no compatibility shim: `feedback_list`, `feedback_get`, `feedback_update`, `feedback_delete`, `feedback_stats`, `feedback_health`, `feedback_dispatch`. Agents must use `feedback_submit` to file entries. Human-operator CRUD now lives behind dashboard authentication at `GET/POST /admin/feedback`, `GET/PATCH/DELETE /admin/feedback/:id`, sharing the same `feedback/feedback-entries.json` store as the MCP submit path. GitHub issue handoff from the dashboard is browser-side, human-triggered, token-free, and targets `jagilber-org/index-server`. Spec: `specs/111-feedback-mcp-rip-down.md`.
+- **MCP feedback tools collapsed to `feedback_submit` only (#111)**. The following MCP tools have been removed with no deprecation alias and no compatibility shim: `feedback_list`, `feedback_get`, `feedback_update`, `feedback_delete`, `feedback_stats`, `feedback_health`, `feedback_dispatch`. Agents must use the stable, core-visible `feedback_submit` tool to file entries. Human-operator CRUD now lives behind dashboard authentication at `GET/POST /admin/feedback`, `GET/PATCH/DELETE /admin/feedback/:id`, sharing the same `feedback/feedback-entries.json` store as the MCP submit path. GitHub issue handoff from the dashboard is browser-side, human-triggered, token-free, and targets `jagilber-org/index-server`. Spec: `specs/111-feedback-mcp-rip-down.md`.
 
 ## [1.24.0] - 2026-04-24
 

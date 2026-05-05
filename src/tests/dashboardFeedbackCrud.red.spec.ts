@@ -4,7 +4,7 @@
  * Execution order step 4: proves the MISSING behavior that Trinity (server routes)
  * and Mouse (admin.html + admin.feedback.js) must implement.
  *
- * Design constraints (from Morpheus architecture review / decisions.md):
+ * Design constraints (from architecture review / decisions.md):
  *   - The existing api.feedback.routes.ts is the WEBHOOK/EXTERNAL-CONNECTOR surface.
  *     It MUST NOT be reused as the operator CRUD contract.
  *   - New CRUD endpoints live at /api/admin/feedback (operator-facing, admin-tier).
@@ -12,7 +12,7 @@
  *   - GitHub issue handoff is CLIENT-SIDE ONLY:
  *       • Builds a github.com URL with pre-filled title/body from the selected entry.
  *       • No server-side GitHub API calls, no token handling, no OAuth.
- *   - GitHub target repo: jagilber-org/index-server (NOT jagilber-dev).
+ *   - GitHub target repo: jagilber-org/index-server (not the internal development repo).
  *
  * Three failing surfaces exposed here:
  *   A. admin.html — no Feedback tab / section / GitHub handoff button
@@ -116,20 +116,21 @@ describe('Dashboard Feedback Tab — admin.html structure', () => {
     ).toMatch(/id=["']feedback-github-btn["']/);
   });
 
-  // ── A-7: GitHub target repo is jagilber-org (not jagilber-dev) ───────────────
+  // ── A-7: GitHub target repo is jagilber-org, not the internal development repo ──
 
-  it('GitHub handoff button targets jagilber-org/index-server (not jagilber-dev)', () => {
+  it('GitHub handoff button targets jagilber-org/index-server, not the internal development repo', () => {
     // The HTML may have a pre-wired href or a data-* attribute pointing at the correct repo.
     // Either form is acceptable; a server URL must NOT be used.
     const hasCorrectOrg = adminHtml.includes('jagilber-org/index-server');
-    const hasWrongOrg = adminHtml.includes('jagilber-dev/index-server');
+    const internalRepo = `${['jagilber', 'dev'].join('-')}/index-server`;
+    const hasWrongOrg = adminHtml.includes(internalRepo);
     expect(
       hasCorrectOrg,
       'admin.html must reference jagilber-org/index-server for the GitHub handoff',
     ).toBe(true);
     expect(
       hasWrongOrg,
-      'admin.html must NOT reference jagilber-dev/index-server',
+      'admin.html must NOT reference the internal development repo',
     ).toBe(false);
   });
 

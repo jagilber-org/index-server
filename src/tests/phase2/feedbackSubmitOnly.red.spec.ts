@@ -94,17 +94,19 @@ describe('RED: feedback_submit-only MCP surface (002 Phase 2b revised)', () => {
   // ── Submit-only surface: feedback_submit MUST remain as sole feedback tool ──
 
   it('feedback_submit is present in MCP registry (sole feedback tool retained)', () => {
-    const adminRegistry = getToolRegistry({ tier: 'admin' });
-    const tool = adminRegistry.find(t => t.name === 'feedback_submit');
+    const coreRegistry = getToolRegistry({ tier: 'core' });
+    const tool = coreRegistry.find(t => t.name === 'feedback_submit');
     expect(tool, 'feedback_submit must remain in the MCP registry').toBeDefined();
-    expect(MUTATION.has('feedback_submit')).toBe(true);
+    expect(tool?.tier).toBe('core');
+    expect(STABLE.has('feedback_submit')).toBe(true);
+    expect(MUTATION.has('feedback_submit')).toBe(false);
   });
 
   // ── Combined: ONLY feedback_submit should be a standalone feedback tool ──
 
-  it('only feedback_submit is a standalone feedback tool in admin registry', () => {
-    const adminRegistry = getToolRegistry({ tier: 'admin' });
-    const standaloneFeedback = adminRegistry
+  it('only feedback_submit is a standalone feedback tool in core registry', () => {
+    const coreRegistry = getToolRegistry({ tier: 'core' });
+    const standaloneFeedback = coreRegistry
       .filter(t => t.name.startsWith('feedback_'))
       .map(t => t.name)
       .sort();

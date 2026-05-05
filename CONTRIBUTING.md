@@ -39,14 +39,14 @@ If any code or tests in the PR were generated or materially edited by an AI agen
 - [ ] Claimed test counts match real coverage and assertions
 - [ ] No hardcoded success values such as `verified: true` or `created: true` were added unless computed from a real check
 - [ ] Agent attestation metadata present on agent-authored commits (AG-4)
-- [ ] Copilot `Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>` trailer present on Copilot-authored commits
+- [ ] Copilot `Co-authored-by: Copilot <copilot-noreply-email>` trailer present on Copilot-authored commits
 - [ ] Tests added for behavioral changes (unit + integration where the change crosses a layer boundary)
 - [ ] No hardcoded paths or secrets — all tunables routed through `src/config/runtimeConfig.ts` (`npm run guard:env` passes)
 - [ ] `logAudit()` invoked on every mutation success and side-effecting error path
 - [ ] `src/services/toolRegistry.ts` updated for new/changed tools (INPUT_SCHEMAS + STABLE + MUTATION + describeTool) and registered via `src/services/toolHandlers.ts`
 - [ ] Conventional Commit subjects on every commit
-- [ ] If `constitution.json` changed: `pwsh -File scripts/sync-constitution.ps1 -Check` passes and rendered `.md` files are regenerated
-- [ ] Security-sensitive changes carry explicit Morpheus + Tank consensus approvals or a linked `.squad/decisions/` record
+- [ ] If `constitution.json` changed: `pwsh -File scripts/build/sync-constitution.ps1 -Check` passes and rendered `.md` files are regenerated
+- [ ] Security-sensitive changes carry explicit security + testing consensus approvals or a linked decision record
 - [ ] Imported external code has a documented source and a `LICENSE`-compatible license, with attribution recorded in `THIRD-PARTY-LICENSES.md` where required
 
 PRs that fail any AI-generated code/test review item must be sent back for correction before merge.

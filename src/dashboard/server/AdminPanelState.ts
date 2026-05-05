@@ -5,6 +5,7 @@
  * persistence, creation, termination, and cleanup of expired sessions.
  */
 
+import crypto from 'crypto';
 import { getRuntimeConfig } from '../../config/runtimeConfig';
 import { SessionPersistenceManager } from './SessionPersistenceManager';
 import {
@@ -219,7 +220,7 @@ export class AdminPanelState {
   }
 
   generateSessionId(): string {
-    return `admin_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    return `admin_${crypto.randomUUID()}`;
   }
 
   getSessionHistory(limit?: number): AdminSessionHistoryEntry[] {

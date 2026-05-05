@@ -18,7 +18,7 @@ import fs from 'fs';
 import path from 'path';
 import Ajv from 'ajv';
 import addFormats from 'ajv-formats';
-import draft7MetaSchema from 'ajv/dist/refs/json-schema-draft-07.json';
+import draft7MetaSchema from 'ajv/dist/refs/json-schema-draft-07.json'; // hallucination-allowlist: AJV publishes this draft-07 meta-schema path.
 import { createTestClient } from './helpers/mcpTestClient.js';
 import schema from '../../schemas/instruction.schema.json';
 
@@ -93,8 +93,8 @@ describe('instruction CRUD: disk contract tests', () => {
       body: 'Body with all optional properties set.',
       rationale: 'Test rationale',
       priority: 80,
-      audience: 'developers',
-      requirement: 'should',
+      audience: 'group',
+      requirement: 'recommended',
       categories: ['testing', 'validation'],
       semanticSummary: 'Full property test',
       owner: 'test-owner',

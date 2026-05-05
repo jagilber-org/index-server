@@ -207,12 +207,17 @@ function applyWriteCompatibility(entry: InstructionEntry): InstructionEntry {
     else if (legacyRequirementMap[upper]) next.requirement = legacyRequirementMap[upper];
   }
 
+  if ((next.contentType as string | undefined) === 'chat-session') {
+    next.contentType = 'workflow';
+  }
+
   if (typeof next.priority !== 'number' || next.priority < 1 || next.priority > 100) next.priority = 50;
   return next;
 }
 
 // Matches the upper bound declared in schemas/instruction.schema.json (id maxLength).
 export const INSTRUCTION_ID_MAX_LENGTH = 120;
+export const INSTRUCTION_ID_PATTERN = /^[a-z0-9](?:[a-z0-9-_]{0,118}[a-z0-9])?$/;
 
 function findIllegalControlChar(id: string): { display: string; code: number } | undefined {
   for (let i = 0; i < id.length; i++) {
@@ -226,7 +231,7 @@ function findIllegalControlChar(id: string): { display: string; code: number } |
   return undefined;
 }
 
-function validateIdSurface(id: unknown): string[] {
+export function validateInstructionIdSurface(id: unknown): string[] {
   if (typeof id !== 'string' || !id.trim()) return ['id: missing required field'];
   const illegal = findIllegalControlChar(id);
   if (illegal) {
@@ -238,7 +243,49 @@ function validateIdSurface(id: unknown): string[] {
   if (id.includes('..') || id.includes('/') || id.includes('\\') || /[:*?"<>|]/.test(id)) {
     return ['id: must be a safe instruction id without path traversal or path separators'];
   }
+  if (!INSTRUCTION_ID_PATTERN.test(id)) {
+    return ['id: must match /^[a-z0-9](?:[a-z0-9-_]{0,118}[a-z0-9])?$/ using lower-case ASCII letters, digits, hyphen, or underscore'];
+  }
   return [];
+}
+
+// Enum membership checks for governance fields. These run at input-surface time so that
+// invalid enum values are rejected early, before applyWriteCompatibility can silently
+// coerce them (e.g. status:"active" → "approved", audience:"agents" → "group").
+// However, values that ARE coercible by applyWriteCompatibility are accepted here to
+// avoid rejecting inputs that would otherwise succeed after coercion.
+const VALID_STATUS = ['approved', 'draft', 'review', 'deprecated'] as const;
+const COERCIBLE_STATUS = ['active'] as const;
+const VALID_PRIORITY_TIER = ['P1', 'P2', 'P3', 'P4'] as const;
+const VALID_CLASSIFICATION = ['public', 'internal', 'restricted'] as const;
+const VALID_CONTENT_TYPE = ['instruction', 'template', 'workflow', 'reference', 'example', 'agent'] as const;
+const COERCIBLE_CONTENT_TYPE = ['chat-session'] as const;
+const VALID_AUDIENCE = ['individual', 'group', 'all'] as const;
+const COERCIBLE_AUDIENCE = ['system', 'developers', 'developer', 'team', 'teams', 'users', 'dev', 'devs', 'testers', 'administrators', 'admins', 'agents', 'powershell script authors'] as const;
+const VALID_REQUIREMENT = ['mandatory', 'critical', 'recommended', 'optional', 'deprecated'] as const;
+const COERCIBLE_REQUIREMENT = ['MUST', 'SHOULD', 'MAY', 'CRITICAL', 'OPTIONAL', 'MANDATORY', 'DEPRECATED'] as const;
+
+export function validateInstructionInputEnumMembership(entry: Record<string, unknown>): string[] {
+  const errs: string[] = [];
+  if (typeof entry.status === 'string' && !(VALID_STATUS as readonly string[]).includes(entry.status) && !(COERCIBLE_STATUS as readonly string[]).includes(entry.status)) {
+    errs.push(`/status: must be one of ${VALID_STATUS.join(', ')}`);
+  }
+  if (typeof entry.priorityTier === 'string' && !(VALID_PRIORITY_TIER as readonly string[]).includes(entry.priorityTier)) {
+    errs.push(`/priorityTier: must be one of ${VALID_PRIORITY_TIER.join(', ')}`);
+  }
+  if (typeof entry.classification === 'string' && !(VALID_CLASSIFICATION as readonly string[]).includes(entry.classification)) {
+    errs.push(`/classification: must be one of ${VALID_CLASSIFICATION.join(', ')}`);
+  }
+  if (typeof entry.contentType === 'string' && !(VALID_CONTENT_TYPE as readonly string[]).includes(entry.contentType) && !(COERCIBLE_CONTENT_TYPE as readonly string[]).includes(entry.contentType)) {
+    errs.push(`/contentType: must be one of ${VALID_CONTENT_TYPE.join(', ')}`);
+  }
+  if (typeof entry.audience === 'string' && !(VALID_AUDIENCE as readonly string[]).includes(entry.audience) && !(COERCIBLE_AUDIENCE as readonly string[]).includes(entry.audience.toLowerCase() as typeof COERCIBLE_AUDIENCE[number])) {
+    errs.push(`/audience: must be one of ${VALID_AUDIENCE.join(', ')}`);
+  }
+  if (typeof entry.requirement === 'string' && !(VALID_REQUIREMENT as readonly string[]).includes(entry.requirement) && !(COERCIBLE_REQUIREMENT as readonly string[]).includes(entry.requirement.toUpperCase() as typeof COERCIBLE_REQUIREMENT[number])) {
+    errs.push(`/requirement: must be one of ${VALID_REQUIREMENT.join(', ')}`);
+  }
+  return errs;
 }
 
 // Typed-field shape checks. These run for both strict and lax callers so that lax mode
@@ -247,9 +294,19 @@ function validateTypedInputShape(entry: Record<string, unknown>): string[] {
   const errs: string[] = [];
   if (entry.priority !== undefined && typeof entry.priority !== 'number') {
     errs.push(`/priority: must be a number, received ${typeof entry.priority}`);
+  } else if (typeof entry.priority === 'number' && (!Number.isInteger(entry.priority) || entry.priority < 1 || entry.priority > 100)) {
+    errs.push('/priority: must be an integer from 1 to 100');
   }
   if (entry.categories !== undefined && !Array.isArray(entry.categories)) {
     errs.push(`/categories: must be an array of strings, received ${typeof entry.categories}`);
+  } else if (Array.isArray(entry.categories)) {
+    for (const [index, category] of entry.categories.entries()) {
+      if (typeof category !== 'string') {
+        errs.push(`/categories/${index}: must be a string, received ${typeof category}`);
+      } else if (!/^[a-z0-9][a-z0-9-_]{0,48}$/.test(category.toLowerCase())) {
+        errs.push(`/categories/${index}: must match /^[a-z0-9][a-z0-9-_]{0,48}$/`);
+      }
+    }
   }
   if (entry.audience !== undefined && typeof entry.audience !== 'string') {
     errs.push(`/audience: must be a string, received ${typeof entry.audience}`);
@@ -274,7 +331,7 @@ function validateTypedInputShape(entry: Record<string, unknown>): string[] {
 
 export function validateInstructionInputSurface(entry: Record<string, unknown>): InstructionValidationResult {
   const validationErrors: string[] = [];
-  validationErrors.push(...validateIdSurface(entry.id));
+  validationErrors.push(...validateInstructionIdSurface(entry.id));
   for (const key of Object.keys(entry)) {
     if (!ALLOWED_INPUT_KEYS.has(key)) {
       validationErrors.push(`/: unexpected property "${key}"`);
@@ -283,6 +340,7 @@ export function validateInstructionInputSurface(entry: Record<string, unknown>):
     if (entry[key] === null) validationErrors.push(`/${key}: null is not allowed`);
   }
   validationErrors.push(...validateTypedInputShape(entry));
+  validationErrors.push(...validateInstructionInputEnumMembership(entry));
   return {
     record: entry as unknown as InstructionEntry,
     validationErrors: dedupe(validationErrors),
@@ -304,7 +362,7 @@ export function validateInstructionRecord(entry: InstructionEntry): InstructionV
   if (record.classification !== undefined && !['public', 'internal', 'restricted'].includes(record.classification)) {
     validationErrors.push(`/classification: invalid value "${String(record.classification)}"`);
   }
-  if (record.contentType !== undefined && !['instruction', 'template', 'chat-session', 'reference', 'example', 'agent'].includes(record.contentType)) {
+  if (record.contentType !== undefined && !['instruction', 'template', 'workflow', 'reference', 'example', 'agent'].includes(record.contentType)) {
     validationErrors.push(`/contentType: invalid value "${String(record.contentType)}"`);
   }
 

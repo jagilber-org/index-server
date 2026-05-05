@@ -175,7 +175,7 @@
 - **copilotInstructions**: `.github/copilot-instructions.md`
 - **instructionsReadme**: `.instructions/README.md`
 - **promotionMap**: `.specify/config/promotion-map.json`
-- **constitutionSyncScript**: `scripts/sync-constitution.ps1`
+- **constitutionSyncScript**: `scripts/build/sync-constitution.ps1`
 - **architecture**: `docs/architecture.md`
 - **prd**: `docs/project_prd.md`
 - **contributing**: `CONTRIBUTING.md`

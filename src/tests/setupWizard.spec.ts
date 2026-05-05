@@ -15,7 +15,7 @@ import os from 'os';
 const EXEC_OPTS: ExecSyncOptions = { stdio: 'pipe', timeout: 60_000 };
 const DEPLOY_EXEC_OPTS: ExecSyncOptions = { stdio: 'pipe', timeout: 90_000 };
 const ROOT = path.resolve(__dirname, '..', '..');
-const WIZARD_SCRIPT = path.join(ROOT, 'scripts', 'setup-wizard.mjs');
+const WIZARD_SCRIPT = path.join(ROOT, 'scripts', 'build', 'setup-wizard.mjs');
 
 function runWizard(args: string, opts?: ExecSyncOptions): string {
   return execSync(
@@ -341,7 +341,7 @@ describe('Setup Wizard Launch Resolution', () => {
 
 describe('Certificate Generation', () => {
   const certDir = path.join(os.tmpdir(), `cert-test-${Date.now()}`);
-  const CERT_SCRIPT = path.join(ROOT, 'scripts', 'generate-certs.mjs');
+  const CERT_SCRIPT = path.join(ROOT, 'scripts', 'build', 'generate-certs.mjs');
 
   afterEach(() => {
     try { fs.rmSync(certDir, { recursive: true, force: true }); } catch { /* ok */ }

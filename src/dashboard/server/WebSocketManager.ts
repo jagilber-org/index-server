@@ -264,7 +264,7 @@ export class WebSocketManager {
       ws.clientId = this.safeGenerateClientId();
     } catch {
       // Fallback simple id
-      ws.clientId = `client-${Date.now()}-${Math.floor(Math.random()*1000)}`;
+      ws.clientId = `client-${Date.now()}-${Math.floor(Math.random()*1000)}`; // lgtm[js/insecure-randomness] — fallback when safeGenerateClientId() throws; loopback-only dashboard
     }
     ws.connectedAt = Date.now();
     ws.lastActivity = Date.now();
@@ -454,7 +454,7 @@ export class WebSocketManager {
     if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
       return crypto.randomUUID();
     }
-    return 'client-' + Math.random().toString(36).slice(2);
+    return 'client-' + Math.random().toString(36).slice(2); // lgtm[js/insecure-randomness] — fallback when crypto.randomUUID unavailable
   }
 
   /** Send current metrics snapshot to a specific client */

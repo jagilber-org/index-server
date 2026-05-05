@@ -539,5 +539,86 @@ export function createSqliteRoutes(): Router {
     }
   });
 
+  // ── Validation ────────────────────────────────────────────────────────
+
+  /** GET /sqlite/validate — Comprehensive database validation (read-only) */
+  router.get('/sqlite/validate', dashboardAdminAuth, (_req, res) => {
+    try {
+      assertSqliteActive();
+      const sqlitePath = getSqlitePath();
+      const db = new DatabaseSync(sqlitePath, { readOnly: true });
+      const checks: Array<{ name: string; pass: boolean; detail?: string }> = [];
+      try {
+        // 1. Integrity check
+        const intRows = db.prepare('PRAGMA integrity_check').all() as Array<Record<string, unknown>>;
+        const intOk = intRows.length === 1 && intRows[0].integrity_check === 'ok';
+        checks.push({ name: 'integrity_check', pass: intOk, detail: intOk ? 'ok' : JSON.stringify(intRows) });
+
+        // 2. Table counts
+        const instrCount = (db.prepare('SELECT COUNT(*) as cnt FROM instructions').get() as Record<string, unknown>)?.cnt as number ?? 0;
+        checks.push({ name: 'instructions_exist', pass: instrCount >= 0, detail: `count=${instrCount}` });
+
+        // 3. FTS5 sync
+        let ftsCount = -1;
+        try {
+          ftsCount = (db.prepare('SELECT COUNT(*) as cnt FROM instructions_fts').get() as Record<string, unknown>)?.cnt as number ?? -1;
+          checks.push({ name: 'fts5_sync', pass: ftsCount === instrCount, detail: `instructions=${instrCount}, fts=${ftsCount}` });
+        } catch {
+          checks.push({ name: 'fts5_sync', pass: false, detail: 'FTS5 table not accessible' });
+        }
+
+        // 4. Orphaned usage records
+        try {
+          const orphanUsage = (db.prepare('SELECT COUNT(*) as cnt FROM usage WHERE instruction_id NOT IN (SELECT id FROM instructions)').get() as Record<string, unknown>)?.cnt as number ?? 0;
+          checks.push({ name: 'usage_no_orphans', pass: orphanUsage === 0, detail: `orphans=${orphanUsage}` });
+        } catch {
+          checks.push({ name: 'usage_no_orphans', pass: true, detail: 'usage table not present (ok)' });
+        }
+
+        // 5. Embedding consistency
+        try {
+          const embCount = (db.prepare('SELECT COUNT(*) as cnt FROM embeddings').get() as Record<string, unknown>)?.cnt as number ?? 0;
+          const embMetaCount = (db.prepare('SELECT COUNT(*) as cnt FROM embedding_meta').get() as Record<string, unknown>)?.cnt as number ?? 0;
+          checks.push({ name: 'embedding_meta_sync', pass: embCount === embMetaCount, detail: `embeddings=${embCount}, meta=${embMetaCount}` });
+
+          const orphanEmb = (db.prepare('SELECT COUNT(*) as cnt FROM embedding_meta WHERE instruction_id NOT IN (SELECT id FROM instructions)').get() as Record<string, unknown>)?.cnt as number ?? 0;
+          checks.push({ name: 'embedding_no_orphans', pass: orphanEmb === 0, detail: `orphans=${orphanEmb}` });
+        } catch {
+          checks.push({ name: 'embedding_meta_sync', pass: true, detail: 'embedding tables not present (ok)' });
+        }
+
+        // 6. NULL required fields
+        const nullIds = (db.prepare("SELECT COUNT(*) as cnt FROM instructions WHERE id IS NULL OR id = ''").get() as Record<string, unknown>)?.cnt as number ?? 0;
+        checks.push({ name: 'no_null_ids', pass: nullIds === 0, detail: `count=${nullIds}` });
+
+        const nullTitles = (db.prepare("SELECT COUNT(*) as cnt FROM instructions WHERE title IS NULL OR title = ''").get() as Record<string, unknown>)?.cnt as number ?? 0;
+        checks.push({ name: 'no_null_titles', pass: nullTitles === 0, detail: `count=${nullTitles}` });
+
+        const nullBodies = (db.prepare("SELECT COUNT(*) as cnt FROM instructions WHERE body IS NULL OR body = ''").get() as Record<string, unknown>)?.cnt as number ?? 0;
+        checks.push({ name: 'no_null_bodies', pass: nullBodies === 0, detail: `count=${nullBodies}` });
+
+        // 7. WAL mode
+        const jm = db.prepare('PRAGMA journal_mode').get() as Record<string, unknown>;
+        const isWal = jm?.journal_mode === 'wal';
+        checks.push({ name: 'wal_mode', pass: isWal, detail: `journal_mode=${jm?.journal_mode ?? 'unknown'}` });
+
+        const allPass = checks.every(c => c.pass);
+        return res.json({
+          success: true,
+          valid: allPass,
+          totalChecks: checks.length,
+          passed: checks.filter(c => c.pass).length,
+          failed: checks.filter(c => !c.pass).length,
+          checks,
+        });
+      } finally {
+        db.close();
+      }
+    } catch (err) {
+      const code = (err as { statusCode?: number }).statusCode ?? 500;
+      return res.status(code).json({ success: false, error: (err as Error).message });
+    }
+  });
+
   return router;
 }

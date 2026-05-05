@@ -35,4 +35,20 @@ describe('validationService zod metrics integration', () => {
     // With full Zod coverage, validation goes through the Zod path
     expect(metrics.zodSuccess).toBeGreaterThanOrEqual(1);
   });
+
+  it('accepts legacy chat-session contentType on index_add through zod compatibility schema', () => {
+    const res = validateParams('index_add', {
+      entry: {
+        id: 'legacy-chat-session-zod',
+        title: 'Legacy chat session',
+        body: 'Legacy write compatibility should reach the handler for normalization.',
+        contentType: 'chat-session',
+      },
+      lax: true,
+      overwrite: true,
+    });
+    expect(res.ok).toBe(true);
+    const metrics = getValidationMetrics();
+    expect(metrics.zodSuccess).toBeGreaterThanOrEqual(1);
+  });
 });

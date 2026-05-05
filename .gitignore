@@ -154,6 +154,9 @@ metrics/**
 # Local environment overrides and configurations
 *.local.json
 mcp.local.json
+/scripts/.env
+/scripts/.env.*
+/scripts/.vscode/
 
 # Platform-specific files
 # Mac metadata
@@ -220,8 +223,8 @@ PLAN.md
 .dist.keep
 
 # Runtime data directories (keep dirs via .gitkeep, ignore contents)
-governance/
-!governance/.gitkeep
+/governance/
+!/governance/.gitkeep
 !backups/.gitkeep
 !feedback/.gitkeep
 !tmp/.gitkeep

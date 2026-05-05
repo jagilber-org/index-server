@@ -37,7 +37,7 @@ const SEARCH_SCHEMA = {
     limit: { type: 'number', minimum: 1, maximum: 100, default: 50 },
     includeCategories: { type: 'boolean', default: false },
     caseSensitive: { type: 'boolean', default: false },
-    contentType: { type: 'string', enum: ['instruction', 'template', 'chat-session', 'reference', 'example', 'agent'] }
+    contentType: { type: 'string', enum: ['instruction', 'template', 'workflow', 'reference', 'example', 'agent'] }
   },
   example: { keywords: ['build', 'validate', 'discipline'], limit: 10, includeCategories: true }
 };
@@ -51,7 +51,7 @@ interface SearchParams {
   limit?: number;
   includeCategories?: boolean;
   caseSensitive?: boolean;
-  contentType?: string; // Filter by content type: instruction, template, chat-session, reference, example
+  contentType?: string; // Filter by content type: instruction, template, workflow, reference, example
 }
 
 export type SearchMatchedField = 'id' | 'title' | 'semanticSummary' | 'body' | 'categories';
@@ -505,7 +505,7 @@ function performSearch(params: InternalSearchParams): SearchResponse {
   const contentType = params.contentType;
 
   // Validate contentType if provided
-  const validContentTypes = ['instruction', 'template', 'chat-session', 'reference', 'example', 'agent'];
+  const validContentTypes = ['instruction', 'template', 'workflow', 'reference', 'example', 'agent'];
   if (contentType && !validContentTypes.includes(contentType)) {
     throw new Error(`Invalid contentType: must be one of ${validContentTypes.join(', ')}`);
   }
@@ -702,7 +702,7 @@ export async function handleInstructionsSearch(params: SearchParams): Promise<Se
       if (typeof params.contentType !== 'string') {
         throw new Error('contentType must be a string');
       }
-      const validContentTypes = ['instruction', 'template', 'chat-session', 'reference', 'example', 'agent'];
+      const validContentTypes = ['instruction', 'template', 'workflow', 'reference', 'example', 'agent'];
       if (!validContentTypes.includes(params.contentType)) {
         throw new Error(`contentType must be one of: ${validContentTypes.join(', ')}`);
       }

@@ -26,7 +26,7 @@
 
 - [ ] Documentation updated for behavioral changes (DC-1)
 - [ ] `scripts/test-hook-regressions.ps1` passes (hook changes)
-- [ ] `scripts/sync-constitution.ps1 -Check` passes (constitution changes)
+- [ ] `scripts/build/sync-constitution.ps1 -Check` passes (constitution changes)
 - [ ] `scripts/validate-template-metadata.ps1` passes (metadata changes)
 - [ ] CHANGELOG.md updated (release PRs)
 - [ ] Security review completed (hook, scanner, or allowlist changes)
@@ -44,14 +44,14 @@ See [`docs/pr_review_checklist.md`](docs/pr_review_checklist.md) for the full po
 - [ ] Claimed test counts match real assertions and coverage
 - [ ] No hardcoded success values such as `verified: true` or `created: true` were added unless derived from a real check
 - [ ] Agent attestation metadata present on agent-authored commits (AG-4)
-- [ ] Copilot `Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>` trailer present on every Copilot-authored commit
+- [ ] Copilot `Co-authored-by: Copilot <copilot-noreply-email>` trailer present on every Copilot-authored commit
 - [ ] Tests added for behavioral changes (unit + integration where the change crosses a layer boundary)
 - [ ] No new hardcoded paths or secrets — all runtime tunables flow through `src/config/runtimeConfig.ts` (`npm run guard:env` passes)
 - [ ] `logAudit()` invoked on every success and side-effecting error path of new/changed mutation handlers
 - [ ] `src/services/toolRegistry.ts` updated for new/changed tools: `INPUT_SCHEMAS`, `STABLE` set, `MUTATION` set, `describeTool(...)`, plus side-effect import in `src/services/toolHandlers.ts`
 - [ ] All commit subjects follow Conventional Commits (`feat:`, `fix:`, `docs:`, `test:`, `refactor:`, `chore:`, etc.)
-- [ ] If `constitution.json` changed: `pwsh -File scripts/sync-constitution.ps1 -Check` exits 0 and rendered `.md` files were regenerated
-- [ ] Security-sensitive changes (hooks, scanners, auth, audit, attestation) carry explicit Morpheus + Tank consensus approvals or a linked `.squad/decisions/` record
+- [ ] If `constitution.json` changed: `pwsh -File scripts/build/sync-constitution.ps1 -Check` exits 0 and rendered `.md` files were regenerated
+- [ ] Security-sensitive changes (hooks, scanners, auth, audit, attestation) carry explicit security + testing consensus approvals or a linked decision record
 - [ ] Imported/adapted external code has a documented source URL and a license compatible with `LICENSE`; attribution added to `THIRD-PARTY-LICENSES.md` where required
 
 ## Testing

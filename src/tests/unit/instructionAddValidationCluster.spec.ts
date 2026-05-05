@@ -136,6 +136,28 @@ describe('index_add validation cluster (#194 #193 #192)', () => {
       expect(result.success).toBe(false);
       expect(result.error).toBe('invalid_instruction');
     });
+
+    it('rejects path traversal before touching the filesystem', async () => {
+      const result = await add({
+        entry: { id: '..\\..\\evil', body: 'x' },
+        overwrite: true,
+        lax: true,
+      });
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('invalid_instruction');
+      expect((result.validationErrors || []).join(' | ')).toMatch(/path traversal|path separators/i);
+      expect(fs.readdirSync(INSTRUCTIONS_DIR).filter(file => file.endsWith('.json'))).toHaveLength(0);
+    });
+
+    it('rejects zero-width Unicode characters in ids', async () => {
+      const result = await add({
+        entry: { id: 'foo\u200bbar', body: 'x' },
+        lax: true,
+      });
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('invalid_instruction');
+      expect((result.validationErrors || []).join(' | ')).toMatch(/lower-case ASCII/i);
+    });
   });
 
   // -------------------------------------------------------------------------

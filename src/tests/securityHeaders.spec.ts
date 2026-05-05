@@ -178,7 +178,7 @@ describe('Security Headers — Script for CI validation', () => {
     // Verify it exists on disk (the CI workflow invokes it directly via node).
     const { existsSync } = await import('fs');
     const { join } = await import('path');
-    const scriptPath = join(process.cwd(), 'scripts', 'validate-security-headers.mjs');
+    const scriptPath = join(process.cwd(), 'scripts', 'governance', 'validate-security-headers.mjs');
     expect(existsSync(scriptPath)).toBe(true);
   });
 });

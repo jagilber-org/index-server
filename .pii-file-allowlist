@@ -1,0 +1,8 @@
+# Files excluded from PII content scanning (tree-scan / security-scan.mjs)
+# Each line is a relative path or glob pattern.
+# Rationale: these files contain the allowlist patterns themselves (self-referencing)
+# or are documentation examples of patterns to detect, not actual PII.
+
+.pii-allowlist
+.copilot/skills/secret-handling/SKILL.md
+.squad/templates/skills/secret-handling/SKILL.md

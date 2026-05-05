@@ -8,21 +8,138 @@
 import path from 'node:path';
 import { Router, Request, Response } from 'express';
 import { getLocalHandler } from '../../../server/registry.js';
-import { ensureLoadedAsync, invalidate, touchIndexVersion, writeEntryAsync, removeEntry, getInstructionsDir } from '../../../services/indexContext.js';
+import { ensureLoadedAsync, invalidate, touchIndexVersion, writeEntryAsync, removeEntry, getInstructionsDir, isDuplicateInstructionWriteError } from '../../../services/indexContext.js';
 import { dashboardAdminAuth } from './adminAuth.js';
 import { handleInstructionsSearch } from '../../../services/handlers.search.js';
 import { InstructionEntry } from '../../../models/instruction.js';
+import { SCHEMA_VERSION } from '../../../versioning/schemaVersion.js';
+import { getRuntimeConfig } from '../../../config/runtimeConfig.js';
 import type { IndexLocals } from '../middleware/ensureLoadedMiddleware.js';
-import { isInstructionValidationError } from '../../../services/instructionRecordValidation.js';
+import {
+  InstructionValidationError,
+  isInstructionValidationError,
+  validateInstructionIdSurface,
+  validateInstructionInputEnumMembership,
+} from '../../../services/instructionRecordValidation.js';
 import { logError } from '../../../services/logger.js';
 import { validatePathContainment } from '../utils/pathContainment.js';
 
-/** Sanitize an instruction name with defense-in-depth path-traversal guard. */
+/** Validate an instruction name with a defense-in-depth path-containment guard. */
 function safeName(name: string): string {
-  const sanitized = String(name).replace(/[^a-zA-Z0-9-_]/g, '-');
+  const sanitized = String(name);
+  const validationErrors = validateInstructionIdSurface(sanitized);
+  if (validationErrors.length) {
+    throw new InstructionValidationError(validationErrors);
+  }
   const base = getInstructionsDir();
   validatePathContainment(path.resolve(base, `${sanitized}.json`), base);
   return sanitized;
+}
+
+function requireInstructionContentObject(content: unknown): Record<string, unknown> {
+  if (!content || typeof content !== 'object' || Array.isArray(content)) {
+    throw new InstructionValidationError(['/content: must be an object']);
+  }
+  return content as Record<string, unknown>;
+}
+
+function assertValidDashboardInstructionEnums(content: Record<string, unknown>): void {
+  const validationErrors = validateInstructionInputEnumMembership(content);
+  if (validationErrors.length) {
+    throw new InstructionValidationError(validationErrors);
+  }
+}
+
+function assertValidDashboardInstructionShape(content: Record<string, unknown>): void {
+  const validationErrors: string[] = [];
+  for (const [key, value] of Object.entries(content)) {
+    if (value === null) validationErrors.push(`/${key}: null is not allowed`);
+  }
+  if (content.title !== undefined && typeof content.title !== 'string') {
+    validationErrors.push(`/title: must be a string, received ${typeof content.title}`);
+  }
+  if (content.body !== undefined && typeof content.body !== 'string') {
+    validationErrors.push(`/body: must be a string, received ${typeof content.body}`);
+  }
+  if (content.audience !== undefined && typeof content.audience !== 'string') {
+    validationErrors.push(`/audience: must be a string, received ${typeof content.audience}`);
+  }
+  if (content.requirement !== undefined && typeof content.requirement !== 'string') {
+    validationErrors.push(`/requirement: must be a string, received ${typeof content.requirement}`);
+  }
+  if (content.contentType !== undefined && typeof content.contentType !== 'string') {
+    validationErrors.push(`/contentType: must be a string, received ${typeof content.contentType}`);
+  }
+  if (content.priority !== undefined && typeof content.priority !== 'number') {
+    validationErrors.push(`/priority: must be a number, received ${typeof content.priority}`);
+  } else if (typeof content.priority === 'number' && (!Number.isInteger(content.priority) || content.priority < 1 || content.priority > 100)) {
+    validationErrors.push('/priority: must be an integer from 1 to 100');
+  }
+  if (content.categories !== undefined && !Array.isArray(content.categories)) {
+    validationErrors.push(`/categories: must be an array of strings, received ${typeof content.categories}`);
+  } else if (Array.isArray(content.categories)) {
+    for (const [index, category] of content.categories.entries()) {
+      if (typeof category !== 'string') {
+        validationErrors.push(`/categories/${index}: must be a string, received ${typeof category}`);
+      } else if (!/^[a-z0-9][a-z0-9-_]{0,48}$/.test(category.toLowerCase())) {
+        validationErrors.push(`/categories/${index}: must match /^[a-z0-9][a-z0-9-_]{0,48}$/`);
+      }
+    }
+  }
+  if (validationErrors.length) {
+    throw new InstructionValidationError(validationErrors);
+  }
+}
+
+function assertDashboardBodyWithinLimit(content: Record<string, unknown>): void {
+  if (typeof content.body !== 'string') return;
+  const bodyLength = content.body.trim().length;
+  const { bodyWarnLength } = getRuntimeConfig().index;
+  if (bodyLength > bodyWarnLength) {
+    throw new InstructionValidationError([`/body: exceeds the ${bodyWarnLength}-character limit (${bodyLength} chars)`]);
+  }
+}
+
+function validationErrorResponse(res: Response, error: InstructionValidationError): Response {
+  return res.status(400).json({ success: false, error: 'invalid_instruction', validationErrors: error.validationErrors });
+}
+
+function dashboardAudience(value: unknown): InstructionEntry['audience'] {
+  switch (value) {
+    case 'individual':
+    case 'group':
+    case 'all':
+      return value;
+    default:
+      return 'all';
+  }
+}
+
+function dashboardRequirement(value: unknown): InstructionEntry['requirement'] {
+  switch (value) {
+    case 'mandatory':
+    case 'critical':
+    case 'recommended':
+    case 'optional':
+    case 'deprecated':
+      return value;
+    default:
+      return 'optional';
+  }
+}
+
+function dashboardContentType(value: unknown): InstructionEntry['contentType'] {
+  switch (value) {
+    case 'template':
+    case 'workflow':
+    case 'reference':
+    case 'example':
+    case 'agent':
+    case 'instruction':
+      return value;
+    default:
+      return 'instruction';
+  }
 }
 
 export function createInstructionsRoutes(): Router {
@@ -170,6 +287,9 @@ export function createInstructionsRoutes(): Router {
       if (!entry) return res.status(404).json({ success: false, error: 'Not found' });
       res.json({ success: true, content: entry, timestamp: Date.now() });
     } catch (error) {
+      if (isInstructionValidationError(error)) {
+        return validationErrorResponse(res, error);
+      }
       logError('[API] Failed to load instruction:', error);
       res.status(500).json({ success: false, error: 'Failed to load instruction' });
     }
@@ -186,20 +306,28 @@ export function createInstructionsRoutes(): Router {
       const id = safeName(name);
       const st = (res.locals as IndexLocals).indexState;
       if (st.byId.has(id)) return res.status(409).json({ success: false, error: 'Instruction already exists' });
-      const contentObj = typeof content === 'object' && content !== null ? content : {}; // lgtm[js/comparison-between-incompatible-types] — idiomatic typeof-object plus null check (typeof null === 'object' in JS)
+      const contentObj = requireInstructionContentObject(content);
+      assertValidDashboardInstructionEnums(contentObj);
+      assertValidDashboardInstructionShape(contentObj);
+      assertDashboardBodyWithinLimit(contentObj);
       const entry: InstructionEntry = {
         ...contentObj,
         id,
-        title: contentObj.title || id,
-        body: contentObj.body || (typeof content === 'string' ? content : ''),
-        categories: Array.isArray(contentObj.categories) ? contentObj.categories : [],
+        title: typeof contentObj.title === 'string' ? contentObj.title : id,
+        body: typeof contentObj.body === 'string' ? contentObj.body : '',
+        categories: Array.isArray(contentObj.categories)
+          ? contentObj.categories.filter((category): category is string => typeof category === 'string')
+          : [],
         priority: typeof contentObj.priority === 'number' ? contentObj.priority : 50,
-        audience: contentObj.audience || 'all',
-        requirement: contentObj.requirement || 'optional',
+        audience: dashboardAudience(contentObj.audience),
+        requirement: dashboardRequirement(contentObj.requirement),
+        contentType: dashboardContentType(contentObj.contentType),
+        sourceHash: typeof contentObj.sourceHash === 'string' ? contentObj.sourceHash : '',
+        schemaVersion: typeof contentObj.schemaVersion === 'string' ? contentObj.schemaVersion : SCHEMA_VERSION,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
-      await writeEntryAsync(entry); // lgtm[js/http-to-file-access] — writes to config-controlled instructions directory
+      await writeEntryAsync(entry, { createOnly: true }); // lgtm[js/http-to-file-access] — writes to config-controlled instructions directory
       touchIndexVersion();
       invalidate();
       const reloaded = await ensureLoadedAsync();
@@ -211,7 +339,10 @@ export function createInstructionsRoutes(): Router {
       res.json({ success: true, message: 'Instruction created', name: id, verified, timestamp: Date.now() });
     } catch (error) {
       if (isInstructionValidationError(error)) {
-        return res.status(400).json({ success: false, error: 'invalid_instruction', validationErrors: error.validationErrors });
+        return validationErrorResponse(res, error);
+      }
+      if (isDuplicateInstructionWriteError(error)) {
+        return res.status(409).json({ success: false, error: 'Instruction already exists' });
       }
       logError('[API] Failed to create instruction:', error);
       res.status(500).json({ success: false, error: 'Failed to create instruction' });
@@ -226,12 +357,16 @@ export function createInstructionsRoutes(): Router {
       const { content } = req.body || {};
       const id = safeName(req.params.name);
       if (!content) return res.status(400).json({ success: false, error: 'Missing content' });
+      const contentObj = requireInstructionContentObject(content);
+      assertValidDashboardInstructionEnums(contentObj);
+      assertValidDashboardInstructionShape(contentObj);
+      assertDashboardBodyWithinLimit(contentObj);
       const st = (res.locals as IndexLocals).indexState;
       const existing = st.byId.get(id);
       if (!existing) return res.status(404).json({ success: false, error: 'Not found' });
       const updated: InstructionEntry = {
         ...existing,
-        ...(typeof content === 'object' && content !== null ? content : {}), // lgtm[js/comparison-between-incompatible-types] — idiomatic typeof-object plus null check (typeof null === 'object' in JS)
+        ...contentObj,
         id, // preserve id
         updatedAt: new Date().toISOString(),
       };
@@ -247,7 +382,7 @@ export function createInstructionsRoutes(): Router {
       res.json({ success: true, message: 'Instruction updated', verified, timestamp: Date.now() });
     } catch (error) {
       if (isInstructionValidationError(error)) {
-        return res.status(400).json({ success: false, error: 'invalid_instruction', validationErrors: error.validationErrors });
+        return validationErrorResponse(res, error);
       }
       logError('[API] Failed to update instruction:', error);
       res.status(500).json({ success: false, error: 'Failed to update instruction' });
@@ -268,6 +403,9 @@ export function createInstructionsRoutes(): Router {
       await ensureLoadedAsync();
       res.json({ success: true, message: 'Instruction deleted', timestamp: Date.now() });
     } catch (error) {
+      if (isInstructionValidationError(error)) {
+        return validationErrorResponse(res, error);
+      }
       logError('[API] Failed to delete instruction:', error);
       res.status(500).json({ success: false, error: 'Failed to delete instruction' });
     }
