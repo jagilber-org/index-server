@@ -74,6 +74,12 @@ describe('npm publish readiness', () => {
       const firstLine = fs.readFileSync(binPath, 'utf8').split('\n')[0];
       expect(firstLine).toMatch(/^#!.*node/);
     });
+
+    it('bin setup launcher points to the packed setup wizard path', () => {
+      const bin = fs.readFileSync(binPath, 'utf8');
+      expect(bin).toContain("'scripts', 'build', 'setup-wizard.mjs'");
+      expect(bin).not.toContain("'scripts', 'setup-wizard.mjs'");
+    });
   });
 
   describe('files field (what npm pack includes)', () => {

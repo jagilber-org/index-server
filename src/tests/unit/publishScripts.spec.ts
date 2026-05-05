@@ -15,6 +15,7 @@ const RELEASE_WORKFLOW_PATH = path.join(REPO_ROOT, 'scripts', 'Invoke-ReleaseWor
 const PS1_PATH = path.join(REPO_ROOT, 'scripts', 'build', 'Publish-DualRepo.ps1');
 const PUB_PATH = path.join(REPO_ROOT, 'scripts', 'build', 'Publish-ToPublicRepo.ps1');
 const CLEANROOM_PATH = path.join(REPO_ROOT, 'scripts', 'deploy', 'New-CleanRoomCopy.ps1');
+const DEPLOY_LOCAL_PATH = path.join(REPO_ROOT, 'scripts', 'deploy', 'deploy-local.ps1');
 const GGSHIELD_WORKFLOW_PATH = path.join(REPO_ROOT, '.github', 'workflows', 'ggshield-secret-scans.yml');
 const GITLEAKS_WORKFLOW_PATH = path.join(REPO_ROOT, '.github', 'workflows', 'gitleaks-secret-scans.yml');
 const SEMGREP_WORKFLOW_PATH = path.join(REPO_ROOT, '.github', 'workflows', 'semgrep.yml');
@@ -333,6 +334,29 @@ describe('publish script hardening', () => {
       expect(src).toContain('function Get-LocalRefSha');
       expect(src).toContain('$remoteBranchSha -ne $localBranchSha');
       expect(src).toContain('$remoteTagSha -ne $localTagSha');
+    });
+
+    it('Publish-ToMirror.ps1 resumes merged PR handoff and avoids manual release collisions', () => {
+      const src = fs.readFileSync(path.join(REPO_ROOT, 'scripts', 'build', 'Publish-ToMirror.ps1'), 'utf8');
+      expect(src).toContain('function Get-PublishPrForBranch');
+      expect(src).toContain('--state all');
+      expect(src).toContain("Content-Hash: $ContentHash");
+      expect(src).toContain("Tag '$Tag' already points at $mergeCommitSha");
+      expect(src).toContain('Do NOT run gh release create');
+      expect(src).toContain('.github/workflows/release.yml creates the GitHub Release.');
+      expect(src).toContain('gh run watch `$runId --repo $Repo');
+      expect(src).not.toContain('gh release create $Tag');
+    });
+
+    it('deploy-local.ps1 avoids destructive npm ci when runtime node_modules already exists', () => {
+      const src = fs.readFileSync(DEPLOY_LOCAL_PATH, 'utf8');
+      expect(src).toContain("Preserving existing node_modules folder");
+      expect(src).toContain("if(Test-Path $nodeModulesPath)");
+      expect(src).toContain("npm install --omit=dev");
+      expect(src).toContain("npm ci --omit=dev");
+      expect(src).toContain("avoid destructive DLL unlink");
+      expect(src).not.toContain("npm ci --production");
+      expect(src).not.toContain("npm install --production");
     });
 
     it('SARIF upload actions are pinned and do not require processing wait permissions', () => {
