@@ -40,7 +40,6 @@ function vectorForText(text: string): Float32Array {
 }
 
 // ─── Module-level mocks ─────────────────────────────────────────────────────
-const MOCK_LOGGING = { level: 'warn', verbose: false, json: false, sync: false, diagnostics: false, protocol: false, sentinelRequested: false };
 
 // Disallowed file extensions/names that should never appear in instructions dir
 const DISALLOWED_IN_INSTR_DIR = ['.zip', '.db', '.db-wal', '.db-shm', 'embeddings.json'];
