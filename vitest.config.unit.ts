@@ -40,6 +40,7 @@ export default defineConfig({
     pool: 'threads',
     testTimeout: 10000,
     hookTimeout: 15000,
-    reporters: ['default'],
+    reporters: ['default', 'junit'],
+    outputFile: { junit: 'test-results/junit.xml' },
   },
 });

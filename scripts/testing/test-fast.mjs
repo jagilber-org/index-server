@@ -45,5 +45,5 @@ const childEnv = {
   INDEX_SERVER_AUTO_BACKUP: '0',
 };
 const vitestBin = path.resolve('node_modules', 'vitest', 'vitest.mjs');
-const child = spawn(process.execPath, [vitestBin, 'run', '--reporter=dot', ...fastSpecs], { stdio: 'inherit', env: childEnv });
+const child = spawn(process.execPath, [vitestBin, 'run', ...fastSpecs], { stdio: 'inherit', env: childEnv });
 child.on('exit', code => process.exit(code));

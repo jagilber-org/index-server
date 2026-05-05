@@ -16,6 +16,7 @@ const PS1_PATH = path.join(REPO_ROOT, 'scripts', 'build', 'Publish-DualRepo.ps1'
 const PUB_PATH = path.join(REPO_ROOT, 'scripts', 'build', 'Publish-ToPublicRepo.ps1');
 const CLEANROOM_PATH = path.join(REPO_ROOT, 'scripts', 'deploy', 'New-CleanRoomCopy.ps1');
 const DEPLOY_LOCAL_PATH = path.join(REPO_ROOT, 'scripts', 'deploy', 'deploy-local.ps1');
+const GITIGNORE_PATH = path.join(REPO_ROOT, '.gitignore');
 const GGSHIELD_WORKFLOW_PATH = path.join(REPO_ROOT, '.github', 'workflows', 'ggshield-secret-scans.yml');
 const GITLEAKS_WORKFLOW_PATH = path.join(REPO_ROOT, '.github', 'workflows', 'gitleaks-secret-scans.yml');
 const SEMGREP_WORKFLOW_PATH = path.join(REPO_ROOT, '.github', 'workflows', 'semgrep.yml');
@@ -213,6 +214,12 @@ describe('publish script hardening', () => {
     it('preserves dotfiles in subdirectories (only root is stripped)', () => {
       expect(fs.existsSync(path.join(outputDir, 'src', '.hidden'))).toBe(true);
     });
+  });
+
+  it('keeps runtime governance ignore rule root-anchored so scripts/governance remains trackable', () => {
+    const gitignoreLines = fs.readFileSync(GITIGNORE_PATH, 'utf8').split(/\r?\n/);
+    expect(gitignoreLines).toContain('/governance/');
+    expect(gitignoreLines).not.toContain('governance/');
   });
 
   describe.skipIf(!HAS_PUBLISH_EXCLUDE)('--verify-only flag', () => {
