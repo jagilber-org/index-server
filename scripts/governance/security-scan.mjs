@@ -149,6 +149,7 @@ const EXTENSIONS = new Set([
   '.ps1', '.psm1', '.psd1',
 ]);
 const PII_FILE_ALLOWLIST = [
+  '.test-run-status.json',
   'credential-pii-system-overview.md',
   'elk.bundled.js',
   'mermaid.min.js',
