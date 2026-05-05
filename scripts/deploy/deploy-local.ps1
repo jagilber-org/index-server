@@ -2,10 +2,9 @@
 .SYNOPSIS
   Builds and deploys the Index Server to a local production-style directory.
 
-  Write-Host "[deploy] Warning: failed to remove $($item | ForEach-Object { try { $_.FullName } catch { '<?> ' } }): $($_.Exception.Message)" -ForegroundColor Yellow
   Copies only the runtime necessities (dist, package.json, LICENSE, README excerpt) and
   creates convenience launch scripts (start.ps1 / start.cmd). The server auto-seeds canonical
-  instructions on first startup. Intended for single‑machine, non-network MCP usage.
+  instructions on first startup. Intended for single-machine, non-network MCP usage.
 
 .PARAMETER Destination
   Target root directory. Default is derived from DEPLOY_PROD_PATH / DEPLOY_DEV_PATH or a local machine root.
@@ -64,9 +63,9 @@ param(
 )
 
 # NOTE (stability-hardening): Recent CI/deploy flake analysis showed two intermittent issues:
-#  1) Handshake test timeouts during concurrent heavy IO (npm ci + large dist copy). Mitigated by raising
+#  - Handshake test timeouts during concurrent heavy IO (npm ci + large dist copy). Mitigated by raising
 #     handshake helper max timeout & adding diagnostics (INDEX_SERVER_TEST_HANDSHAKE_* env vars).
-#  2) Transient ERR_MODULE_NOT_FOUND / ENOENT for node_modules packages (e.g. es-errors, debug) observed
+#  - Transient ERR_MODULE_NOT_FOUND / ENOENT for node_modules packages (e.g. es-errors, debug) observed
 #     only when a separate test task executed overlapping with a fresh `npm ci` from this deploy script.
 #     Root cause: parallel task deleted and reinstalled node_modules while vitest worker tried to resolve.
 # To prevent recurrence, ensure tests complete before invoking deploy-local.ps1 with -Rebuild, or run deploy
@@ -250,6 +249,12 @@ if(Test-Path $Destination){
   $preserveCerts = Join-Path $Destination '.certs'
   $hadCerts = Test-Path $preserveCerts
   if($hadCerts){ Write-Host '[deploy] Preserving .certs folder (TLS certificates).' -ForegroundColor Green }
+  # Preserve node_modules on Windows redeploys. Native dependencies such as sharp
+  # can keep DLLs loaded while the server is running; destructive cleanup followed
+  # by `npm ci` then fails with EPERM after files have already been copied.
+  $preserveNodeModules = Join-Path $Destination 'node_modules'
+  $hadNodeModules = Test-Path $preserveNodeModules
+  if($hadNodeModules){ Write-Host '[deploy] Preserving existing node_modules folder; dependency install will update in place.' -ForegroundColor Green }
     # Robust removal: under concurrent test runs transient race conditions or non-filesystem
     # objects (e.g. $null placeholders) have caused pipeline objects without a FullName
     # property, aborting the script (and leaving dist/ uncopied). We defensively filter and
@@ -258,6 +263,7 @@ if(Test-Path $Destination){
     if($hadInstructions){ $preserveSet += $preserveInstructions }
     if($hadBackups){ $preserveSet += $preserveBackups }
     if($hadCerts){ $preserveSet += $preserveCerts }
+    if($hadNodeModules){ $preserveSet += $preserveNodeModules }
     Get-ChildItem -Force -LiteralPath $Destination -ErrorAction SilentlyContinue | ForEach-Object {
       $item = $_
       if(-not $item){ return }
@@ -381,7 +387,7 @@ $runtime = [ordered]@{
   scripts = @{ start = 'node dist/server/index-server.js' }
 }
 # Preserve npm overrides so the lockfile (which is resolved under overrides)
-# stays in sync with package.json during `npm ci --production`. Without this,
+# stays in sync with package.json during `npm ci --omit=dev`. Without this,
 # transitive deps pinned via overrides (e.g. uuid -> ^14 forced by mermaid)
 # trigger EUSAGE "Missing: <pkg>@<ver> from lock file" because npm ci sees
 # the original transitive request but the lockfile only carries the
@@ -392,7 +398,7 @@ if($null -ne $pkgOverrides){
 }
 $runtime | ConvertTo-Json -Depth 10 | Out-File (Join-Path $Destination 'package.json') -Encoding UTF8
 
-# Copy package-lock.json so npm ci --production installs exact locked versions
+# Copy package-lock.json so npm ci --omit=dev installs exact locked versions
 if(Test-Path 'package-lock.json'){
   Write-Host '[deploy] Copying package-lock.json (ensures deterministic dependency installation)...'
   Copy-Item -Force 'package-lock.json' (Join-Path $Destination 'package-lock.json')
@@ -455,9 +461,9 @@ if(-not (Test-Path (Join-Path $PSScriptRoot 'node_modules'))){
   pushd $PSScriptRoot
   try {
     if(Test-Path (Join-Path $PSScriptRoot 'package-lock.json')){
-      npm ci --production
+      npm ci --omit=dev
     } else {
-      npm install --production
+      npm install --omit=dev
     }
   } catch { [Console]::Error.WriteLine("[start] npm install failed: $($_.Exception.Message)"); exit 1 }
   finally { popd }
@@ -471,7 +477,7 @@ node @nodeArgs dist/server/index-server.js 2>> (Join-Path $PSScriptRoot 'logs/se
 '@
 Set-Content -Path (Join-Path $Destination 'start.ps1') -Value $startPs1 -Encoding UTF8
 
-$startCmd = "@echo off" + "`r`nrem Set INDEX_SERVER_VERBOSE_LOGGING=1 to enable IndexCount / diagnostics" + "`r`nif not exist node_modules (echo [start] Installing production dependencies... & if exist package-lock.json (call npm ci --production) else (call npm install --production))" + "`r`nnode %* dist\server\index-server.js"
+$startCmd = "@echo off" + "`r`nrem Set INDEX_SERVER_VERBOSE_LOGGING=1 to enable IndexCount / diagnostics" + "`r`nif not exist node_modules (echo [start] Installing production dependencies... & if exist package-lock.json (call npm ci --omit=dev) else (call npm install --omit=dev))" + "`r`nnode %* dist\server\index-server.js"
 Set-Content -Path (Join-Path $Destination 'start.cmd') -Value $startCmd -Encoding ASCII
 
 Write-Host '[deploy] Done copying files.' -ForegroundColor Green
@@ -480,13 +486,21 @@ Write-Host '[deploy] Done copying files.' -ForegroundColor Green
 Write-Host '[deploy] Installing production dependencies...' -ForegroundColor Cyan
 Push-Location $Destination
 try {
-  # Prefer npm ci when lock file is present (deterministic, fast) — fall back to npm install otherwise
-  if(Test-Path (Join-Path $Destination 'package-lock.json')){
-    npm ci --production
-    if($LASTEXITCODE -ne 0){ throw "npm ci --production failed with exit code $LASTEXITCODE" }
+  # Use npm ci only for fresh installs. On Windows, npm ci destructively removes
+  # node_modules first; if a running process or AV scanner holds a native DLL
+  # open (for example sharp/libvips), the unlink fails with EPERM. Existing
+  # runtime installs are updated in place instead.
+  $nodeModulesPath = Join-Path $Destination 'node_modules'
+  if(Test-Path $nodeModulesPath){
+    Write-Host '[deploy] Existing node_modules detected; running npm install --omit=dev to avoid destructive DLL unlink.' -ForegroundColor Cyan
+    npm install --omit=dev
+    if($LASTEXITCODE -ne 0){ throw "npm install --omit=dev failed with exit code $LASTEXITCODE" }
+  } elseif(Test-Path (Join-Path $Destination 'package-lock.json')){
+    npm ci --omit=dev
+    if($LASTEXITCODE -ne 0){ throw "npm ci --omit=dev failed with exit code $LASTEXITCODE" }
   } else {
-    npm install --production
-    if($LASTEXITCODE -ne 0){ throw "npm install --production failed with exit code $LASTEXITCODE" }
+    npm install --omit=dev
+    if($LASTEXITCODE -ne 0){ throw "npm install --omit=dev failed with exit code $LASTEXITCODE" }
   }
   # Verify critical dependencies were installed
   $criticalDeps = @('ajv','express','zod','ws')
@@ -498,7 +512,7 @@ try {
   Write-Host '[deploy] Production dependencies installed and validated.' -ForegroundColor Green
 } catch {
   Write-Host "[deploy] npm install failed: $($_.Exception.Message)" -ForegroundColor Red
-  Write-Host '[deploy] Server will fail to start without dependencies. Fix npm issues and re-deploy.' -ForegroundColor Yellow
+  Write-Host '[deploy] Server will fail to start without dependencies. If this is EPERM/unlink on a native DLL, stop the running server or process holding node_modules, then re-deploy.' -ForegroundColor Yellow
   exit 1
 } finally { Pop-Location }
 Write-Host "Next: (cd $Destination ; pwsh .\\start.ps1 -VerboseLogging -EnableMutation)" -ForegroundColor Cyan

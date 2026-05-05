@@ -294,7 +294,7 @@ function parseArgs(argv: string[]): CliConfig {
 }
 
 function launchSetupWizard(argv: string[]): never {
-  const wizardPath = path.join(__dirname, '..', '..', 'scripts', 'setup-wizard.mjs');
+  const wizardPath = path.join(__dirname, '..', '..', 'scripts', 'build', 'setup-wizard.mjs');
   // Forward all args after --setup/--configure to the wizard
   const setupIdx = argv.findIndex(a => a === '--setup' || a === '--configure');
   const forwardArgs = setupIdx >= 0 ? argv.slice(setupIdx + 1) : [];

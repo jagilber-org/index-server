@@ -63,11 +63,12 @@ The canonical release flow is:
    - `pwsh -NoProfile -File scripts\Invoke-ReleaseWorkflow.ps1 -PushInternal`
    - This runs preflight checks, pushes the internal release branch/tags, verifies refs, waits for internal GitHub Actions checks, builds, deploys locally, prepares the clean-room public snapshot, and prints the human-only public mirror command.
 6. Publish the public mirror after human review.
-   - Preferred: run the printed `scripts\Publish-ToMirror.ps1 -CreatePR -WaitForMerge` command, or have a human rerun `scripts\Invoke-ReleaseWorkflow.ps1 -CreatePR -WaitForMerge`.
-   - Alternative: `node scripts/publish-direct-to-remote.cjs --tag vX.Y.Z --create-release`
+    - Preferred: run the printed `scripts\Publish-ToMirror.ps1 -CreatePR -WaitForMerge` command, or have a human rerun `scripts\Invoke-ReleaseWorkflow.ps1 -CreatePR -WaitForMerge`.
+    - If `-WaitForMerge` times out but the PR is merged later, rerun the same command. The script reuses the existing merged PR for the publish branch when the content hash matches and resumes tag creation.
+    - Alternative: `node scripts/publish-direct-to-remote.cjs --tag vX.Y.Z --create-release`
 7. Verify both sides.
-   - Confirm `origin` and `public` both contain `vX.Y.Z`.
-   - Confirm the public GitHub release exists and the local repo is back on clean `main`.
+    - Confirm `origin` and `public` both contain `vX.Y.Z`.
+    - Confirm the public GitHub release exists and the local repo is back on clean `main`.
 
 ### MCP Registry auth note
 
@@ -90,6 +91,8 @@ pwsh -NoProfile -File scripts\Publish-ToMirror.ps1 -SourcePath '<clean-room-path
 ```
 
 Replace `X.Y.Z` with the version created by the bump step.
+
+For the PR-based path, the public Release workflow is triggered by creating `refs/tags/vX.Y.Z` on the public mirror. Do not separately run `gh release create` for that tag; `.github/workflows/release.yml` owns GitHub Release creation.
 
 ### Public Publish Alternatives
 

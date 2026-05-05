@@ -59,9 +59,13 @@
 
 .PARAMETER WaitForMerge
     CreatePR mode only. After opening the PR, poll until it is merged, then
-    create and push the release tag (annotated, name = -Tag) pointing at the
-    merge commit on main. Without this switch the operator must tag manually
-    after merging.
+    create the release tag pointing at the merge commit on main. Tag creation
+    triggers the public Release workflow, which creates the GitHub Release.
+    Without this switch the operator must tag manually after merging.
+
+    If the wait times out, rerun the same command after merging. The script
+    reuses the existing PR for the publish branch, including already-merged PRs
+    whose body matches the prepared content hash, and resumes post-merge tagging.
 
 .PARAMETER WaitForMergeTimeoutMinutes
     Maximum minutes to wait for the PR to be merged when -WaitForMerge is set.
@@ -369,6 +373,70 @@ Publish cannot proceed without a sanctioned remote configuration (fail-closed).
     return
 }
 
+function Get-PublishPrForBranch {
+    param(
+        [Parameter(Mandatory)]
+        [string]$Repo,
+
+        [Parameter(Mandatory)]
+        [string]$Branch,
+
+        [string]$ContentHash
+    )
+
+    $json = & gh pr list --repo $Repo --head $Branch --state all --limit 20 --json url,number,state,body,mergeCommit,updatedAt 2>$null
+    if ($LASTEXITCODE -ne 0 -or -not $json -or $json -eq '[]') {
+        return $null
+    }
+
+    try {
+        $prs = @($json | ConvertFrom-Json)
+    }
+    catch {
+        Write-Warning "Could not parse existing PR list for branch '$Branch'; gh output was: $json"
+        return $null
+    }
+
+    $open = @($prs | Where-Object { $_.state -eq 'OPEN' } | Sort-Object updatedAt -Descending | Select-Object -First 1)
+    if ($open.Count -gt 0) {
+        return $open[0]
+    }
+
+    $merged = @($prs | Where-Object {
+            $_.state -eq 'MERGED' -and (
+                -not $ContentHash -or
+                ($_.body -and $_.body.Contains("Content-Hash: $ContentHash"))
+            )
+        } | Sort-Object updatedAt -Descending | Select-Object -First 1)
+    if ($merged.Count -gt 0) {
+        return $merged[0]
+    }
+
+    return $null
+}
+
+function Write-ReleaseWorkflowHandoff {
+    param(
+        [Parameter(Mandatory)]
+        [string]$Repo,
+
+        [Parameter(Mandatory)]
+        [string]$Tag
+    )
+
+    Write-Host ''
+    Write-Host '------------------------------------------------------------' -ForegroundColor Cyan
+    Write-Host ' RELEASE WORKFLOW HANDOFF' -ForegroundColor Cyan
+    Write-Host '------------------------------------------------------------' -ForegroundColor Cyan
+    Write-Host "  Tag '$Tag' is the release trigger. Do NOT run gh release create;" -ForegroundColor White
+    Write-Host '  .github/workflows/release.yml creates the GitHub Release.' -ForegroundColor White
+    Write-Host ''
+    Write-Host '  Watch the triggered run:' -ForegroundColor White
+    Write-Host "       `$runId = gh run list --repo $Repo --workflow Release --limit 1 --json databaseId --jq '.[0].databaseId'" -ForegroundColor Yellow
+    Write-Host "       gh run watch `$runId --repo $Repo" -ForegroundColor Yellow
+    Write-Host '------------------------------------------------------------' -ForegroundColor Cyan
+}
+
 # --- Default review org from RemoteUrl ---
 if (-not $ReviewOrg -and $RemoteUrl -match 'github\.com[/:]([^/]+)/') {
     $ReviewOrg = $matches[1]
@@ -558,44 +626,40 @@ try {
         $normalizedPrUrl = Normalize-GitUrl $RemoteUrl
         $prRepo = $normalizedPrUrl -replace '^https://github\.com/', ''
 
-        $prTitle = "Publish from $($manifest.sourceRepo)"
-        if ($Tag) { $prTitle += " ($Tag)" }
-        $prBody = "Content-Hash: $($manifest.contentHash)`nSource: $($manifest.sourceRepo)`nPrepared: $($manifest.preparedAt)"
-
-        $prUrl = & gh pr create --repo $prRepo --base main --head $branchName --title $prTitle --body $prBody 2>&1
         $prAlreadyExisted = $false
-        if ($LASTEXITCODE -ne 0) {
-            Write-Warning "Branch pushed but PR creation via gh failed: $prUrl"
-            # Surface any existing PR for this branch so the operator does not duplicate it.
-            $existingPr = & gh pr list --repo $prRepo --head $branchName --state open --json url,number 2>$null
-            if ($LASTEXITCODE -eq 0 -and $existingPr -and $existingPr -ne '[]') {
-                Write-Host "An open PR already exists for branch '$branchName':" -ForegroundColor Yellow
-                $existingPrUrl = $null
-                try {
-                    $parsedPrs = $existingPr | ConvertFrom-Json
-                    foreach ($pr in $parsedPrs) {
-                        Write-Host "  PR #$($pr.number): $($pr.url)" -ForegroundColor Yellow
-                        if (-not $existingPrUrl) { $existingPrUrl = $pr.url }
-                    }
-                }
-                catch {
-                    # Fall back to raw output if parsing ever fails so operators still see something useful.
-                    Write-Host $existingPr -ForegroundColor Yellow
-                }
-                # Treat the existing PR as the canonical PR for the rest of the
-                # workflow so operators still get the post-merge tag/release
-                # next-steps (and WaitForMerge auto-tagging) on republish runs.
-                if ($existingPrUrl) {
-                    $prUrl = $existingPrUrl
+        $prReady = $false
+        $existingPublishPr = Get-PublishPrForBranch -Repo $prRepo -Branch $branchName -ContentHash $manifest.contentHash
+        if ($existingPublishPr) {
+            $prUrl = $existingPublishPr.url
+            $prAlreadyExisted = $true
+            $prReady = $true
+            Write-Host "Reusing existing PR #$($existingPublishPr.number) for branch '$branchName' ($($existingPublishPr.state))." -ForegroundColor Yellow
+        }
+        else {
+            $prTitle = "Publish from $($manifest.sourceRepo)"
+            if ($Tag) { $prTitle += " ($Tag)" }
+            $prBody = "Content-Hash: $($manifest.contentHash)`nSource: $($manifest.sourceRepo)`nPrepared: $($manifest.preparedAt)"
+
+            $prUrl = & gh pr create --repo $prRepo --base main --head $branchName --title $prTitle --body $prBody 2>&1
+            if ($LASTEXITCODE -ne 0) {
+                Write-Warning "Branch pushed but PR creation via gh failed: $prUrl"
+                $existingPublishPr = Get-PublishPrForBranch -Repo $prRepo -Branch $branchName -ContentHash $manifest.contentHash
+                if ($existingPublishPr) {
+                    Write-Host "Reusing existing PR #$($existingPublishPr.number) for branch '$branchName' ($($existingPublishPr.state))." -ForegroundColor Yellow
+                    $prUrl = $existingPublishPr.url
                     $prAlreadyExisted = $true
+                    $prReady = $true
+                }
+                else {
+                    Write-Host "Create the PR manually at: $normalizedPrUrl/compare/main...$($branchName)?expand=1" -ForegroundColor Yellow
                 }
             }
             else {
-                Write-Host "Create the PR manually at: $normalizedPrUrl/compare/main...$($branchName)?expand=1" -ForegroundColor Yellow
+                $prReady = $true
             }
         }
 
-        if ($LASTEXITCODE -eq 0 -or $prAlreadyExisted) {
+        if ($prReady -and $prUrl) {
             Write-Host ''
             Write-Host '============================================================' -ForegroundColor Cyan
             if ($prAlreadyExisted) {
@@ -658,7 +722,20 @@ try {
                             $existingTag = & gh api "repos/$prRepo/git/refs/tags/$Tag" 2>$null
                             $tagExists = ($LASTEXITCODE -eq 0 -and $existingTag -and $existingTag -notmatch 'Not Found')
                             if ($tagExists -and -not $AllowTagOverwrite) {
-                                Write-Error "Tag '$Tag' already exists on $prRepo. Re-run with -AllowTagOverwrite to replace it."
+                                $existingTagSha = $null
+                                try {
+                                    $existingTagObj = $existingTag | ConvertFrom-Json
+                                    $existingTagSha = $existingTagObj.object.sha
+                                }
+                                catch {
+                                    # Fall through to the immutable-tag error below.
+                                }
+                                if ($existingTagSha -eq $mergeCommitSha) {
+                                    Write-Host "[publish] Tag '$Tag' already points at $mergeCommitSha on $prRepo; post-merge tagging is complete." -ForegroundColor Green
+                                    Write-ReleaseWorkflowHandoff -Repo $prRepo -Tag $Tag
+                                    return
+                                }
+                                Write-Error "Tag '$Tag' already exists on $prRepo at $existingTagSha, expected $mergeCommitSha. Re-run with -AllowTagOverwrite only after confirming the published release should move."
                                 return
                             }
                             if ($tagExists -and $AllowTagOverwrite) {
@@ -676,12 +753,7 @@ try {
                             }
                             else {
                                 Write-Host "[publish] Tag '$Tag' -> $mergeCommitSha created on $prRepo." -ForegroundColor Green
-                                Write-Host ''
-                                Write-Host '------------------------------------------------------------' -ForegroundColor Cyan
-                                Write-Host ' KICK OFF GITHUB RELEASE' -ForegroundColor Cyan
-                                Write-Host '------------------------------------------------------------' -ForegroundColor Cyan
-                                Write-Host "  gh release create $Tag --repo $prRepo --target main --title '$Tag' --generate-notes" -ForegroundColor Yellow
-                                Write-Host '------------------------------------------------------------' -ForegroundColor Cyan
+                                Write-ReleaseWorkflowHandoff -Repo $prRepo -Tag $Tag
                             }
                         }
                     }
@@ -692,19 +764,28 @@ try {
                 Write-Host ' NEXT STEPS (after PR is merged)' -ForegroundColor Cyan
                 Write-Host '------------------------------------------------------------' -ForegroundColor Cyan
                 if ($Tag) {
-                    Write-Host '  1. Capture the merge commit SHA on main:' -ForegroundColor White
-                    Write-Host "       `$sha = gh api repos/$prRepo/commits/main --jq .sha" -ForegroundColor Yellow
-                    Write-Host '  2. Create the annotated tag at that commit:' -ForegroundColor White
+                    $prUrlText = ($prUrl | Out-String).Trim()
+                    $prNumber = $null
+                    if ($prUrlText -match '/pull/(\d+)\s*$') { $prNumber = [int]$Matches[1] }
+                    Write-Host '  1. Capture the PR merge commit SHA after the PR is merged:' -ForegroundColor White
+                    if ($prNumber) {
+                        Write-Host "       `$sha = gh pr view $prNumber --repo $prRepo --json mergeCommit --jq .mergeCommit.oid" -ForegroundColor Yellow
+                    }
+                    else {
+                        Write-Host "       `$sha = gh api repos/$prRepo/commits/main --jq .sha" -ForegroundColor Yellow
+                    }
+                    Write-Host '  2. Create the release tag at that exact commit:' -ForegroundColor White
                     Write-Host "       gh api -X POST repos/$prRepo/git/refs -f ref='refs/tags/$Tag' -f sha=`$sha" -ForegroundColor Yellow
-                    Write-Host '  3. Kick off the GitHub Release (auto-generated notes):' -ForegroundColor White
-                    Write-Host "       gh release create $Tag --repo $prRepo --target main --title '$Tag' --generate-notes" -ForegroundColor Yellow
+                    Write-Host '  3. Watch the tag-triggered Release workflow:' -ForegroundColor White
+                    Write-Host "       `$runId = gh run list --repo $prRepo --workflow Release --limit 1 --json databaseId --jq '.[0].databaseId'" -ForegroundColor Yellow
+                    Write-Host "       gh run watch `$runId --repo $prRepo" -ForegroundColor Yellow
                     Write-Host ''
-                    Write-Host "  Or skip steps 1-3 next time by re-running this script with: -WaitForMerge -Tag $Tag" -ForegroundColor DarkGray
+                    Write-Host "  Or skip these steps next time by re-running this script with: -WaitForMerge -Tag $Tag" -ForegroundColor DarkGray
                 } else {
                     Write-Host '  No -Tag was supplied; tag/release skipped. To tag manually:' -ForegroundColor White
                     Write-Host "       `$sha = gh api repos/$prRepo/commits/main --jq .sha" -ForegroundColor Yellow
                     Write-Host "       gh api -X POST repos/$prRepo/git/refs -f ref='refs/tags/<vX.Y.Z>' -f sha=`$sha" -ForegroundColor Yellow
-                    Write-Host "       gh release create <vX.Y.Z> --repo $prRepo --target main --generate-notes" -ForegroundColor Yellow
+                    Write-Host "       gh run list --repo $prRepo --workflow Release --limit 1" -ForegroundColor Yellow
                 }
                 Write-Host '------------------------------------------------------------' -ForegroundColor Cyan
             }

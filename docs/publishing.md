@@ -161,7 +161,7 @@ node scripts/publish-direct-to-remote.cjs --tag v1.21.0 --create-release
 | `-SkipInternalChecks` | Intentional manual-check handoff after internal branch/tag verification |
 | `-InternalChecksTimeoutMinutes` | Timeout for waiting on internal GitHub Actions checks after `-PushInternal` |
 | `-CreatePR` | Human-only: prepare and invoke `Publish-ToMirror.ps1 -CreatePR` |
-| `-WaitForMerge` | Human-only with `-CreatePR`: wait for merge, then tag the public mirror merge commit |
+| `-WaitForMerge` | Human-only with `-CreatePR`: wait for merge, then tag the public mirror merge commit; rerun after a timeout to resume from an already-merged matching PR |
 | `-DirectPublish` | Human-only: force-push mirror delivery, subject to `.publish-config.json` |
 | `-CreateReviewRepo` | Human-only: create a restricted review repo instead of publishing |
 | `-SkipPreflight` / `-SkipBuild` / `-SkipDeploy` / `-SkipCleanRoom` | Intentional deviation switches for already-completed steps |
@@ -176,6 +176,8 @@ node scripts/publish-direct-to-remote.cjs --tag v1.21.0 --create-release
 | `-CreateReviewRepo` | Create restricted GitHub repo for team review |
 | `-Tag` | Git tag to apply on remote |
 | `-Force` | Skip confirmation prompts |
+
+For `-CreatePR`, creating the public tag is the release trigger. Do not run `gh release create` manually for the same tag; the public `.github/workflows/release.yml` creates the GitHub Release after the tag appears.
 
 #### publish-direct-to-remote.cjs
 

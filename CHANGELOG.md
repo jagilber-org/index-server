@@ -17,6 +17,10 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 - **Tool classification docs**: clarified that registry `stable` vs `mutation` is a visibility/gating contract, so `feedback_submit` remains stable/core while still persisting feedback and audit entries.
 - **Instruction content type migration**: bumped instruction schema version to v5 and added a compatibility path mapping legacy `contentType: "chat-session"` records and writes to `workflow`, preserving workflow/runbook semantics instead of falling back to `instruction`.
 
+### Fixed
+
+- **Public release handoff**: `Publish-ToMirror.ps1 -CreatePR -WaitForMerge` now resumes from an already-merged publish PR when a previous wait timed out, treats an existing tag at the expected merge commit as success, and prints Release workflow watch commands instead of instructing operators to run a competing `gh release create`.
+
 ## [1.28.0] - 2026-05-04
 
 ### Added
