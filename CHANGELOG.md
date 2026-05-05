@@ -6,6 +6,14 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 
 ## [Unreleased]
 
+## [1.28.1] - 2026-05-05
+
+### Fixed
+
+- **Setup wizard package entrypoint**: fixed `npx -y @jagilber-org/index-server@latest --setup` by pointing the packed CLI launcher at `scripts/build/setup-wizard.mjs`.
+- **Release validation**: ensured PR and release unit-test paths emit `test-results/junit.xml`, restored public governance utilities in publish branches, and made duplicate MCP Registry publishes idempotent.
+- **Public CI gates**: stabilized merge-only log hygiene and GGShield quota handling so public `main` remains green after release PR merges.
+
 ### Added
 
 - **Release workflow**: added `scripts/Invoke-ReleaseWorkflow.ps1` as the canonical release/publish front door. It loads `.env`, resolves tag/remote/clean-room defaults, runs release preflight checks, optionally pushes and verifies the internal branch/tags, waits for internal GitHub Actions checks, prepares the clean-room mirror copy, and either prints or explicitly invokes the human-only public mirror delivery path.
