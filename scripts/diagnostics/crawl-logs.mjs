@@ -190,7 +190,7 @@ for (const file of files) {
 
     const msg = typeof obj.msg === 'string' ? obj.msg : JSON.stringify(obj.msg);
     const sig = fingerprint(msg);
-    const allow = isAllowlisted(msg);
+    const allow = isAllowlisted(msg) || (typeof obj.detail === 'string' && isAllowlisted(obj.detail));
     let bucket = sigBuckets.get(sig);
     if (!bucket) {
       bucket = { level, count: 0, samples: [], allowlisted: allow };

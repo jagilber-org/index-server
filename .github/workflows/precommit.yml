@@ -75,6 +75,7 @@ jobs:
         if: ${{ github.event_name == 'push' && env.GITGUARDIAN_API_KEY != '' }}
         env:
           GITGUARDIAN_API_KEY: ${{ secrets.GITGUARDIAN_API_KEY }}
+          GGSHIELD_QUOTA_MODE: advisory
         run: |
           mkdir -p reports
           bash scripts/ci/ggshield-with-retry.sh secret scan path . --recursive -y --use-gitignore --format json --output reports/ggshield-report.json --exit-zero
