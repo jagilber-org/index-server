@@ -31,6 +31,7 @@ description = "Template-standard exclusions"
     '''\.svn/''',
     '''\.cache/''',
     '''\.cache_ggshield/''',
+    '''^\.codeql/''',
     '''\.mypy_cache/''',
     '''\.pytest_cache/''',
     '''coverage/''',
