@@ -53,7 +53,7 @@ describe('.gitignore completeness', () => {
       'data/',
       'memory/',
       'logs/',
-      'governance/',
+      '/governance/',
       'backups/',
       'metrics/',
       'coverage/',

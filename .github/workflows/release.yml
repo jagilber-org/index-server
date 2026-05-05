@@ -338,7 +338,20 @@ jobs:
 
       - name: Publish to MCP Registry
         if: env.ALLOW_EXTERNAL_PUBLISH == 'true' && (steps.mcp_auth.outputs.mode == 'oidc' || steps.mcp_auth.outputs.mode == 'pat')
-        run: ./mcp-publisher publish
+        run: |
+          set +e
+          output=$(./mcp-publisher publish 2>&1)
+          status=$?
+          set -e
+          echo "$output"
+          if [ "$status" -eq 0 ]; then
+            exit 0
+          fi
+          if echo "$output" | grep -qi 'duplicate version'; then
+            echo "MCP Registry version already exists; treating publish as idempotent."
+            exit 0
+          fi
+          exit "$status"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v3
