@@ -20,9 +20,13 @@ EXPERIMENTAL: SQLite (storage )?backend
 # Test fixtures inject deliberate registry tool errors to exercise error paths.
 \[registry\] Tool error: (messaging_|feedback_)
 
-# Negative test: index loader is fed instructions with intentionally bad sourceHash to
-# verify schema rejection. Counted but expected.
-\[index:skip\] test-<n>\.json: schema: /sourceHash:
+# Negative tests feed the index loader intentionally bad generated test-N files
+# to verify schema rejection. Counted but expected.
+\[index:skip\] test-\d+\.json: schema: /sourceHash:
+
+# Other index loader negative fixtures intentionally feed malformed instruction
+# files to verify skip/error reporting.
+\[index:skip\]
 
 # Auto-migration failure path test fixture. The fix-loop-guard ensures it fires once
 # per process; the test triggers it deliberately. Real regressions would repeat per request.
@@ -39,6 +43,27 @@ EXPERIMENTAL: SQLite (storage )?backend
 # Input-validation surface: search service logs invalid keyword/regex/limit attempts at
 # WARN with the parsing Error stack. Tests exercise every validation branch.
 \[search\] Search error:
+
+# Import and RPC negative-path fixtures intentionally submit malformed payloads
+# to verify errors are surfaced consistently.
+\[import\] (entry rejected|rejected|complete with errors)
+\[rpc\] tools/call error
+\[registry\] Tool error: (index_search|index_dispatch)
+\[HttpTransport\] RPC handler error
+\[test\] surface-error
+
+# Memory monitor and audit/manifest failure fixtures deliberately exercise
+# failure logging paths; these are not operator-actionable in test logs.
+\[MemoryMonitor\]
+^Memory Status
+^Event Listeners:
+MEMORY MONITOR REPORT
+\[audit\] Failed to persist audit log
+\[manifest\] write failed
+
+# Stack traces emitted by deliberate parser/event-buffer negative tests.
+Unexpected non-whitespace character after JSON
+src[\\/]tests[\\/]eventBuffer\.spec\.ts
 
 # CI runners don't have DirectML/CUDA; embedding service falls back to CPU and warns.
 \[embeddingService\] dml provider not available
