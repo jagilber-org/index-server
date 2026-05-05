@@ -60,7 +60,7 @@ function buildMinimalExample(): unknown {
     categories: ["example", "documentation"],
     primaryCategory: "example",
     contentType: "instruction",
-    schemaVersion: "4"
+    schemaVersion: "5"
   };
 }
 
@@ -79,7 +79,7 @@ function _buildComprehensiveExample(): unknown {
     categories: ["example", "documentation", "governance"],
     primaryCategory: "governance",
     contentType: "instruction",
-    schemaVersion: "4",
+    schemaVersion: "5",
     version: "1.0.0",
     status: "approved",
     owner: "platform-team",
@@ -162,8 +162,8 @@ function defineValidationRules() {
     { field: 'requirement', rule: 'Enum', constraint: 'One of: mandatory, critical, recommended, optional, deprecated' },
     { field: 'categories', rule: 'Array', constraint: '0-25 items, each 1-49 chars, lowercase, pattern: ^[a-z0-9][a-z0-9-_]{0,48}$' },
     { field: 'primaryCategory', rule: 'Reference', constraint: 'Must be a member of categories array if present' },
-    { field: 'contentType', rule: 'Enum', constraint: 'One of: instruction (default), template, chat-session, reference, example, agent' },
-    { field: 'schemaVersion', rule: 'Enum', constraint: 'Currently "4"' },
+    { field: 'contentType', rule: 'Enum', constraint: 'One of: instruction (default), template, workflow, reference, example, agent' },
+    { field: 'schemaVersion', rule: 'Enum', constraint: 'Currently "5"' },
     { field: 'sourceHash', rule: 'Pattern', constraint: 'SHA256 hex string (64 chars) when present' },
     { field: 'version', rule: 'Pattern', constraint: 'Semantic version: ^\\d+\\.\\d+\\.\\d+$ (e.g., "1.0.0")' },
     { field: 'status', rule: 'Enum', constraint: 'One of: draft, review, approved, deprecated' },

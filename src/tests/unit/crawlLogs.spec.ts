@@ -14,7 +14,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { spawnSync } from 'node:child_process';
 
-const SCRIPT = path.resolve(__dirname, '..', '..', '..', 'scripts', 'crawl-logs.mjs');
+const SCRIPT = path.resolve(__dirname, '..', '..', '..', 'scripts', 'diagnostics', 'crawl-logs.mjs');
 
 let tmpDir: string;
 

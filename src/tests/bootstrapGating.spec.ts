@@ -45,7 +45,7 @@ describe('bootstrap gating', () => {
     send(proc,{ jsonrpc:'2.0', id:1, method:'initialize', params:{ protocolVersion:'2025-06-18', clientInfo:{ name:'bootstrap-test', version:'0.0.0' }, capabilities:{ tools:{} } } });
     await waitForId(proc,1);
     // Attempt mutation via dispatcher
-    send(proc,{ jsonrpc:'2.0', id:2, method:'tools/call', params:{ name:'index_dispatch', arguments:{ action:'add', entry:{ id:'temp-bootstrap-test', title:'t', body:'b', priority:1, audience:'agents', requirement:'optional', categories:['test'] }, overwrite:true, lax:true } } });
+    send(proc,{ jsonrpc:'2.0', id:2, method:'tools/call', params:{ name:'index_dispatch', arguments:{ action:'add', entry:{ id:'temp-bootstrap-test', title:'t', body:'b', priority:1, audience:'group', requirement:'optional', categories:['test'] }, overwrite:true, lax:true } } });
     const addBlocked = await waitForId(proc,2);
     const blockedPayload = (addBlocked as any).result?.content?.[0]?.text ? JSON.parse((addBlocked as any).result.content[0].text) : (addBlocked as any).result;
     expect(blockedPayload.error || blockedPayload.reason).toBeTruthy();
@@ -62,7 +62,7 @@ describe('bootstrap gating', () => {
     const finPayload = (fin as any).result?.content?.[0]?.text ? JSON.parse((fin as any).result.content[0].text) : (fin as any).result;
     expect(finPayload.result?.confirmed).toBe(true);
     // Retry mutation
-    send(proc,{ jsonrpc:'2.0', id:5, method:'tools/call', params:{ name:'index_dispatch', arguments:{ action:'add', entry:{ id:'temp-bootstrap-test', title:'t', body:'b', priority:1, audience:'agents', requirement:'optional', categories:['test'] }, overwrite:true, lax:true } } });
+    send(proc,{ jsonrpc:'2.0', id:5, method:'tools/call', params:{ name:'index_dispatch', arguments:{ action:'add', entry:{ id:'temp-bootstrap-test', title:'t', body:'b', priority:1, audience:'group', requirement:'optional', categories:['test'] }, overwrite:true, lax:true } } });
     const addAfter = await waitForId(proc,5);
     const addAfterPayload = (addAfter as any).result?.content?.[0]?.text ? JSON.parse((addAfter as any).result.content[0].text) : (addAfter as any).result;
     expect(addAfterPayload.error).toBeFalsy();
@@ -95,7 +95,7 @@ describe('bootstrap gating', () => {
     procRef.stderr?.on('data', () => { /* drain stderr */ });
     send(procRef,{ jsonrpc:'2.0', id:21, method:'initialize', params:{ protocolVersion:'2025-06-18', clientInfo:{ name:'bootstrap-ref', version:'0.0.0' }, capabilities:{ tools:{} } } });
     await waitForId(procRef,21);
-    send(procRef,{ jsonrpc:'2.0', id:22, method:'tools/call', params:{ name:'index_dispatch', arguments:{ action:'add', entry:{ id:'ref-block-test', title:'ref', body:'r', priority:1, audience:'agents', requirement:'optional', categories:['test'] }, overwrite:true, lax:true } } });
+    send(procRef,{ jsonrpc:'2.0', id:22, method:'tools/call', params:{ name:'index_dispatch', arguments:{ action:'add', entry:{ id:'ref-block-test', title:'ref', body:'r', priority:1, audience:'group', requirement:'optional', categories:['test'] }, overwrite:true, lax:true } } });
     const blocked = await waitForId(procRef,22);
     const blockedPayload = (blocked as any).result?.content?.[0]?.text ? JSON.parse((blocked as any).result.content[0].text) : (blocked as any).result;
     expect(blockedPayload.reason).toBe('reference_mode_read_only');

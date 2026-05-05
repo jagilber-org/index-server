@@ -71,9 +71,9 @@ The compose file also supports `INDEX_SERVER_PORT_BIND_HOST` and defaults it to 
 | `INDEX_SERVER_DASHBOARD_TLS_CA` | — | CA certificate path (PEM) |
 | `INDEX_SERVER_MUTATION` | `1` | Write operations are enabled by default; set `0` for read-only |
 | `INDEX_SERVER_LOG_LEVEL` | `info` | Log level (error/warn/info/debug/trace) |
-| `INDEX_SERVER_DIR` | `/app/instructions` | Instruction index directory |
-| `INDEX_SERVER_METRICS_DIR` | `/app/metrics` | Metrics storage |
-| `INDEX_SERVER_FEEDBACK_DIR` | `/app/feedback` | Feedback storage |
+| `INDEX_SERVER_DIR` | container instruction directory | Instruction index directory |
+| `INDEX_SERVER_METRICS_DIR` | container metrics directory | Metrics storage |
+| `INDEX_SERVER_FEEDBACK_DIR` | container feedback directory | Feedback storage |
 | `INDEX_SERVER_SEMANTIC_ENABLED` | `0` | `1` to enable semantic/embedding search (requires ~90MB model download on first use) |
 | `INDEX_SERVER_STORAGE_BACKEND` | `json` | `sqlite` for SQLite storage, `json` (default) for JSON files |
 | `INDEX_SERVER_SQLITE_VEC_ENABLED` | `0` | `1` to enable sqlite-vec vector embedding storage (requires Node.js ≥ 22.13.0). Falls back to JSON if native binary unavailable. |
@@ -83,12 +83,12 @@ The compose file also supports `INDEX_SERVER_PORT_BIND_HOST` and defaults it to 
 
 | Mount Point | Purpose |
 |-------------|---------|
-| `/app/instructions` | Instruction index (override built-in bundle) |
+| container instruction directory | Instruction index (override built-in bundle) |
 | `/app/data` | Persistent state data |
 | `/app/certs` | TLS certificates (read-only mount) |
 | `/app/logs` | Log files |
-| `/app/metrics` | Performance metrics |
-| `/app/feedback` | User feedback storage |
+| container metrics directory | Performance metrics |
+| container feedback directory | User feedback storage |
 
 ## TLS Certificate Generation
 

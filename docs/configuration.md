@@ -189,9 +189,9 @@ If VS Code shows "Configured but Not Connected":
 
 ---
 
-## Local Production Deployment (c:\mcp)
+## Local Production Deployment
 
-Quick script creates a trimmed runtime copy (dist + minimal package.json + seed instructions) at `C:\mcp\index-server`.
+Quick script creates a trimmed runtime copy (dist + minimal package.json + seed instructions) at your configured production install root.
 Existing runtime instructions are now ALWAYS preserved; before any overwrite a timestamped backup is created under `backups/` (unless `-NoBackup`).
 
 Steps:
@@ -205,13 +205,13 @@ Steps:
 1. Deploy (creates backup of existing instructions when present):
 
   ```powershell
-  pwsh scripts/deploy-local.ps1 -Destination C:\mcp\index-server -Rebuild -Overwrite
+  pwsh scripts/deploy-local.ps1 -Destination <production-install-root> -Rebuild -Overwrite
   ```
 
 1. Install production deps (inside destination):
 
   ```powershell
-  cd C:\mcp\index-server
+  cd <production-install-root>
   npm install --production
   ```
 
@@ -227,7 +227,7 @@ Steps:
   start.cmd
   ```
 
-1. Configure global VS Code `mcp.json` to point `cwd` to `C:/mcp/index-server` and `args: ["dist/server/index-server.js"]`.
+1. Configure global VS Code `mcp.json` to point `cwd` to your production install root and `args: ["dist/server/index-server.js"]`.
 
 Notes:
 
@@ -237,24 +237,24 @@ Notes:
 * Restore latest backup:
 
   ```powershell
-  pwsh scripts/restore-instructions.ps1 -Destination C:\mcp\index-server
+  pwsh scripts/restore-instructions.ps1 -Destination <production-install-root>
   ```
   
 * Restore specific backup (overwriting existing):
 
   ```powershell
-  pwsh scripts/restore-instructions.ps1 -Destination C:\mcp\index-server -BackupName instructions-20250828-153011 -Force
+  pwsh scripts/restore-instructions.ps1 -Destination <production-install-root> -BackupName instructions-20250828-153011 -Force
   ```
   
 * Fast code-only sync (no rebuild/tests, assumes local dist is current):
 
   ```powershell
-  pwsh scripts/sync-dist.ps1 -Destination C:\mcp\index-server -UpdatePackage
+  pwsh scripts/sync-dist.ps1 -Destination <production-install-root> -UpdatePackage
   ```
   
 * Governance & usage data live inside the instruction JSON files; keeping backups provides full recoverability.
 
-Optional: Create a scheduled task or Windows Service wrapper invoking `pwsh -File C:\mcp\index-server\start.ps1 -EnableMutation` for auto-start.
+Optional: Create a scheduled task or Windows Service wrapper invoking `pwsh -File <production-install-root>\start.ps1 -EnableMutation` for auto-start.
 
 ### Deployment Manifest & Post-Deploy Smoke Test (1.5.x)
 
@@ -290,7 +290,7 @@ Integrity Rationale:
 Use the new script `scripts/smoke-deploy.ps1` to verify a deployment quickly before pointing clients at it:
 
 ```powershell
-pwsh scripts/smoke-deploy.ps1 -Path C:\mcp\index-server -Json
+pwsh scripts/smoke-deploy.ps1 -Path <production-install-root> -Json
 ```
 
 Checks performed:
@@ -314,16 +314,16 @@ Flags:
 Typical CI pattern after deployment:
 
 ```powershell
-pwsh scripts/deploy-local.ps1 -Destination C:\mcp\index-server -Rebuild -Overwrite
-pwsh scripts/smoke-deploy.ps1 -Path C:\mcp\index-server -Json
+pwsh scripts/deploy-local.ps1 -Destination <production-install-root> -Rebuild -Overwrite
+pwsh scripts/smoke-deploy.ps1 -Path <production-install-root> -Json
 ```
 
 Manifest Comparison Example (PowerShell):
 
 ```powershell
 Compare-Object \
-  (Get-Content C:\mcp\index-server\deployment-manifest.json | ConvertFrom-Json) \
-  (Get-Content C:\mcp\index-server-prev\deployment-manifest.json | ConvertFrom-Json) -Property version, gitCommit, artifacts
+  (Get-Content <production-install-root>\deployment-manifest.json | ConvertFrom-Json) \
+  (Get-Content <previous-production-install-root>\deployment-manifest.json | ConvertFrom-Json) -Property version, gitCommit, artifacts
 ```
 
 This surfaces version / commit / hash drift succinctly without scanning full directory trees.
@@ -634,7 +634,7 @@ Rationale: a single execution pathway (tools/call) eliminates duplicate validati
 | `INDEX_SERVER_MAX_BULK_DELETE` | 5 | runtime | Maximum number of IDs `index_remove` deletes without `force: true`. |
 | `INDEX_SERVER_BACKUP_BEFORE_BULK_DELETE` | on | runtime | Snapshot instruction files before forced bulk delete. Set `0` to disable. |
 | `INDEX_SERVER_AUTO_SPLIT_OVERSIZED` | off | runtime | Auto-split oversized entries on startup instead of truncating. |
-| `INDEX_SERVER_BODY_WARN_LENGTH` | 50000 | runtime | Body warn/truncate threshold for instruction entries. Range: 1000-1000000. |
+| `INDEX_SERVER_BODY_WARN_LENGTH` | 50000 | runtime | Body warn/truncate threshold for instruction entries. Range: 1000 to 1000000. |
 
 #### Backup
 
@@ -996,7 +996,7 @@ Environment Flags:
 Design Rationale:
 
 * Central helper `attemptManifestUpdate()` now performs an immediate synchronous manifest write (Phase F simplification). Previous debounce logic was removed to guarantee determinism and eliminate timing races. (A future high‑churn mode could reintroduce batching behind an env flag if needed.)
-* Separation of concerns: instruction files validated by `instruction.schema.json` (schemaVersion `4`), manifest snapshot validated by its own schema (`manifest.schema.json`). No need to bump instruction `schemaVersion` when altering internal manifest representation.
+* Separation of concerns: instruction files validated by `instruction.schema.json` (schemaVersion `5`), manifest snapshot validated by its own schema (`manifest.schema.json`). No need to bump instruction `schemaVersion` when altering internal manifest representation.
 * Additive only – no change in existing mutation semantics or instruction schema.
 
 ### Handshake Reliability (1.1.1)

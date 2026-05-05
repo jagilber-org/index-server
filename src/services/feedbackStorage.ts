@@ -8,7 +8,7 @@ import { logWarn, logError } from './logger';
 import { getRuntimeConfig } from '../config/runtimeConfig';
 import fs from 'fs';
 import path from 'path';
-import { createHash } from 'crypto';
+import { createHash, randomBytes } from 'crypto';
 
 export interface FeedbackEntry {
   id: string;
@@ -102,6 +102,6 @@ export function saveFeedbackStorage(storage: FeedbackStorage): void {
 
 export function generateFeedbackId(type: string, timestamp: string): string {
   const hash = createHash('sha256');
-  hash.update(`${type}-${timestamp}-${Math.random()}`);
+  hash.update(`${type}-${timestamp}-${randomBytes(8).toString('hex')}`);
   return hash.digest('hex').substring(0, 16);
 }

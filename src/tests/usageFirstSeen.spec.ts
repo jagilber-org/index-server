@@ -5,10 +5,17 @@ import path from 'path';
 // Tests that firstSeenTs is populated on first usage track
 
 const TEST_DIR = path.join(process.cwd(), 'tmp', 'test-usage-firstseen-' + Date.now());
-const TEST_ID = 'firstseen-test-entry';
+const TEST_ID = 'firstseen-test-entry-' + Date.now();
+const TEST_SNAPSHOT = path.join(TEST_DIR, 'usage-snapshot.json');
+const ORIGINAL_INDEX_SERVER_DIR = process.env.INDEX_SERVER_DIR;
+const ORIGINAL_USAGE_SNAPSHOT_PATH = process.env.INDEX_SERVER_USAGE_SNAPSHOT_PATH;
 
 describe('usageFirstSeen', () => {
 	afterAll(() => {
+		if (ORIGINAL_INDEX_SERVER_DIR === undefined) delete process.env.INDEX_SERVER_DIR;
+		else process.env.INDEX_SERVER_DIR = ORIGINAL_INDEX_SERVER_DIR;
+		if (ORIGINAL_USAGE_SNAPSHOT_PATH === undefined) delete process.env.INDEX_SERVER_USAGE_SNAPSHOT_PATH;
+		else process.env.INDEX_SERVER_USAGE_SNAPSHOT_PATH = ORIGINAL_USAGE_SNAPSHOT_PATH;
 		try { fs.rmSync(TEST_DIR, { recursive: true, force: true }); } catch { /* ignore */ }
 	});
 
@@ -16,6 +23,7 @@ describe('usageFirstSeen', () => {
 		vi.resetModules();
 		process.env.INDEX_SERVER_FEATURES = 'usage';
 		process.env.INDEX_SERVER_DIR = TEST_DIR;
+		process.env.INDEX_SERVER_USAGE_SNAPSHOT_PATH = TEST_SNAPSHOT;
 		fs.mkdirSync(TEST_DIR, { recursive: true });
 		const createdAt = new Date().toISOString();
 		fs.writeFileSync(path.join(TEST_DIR, TEST_ID + '.json'), JSON.stringify({
@@ -23,7 +31,8 @@ describe('usageFirstSeen', () => {
 			createdAt, updatedAt: createdAt
 		}));
 
-		const { incrementUsage, invalidate } = await import('../services/indexContext.js');
+		const { incrementUsage, invalidate, __testResetUsageState } = await import('../services/indexContext.js');
+		__testResetUsageState();
 		invalidate();
 		const result = incrementUsage(TEST_ID);
 
@@ -45,6 +54,7 @@ describe('usageFirstSeen', () => {
 		vi.resetModules();
 		process.env.INDEX_SERVER_FEATURES = 'usage';
 		process.env.INDEX_SERVER_DIR = TEST_DIR;
+		process.env.INDEX_SERVER_USAGE_SNAPSHOT_PATH = TEST_SNAPSHOT;
 		fs.mkdirSync(TEST_DIR, { recursive: true });
 		const id2 = 'firstseen-lastusedat-' + Date.now();
 		fs.writeFileSync(path.join(TEST_DIR, id2 + '.json'), JSON.stringify({
@@ -52,7 +62,8 @@ describe('usageFirstSeen', () => {
 			createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
 		}));
 
-		const { incrementUsage, invalidate } = await import('../services/indexContext.js');
+		const { incrementUsage, invalidate, __testResetUsageState } = await import('../services/indexContext.js');
+		__testResetUsageState();
 		invalidate();
 		const r1 = incrementUsage(id2) as { lastUsedAt?: string } | null;
 		expect(r1).not.toBeNull();

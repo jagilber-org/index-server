@@ -6,14 +6,16 @@ This guide covers the two PowerShell stress test scripts for Index Server and ho
 
 | Script | Purpose |
 |--------|---------|
-| `scripts/stress-test.ps1` | Simple CRUD cycle stress with per-operation timing |
-| `scripts/stress-test-crud.ps1` | Comprehensive CRUD stress with phased operations, usage tracking, and hotset queries |
+| `scripts/perf/stress-test.ps1` | Simple CRUD cycle stress with per-operation timing |
+| `scripts/perf/stress-test-crud.ps1` | Comprehensive CRUD stress with phased operations, usage tracking, and hotset queries |
+| `scripts/perf/stress-test-backup.ps1` | Backup lifecycle stress with CRUD seeding and backup/restore cycling |
+| `scripts/diagnostics/sqlite-validate.ps1` | SQLite integrity checks via PRAGMA and the dashboard validate endpoint |
 
-Both scripts exercise a running Index Server instance through `index-server-client.ps1` and report timing, success/failure counts, and error details.
+Both scripts exercise a running Index Server instance through `index-server-client.ps1`, validate operation-specific response payloads, and report timing, success/failure counts, and error details.
 
 ## stress-test.ps1
 
-Runs N iterations of a full CRUD cycle (add → get → search → update → remove) and reports per-operation latency statistics.
+Runs N iterations of a full CRUD cycle (add → get → search → update → verify update → remove → verify delete) and reports per-operation latency statistics. Each step validates the response shape and expected IDs/content, so malformed or success-shaped failures count as test failures.
 
 ### Usage
 
@@ -46,7 +48,7 @@ Runs N iterations of a full CRUD cycle (add → get → search → update → re
 
 ## stress-test-crud.ps1
 
-A more comprehensive stress test that runs multi-phase CRUD cycles including create, read (sampled), list, search, update, usage tracking, hotset queries, and delete. Reports ops/sec and success rate.
+A more comprehensive stress test that runs multi-phase CRUD cycles including create, read (sampled), list, search, update verification, usage tracking, hotset queries, delete, and sampled delete verification. Reports ops/sec and success rate.
 
 ### Usage
 
@@ -63,11 +65,22 @@ A more comprehensive stress test that runs multi-phase CRUD cycles including cre
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | `-BaseUrl` | `http://localhost:4600` | Server URL |
-| `-ClientScript` | `scripts/dist/index-server-client.ps1` | Path to client script |
+| `-ClientScript` | `scripts/client/index-server-client.ps1` | Path to client script |
 | `-Count` | `50` | Instructions per cycle |
 | `-Cycles` | `3` | Number of full CRUD cycles |
 | `-Parallel` | `5` | Max concurrent operations in the CREATE phase |
 | `-AdminKey` | `$env:INDEX_SERVER_ADMIN_API_KEY` | Bearer token for authenticated endpoints |
+
+## Response Validation
+
+Both stress scripts dot-source `scripts\crud-response-validation.ps1` and fail when a tool response is missing required payload fields. The validators check:
+
+- add responses report the expected ID and `created`/`overwritten` state
+- get responses return the expected instruction ID, title, and body content
+- search/list responses include result collections and expected IDs where applicable
+- remove responses include the deleted ID in `removedIds`
+- delete verification responses report `notFound=true`
+- usage, hotset, health, and embedding endpoints return success-shaped payloads
 
 ## Parallel Mode
 

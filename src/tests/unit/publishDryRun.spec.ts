@@ -14,7 +14,7 @@ import path from 'path';
 import { execSync } from 'child_process';
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
-const CJS_PATH = path.join(REPO_ROOT, 'scripts', 'publish-direct-to-remote.cjs');
+const CJS_PATH = path.join(REPO_ROOT, 'scripts', 'build', 'publish-direct-to-remote.cjs');
 const HAS_PUBLISH_EXCLUDE = fs.existsSync(path.join(REPO_ROOT, '.publish-exclude'));
 
 describe('publish --verify-only scenarios', () => {

@@ -10,7 +10,7 @@ jobs:
   pre-commit:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6 # pii-allowlist: pinned action SHA
         with:
           # Need full history so `pre-commit run --from-ref BASE --to-ref HEAD`
           # can resolve the PR base SHA. Default fetch-depth=1 only has HEAD
@@ -19,9 +19,9 @@ jobs:
 
       - name: Validate constitution sync
         shell: pwsh
-        run: scripts/sync-constitution.ps1 -Check
+        run: scripts/build/sync-constitution.ps1 -Check
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e  # v6 # pii-allowlist: pinned action SHA
         with:
           node-version: '20'
           cache: 'npm'
@@ -32,7 +32,7 @@ jobs:
         # the pre-push policy replay below.
         run: npm ci --no-audit --no-fund
 
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6 # pii-allowlist: pinned action SHA
         with:
           python-version: '3.12'
 
@@ -44,9 +44,6 @@ jobs:
       - name: Run pre-commit policy (diff-only on PRs)
         env:
           GITGUARDIAN_API_KEY: ${{ secrets.GITGUARDIAN_API_KEY }}
-          # On PRs we honor quota errors so a billing-side outage does
-          # not block merges. Push-to-main remains strict.
-          GGSHIELD_SKIP_ON_QUOTA: ${{ github.event_name == 'pull_request' && '1' || '0' }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
@@ -65,7 +62,6 @@ jobs:
       - name: Run pre-push security policy replay
         env:
           GITGUARDIAN_API_KEY: ${{ secrets.GITGUARDIAN_API_KEY }}
-          GGSHIELD_SKIP_ON_QUOTA: ${{ github.event_name == 'pull_request' && '1' || '0' }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
@@ -81,11 +77,11 @@ jobs:
           GITGUARDIAN_API_KEY: ${{ secrets.GITGUARDIAN_API_KEY }}
         run: |
           mkdir -p reports
-          bash scripts/ggshield-with-retry.sh secret scan path . --recursive -y --use-gitignore --format json --output reports/ggshield-report.json --exit-zero
+          bash scripts/ci/ggshield-with-retry.sh secret scan path . --recursive -y --use-gitignore --format json --output reports/ggshield-report.json --exit-zero
 
       - name: Upload ggshield JSON report
         if: ${{ always() }}
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7 # pii-allowlist: pinned action SHA
         with:
           name: ggshield-report
           path: reports/ggshield-report.json

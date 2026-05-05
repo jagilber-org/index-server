@@ -722,6 +722,7 @@ The `index_add` pathway now enforces additional server-side governance:
 * Metadata-Only Overwrite Hydration: When `overwrite: true` and the caller intentionally omits `entry.body` (or `title`), the server hydrates the persisted values prior to validation so that minor metadata adjustments (e.g., tags) do not require resending full content. Omit ONLY when you intend no body/title change.
 * Overwritten Flag Accuracy: `overwritten: true` only when an existing persisted instruction was actually replaced (metadata-only hydrations without a semantic version change still set `overwritten: true` because the on-disk record is rewritten after governance normalization).
 * ChangeLog Repair: A malformed or missing ChangeLog entry for the ID is silently synthesized/normalized to keep governance hashes stable.
+* Legacy Content Type Alias: write inputs may still send `contentType: "chat-session"` for compatibility; JSON Schema/Zod request validation accepts it, then the write path normalizes it to canonical `workflow` before persisted schema v5 validation. New clients should send `workflow`.
 
 Developer Tips:
 
@@ -1145,6 +1146,13 @@ All mutation operations now return enhanced error information:
 ## Tool Inventory (Authoritative Reference)
 
 > **44 registered tools** — This table is generated from the live tool registry and is the authoritative tool name reference. Use `meta_tools` to get the runtime version of this list.
+>
+> Classification is the registry visibility/gating contract, not a guarantee
+> that a tool has no persistence side effects. `stable` means non-privileged and
+> normally visible for its tier; `mutation` means a privileged write operation
+> controlled by mutation gates. `feedback_submit` is intentionally `stable` and
+> `core` so agents can always report issues, even though it appends to feedback
+> storage and writes an audit entry.
 
 | Tool Name | Classification | Tier | Description |
 |-----------|---------------|------|-------------|
@@ -1156,7 +1164,7 @@ All mutation operations now return enhanced error information:
 | `diagnostics_memoryPressure` | stable | admin | Allocate & release transient memory to induce GC / memory pressure. |
 | `diagnostics_microtaskFlood` | stable | admin | Flood the microtask queue with many Promise resolutions to probe event loop starvation. |
 | `feature_status` | stable | admin | Report active index feature flags and counters. |
-| `feedback_submit` | mutation | admin | Submit feedback entry (issue, status report, security alert, feature request). |
+| `feedback_submit` | stable | core | Submit feedback entry (issue, status report, security alert, feature request). |
 | `gates_evaluate` | stable | extended | Evaluate configured gating criteria over current Index. |
 | `graph_export` | stable | extended | Export instruction relationship graph (schema v1 minimal or v2 enriched). |
 | `health_check` | stable | core | Returns server health status & version. |
@@ -1195,9 +1203,9 @@ All mutation operations now return enhanced error information:
 
 ### Tier Visibility
 
-- **Core** (6 tools): Always visible. Essential daily-use tools.
+- **Core** (7 tools): Always visible. Essential daily-use tools.
 - **Extended** (14 tools): Opt-in via `INDEX_SERVER_FLAG_TOOLS_EXTENDED=1`
-- **Admin** (24 tools): Opt-in via `INDEX_SERVER_FLAG_TOOLS_ADMIN=1`. Operations/debug tools.
+- **Admin** (23 tools): Opt-in via `INDEX_SERVER_FLAG_TOOLS_ADMIN=1`. Operations/debug tools.
 
 ## 📈 Performance Characteristics
 
@@ -1596,7 +1604,7 @@ For subagents or environments that cannot load MCP tools, two REST client script
 
 **Prerequisite:** Dashboard must be enabled (`INDEX_SERVER_DASHBOARD=1` or `--dashboard` flag).
 
-### PowerShell (`scripts/index-server-client.ps1`)
+### PowerShell (`scripts/client/index-server-client.ps1`)
 
 ```powershell
 # Health check
@@ -1610,6 +1618,7 @@ For subagents or environments that cannot load MCP tools, two REST client script
 
 # List instructions
 .\scripts\index-server-client.ps1 -Action list -Limit 20
+.\scripts\index-server-client.ps1 -Action list -Limit 20 -ExpectId my-instruction-id
 
 # Add an instruction
 .\scripts\index-server-client.ps1 -Action add -Id new-inst -Title "My Instruction" -Body "Content here" -Priority 50
@@ -1632,7 +1641,7 @@ For subagents or environments that cannot load MCP tools, two REST client script
 
 **Environment:** Set `INDEX_SERVER_URL` to avoid passing `-BaseUrl` every time.
 
-### Bash (`scripts/index-server-client.sh`)
+### Bash (`scripts/client/index-server-client.sh`)
 
 ```bash
 # Health check

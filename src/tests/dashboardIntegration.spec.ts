@@ -238,7 +238,7 @@ describe('Dashboard TLS Integration', () => {
     const result = await new Promise<{ statusCode: number; body: string }>((resolve, reject) => {
       const req = https.get(
         `https://${DASH_HOST}:${TLS_PORT}/api/status`,
-        { rejectUnauthorized: false },
+        { rejectUnauthorized: false }, // lgtm[js/disabling-certificate-validation] — test: self-signed cert
         (res) => {
           let body = '';
           res.on('data', c => body += c);
@@ -257,7 +257,7 @@ describe('Dashboard TLS Integration', () => {
     const result = await new Promise<{ headers: Record<string, string | string[] | undefined> }>((resolve, reject) => {
       const req = https.get(
         `https://${DASH_HOST}:${TLS_PORT}/api/status`,
-        { rejectUnauthorized: false },
+        { rejectUnauthorized: false }, // lgtm[js/disabling-certificate-validation] — test: self-signed cert
         (res) => {
           res.resume();
           resolve({ headers: res.headers as Record<string, string | string[] | undefined> });

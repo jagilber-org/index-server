@@ -73,7 +73,8 @@ describe('Negative tests — core handler failure paths (Issue #150)', () => {
       const add = getRequiredHandler<(params: Record<string, unknown>) => Promise<Record<string, unknown>>>('index_add');
       const result = await add({ entry: { title: 'No ID', body: 'body' } });
       expect(result.success).toBe(false);
-      expect(result.error).toMatch(/missing (entry|id|required)/i);
+      expect(result.error).toBe('invalid_instruction');
+      expect(JSON.stringify(result.validationErrors ?? [])).toMatch(/(missing|required).*id|id.*(missing|required)/i);
     });
 
     it('rejects entry with empty string id', async () => {

@@ -10,10 +10,14 @@ import path from 'path';
 import { execSync } from 'child_process';
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
-const CJS_PATH = path.join(REPO_ROOT, 'scripts', 'publish-direct-to-remote.cjs');
-const PS1_PATH = path.join(REPO_ROOT, 'scripts', 'Publish-DualRepo.ps1');
-const PUB_PATH = path.join(REPO_ROOT, 'scripts', 'Publish-ToPublicRepo.ps1');
-const CLEANROOM_PATH = path.join(REPO_ROOT, 'scripts', 'New-CleanRoomCopy.ps1');
+const CJS_PATH = path.join(REPO_ROOT, 'scripts', 'build', 'publish-direct-to-remote.cjs');
+const RELEASE_WORKFLOW_PATH = path.join(REPO_ROOT, 'scripts', 'Invoke-ReleaseWorkflow.ps1');
+const PS1_PATH = path.join(REPO_ROOT, 'scripts', 'build', 'Publish-DualRepo.ps1');
+const PUB_PATH = path.join(REPO_ROOT, 'scripts', 'build', 'Publish-ToPublicRepo.ps1');
+const CLEANROOM_PATH = path.join(REPO_ROOT, 'scripts', 'deploy', 'New-CleanRoomCopy.ps1');
+const GGSHIELD_WORKFLOW_PATH = path.join(REPO_ROOT, '.github', 'workflows', 'ggshield-secret-scans.yml');
+const GITLEAKS_WORKFLOW_PATH = path.join(REPO_ROOT, '.github', 'workflows', 'gitleaks-secret-scans.yml');
+const SEMGREP_WORKFLOW_PATH = path.join(REPO_ROOT, '.github', 'workflows', 'semgrep.yml');
 const HAS_PUBLISH_EXCLUDE = fs.existsSync(path.join(REPO_ROOT, '.publish-exclude'));
 const HAS_PS1_SCRIPT = fs.existsSync(PS1_PATH);
 const _HAS_PUB_SCRIPT = fs.existsSync(PUB_PATH);
@@ -277,13 +281,13 @@ describe('publish script hardening', () => {
     });
 
     it('Publish-ToMirror.ps1 requires explicit break-glass for tag overwrite', () => {
-      const src = fs.readFileSync(path.join(REPO_ROOT, 'scripts', 'Publish-ToMirror.ps1'), 'utf8');
+      const src = fs.readFileSync(path.join(REPO_ROOT, 'scripts', 'build', 'Publish-ToMirror.ps1'), 'utf8');
       expect(src).toMatch(/\[switch\]\$AllowTagOverwrite/);
       expect(src).toMatch(/Tag '\$Tag' already exists on the remote\./);
     });
 
     it('Publish-ToMirror.ps1 only removes the target remote tag during explicit overwrite', () => {
-      const src = fs.readFileSync(path.join(REPO_ROOT, 'scripts', 'Publish-ToMirror.ps1'), 'utf8');
+      const src = fs.readFileSync(path.join(REPO_ROOT, 'scripts', 'build', 'Publish-ToMirror.ps1'), 'utf8');
       expect(src).toContain("Invoke-Git -Arguments @('ls-remote', '--tags', 'public', \"refs/tags/$Tag\")");
       expect(src).toContain("if ($AllowTagOverwrite) {");
       expect(src).toContain(`@('push', 'public', ":refs/tags/$Tag")`);
@@ -291,14 +295,14 @@ describe('publish script hardening', () => {
     });
 
     it('Publish-ToMirror.ps1 stages into a temporary git workspace instead of mutating SourcePath', () => {
-      const src = fs.readFileSync(path.join(REPO_ROOT, 'scripts', 'Publish-ToMirror.ps1'), 'utf8');
+      const src = fs.readFileSync(path.join(REPO_ROOT, 'scripts', 'build', 'Publish-ToMirror.ps1'), 'utf8');
       expect(src).toContain('$publishWorkspace');
       expect(src).toContain('Copy-PreparedContent -SourceRoot $SourcePath');
       expect(src).not.toContain('Push-Location $SourcePath');
     });
 
     it('Publish-ToMirror.ps1 -CreatePR clones main from the public remote so the PR has shared ancestry', () => {
-      const src = fs.readFileSync(path.join(REPO_ROOT, 'scripts', 'Publish-ToMirror.ps1'), 'utf8');
+      const src = fs.readFileSync(path.join(REPO_ROOT, 'scripts', 'build', 'Publish-ToMirror.ps1'), 'utf8');
       // Clone-from-main (not orphan init) is what allows `gh pr create` to compute a diff.
       expect(src).toContain('git clone --origin public --branch main --single-branch --depth 1');
       // Tracked content is wiped before the prepared snapshot is laid down so the
@@ -306,6 +310,43 @@ describe('publish script hardening', () => {
       expect(src).toContain("'rm', '-rf', '--ignore-unmatch'");
       // DirectPublish / CreateReviewRepo continue to use orphan-init (clean-room snapshot).
       expect(src).toContain('Orphan-init flow for DirectPublish and CreateReviewRepo');
+    });
+
+    it('New-CleanRoomCopy.ps1 keeps ambient env leak detection active for public artifacts', () => {
+      const src = fs.readFileSync(CLEANROOM_PATH, 'utf8');
+      expect(src).not.toContain('INDEX_SERVER_PRECOMMIT_SKIP_AMBIENT_ENV');
+      expect(src).toContain('INDEX_SERVER_PRECOMMIT_DOTENV');
+      expect(src).toContain("Join-Path $repoRoot '.env'");
+    });
+
+    it('New-CleanRoomCopy.ps1 has a top-level temp cleanup trap', () => {
+      const src = fs.readFileSync(CLEANROOM_PATH, 'utf8');
+      expect(src).toContain('$script:cleanRoomTempDir = $tempDir');
+      expect(src).toContain('$script:preserveCleanRoomTemp = $false');
+      expect(src).toContain('trap {');
+      expect(src).toContain('Remove-Item $script:cleanRoomTempDir -Recurse -Force');
+    });
+
+    it('Invoke-ReleaseWorkflow.ps1 verifies exact branch and tag SHAs after internal push', () => {
+      const src = fs.readFileSync(RELEASE_WORKFLOW_PATH, 'utf8');
+      expect(src).toContain('function Get-RemoteRefSha');
+      expect(src).toContain('function Get-LocalRefSha');
+      expect(src).toContain('$remoteBranchSha -ne $localBranchSha');
+      expect(src).toContain('$remoteTagSha -ne $localTagSha');
+    });
+
+    it('SARIF upload actions are pinned and do not require processing wait permissions', () => {
+      for (const workflowPath of [GITLEAKS_WORKFLOW_PATH, SEMGREP_WORKFLOW_PATH]) {
+        const src = fs.readFileSync(workflowPath, 'utf8');
+        expect(src).toContain('github/codeql-action/upload-sarif@ed410739ba306e4ebe5e123421a6bd694e494a2b'); // pii-allowlist: pinned action SHA
+        expect(src).toContain('wait-for-processing: false');
+      }
+    });
+
+    it('GGShield PR quota degradation is explicitly advisory while strict scans use defaults', () => {
+      const src = fs.readFileSync(GGSHIELD_WORKFLOW_PATH, 'utf8');
+      expect(src).toContain('GGSHIELD_QUOTA_MODE: advisory');
+      expect(src).not.toContain('GGSHIELD_SKIP_ON_QUOTA');
     });
 
     it('neither blocklist is empty', () => {

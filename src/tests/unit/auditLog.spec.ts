@@ -1,7 +1,7 @@
 /**
  * Audit logging extension tests.
  * Validates:
- * 1. logAudit accepts and persists a `kind` field (mutation | read | http)
+ * 1. logAudit accepts and persists a `kind` field (mutation | read | http | feedback)
  * 2. Existing mutation entries default to kind='mutation'
  * 3. readAuditEntries returns the kind field and parseErrors metadata
  * 4. logToolAudit helper correctly logs tool invocations with kind='read'|'mutation'
@@ -70,6 +70,14 @@ describe('auditLog extension', () => {
     expect(result.entries.length).toBe(1);
     expect(result.entries[0].kind).toBe('http');
     expect(result.entries[0].meta?.clientIp).toBe('127.0.0.1');
+  });
+
+  it('logAudit with kind="feedback" persists feedback entries', () => {
+    mod.logAudit('feedback_submit', ['feedback-1'], { severity: 'low' }, 'feedback');
+    const result = mod.readAuditEntries();
+    expect(result.entries.length).toBe(1);
+    expect(result.entries[0].kind).toBe('feedback');
+    expect(result.entries[0].action).toBe('feedback_submit');
   });
 
   it('all entries include ISO timestamp', () => {

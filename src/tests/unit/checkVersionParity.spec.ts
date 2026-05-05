@@ -13,7 +13,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
-const SCRIPT = path.join(REPO_ROOT, 'scripts', 'check-version-parity.mjs');
+const SCRIPT = path.join(REPO_ROOT, 'scripts', 'governance', 'check-version-parity.mjs');
 
 function stageRepo(version: { pkg: string; server: string; pkgEntries?: Record<string, string> }): string {
   const dir = mkdtempSync(path.join(tmpdir(), 'parity-'));

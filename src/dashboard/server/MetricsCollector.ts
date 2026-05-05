@@ -7,6 +7,7 @@
  */
 
 import fs from 'fs';
+import crypto from 'crypto';
 import path from 'path';
 import v8 from 'v8';
 import { getFileMetricsStorage, FileMetricsStorage } from './FileMetricsStorage.js';
@@ -816,7 +817,7 @@ export class MetricsCollector {
       recentActivity: buildRecentActivity(this.tools),
       streamingStats: {
         totalStreamingConnections: this.activeConnections,
-        dataTransferRate: this.connections.size * 0.1 + Math.random() * 0.5,
+        dataTransferRate: this.connections.size * 0.1 + Math.random() * 0.5, // nosemgrep: insecure-randomness — simulated metric jitter
         latency,
         compressionRatio: 0.7,
       },
@@ -871,7 +872,7 @@ export class MetricsCollector {
    */
   generateRealTimeAlert(type: string, severity: string, message: string, value: number, threshold: number): Alert {
     const alert: Alert = {
-      id: `alert_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      id: `alert_${Date.now()}_${crypto.randomBytes(6).toString('hex')}`,
       type: type as Alert['type'],
       severity: severity as Alert['severity'],
       message,

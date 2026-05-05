@@ -188,7 +188,7 @@ jobs:
           cache-from: type=gha
 
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@v0.35.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: 'index-server:scan'
           format: 'sarif'
@@ -205,7 +205,7 @@ jobs:
         continue-on-error: true
 
       - name: Trivy summary (table)
-        uses: aquasecurity/trivy-action@v0.35.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: 'index-server:scan'
           format: 'table'

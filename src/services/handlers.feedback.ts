@@ -61,7 +61,7 @@ registerHandler('feedback_submit', (params: {
     type: entry.type,
     severity: entry.severity,
     title: entry.title
-  });
+  }, 'feedback');
   logInfo('[feedback] Feedback submitted', {
     id: entry.id,
     type: entry.type,

@@ -13,8 +13,8 @@ export type ToolTier = 'core' | 'extended' | 'admin';
 export interface ToolRegistryEntry {
   name: string;                 // Fully qualified method name (JSON-RPC method)
   description: string;          // Human readable summary
-  stable: boolean;              // Stable across sessions (deterministic side-effect free)
-  mutation: boolean;            // Performs mutation / may be disabled when INDEX_SERVER_MUTATION=0
+  stable: boolean;              // Stable, non-privileged MCP surface
+  mutation: boolean;            // Privileged write operation / may be disabled when INDEX_SERVER_MUTATION=0
   tier: ToolTier;               // Visibility tier (core=always, extended=opt-in, admin=debug/ops)
   inputSchema: object;          // JSON Schema for params (always an object schema)
   outputSchema?: object;        // JSON Schema for successful result (subset of outputSchemas map)
@@ -110,7 +110,7 @@ const INPUT_SCHEMAS: Record<string, object> = {
     keywords: { type: 'array', items: { type: 'string' }, description: 'Explicit keyword array for search action when the caller wants direct token control.' },
     ids: { type: 'array', items: { type: 'string' }, description: 'Array of instruction IDs for remove or export actions.' },
     category: { type: 'string', description: 'Filter by category for list action.' },
-    contentType: { type: 'string', enum: ['instruction', 'template', 'chat-session', 'reference', 'example', 'agent'], description: 'Filter by content type for list, search, or query actions, or specify the entry content type for add action.' },
+    contentType: { type: 'string', enum: ['instruction', 'template', 'workflow', 'reference', 'example', 'agent', 'chat-session'], description: 'Filter by content type for list, search, or query actions, or specify the entry content type for add action. Legacy "chat-session" write inputs are migrated to "workflow".' },
     text: { type: 'string', description: 'Full-text search within query action.' },
     includeCategories: { type: 'boolean', description: 'Search categories in addition to id/title/semanticSummary/body for search action.' },
     caseSensitive: { type: 'boolean', description: 'Enable case-sensitive matching for search action.' },
@@ -164,7 +164,7 @@ const INPUT_SCHEMAS: Record<string, object> = {
   'index_import': { type: 'object', additionalProperties: false, properties: {
     entries: { oneOf: [
       { type: 'array', minItems: 1, items: { type: 'object', required: ['id','title','body','priority','audience','requirement'], additionalProperties: false, properties: {
-        id: { type: 'string' }, title: { type: 'string' }, body: { type: 'string' }, rationale: { type: 'string' }, priority: { type: 'number' }, audience: { type: 'string' }, requirement: { type: 'string' }, categories: { type: 'array', items: { type: 'string' } }, version: { type: 'string' }, owner: { type: 'string' }, status: { type: 'string', enum: ['approved','draft','review','deprecated'] }, priorityTier: { type: 'string', enum: ['P1','P2','P3','P4'] }, classification: { type: 'string', enum: ['public','internal','restricted'] }, lastReviewedAt: { type: 'string' }, nextReviewDue: { type: 'string' }, semanticSummary: { type: 'string' }, changeLog: { type: 'array', items: { type: 'object', additionalProperties: true } }, contentType: { type: 'string', enum: ['instruction', 'template', 'chat-session', 'reference', 'example', 'agent'] }, extensions: extensionsInputSchema, mode: { type: 'string' }
+        id: { type: 'string' }, title: { type: 'string' }, body: { type: 'string' }, rationale: { type: 'string' }, priority: { type: 'number' }, audience: { type: 'string' }, requirement: { type: 'string' }, categories: { type: 'array', items: { type: 'string' } }, version: { type: 'string' }, owner: { type: 'string' }, status: { type: 'string', enum: ['approved','draft','review','deprecated'] }, priorityTier: { type: 'string', enum: ['P1','P2','P3','P4'] }, classification: { type: 'string', enum: ['public','internal','restricted'] }, lastReviewedAt: { type: 'string' }, nextReviewDue: { type: 'string' }, semanticSummary: { type: 'string' }, changeLog: { type: 'array', items: { type: 'object', additionalProperties: true } }, contentType: { type: 'string', enum: ['instruction', 'template', 'workflow', 'reference', 'example', 'agent', 'chat-session'] }, extensions: extensionsInputSchema, mode: { type: 'string' }
       } } },
       { type: 'string', description: 'Stringified JSON array of instruction entries, or a file path to a JSON array of instruction entries' }
     ] },
@@ -173,7 +173,7 @@ const INPUT_SCHEMAS: Record<string, object> = {
   } },
   'index_add': { type: 'object', additionalProperties: false, required: ['entry'], properties: {
     entry: { type: 'object', required: ['id','body'], additionalProperties: false, properties: {
-        id: { type: 'string', maxLength: 120 }, title: { type: 'string' }, body: { type: 'string' }, rationale: { type: 'string' }, priority: { type: 'number' }, audience: { type: 'string' }, requirement: { type: 'string' }, categories: { type: 'array', items: { type: 'string' } }, deprecatedBy: { type: 'string' }, riskScore: { type: 'number' }, version: { type: 'string' }, owner: { type: 'string' }, status: { type: 'string', enum: ['approved','draft','review','deprecated'] }, priorityTier: { type: 'string', enum: ['P1','P2','P3','P4'] }, classification: { type: 'string', enum: ['public','internal','restricted'] }, lastReviewedAt: { type: 'string' }, nextReviewDue: { type: 'string' }, semanticSummary: { type: 'string' }, changeLog: { type: 'array', items: { type: 'object', additionalProperties: true } }, contentType: { type: 'string', enum: ['instruction', 'template', 'chat-session', 'reference', 'example', 'agent'] }, extensions: extensionsInputSchema
+        id: { type: 'string', minLength: 1, maxLength: 120, pattern: '^[a-z0-9](?:[a-z0-9-_]{0,118}[a-z0-9])?$' }, title: { type: 'string' }, body: { type: 'string' }, rationale: { type: 'string' }, priority: { type: 'number', minimum: 1, maximum: 100 }, audience: { type: 'string', enum: ['individual', 'group', 'all'] }, requirement: { type: 'string', enum: ['mandatory', 'critical', 'recommended', 'optional', 'deprecated'] }, categories: { type: 'array', items: { type: 'string', pattern: '^[a-z0-9][a-z0-9-_]{0,48}$' } }, deprecatedBy: { type: 'string' }, riskScore: { type: 'number' }, version: { type: 'string' }, owner: { type: 'string' }, status: { type: 'string', enum: ['approved','draft','review','deprecated'] }, priorityTier: { type: 'string', enum: ['P1','P2','P3','P4'] }, classification: { type: 'string', enum: ['public','internal','restricted'] }, lastReviewedAt: { type: 'string' }, nextReviewDue: { type: 'string' }, semanticSummary: { type: 'string' }, changeLog: { type: 'array', items: { type: 'object', additionalProperties: true } }, contentType: { type: 'string', enum: ['instruction', 'template', 'workflow', 'reference', 'example', 'agent', 'chat-session'] }, extensions: extensionsInputSchema
       } },
     overwrite: { type: 'boolean' },
     lax: { type: 'boolean' }
@@ -237,7 +237,7 @@ const INPUT_SCHEMAS: Record<string, object> = {
     limit: { type: 'number', minimum: 1, maximum: 100, default: 50, description: 'Maximum number of instruction IDs to return' },
     includeCategories: { type: 'boolean', default: false, description: 'Include categories in search scope' },
     caseSensitive: { type: 'boolean', default: false, description: 'Perform case-sensitive matching' },
-    contentType: { type: 'string', enum: ['instruction', 'template', 'chat-session', 'reference', 'example', 'agent'], description: 'Filter results by content type (optional)' }
+    contentType: { type: 'string', enum: ['instruction', 'template', 'workflow', 'reference', 'example', 'agent'], description: 'Filter results by content type (optional)' }
   } },
   // promote_from_repo tool
   'promote_from_repo': { type: 'object', additionalProperties: false, required: ['repoPath'], properties: {
@@ -340,16 +340,17 @@ const INPUT_SCHEMAS: Record<string, object> = {
 } };
 
 // Stable & mutation classification lists (mirrors usage in toolHandlers; exported to remove duplication there).
-export const STABLE = new Set(['health_check','graph_export','index_dispatch','index_search','index_governanceHash','prompt_review','integrity_verify','usage_track','usage_hotset','metrics_snapshot','gates_evaluate','meta_tools','help_overview','index_schema','manifest_status','index_diagnostics','meta_activation_guide','meta_check_activation','bootstrap','bootstrap_status','feature_status','index_health','index_inspect','index_debug','integrity_manifest','messaging_read','messaging_list_channels','messaging_stats','messaging_get','messaging_thread','trace_dump']);
-export const MUTATION = new Set(['index_add','index_import','index_repair','index_reload','index_remove','index_groom','index_enrich','index_governanceUpdate','index_normalize','usage_flush','feedback_submit','manifest_refresh','manifest_repair','promote_from_repo','bootstrap_request','bootstrap_confirmFinalize','messaging_send','messaging_ack','messaging_update','messaging_purge','messaging_reply','diagnostics_block','diagnostics_microtaskFlood','diagnostics_memoryPressure']);
+export const STABLE = new Set(['health_check','feedback_submit','graph_export','index_dispatch','index_search','index_governanceHash','prompt_review','integrity_verify','usage_track','usage_hotset','metrics_snapshot','gates_evaluate','meta_tools','help_overview','index_schema','manifest_status','index_diagnostics','meta_activation_guide','meta_check_activation','bootstrap','bootstrap_status','feature_status','index_health','index_inspect','index_debug','integrity_manifest','messaging_read','messaging_list_channels','messaging_stats','messaging_get','messaging_thread','trace_dump']);
+export const MUTATION = new Set(['index_add','index_import','index_repair','index_reload','index_remove','index_groom','index_enrich','index_governanceUpdate','index_normalize','usage_flush','manifest_refresh','manifest_repair','promote_from_repo','bootstrap_request','bootstrap_confirmFinalize','messaging_send','messaging_ack','messaging_update','messaging_purge','messaging_reply','diagnostics_block','diagnostics_microtaskFlood','diagnostics_memoryPressure']);
 
 // Tool tier classification (002-tool-consolidation spec)
 // core: always visible, essential daily use
 // extended: opt-in via INDEX_SERVER_FLAG_TOOLS_EXTENDED=1 or flags.json tools_extended:true
 // admin: opt-in via INDEX_SERVER_FLAG_TOOLS_ADMIN=1, rarely needed ops/debug tools
 const TOOL_TIERS: Record<string, ToolTier> = {
-  // Core (7 → 6 after feedback_dispatch removal)
+  // Core (7 after feedback_dispatch removal; feedback_submit remains always visible for agent reporting)
   'health_check': 'core',
+  'feedback_submit': 'core',
   'index_dispatch': 'core',
   'index_search': 'core',
   'prompt_review': 'core',
@@ -371,7 +372,6 @@ const TOOL_TIERS: Record<string, ToolTier> = {
   'promote_from_repo': 'extended',
   'index_schema': 'extended',
   // Admin (everything else)
-  'feedback_submit': 'admin',
   'meta_tools': 'admin',
   'meta_activation_guide': 'admin',
   'meta_check_activation': 'admin',

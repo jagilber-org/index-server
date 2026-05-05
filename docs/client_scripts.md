@@ -29,14 +29,14 @@ chmod +x index-server-client.sh
 
 ### Use from Repository
 
-The scripts are in the `scripts/` directory of the repository:
+The scripts are in the `scripts/client/` directory of the repository:
 
 ```bash
 # PowerShell
-pwsh scripts/index-server-client.ps1 -Action health
+pwsh scripts/client/index-server-client.ps1 -Action health
 
 # Bash
-bash scripts/index-server-client.sh health
+bash scripts/client/index-server-client.sh health
 ```
 
 ## Configuration
@@ -108,10 +108,13 @@ bash scripts/index-server-client.sh health
 ```powershell
 # PowerShell
 .\index-server-client.ps1 -Action list -Limit 20
+.\index-server-client.ps1 -Action list -Limit 20 -ExpectId "my-instruction-id"
 
 # Bash
 ./index-server-client.sh list 20
 ```
+
+Use `-ExpectId` in PowerShell validation or smoke tests to ask the server to prioritize a known instruction in list results.
 
 ### add — Create Instruction
 

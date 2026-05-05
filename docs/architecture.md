@@ -88,7 +88,7 @@ graph LR
 | Tool Handlers | JSON-RPC implementation (instructions/*, feedback/*, governanceHash, usage, integrity, gates, metrics) | Write tools are enabled by default and can be forced read-only with INDEX_SERVER_MUTATION=0 |
 | MCP SDK Transport | Standard MCP over stdio | Emits `server/ready`, handles capabilities |
 | Usage Tracking | usage_track increments with firstSeenTs + debounced persistence | Optional gating via INDEX_SERVER_FEATURES='usage' |
-| Feedback / Emit System | feedback_submit,list,get,update,stats,health tools | Persistent JSON store + audit & security logging |
+| Feedback / Emit System | `feedback_submit` MCP tool + dashboard feedback CRUD | Persistent JSON store + feedback audit & security logging |
 | Metrics Snapshot | Aggregate per-method counts + feature counters | Lightweight in-memory aggregation |
 | Integrity Verify | Recompute vs stored sourceHash | Detects tampering or stale placeholders |
 | Gates Evaluate | Evaluate gating rules from `instructions/gates.json` | Summarizes pass/fail severities |
@@ -101,7 +101,7 @@ graph LR
 
 1. Loader enumerates `instructions/*.json`, applies Ajv validation (draft-07) and minimal bootstrap defaults.
 2. Classification normalizes + derives governance fields (version/status/owner/priorityTier/review dates/semantic summary) & risk score.
-3. Migration hook updates schemaVersion if older (current schemaVersion: 4 per instruction.schema.json).
+3. Migration hook updates schemaVersion if older (current schemaVersion: 5 per instruction.schema.json).
 4. index hash (id:sourceHash) and governance hash (projection set) computed.
 5. Entries cached (map + sorted list); enrichment persistence pass rewrites placeholders once.
 6. Tools served: diff / list / governanceHash / integrity / gates / prompt review / usage / metrics.

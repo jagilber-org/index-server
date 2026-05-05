@@ -50,7 +50,7 @@ src/perf/
 
 # Scripts not needed at runtime
 scripts/
-!scripts/copy-dashboard-assets.mjs
+!scripts/build/copy-dashboard-assets.mjs
 
 # Misc
 *.log

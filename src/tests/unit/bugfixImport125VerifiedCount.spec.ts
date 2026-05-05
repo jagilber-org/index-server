@@ -41,6 +41,7 @@ vi.mock('../../services/auditLog', () => ({ logAudit }));
 vi.mock('../../config/runtimeConfig', () => ({
   getRuntimeConfig: () => ({
     index: { bodyWarnLength: 20_000 },
+    logging: { level: 'INFO' },
     instructions: { requireCategory: false, agentId: 'a', workspaceId: 'w', manifest: { writeEnabled: false } },
   }),
 }));

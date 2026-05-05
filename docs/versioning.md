@@ -46,7 +46,7 @@ Example skeleton:
 
 This repository has two distinct Git remotes:
 
-- `origin` - private development repository (`jagilber-dev/index-server`)
+- `origin` - internal development repository
 - `public` - public mirror repository (`jagilber-org/index-server`)
 
 The canonical release flow is:
@@ -54,24 +54,26 @@ The canonical release flow is:
 1. Start from a clean local `main` synced with `origin/main`.
 2. Decide increment: patch | minor | major.
 3. Update `package.json` and `CHANGELOG.md`.
-   - Preferred bump helper: `node scripts/bump-version.mjs patch` (or `minor` / `major`).
-   - The helper creates the private release commit and local tag.
-4. Validate the release candidate before publishing.
-   - Minimum release checks: focused `pre-commit`, `npm run typecheck`, `npm run build`, `npm run test:fast`.
-5. Push the private release to `origin`.
-   - `git push origin main --follow-tags`
-6. Publish the public mirror from the private repo source.
-   - `node scripts/publish-direct-to-remote.cjs --tag vX.Y.Z --create-release`
-   - This stages a clean-room copy using `.publish-exclude`, verifies no forbidden artifacts leaked, scans for environment-value leaks, force-pushes `public/main`, pushes the public tag, and creates a GitHub release on `jagilber-org/index-server`.
+   - Preferred bump helper: `node scripts/build/bump-version.mjs patch` (or `minor` / `major`).
+   - The helper creates the internal release commit and local tag.
+4. Start the canonical release/publish front door.
+   - `pwsh -NoProfile -File scripts\Invoke-ReleaseWorkflow.ps1 -DryRun`
+   - Review the resolved tag, sanctioned public remote, clean-room path, and planned delivery command.
+5. Run the release/publish front door for the actual release preparation.
+   - `pwsh -NoProfile -File scripts\Invoke-ReleaseWorkflow.ps1 -PushInternal`
+   - This runs preflight checks, pushes the internal release branch/tags, verifies refs, waits for internal GitHub Actions checks, builds, deploys locally, prepares the clean-room public snapshot, and prints the human-only public mirror command.
+6. Publish the public mirror after human review.
+   - Preferred: run the printed `scripts\Publish-ToMirror.ps1 -CreatePR -WaitForMerge` command, or have a human rerun `scripts\Invoke-ReleaseWorkflow.ps1 -CreatePR -WaitForMerge`.
+   - Alternative: `node scripts/publish-direct-to-remote.cjs --tag vX.Y.Z --create-release`
 7. Verify both sides.
    - Confirm `origin` and `public` both contain `vX.Y.Z`.
    - Confirm the public GitHub release exists and the local repo is back on clean `main`.
 
 ### MCP Registry auth note
 
-The release workflow in `jagilber-dev/index-server` executes from the **private** repo context, so MCP Registry publish should currently be treated as a **PAT-authenticated** step there via `MCP_GITHUB_TOKEN`.
+The release workflow executes from the **internal** repo context, so MCP Registry publish should currently be treated as a **PAT-authenticated** step there via `MCP_GITHUB_TOKEN`.
 
-GitHub OIDC is only the expected path when the workflow itself runs from the **public mirror** (`jagilber-org/index-server`). Until that execution model changes, do not assume OIDC will activate for private-repo tag releases.
+GitHub OIDC is only the expected path when the workflow itself runs from the **public mirror** (`jagilber-org/index-server`). Until that execution model changes, do not assume OIDC will activate for internal-repo tag releases.
 
 When PAT fallback is required, keep `MCP_GITHUB_TOKEN` scoped only to the MCP Registry publish action rather than broader repository administration.
 
@@ -80,25 +82,23 @@ When PAT fallback is required, keep `MCP_GITHUB_TOKEN` scoped only to the MCP Re
 ```bash
 git checkout main
 git pull --ff-only origin main
-node scripts/bump-version.mjs patch
-pre-commit run --all-files
-npm run typecheck
-npm run build
-npm run test:fast
-git push origin main --follow-tags
-node scripts/publish-direct-to-remote.cjs --tag vX.Y.Z --create-release
+node scripts/build/bump-version.mjs patch
+pwsh -NoProfile -File scripts\Invoke-ReleaseWorkflow.ps1 -DryRun
+pwsh -NoProfile -File scripts\Invoke-ReleaseWorkflow.ps1 -PushInternal
+# Human-only after clean-room review:
+pwsh -NoProfile -File scripts\Publish-ToMirror.ps1 -SourcePath '<clean-room-path>' -RemoteUrl '<public-mirror-url>' -Tag vX.Y.Z -CreatePR -WaitForMerge
 ```
 
 Replace `X.Y.Z` with the version created by the bump step.
 
 ### Public Publish Alternatives
 
-The two-step PowerShell workflow remains available for manual review-oriented publication flows:
+The underlying two-step PowerShell workflow remains available for manual review-oriented publication flows:
 
 1. `scripts/New-CleanRoomCopy.ps1` — safe content preparation with `-DryRun` to inspect what would be published
 2. `scripts/Publish-ToMirror.ps1` — remote delivery with `-CreateReviewRepo` for team review or `-DirectPublish` for direct mirror publication
 
-Use this PowerShell path when you explicitly need a manual review or review-repo workflow. For the standard release path, prefer `scripts/publish-direct-to-remote.cjs`.
+Use `scripts\Invoke-ReleaseWorkflow.ps1` for the standard release path so preflight, internal push/check verification, local deploy, clean-room preparation, and public handoff stay ordered consistently.
 
 ### Removed Legacy Path
 
@@ -106,7 +106,7 @@ Use this PowerShell path when you explicitly need a manual review or review-repo
 
 ### Scope Note
 
-The canonical release process documented here covers the private GitHub repo and the public mirror repo. If npm package publication is added as part of release, document that flow separately with its required credentials, validation gates, and rollback steps.
+The canonical release process documented here covers the internal GitHub repo and the public mirror repo. If npm package publication is added as part of release, document that flow separately with its required credentials, validation gates, and rollback steps.
 
 ### MCP marketplace migration tracking
 
@@ -117,7 +117,7 @@ Marketplace migration remains a staged release-governance effort rather than a o
 
 Current guidance:
 
-- Assume private-repo releases use `MCP_GITHUB_TOKEN` PAT fallback for MCP Registry publication.
+- Assume internal-repo releases use `MCP_GITHUB_TOKEN` PAT fallback for MCP Registry publication.
 - Keep the legacy VSIX path documented only as a fallback, not as the default release/install story.
 - Track remaining migration follow-ups in issue #108 (prompts/resources) and issue #109 (pre-existing `build:verify` failures).
 
@@ -151,7 +151,7 @@ Use `package.json` and `CHANGELOG.md` as the live release sources of truth. Do n
 
 ### Strict SemVer Enforcement (Create & Update)
 
-All supplied `version` values on `index_add` (create or overwrite) must match full SemVer `MAJOR.MINOR.PATCH` optionally with pre-release/build metadata. Malformed versions (e.g., `1.0`, `2`, `1.0.0.1`) are rejected with `error: invalid_semver`.
+All supplied `version` values on `index_add` (create or overwrite) must match full SemVer `MAJOR.MINOR.PATCH` optionally with pre-release/build metadata. Malformed versions (e.g., `1.0`, `2`, `1.0.0+bad+extra`) are rejected with `error: invalid_semver`.
 
 Rationale:
 
@@ -170,6 +170,10 @@ Implications:
 
 - Returned flags: `overwritten:true` when existing record modified even if body unchanged.
 - Clients should still supply an explicit higher version for metadata-only semantic changes; omission defers bump logic to body change rules.
+
+### Instruction Schema v5 Content-Type Migration
+
+Instruction schema v5 renames the legacy persisted/API content type `chat-session` to `workflow`. The loader and write compatibility layer accept `chat-session` as a legacy alias and normalize it to `workflow` before schema validation, preserving workflow/runbook semantics for existing records. New clients should send `workflow`; `chat-session` remains compatibility input only and is not emitted in persisted v5 records.
 
 ### ChangeLog Repair & Normalization
 

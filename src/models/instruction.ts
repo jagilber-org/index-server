@@ -1,6 +1,6 @@
 export type AudienceScope = 'individual' | 'group' | 'all';
 export type RequirementLevel = 'mandatory' | 'critical' | 'recommended' | 'optional' | 'deprecated';
-export type ContentType = 'instruction' | 'template' | 'chat-session' | 'reference' | 'example' | 'agent';
+export type ContentType = 'instruction' | 'template' | 'workflow' | 'reference' | 'example' | 'agent';
 export interface InstructionEntry {
   id: string;
   title: string;

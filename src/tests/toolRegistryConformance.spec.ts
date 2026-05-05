@@ -78,10 +78,10 @@ describe('Tool Registry Conformance', () => {
     expect(STABLE.size).toBeGreaterThanOrEqual(20);
   });
 
-  it('core tools are always STABLE (not mutation)', () => {
+  it('core tools are stable, not privileged mutations', () => {
     const coreMutations = registry
       .filter(t => t.tier === 'core' && t.mutation)
       .map(t => t.name);
-    expect(coreMutations, `Core tools should be stable, not mutation: ${coreMutations.join(', ')}`).toHaveLength(0);
+    expect(coreMutations, `Core tools should not be privileged mutations: ${coreMutations.join(', ')}`).toHaveLength(0);
   });
 });

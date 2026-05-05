@@ -145,6 +145,7 @@ export function createApiRoutes(options: ApiRoutesOptions = {}): Router {
             const success = res.statusCode < 500;
             const route = normalizeRoute(req);
             const toolId = `http/${req.method} ${route}`;
+            metricsCollector.recordToolCall('http/request', success, ms, success ? undefined : `http_${res.statusCode}`);
             metricsCollector.recordToolCall(toolId, success, ms, success ? undefined : `http_${res.statusCode}`);
           } catch { /* never block response path */ }
         });
@@ -182,7 +183,7 @@ export function createApiRoutes(options: ApiRoutesOptions = {}): Router {
 
   // Pre-load instruction index once per request so route handlers can use
   // res.locals.indexState instead of calling ensureLoaded() repeatedly.
-  // See: https://github.com/jagilber-dev/index-server/issues/45
+  // See internal tracker #45.
   router.use(ensureLoadedMiddleware);
 
   // Mount route modules

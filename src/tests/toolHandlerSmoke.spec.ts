@@ -22,6 +22,12 @@ const MINIMAL_PARAMS: Record<string, unknown> = {
   index_inspect: { id: '__nonexistent__' },
   messaging_get: { messageId: '__nonexistent__' },
   messaging_thread: { parentId: '__nonexistent__' },
+  feedback_submit: {
+    type: 'issue',
+    severity: 'low',
+    title: 'Smoke test feedback',
+    description: 'Minimal smoke-test payload',
+  },
 };
 
 // Tools that throw for bad IDs (expected behavior, not a bug)

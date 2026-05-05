@@ -7,7 +7,7 @@ import { spawn, execSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 
-const PWSH_SCRIPT = path.resolve(__dirname, '..', 'scripts', 'powershell-mcp-server.ps1');
+const PWSH_SCRIPT = path.resolve(__dirname, '..', '..', 'scripts', 'client', 'powershell-mcp-server.ps1');
 
 // Skip entire suite if pwsh is not available or the script file is missing (excluded from public repo)
 function hasPwshAndScript(): boolean {
@@ -30,7 +30,7 @@ interface Frame { jsonrpc?: string; id?: number; method?: string; result?: any; 
 const parse = (l:string):Frame|undefined => { try { return JSON.parse(l.replace(/^\uFEFF/, '').trim()); } catch { return undefined; } };
 
 function runPwshServer(){
-  const child = spawn('pwsh', ['-NoLogo','-NoProfile','-ExecutionPolicy','Bypass','-File','scripts/powershell-mcp-server.ps1'], { stdio:['pipe','pipe','pipe'], env:{ ...process.env } });
+  const child = spawn('pwsh', ['-NoLogo','-NoProfile','-ExecutionPolicy','Bypass','-File', PWSH_SCRIPT], { stdio:['pipe','pipe','pipe'], env:{ ...process.env } });
   return child;
 }
 

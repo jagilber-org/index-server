@@ -29,8 +29,8 @@ COPY constitution.json ./
 RUN npx tsc -p tsconfig.json
 
 # Copy dashboard assets (if present)
-COPY scripts/copy-dashboard-assets.mjs ./scripts/
-RUN node scripts/copy-dashboard-assets.mjs 2>/dev/null || true
+COPY scripts/build/copy-dashboard-assets.mjs ./scripts/build/
+RUN node scripts/build/copy-dashboard-assets.mjs 2>/dev/null || true
 
 # Prune to production-only dependencies
 RUN npm prune --omit=dev && \
@@ -68,33 +68,35 @@ COPY --from=build /app/package.json ./
 COPY --from=build /app/schemas ./schemas
 COPY --from=build /app/constitution.json ./
 
+ENV INDEX_SERVER_HOME=/app
+
 # Copy instruction bundle if present (can be overridden via volume mount)
 # instructions/ is gitignored in source; may not exist in clean clones.
 # Use a dummy Dockerfile trick: COPY with a known file + optional dir.
 COPY package.json instructions* /tmp/staging/
-RUN mkdir -p /app/instructions && \
+RUN mkdir -p "$INDEX_SERVER_HOME/instructions" && \
     if [ -d /tmp/staging/instructions ]; then \
-      cp -r /tmp/staging/instructions/* /app/instructions/ 2>/dev/null || true; \
+            cp -r /tmp/staging/instructions/* "$INDEX_SERVER_HOME/instructions/" 2>/dev/null || true; \
     fi && \
     rm -rf /tmp/staging
 
 # Create data directories with correct permissions
-RUN mkdir -p /app/data /app/logs /app/metrics /app/feedback /app/governance /app/certs && \
+RUN mkdir -p "$INDEX_SERVER_HOME/data" "$INDEX_SERVER_HOME/logs" "$INDEX_SERVER_HOME/metrics" "$INDEX_SERVER_HOME/feedback" "$INDEX_SERVER_HOME/governance" "$INDEX_SERVER_HOME/certs" && \
     chown -R node:node /app
 
 # Volume mount points
-VOLUME ["/app/certs", "/app/data", "/app/instructions"]
+VOLUME ["/app/certs", "/app/data"]
 
 # Environment defaults.
 # The dashboard binds to 0.0.0.0 inside the container so published ports work.
 # Limit host exposure via compose or runtime port binding instead.
 ENV NODE_ENV=production \
-    INDEX_SERVER_DIR=/app/instructions \
+    INDEX_SERVER_DIR=${INDEX_SERVER_HOME}/instructions \
     INDEX_SERVER_DASHBOARD=1 \
     INDEX_SERVER_DASHBOARD_PORT=8787 \
     INDEX_SERVER_LOG_LEVEL=info \
-    INDEX_SERVER_METRICS_DIR=/app/metrics \
-    INDEX_SERVER_FEEDBACK_DIR=/app/feedback \
+    INDEX_SERVER_METRICS_DIR=${INDEX_SERVER_HOME}/metrics \
+    INDEX_SERVER_FEEDBACK_DIR=${INDEX_SERVER_HOME}/feedback \
     INDEX_SERVER_MUTATION=0
 
 # nosemgrep: semgrep.tree-scan-dashboard-bind-all-interfaces -- intentional: container binds 0.0.0.0; host exposure controlled via Docker Compose port mapping

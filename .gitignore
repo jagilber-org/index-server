@@ -154,6 +154,9 @@ metrics/**
 # Local environment overrides and configurations
 *.local.json
 mcp.local.json
+/scripts/.env
+/scripts/.env.*
+/scripts/.vscode/
 
 # Platform-specific files
 # Mac metadata

@@ -34,7 +34,7 @@ const zDispatch = z.object({
   keywords: z.array(z.string()).optional(),
   ids: z.array(z.string()).optional(),
   category: z.string().optional(),
-  contentType: z.enum(['instruction', 'template', 'chat-session', 'reference', 'example', 'agent']).optional(),
+  contentType: z.enum(['instruction', 'template', 'workflow', 'reference', 'example', 'agent', 'chat-session']).optional(),
   text: z.string().optional(),
   includeCategories: z.boolean().optional(),
   caseSensitive: z.boolean().optional(),
@@ -99,7 +99,7 @@ function buildZIndexEntry() {
     nextReviewDue: z.string().optional(),
     semanticSummary: z.string().optional(),
     changeLog: z.array(z.object({}).passthrough()).optional(),
-    contentType: z.enum(['instruction', 'template', 'chat-session', 'reference', 'example', 'agent']).optional(),
+    contentType: z.enum(['instruction', 'template', 'workflow', 'reference', 'example', 'agent', 'chat-session']).optional(),
     extensions: z.record(z.string(), zExtensionValue).optional()
   }).strict();
 }
@@ -175,7 +175,7 @@ const zSearch = z.object({
   limit: z.number().int().min(1).max(100).default(50).optional(),
   includeCategories: z.boolean().default(false).optional(),
   caseSensitive: z.boolean().default(false).optional(),
-  contentType: z.enum(['instruction', 'template', 'chat-session', 'reference', 'example', 'agent']).optional()
+  contentType: z.enum(['instruction', 'template', 'workflow', 'reference', 'example', 'agent']).optional()
 }).strict();
 
 // ── Diagnostics ──────────────────────────────────────────────────────────────

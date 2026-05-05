@@ -267,7 +267,7 @@
             "documented deviation in .template-adoption.json if replaced"
           ],
           "enforcedBy": [
-            "scripts/pre-commit.ps1",
+            "scripts/hooks/pre-commit.ps1",
             ".github/copilot-instructions.md"
           ]
         },
@@ -288,7 +288,7 @@
             "Narrow allowlist markers or documented exception rationale"
           ],
           "enforcedBy": [
-            "scripts/pre-commit.ps1",
+            "scripts/hooks/pre-commit.ps1",
             ".github/workflows/ci.yml"
           ]
         },
@@ -1236,7 +1236,7 @@
             "sync-constitution check output"
           ],
           "enforcedBy": [
-            "scripts/sync-constitution.ps1",
+            "scripts/build/sync-constitution.ps1",
             ".github/copilot-instructions.md"
           ]
         },
@@ -1367,7 +1367,7 @@
     "copilotInstructions": ".github/copilot-instructions.md",
     "instructionsReadme": ".instructions/README.md",
     "promotionMap": ".specify/config/promotion-map.json",
-    "constitutionSyncScript": "scripts/sync-constitution.ps1",
+    "constitutionSyncScript": "scripts/build/sync-constitution.ps1",
     "architecture": "docs/architecture.md",
     "prd": "docs/project_prd.md",
     "contributing": "CONTRIBUTING.md",

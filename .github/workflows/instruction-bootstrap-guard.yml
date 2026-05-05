@@ -29,7 +29,7 @@ jobs:
       - name: Governance Validation
         run: |
           if [ -d instructions ] && ls instructions/*.json 1>/dev/null 2>&1; then
-            node scripts/validate-governance.mjs
+            node scripts/governance/validate-governance.mjs
           else
             echo "No instructions/ directory — skipping governance validation"
           fi

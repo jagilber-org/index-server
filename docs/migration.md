@@ -98,13 +98,40 @@ Verification Checklist (Schema v4 specific):
 | Step | Action | Expectation |
 |------|--------|-------------|
 | 1 | Pick a v3 instruction | `schemaVersion` shows `3` on disk |
-| 2 | Start server with mutation enabled | File rewritten with `schemaVersion: "4"` |
+| 2 | Start server with mutation enabled | File rewritten with the current `schemaVersion` |
 | 3 | Run `promote_from_repo` for any repo | Promoted entries include `sourceWorkspace` and `createdByAgent` fields |
 | 4 | Run `index_diagnostics` | Previously skipped entries (extra properties) now load successfully |
 
 Rollback Safety:
 
 - Older builds (expecting v3) will reject entries containing `sourceWorkspace` or `createdByAgent` due to `additionalProperties: false`. Rollback requires stripping these fields or reverting schema.json.
+
+### 2.3 Content type vocabulary change (`chat-session` -> `workflow`)
+
+Applies when moving from builds or generated schema archives that used
+`contentType: "chat-session"` to current builds whose instruction schema accepts
+`workflow` instead.
+
+Current compatibility status:
+
+- `schemas/instruction.schema.json`, runtime input validation, search filters,
+  and tool schemas accept `instruction`, `template`, `workflow`, `reference`,
+  `example`, and `agent`.
+- `chat-session` is a legacy value visible in archived generated schemas and
+  older records only.
+- Schema v5 rewrites `chat-session` to `workflow` during loader migration and
+  write compatibility before strict schema validation.
+- New persisted records must use `workflow`; `chat-session` is compatibility
+  input only.
+
+Operator migration:
+
+1. Back up `instructions/` before loading or bulk-editing production catalogs.
+2. Start a schema-v5 build with mutation enabled so legacy records can be
+   rewritten to `workflow`.
+3. After migration, run `index_reload` and `integrity_verify`; then use
+   `index_dispatch` with `action: "query", contentType: "workflow"` to confirm
+   workflow records are discoverable.
 
 ## 3. Verification Checklist (Automatable)
 

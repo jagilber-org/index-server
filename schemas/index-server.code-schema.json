@@ -23436,7 +23436,7 @@
         {
           "name": "ContentType",
           "isExported": true,
-          "type": "'instruction' | 'template' | 'chat-session' | 'reference' | 'example' | 'agent'",
+          "type": "'instruction' | 'template' | 'workflow' | 'reference' | 'example' | 'agent'",
           "line": 3
         }
       ],

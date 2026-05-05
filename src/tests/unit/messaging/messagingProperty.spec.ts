@@ -102,7 +102,7 @@ describe('Messaging Property-Based Tests', () => {
     it('directed messages hidden from non-recipients', async () => {
       await fc.assert(
         fc.asyncProperty(
-          fc.string({ minLength: 1, maxLength: 20 }).filter(s => s !== 'sender' && s !== 'target'),
+          fc.string({ minLength: 1, maxLength: 20 }).filter(s => s !== 'sender' && s !== 'target' && s !== '*'),
           async (outsider) => {
             const mb = new AgentMailbox({ dir: makeTempDir(), maxMessages: 100, sweepIntervalMs: 0 });
             await mb.send({

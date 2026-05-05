@@ -24,9 +24,8 @@ paths-ignore:
   # Dev / build / publish scripts: many use intentional cert/url patterns and
   # are not exposed to end users.
   - scripts/validate-security-headers.mjs
-  - scripts/pre-push-public-guard.cjs
+  - scripts/hooks/pre-push-public-guard.cjs
   - scripts/generate-tools-doc.mjs
-  - scripts/generate-tools-doc.cjs
   # Canonical generated/runtime trees per codeql-local-database-setup
   # (index-server instruction v1.0.2, 2026-05-01). Defensive even though
   # `paths` already narrows scope to src/scripts -- protects against

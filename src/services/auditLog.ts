@@ -7,7 +7,7 @@ import { MUTATION } from './toolRegistry';
 
 // Append-only JSONL audit log for all server operations.
 // Each line: { ts, kind, action, ids?, meta? }
-// kind: 'mutation' | 'read' | 'http' — classifies the entry type.
+// kind: 'mutation' | 'read' | 'http' | 'feedback' — classifies the entry type.
 // Path and enablement are driven by runtime configuration (instructions.auditLog).
 
 // AsyncLocalStorage carries the correlation ID from registry wrapper into handler scope.
@@ -111,7 +111,7 @@ export function resetAuditLogCache(): void {
   auditLogState.writeWarningActive = false;
 }
 
-export type AuditKind = 'mutation' | 'read' | 'http';
+export type AuditKind = 'mutation' | 'read' | 'http' | 'feedback';
 
 export interface AuditEntry {
   ts: string; // ISO timestamp

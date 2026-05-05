@@ -89,6 +89,20 @@ registerHandler('index_add', guard('index_add', async (p: AddParams) => {
     if (priorLoad) return { error: priorLoad };
     return { error: { code: 'unknown', detail: 'missing-existing-entry', raw: 'missing-existing-entry' } };
   };
+  const validateExistingCollisionFile = (filePath: string): string[] => {
+    if (!fs.existsSync(filePath)) return [];
+    try {
+      const raw = JSON.parse(fs.readFileSync(filePath, 'utf8')) as Record<string, unknown>;
+      const validationCandidate = { ...raw, schemaVersion: SCHEMA_VERSION } as unknown as InstructionEntry;
+      const validation = validateInstructionRecord(validationCandidate);
+      return validation.validationErrors
+        .filter((issue) => issue.includes('/classification'))
+        .map((issue) => sanitizeErrorDetail(issue) || 'existing entry failed validation');
+    } catch (err) {
+      const sanitized = sanitizeLoadError(err, 'parse_failed');
+      return [sanitized.detail];
+    }
+  };
   const verifyReadBack = async (id: string, filePath: string, requestedCategories: unknown) => {
     try { invalidate(); } catch { /* ignore */ }
     const stReloaded = await ensureLoadedAsync();
@@ -180,6 +194,16 @@ registerHandler('index_add', guard('index_add', async (p: AddParams) => {
     if (mutable.audience === undefined) mutable.audience = 'all' as InstructionEntry['audience'];
     if (mutable.requirement === undefined) mutable.requirement = 'optional';
     if (mutable.categories === undefined) mutable.categories = [];
+    if (mutable.contentType === undefined) mutable.contentType = 'instruction';
+  }
+  const surfaceValidation = validateInstructionInputSurface(e as unknown as Record<string, unknown>);
+  if (surfaceValidation.validationErrors.length) {
+    return failValidation(
+      'invalid_instruction',
+      surfaceValidation.validationErrors,
+      surfaceValidation.hints,
+      { id: e.id },
+    );
   }
   const dir = getInstructionsDir(); if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   const file = path.join(dir, `${e.id}.json`);
@@ -212,11 +236,10 @@ registerHandler('index_add', guard('index_add', async (p: AddParams) => {
     e.title === undefined ? 'title: missing required field' : undefined,
     e.body === undefined ? 'body: missing required field' : undefined,
   ].filter((issue): issue is string => !!issue);
-  const surfaceValidation = validateInstructionInputSurface(e as unknown as Record<string, unknown>);
-  if (requiredFieldErrors.length || surfaceValidation.validationErrors.length) {
+  if (requiredFieldErrors.length) {
     return failValidation(
-      requiredFieldErrors.length ? 'missing required fields' : 'invalid_instruction',
-      [...requiredFieldErrors, ...surfaceValidation.validationErrors],
+      'missing required fields',
+      requiredFieldErrors,
       surfaceValidation.hints,
       { id: e.id },
     );
@@ -435,6 +458,18 @@ registerHandler('index_add', guard('index_add', async (p: AddParams) => {
       return failValidation('invalid_instruction', err.validationErrors, err.hints, { id: e.id });
     }
     if (!overwrite && isDuplicateInstructionWriteError(err)) {
+      const existingValidationErrors = validateExistingCollisionFile(file);
+      if (existingValidationErrors.length) {
+        return {
+          id: e.id,
+          success: false,
+          skipped: false,
+          created: false,
+          overwritten: false,
+          error: 'existing_instruction_invalid',
+          validationErrors: existingValidationErrors,
+        };
+      }
       let st0 = await ensureLoadedAsync(); let visible = st0.byId.has(e.id); let repaired = false; if (!visible) {
         try { invalidate(); st0 = await ensureLoadedAsync(); visible = st0.byId.has(e.id); if (visible) repaired = true; } catch { /* ignore reload */ }
       }

@@ -15,7 +15,7 @@ import { tmpdir, platform } from 'node:os';
 import path from 'node:path';
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
-const SCRIPT = path.join(REPO_ROOT, 'scripts', 'ggshield-with-retry.sh');
+const SCRIPT = path.join(REPO_ROOT, 'scripts', 'ci', 'ggshield-with-retry.sh');
 const isWindows = platform() === 'win32';
 
 function makeFakeBin(mode: string): string {
@@ -91,18 +91,28 @@ describe.skipIf(isWindows)('ggshield-with-retry.sh', () => {
     expect(stderr).toMatch(/GGSHIELD_DISABLED=1/);
   });
 
-  it('exits 0 on quota error when GGSHIELD_SKIP_ON_QUOTA=1', () => {
+  it('fails closed on quota error even when legacy skip env is set', () => {
     const { code, stderr } = runWrapper({
       fakeMode: 'quota',
       env: { GGSHIELD_SKIP_ON_QUOTA: '1' },
     });
-    expect(code).toBe(0);
-    expect(stderr).toMatch(/Quota exhausted.*GGSHIELD_SKIP_ON_QUOTA=1/);
+    expect(code).toBe(128);
+    expect(stderr).toMatch(/Quota exhausted.*failing closed/);
   });
 
   it('propagates quota error exit code without skip switch', () => {
     const { code } = runWrapper({ fakeMode: 'quota' });
     expect(code).toBe(128);
+  });
+
+  it('marks quota exhaustion advisory only when explicitly configured', () => {
+    const { code, stdout, stderr } = runWrapper({
+      fakeMode: 'quota',
+      env: { GGSHIELD_QUOTA_MODE: 'advisory' },
+    });
+    expect(code).toBe(0);
+    expect(stderr).toMatch(/Quota exhausted.*advisory/);
+    expect(stdout).toMatch(/::warning title=GGShield quota exhausted::/);
   });
 
   it('retries transient failures and eventually succeeds', () => {

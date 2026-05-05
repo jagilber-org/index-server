@@ -25,7 +25,7 @@ import '../services/toolHandlers.js';
 const TEST_PORT = 17787;
 const TEST_HOST = '127.0.0.1';
 let activeBaseUrl = `http://${TEST_HOST}:${TEST_PORT}`;
-const SCRIPTS_DIR = path.join(process.cwd(), 'scripts');
+const SCRIPTS_DIR = path.join(process.cwd(), 'scripts', 'client');
 const PS1_SCRIPT = path.join(SCRIPTS_DIR, 'index-server-client.ps1');
 const SH_SCRIPT = path.join(SCRIPTS_DIR, 'index-server-client.sh');
 const CLIENT_E2E_INDEX_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'index-server-client-e2e-'));

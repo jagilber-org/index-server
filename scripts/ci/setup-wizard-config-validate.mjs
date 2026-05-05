@@ -19,7 +19,7 @@ import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..', '..');
-const WIZARD = path.join(ROOT, 'scripts', 'setup-wizard.mjs');
+const WIZARD = path.join(ROOT, 'scripts', 'build', 'setup-wizard.mjs');
 const tmpBase = path.join(os.tmpdir(), `wizard-validate-${Date.now()}`);
 
 const TARGETS = ['vscode', 'copilot-cli', 'claude'];

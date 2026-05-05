@@ -134,18 +134,18 @@
       "enum": [
         "instruction",
         "template",
-        "chat-session",
+        "workflow",
         "reference",
         "example",
         "agent"
       ],
       "default": "instruction",
-      "description": "Content type classification: instruction (actionable guidance), template (scaffolds/error templates), chat-session (conversation history), reference (docs/guides), example (code samples), agent (AI agent definitions/personas)"
+      "description": "Content type classification: instruction (actionable guidance), template (scaffolds/error templates), workflow (multi-step processes or runbooks), reference (docs/guides), example (code samples), agent (AI agent definitions/personas). The legacy value chat-session is accepted only by migration/write compatibility and is normalized to workflow before persistence; new records should use workflow."
     },
     "schemaVersion": {
       "type": "string",
       "enum": [
-        "4"
+        "5"
       ],
       "description": "Internal schema version for migration"
     },
