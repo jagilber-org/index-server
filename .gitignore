@@ -223,8 +223,8 @@ PLAN.md
 .dist.keep
 
 # Runtime data directories (keep dirs via .gitkeep, ignore contents)
-governance/
-!governance/.gitkeep
+/governance/
+!/governance/.gitkeep
 !backups/.gitkeep
 !feedback/.gitkeep
 !tmp/.gitkeep
