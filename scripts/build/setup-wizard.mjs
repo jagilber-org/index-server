@@ -14,8 +14,8 @@
  * Usage:
  *   npx @jagilber-org/index-server --setup
  *   npm run setup
- *   node scripts/setup-wizard.mjs
- *   node scripts/setup-wizard.mjs --non-interactive --profile enhanced --root C:/mcp/index-server
+ *   node scripts/build/setup-wizard.mjs
+ *   node scripts/build/setup-wizard.mjs --non-interactive --profile enhanced --root C:/mcp/index-server
  */
 import fs from 'fs';
 import path from 'path';
@@ -27,6 +27,18 @@ import { select, input, confirm, checkbox } from '@inquirer/prompts';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..', '..');
 const IS_WINDOWS = process.platform === 'win32';
+function parsePositiveTimeout(value, fallback) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+const DEPLOY_PACK_TIMEOUT_MS = parsePositiveTimeout(
+  process.env.INDEX_SERVER_SETUP_PACK_TIMEOUT_MS,
+  30_000
+);
+const DEPLOY_INSTALL_TIMEOUT_MS = parsePositiveTimeout(
+  process.env.INDEX_SERVER_SETUP_INSTALL_TIMEOUT_MS,
+  IS_WINDOWS ? 420_000 : 120_000
+);
 
 // --------------------------------------------------------------------------
 // Launch spec resolver — determines how to invoke index-server at runtime.
@@ -781,7 +793,7 @@ async function deployRuntime(config) {
     // and produces a proper self-contained node_modules tree.
     const packOutput = runNpm(
       ['pack', '--pack-destination', targetRoot],
-      { cwd: ROOT, stdio: ['pipe', 'pipe', 'inherit'], timeout: 30_000 }
+      { cwd: ROOT, stdio: ['pipe', 'pipe', 'inherit'], timeout: DEPLOY_PACK_TIMEOUT_MS }
     ).toString().trim();
     const tarballName = packOutput.split('\n').pop();
 
@@ -789,9 +801,10 @@ async function deployRuntime(config) {
 
     try {
       // Install from the local tarball
+      console.log(`   npm install timeout: ${DEPLOY_INSTALL_TIMEOUT_MS}ms`);
       runNpm(
         ['install', tarballPath, '--omit=dev', '--no-fund', '--no-audit'],
-        { cwd: targetRoot, stdio: 'inherit', timeout: 120_000 }
+        { cwd: targetRoot, stdio: 'inherit', timeout: DEPLOY_INSTALL_TIMEOUT_MS }
       );
     } finally {
       // Clean up tarball
@@ -860,10 +873,10 @@ async function main() {
 Interactive mode:
   npx @jagilber-org/index-server --setup
   npm run setup
-  node scripts/setup-wizard.mjs
+  node scripts/build/setup-wizard.mjs
 
 Non-interactive mode:
-  node scripts/setup-wizard.mjs --non-interactive [options]
+  node scripts/build/setup-wizard.mjs --non-interactive [options]
     --profile <name>    default | enhanced | experimental
     --root <dir>        Base directory for all data paths
     --port <n>          Dashboard port (default: 8787)
@@ -959,12 +972,12 @@ Non-interactive mode:
       const certDir = path.join(config.root, 'certs');
       execFileSync(
         process.execPath,
-        [path.join(ROOT, 'scripts', 'generate-certs.mjs'), '--hostname', 'localhost', '--output', certDir],
+        [path.join(ROOT, 'scripts', 'build', 'generate-certs.mjs'), '--hostname', 'localhost', '--output', certDir],
         { stdio: 'inherit' }
       );
     } catch {
       console.error('❌ Certificate generation failed. Run manually:');
-      console.error(`   node scripts/generate-certs.mjs --output "${path.join(config.root, 'certs')}"`);
+      console.error(`   node scripts/build/generate-certs.mjs --output "${path.join(config.root, 'certs')}"`);
     }
   }
 

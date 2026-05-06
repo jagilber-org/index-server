@@ -62,6 +62,19 @@ function fwd(p) {
   return p.replace(/\\/g, '/');
 }
 
+function hasOpenSsl() {
+  try {
+    execFileSync('openssl', ['version'], { stdio: 'pipe' });
+    return true;
+  } catch {
+    if (process.platform !== 'win32') return false;
+    const gitSslDir = 'C:\\Program Files\\Git\\usr\\bin';
+    if (!fs.existsSync(path.join(gitSslDir, 'openssl.exe'))) return false;
+    process.env.PATH = `${gitSslDir}${path.delimiter}${process.env.PATH}`;
+    return true;
+  }
+}
+
 function runWizard(args, envOverrides = {}) {
   const wizardArgs = Array.isArray(args) ? args : [];
   return execFileSync(
@@ -130,6 +143,19 @@ for (const profile of PROFILES) {
       assert(content.includes('INDEX_SERVER_DASHBOARD'), 'Must contain INDEX_SERVER_DASHBOARD');
       assert(content.includes(`Profile: ${profile}`), `Must reference profile "${profile}"`);
     });
+
+    if (profile === 'enhanced' || profile === 'experimental') {
+      runTest('TLS certs generated', () => {
+        if (!hasOpenSsl()) {
+          console.log('    OpenSSL not available — skipping cert file assertions');
+          return;
+        }
+        const certDir = path.join(testDir, 'certs');
+        assert(fs.existsSync(path.join(certDir, 'ca.crt')), 'ca.crt must exist');
+        assert(fs.existsSync(path.join(certDir, 'server.crt')), 'server.crt must exist');
+        assert(fs.existsSync(path.join(certDir, 'server.key')), 'server.key must exist');
+      });
+    }
 
     // --- Target-specific config validation ---
     if (target === 'vscode') {

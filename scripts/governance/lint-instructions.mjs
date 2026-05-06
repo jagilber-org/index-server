@@ -25,24 +25,11 @@ function log(kind, id, msg){
 }
 function sentenceCase(str){ if(!str) return str; return str[0].toUpperCase() + str.slice(1); }
 function isAcronym(word){ return /^[A-Z]{2,}$/.test(word); }
-function isGovernanceSeed(file, full){
-  const lowerBase = file.toLowerCase();
-  if(/^(000-bootstrapper|001-lifecycle-bootstrap)/.test(lowerBase)) return true;
-  if(lowerBase.includes('.governance.')) return true;
-  if(lowerBase === 'constitution.json') return true;
-  try {
-    return /__GOVERNANCE_SEED__/.test(fs.readFileSync(full, { encoding: 'utf8', flag: 'r' }).slice(0, 200));
-  } catch {
-    return false;
-  }
-}
 
 for(const file of (fs.existsSync(base)? fs.readdirSync(base): [])){
   if(!file.endsWith('.json')) continue;
   const full = path.join(base,file);
-  if(isGovernanceSeed(file, full)) continue;
   let raw; try { raw = JSON.parse(fs.readFileSync(full,'utf8')); } catch { log('ERROR', file, 'invalid json'); continue; }
-  if(!(typeof raw.id === 'string' && typeof raw.title === 'string' && typeof raw.body === 'string')) continue;
   const id = raw.id || file;
   // Required governance fields (post 0.7.0) - treat missing as error
   for(const f of ['owner','status','version','priorityTier','classification']){

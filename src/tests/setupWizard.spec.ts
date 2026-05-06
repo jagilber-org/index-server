@@ -7,7 +7,7 @@
  * Constitution: TS-9 (test real code), TS-12 (>=5 cases)
  */
 import { describe, it, expect, afterEach } from 'vitest';
-import { execSync, ExecSyncOptions } from 'child_process';
+import { execSync, ExecSyncOptions, spawnSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
@@ -16,6 +16,19 @@ const EXEC_OPTS: ExecSyncOptions = { stdio: 'pipe', timeout: 60_000 };
 const DEPLOY_EXEC_OPTS: ExecSyncOptions = { stdio: 'pipe', timeout: 90_000 };
 const ROOT = path.resolve(__dirname, '..', '..');
 const WIZARD_SCRIPT = path.join(ROOT, 'scripts', 'build', 'setup-wizard.mjs');
+
+function hasOpenSsl(): boolean {
+  try {
+    execSync('openssl version', { stdio: 'pipe' });
+    return true;
+  } catch {
+    if (process.platform !== 'win32') return false;
+    const gitSslDir = 'C:\\Program Files\\Git\\usr\\bin';
+    if (!fs.existsSync(path.join(gitSslDir, 'openssl.exe'))) return false;
+    process.env.PATH = `${gitSslDir}${path.delimiter}${process.env.PATH}`;
+    return true;
+  }
+}
 
 function runWizard(args: string, opts?: ExecSyncOptions): string {
   return execSync(
@@ -256,6 +269,48 @@ describe('Setup Wizard Next Steps — Build Step Skip', () => {
   });
 });
 
+describe('Setup Wizard TLS Certificate Integration', () => {
+  it('should generate certs for enhanced profile using the packaged script path', () => {
+    if (!hasOpenSsl()) {
+      console.log('OpenSSL not available — skipping enhanced profile cert integration test');
+      return;
+    }
+
+    const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'wizard-tls-'));
+    try {
+      const result = spawnSync(
+        process.execPath,
+        [
+          WIZARD_SCRIPT,
+          '--non-interactive',
+          '--profile',
+          'enhanced',
+          '--root',
+          tmpRoot,
+          '--no-deploy',
+          '--no-preview',
+        ],
+        {
+          cwd: ROOT,
+          encoding: 'utf8',
+          timeout: 60_000,
+          env: { ...process.env, HOME: os.tmpdir(), USERPROFILE: os.tmpdir() },
+        },
+      );
+
+      const combinedOutput = `${result.stdout}\n${result.stderr}`;
+      expect(result.status, combinedOutput).toBe(0);
+      expect(combinedOutput).not.toContain('MODULE_NOT_FOUND');
+      expect(combinedOutput).not.toContain('Cannot find module');
+      expect(fs.existsSync(path.join(tmpRoot, 'certs', 'ca.crt'))).toBe(true);
+      expect(fs.existsSync(path.join(tmpRoot, 'certs', 'server.crt'))).toBe(true);
+      expect(fs.existsSync(path.join(tmpRoot, 'certs', 'server.key'))).toBe(true);
+    } finally {
+      fs.rmSync(tmpRoot, { recursive: true, force: true });
+    }
+  }, 90_000);
+});
+
 describe('Setup Wizard Runtime Deployment', () => {
   const tmpDir = path.join(os.tmpdir(), `wizard-deploy-${Date.now()}`);
 
@@ -285,6 +340,24 @@ describe('Setup Wizard Runtime Deployment', () => {
     expect(output).not.toContain('Build the server');
     expect(output).not.toContain('npm run build');
   }, 120_000);
+});
+
+describe('Setup Wizard Runtime Deployment Timeouts', () => {
+  const wizardSource = fs.readFileSync(WIZARD_SCRIPT, 'utf8');
+  const smokeSource = fs.readFileSync(path.join(ROOT, 'scripts', 'ci', 'clean-install-smoke.mjs'), 'utf8');
+
+  it('should allow the runtime npm install timeout to be overridden by environment', () => {
+    expect(wizardSource).toContain('INDEX_SERVER_SETUP_INSTALL_TIMEOUT_MS');
+    expect(wizardSource).toContain('parsePositiveTimeout');
+    expect(wizardSource).toContain('DEPLOY_INSTALL_TIMEOUT_MS');
+  });
+
+  it('should give Windows clean-install deployment enough time for nested npm install', () => {
+    expect(wizardSource).toContain('IS_WINDOWS ? 420_000 : 120_000');
+    expect(smokeSource).toContain('runtimeDeployInstallTimeoutMs = isWindows ? 420_000 : 180_000');
+    expect(smokeSource).toContain('INDEX_SERVER_SETUP_INSTALL_TIMEOUT_MS');
+    expect(smokeSource).toContain('setupTimeoutMs = isWindows ? 600_000 : 240_000');
+  });
 });
 
 describe('Setup Wizard Launch Resolution', () => {

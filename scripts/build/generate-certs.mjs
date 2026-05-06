@@ -6,7 +6,7 @@
  * For production, replace with certificates from a real CA.
  *
  * Usage:
- *   node scripts/generate-certs.mjs [--hostname <name>] [--days <n>] [--output <dir>]
+ *   node scripts/build/generate-certs.mjs [--hostname <name>] [--days <n>] [--output <dir>]
  */
 import { execFileSync } from 'child_process';
 import fs from 'fs';
