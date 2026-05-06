@@ -6,6 +6,12 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 
 ## [Unreleased]
 
+## [1.28.2] - 2026-05-06
+
+### Added
+
+- Clean install setup coverage and release workflow safety fixes.
+
 ## [1.28.1] - 2026-05-05
 
 ### Fixed

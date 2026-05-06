@@ -24,7 +24,7 @@ if (!type || !VALID_TYPES.includes(type)) {
   process.exit(1);
 }
 
-const root = join(import.meta.dirname, '..');
+const root = join(import.meta.dirname, '..', '..');
 
 // Guard: clean working tree
 const status = execSync('git status --porcelain', { encoding: 'utf8' }).trim();
@@ -81,10 +81,21 @@ try {
   if (changelogMessage) {
     entry += `\n### Added\n\n- ${changelogMessage}\n`;
   }
-  // Mirror PS1: normalize CRLF→LF, trim trailing newlines, join with blank line, single trailing \n
+  // Mirror PS1: normalize CRLF -> LF, trim trailing newlines, insert below Unreleased.
   const normalized = existing.replace(/\r\n/g, '\n').replace(/\n+$/, '');
   const entryNormalized = entry.replace(/\r\n/g, '\n').replace(/\n+$/, '');
-  writeFileSync(changelogPath, normalized + '\n\n' + entryNormalized + '\n', 'utf8');
+  const unreleasedHeading = '## [Unreleased]';
+  const unreleasedIndex = normalized.indexOf(unreleasedHeading);
+  if (unreleasedIndex === -1) {
+    writeFileSync(changelogPath, entryNormalized + '\n\n' + normalized + '\n', 'utf8');
+  } else {
+    const insertAt = unreleasedIndex + unreleasedHeading.length;
+    writeFileSync(
+      changelogPath,
+      normalized.slice(0, insertAt) + '\n\n' + entryNormalized + normalized.slice(insertAt) + '\n',
+      'utf8',
+    );
+  }
   changelogUpdated = true;
 } catch (e) { if (e.code !== 'ENOENT') throw e; }
 
