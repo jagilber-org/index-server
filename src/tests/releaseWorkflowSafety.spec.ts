@@ -5,6 +5,9 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const repoRoot = process.cwd();
+const packageManifest = JSON.parse(
+  fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8'),
+) as { version: string };
 
 function runPwsh(scriptPath: string, args: string[], cwd = repoRoot) {
   return execFileSync('pwsh', ['-NoProfile', '-File', scriptPath, ...args], {
@@ -30,7 +33,7 @@ describe('release/publication entrypoint safety', () => {
     const output = runPwsh(path.join(repoRoot, 'scripts', 'Invoke-ReleaseWorkflow.ps1'), [
       '-DryRun',
       '-Tag',
-      'v1.28.0',
+      `v${packageManifest.version}`,
       '-RemoteUrl',
       'https://github.com/jagilber-org/index-server.git',
       '-CleanRoomPath',

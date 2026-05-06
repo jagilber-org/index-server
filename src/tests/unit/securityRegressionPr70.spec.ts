@@ -6,7 +6,7 @@
  *
  * This file fills gaps explicitly called out in issue #71 that the prior
  * suite does not yet exercise:
- *   • #64 Command injection — `scripts/dist/generate-certs.mjs` argument
+ *   • #64 Command injection — `scripts/build/generate-certs.mjs` argument
  *     validation (hostname / days / keySize) and `execFileSync` usage.
  *   • #62 Route-level path traversal — `/api/docs/:name` and
  *     `/api/screenshots/:name` route handlers must use the shared
@@ -30,7 +30,7 @@ import { getHandler } from '../../server/registry';
 // #64 — Command Injection: generate-certs.mjs
 // ---------------------------------------------------------------------------
 describe('generate-certs.mjs — command injection prevention (PR #70, issue #64)', () => {
-  const scriptPath = path.resolve(__dirname, '..', '..', '..', 'scripts', 'dist', 'generate-certs.mjs');
+  const scriptPath = path.resolve(__dirname, '..', '..', '..', 'scripts', 'build', 'generate-certs.mjs');
 
   function readScript(): string {
     return fs.readFileSync(scriptPath, 'utf8');
