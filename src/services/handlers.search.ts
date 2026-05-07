@@ -782,11 +782,12 @@ export async function handleInstructionsSearch(params: SearchParams): Promise<Se
         const unique = [...new Set(tokenized)].slice(0, 10);
         if (unique.length > 0 && unique.length !== searchParams.keywords.length || unique.some((t, i) => t !== searchParams.keywords[i])) {
           logInfo(`[search] Auto-tokenizing keywords: [${searchParams.keywords.join(', ')}] -> [${unique.join(', ')}]`);
-          const retryParams: SearchParams = { ...searchParams, keywords: unique };
+        const retryParams: SearchParams = { ...searchParams, keywords: unique };
           const retryResult = performSearch(retryParams);
           retryResult.autoTokenized = true;
           if (retryResult.totalMatches === 0) {
             retryResult.hints = buildSearchHints(retryParams);
+            if (getRuntimeConfig().index.omitZeroResultQuery) delete (retryResult as Partial<SearchResponse>).query;
           } else {
             autoTrackSearchResults(retryResult.results);
           }
@@ -798,6 +799,7 @@ export async function handleInstructionsSearch(params: SearchParams): Promise<Se
     // Attach hints on zero-result responses
     if (result.totalMatches === 0) {
       result.hints = buildSearchHints(searchParams);
+      if (getRuntimeConfig().index.omitZeroResultQuery) delete (result as Partial<SearchResponse>).query;
     }
 
     // Attach _meta hints on successful (non-empty) responses

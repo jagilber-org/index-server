@@ -237,7 +237,8 @@ export function preflightOpenssl(): string {
     throw new CertInitError(
       'OPENSSL_NOT_FOUND',
       'openssl was not found on PATH or could not be invoked. Install OpenSSL and retry. ' +
-        'See https://www.openssl.org/source/ for downloads.',
+        'On Windows, Git for Windows typically includes it at C:\\Program Files\\Git\\usr\\bin\\openssl.exe. ' +
+        'See docs/cert_init.md for setup guidance.',
       e,
     );
   }
@@ -245,7 +246,8 @@ export function preflightOpenssl(): string {
     const stderr = result?.stderr?.toString().trim() ?? '';
     throw new CertInitError(
       'OPENSSL_NOT_FOUND',
-      `openssl probe failed (status=${String(result?.status)}): ${stderr || 'no output'}. Install OpenSSL and retry.`,
+      `openssl probe failed (status=${String(result?.status)}): ${stderr || 'no output'}. ` +
+        'Install OpenSSL and retry. See docs/cert_init.md for setup guidance.',
     );
   }
   return result.stdout.toString().trim();

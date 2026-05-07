@@ -161,6 +161,8 @@ Agents should periodically re-query the bootstrap instruction to get latest guid
 
 Use `INDEX_SERVER_DIR` for a stable data path outside editor or MCP client config/install folders so backups and reinstalls do not disturb your catalog.
 
+Generated MCP configs also set `INDEX_SERVER_SEARCH_OMIT_ZERO_QUERY=1` so zero-result validation searches do not echo deleted test identifiers in the response metadata. Normal server configurations leave this unset and retain the standard `query` block in search responses.
+
 ### Related Documentation
 
 - [Content Guidance](content_guidance.md) - Local-first P0 vs shared P1 strategy

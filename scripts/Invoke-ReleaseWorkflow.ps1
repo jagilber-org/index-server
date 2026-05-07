@@ -215,7 +215,7 @@ function Get-RemoteRefSha {
         [Parameter(Mandatory)][string]$RefPattern
     )
 
-    $refs = Get-RemoteRef -RemoteName $RemoteName -RefPattern $RefPattern
+    $refs = @(Get-RemoteRef -RemoteName $RemoteName -RefPattern $RefPattern)
     if ($refs.Count -eq 0) {
         return $null
     }
@@ -446,7 +446,11 @@ if ($SkipPreflight) {
     Write-Host '[publish] Skipping preflight (-SkipPreflight specified)'
 } else {
     if (-not (Get-Command pre-commit -ErrorAction SilentlyContinue)) {
-        throw '[publish] pre-commit is required for release preflight but was not found on PATH.'
+        if ($DryRun) {
+            Write-Host '[publish] pre-commit not on PATH; skipping availability check in -DryRun mode.' -ForegroundColor DarkYellow
+        } else {
+            throw '[publish] pre-commit is required for release preflight but was not found on PATH.'
+        }
     }
 
     Invoke-Step 'pre-commit run --all-files (skip no-commit-to-branch)' { Invoke-PreCommitReleasePreflight } -SkipWhenDryRun

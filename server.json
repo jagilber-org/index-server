@@ -6,12 +6,12 @@
     "url": "https://github.com/jagilber-org/index-server",
     "source": "github"
   },
-  "version": "1.28.2",
+  "version": "1.28.3",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "@jagilber-org/index-server",
-      "version": "1.28.2",
+      "version": "1.28.3",
       "transport": {
         "type": "stdio"
       }

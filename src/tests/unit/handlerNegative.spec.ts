@@ -28,6 +28,7 @@ describe('Handler negative tests — remove, search, usage, feedback', () => {
     client = await createTestClient({
       instructionsDir,
       forceMutation: true,
+      extraEnv: { INDEX_SERVER_FEATURES: 'usage' },
     });
   }, 30000);
 
@@ -180,28 +181,21 @@ describe('Handler negative tests — remove, search, usage, feedback', () => {
       const resp = await client.callToolJSON('usage_track', {
         id: 'non-existent-instruction-' + Date.now(),
       });
-      // Should not crash — may succeed (tracking non-existent is sometimes allowed)
-      // or return a controlled error
-      expect(resp !== undefined, 'should not crash for non-existent id').toBe(true);
+      expect(resp?.notFound, 'unknown usage target should return notFound: ' + JSON.stringify(resp)).toBe(true);
     });
 
     it('rejects invalid action type', async () => {
-      const resp = await client.callToolJSON('usage_track', {
+      await expect(client.callToolJSON('usage_track', {
         id: 'test',
         action: 'INVALID_ACTION',
-      });
-      const errish = resp?.error || resp?.isError || resp?.status === 'error'; // lgtm[js/unused-local-variable] — diagnostic capture; assertion only requires resp defined
-      void errish;
-      // If it doesn't reject, at least it shouldn't crash
-      expect(resp !== undefined, 'should handle invalid action type').toBe(true);
+      })).rejects.toThrow(/action|enum|retrieved|applied|cited/i);
     });
 
     it('rejects invalid signal value', async () => {
-      const resp = await client.callToolJSON('usage_track', {
+      await expect(client.callToolJSON('usage_track', {
         id: 'test',
         signal: 'INVALID_SIGNAL',
-      });
-      expect(resp !== undefined, 'should handle invalid signal type').toBe(true);
+      })).rejects.toThrow(/signal|enum|helpful|not-relevant|outdated|applied/i);
     });
   });
 });

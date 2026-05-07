@@ -1,8 +1,21 @@
 import { registerHandler } from '../server/registry';
 import { ensureLoaded, incrementUsage, loadUsageSnapshot } from './indexContext';
 
+const VALID_ACTIONS = new Set(['retrieved', 'applied', 'cited']);
+const VALID_SIGNALS = new Set(['helpful', 'not-relevant', 'outdated', 'applied']);
+
+function invalidParam(message: string): Error & { code: number } {
+  return Object.assign(new Error(message), { code: -32602 });
+}
+
 registerHandler('usage_track', (p: { id: string; action?: string; signal?: string; comment?: string }) => {
   if (!p.id) return { error: 'missing id' };
+  if (p.action !== undefined && !VALID_ACTIONS.has(p.action)) {
+    throw invalidParam(`Invalid usage action "${p.action}". Expected one of: retrieved, applied, cited.`);
+  }
+  if (p.signal !== undefined && !VALID_SIGNALS.has(p.signal)) {
+    throw invalidParam(`Invalid usage signal "${p.signal}". Expected one of: helpful, not-relevant, outdated, applied.`);
+  }
   const opts = { action: p.action, signal: p.signal, comment: p.comment };
   const r = incrementUsage(p.id, opts);
   if (!r) return { notFound: true };

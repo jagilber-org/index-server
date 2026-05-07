@@ -52,6 +52,10 @@ EXPERIMENTAL: SQLite (storage )?backend
 \[HttpTransport\] RPC handler error
 \[test\] surface-error
 
+# Admin backup negative-path fixtures intentionally reject empty ZIP uploads
+# to verify operator-facing validation without accepting malformed backups.
+\[admin\] importZipBackup rejected
+
 # Memory monitor and audit/manifest failure fixtures deliberately exercise
 # failure logging paths; these are not operator-actionable in test logs.
 \[MemoryMonitor\]

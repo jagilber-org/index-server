@@ -8,8 +8,8 @@ import { join } from 'path';
 
 const typesDir = join(process.cwd(), 'src', 'types');
 let ok = true;
-// Allow list: only sdk-shim.d.ts is expected.
-const allowList = new Set(['sdk-shim.d.ts']);
+// Allow list: keep only shims required for current compiler/runtime gaps.
+const allowList = new Set(['sdk-shim.d.ts', 'node-sqlite.d.ts']);
 
 try {
   const entries = readdirSync(typesDir).filter(f=>f.endsWith('.d.ts'));

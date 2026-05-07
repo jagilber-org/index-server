@@ -11,6 +11,7 @@
  * Each test documents WHY the assertion matters (the attack it blocks).
  */
 import { describe, it, expect } from 'vitest';
+import fs from 'fs';
 import nodePath from 'path';
 
 // ---------------------------------------------------------------------------
@@ -290,5 +291,26 @@ describe('regex search validation — injection prevention (PR #70, issue #61)',
     expect(backrefCheck.test('\\2')).toBe(true);
     expect(backrefCheck.test('\\0')).toBe(false); // \0 is not a backreference
     expect(backrefCheck.test('abc')).toBe(false);
+  });
+});
+
+describe('Mermaid graph rendering — XSS-safe DOM insertion (PR #70, issue #71)', () => {
+  const graphClientPath = nodePath.resolve(process.cwd(), 'src', 'dashboard', 'client', 'js', 'admin.graph.js');
+
+  it('does not assign Mermaid-rendered markup through innerHTML', () => {
+    const source = fs.readFileSync(graphClientPath, 'utf8');
+    const renderGraphSvg = source.match(/function renderGraphSvg\(host, svgMarkup\)\{[\s\S]*?\n {2}\}/)?.[0] ?? '';
+
+    expect(renderGraphSvg).toContain('sanitizeGraphSvg(svgMarkup)');
+    expect(renderGraphSvg).toContain('host.replaceChildren(safeSvg)');
+    expect(renderGraphSvg).not.toContain('innerHTML');
+  });
+
+  it('renders graph status and error text with textContent instead of HTML injection', () => {
+    const source = fs.readFileSync(graphClientPath, 'utf8');
+
+    expect(source).toContain('box.textContent = message');
+    expect(source).toContain("target.textContent = '(loading graph...)'");
+    expect(source).not.toMatch(/graph-mermaid[\s\S]{0,300}\.innerHTML\s*=/);
   });
 });

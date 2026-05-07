@@ -1,7 +1,10 @@
-name: Publish to npm
+name: Publish to npm [DISABLED]
+
+# This workflow is disabled. Package releases now go only to GitHub Packages.
+# See: https://github.com/jagilber-org/index-server/pkgs/npm/index-server
 
 on:
-  # Manual-only companion workflow. Release.yml is the canonical automatic tag release path.
+  # Disabled — workflow will not trigger
   workflow_dispatch:
     inputs:
       dry_run:
@@ -17,41 +20,9 @@ permissions:
   contents: read
 
 jobs:
+  # This job is intentionally empty. npm package publishing now happens via
+  # Release.yml → GitHub Packages registry only.
   publish:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-
-      - name: Use Node.js 22
-        uses: actions/setup-node@v6
-        with:
-          node-version: 22
-          cache: 'npm'
-          registry-url: 'https://registry.npmjs.org'
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Build
-        run: npm run build
-
-      - name: Typecheck
-        run: npm run typecheck
-
-      - name: Test
-        run: npm test
-
-      - name: Verify package contents
-        run: npm pack --dry-run 2>&1 | head -50
-
-      - name: Publish (dry run)
-        if: github.event.inputs.dry_run == 'true'
-        run: npm publish --dry-run
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-      - name: Publish to npmjs
-        if: (startsWith(github.ref, 'refs/tags/') || github.event.inputs.dry_run == 'false')
-        run: npm publish
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - run: echo "npmjs publishing disabled. All releases go to GitHub Packages only."

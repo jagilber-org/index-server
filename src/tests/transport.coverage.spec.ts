@@ -82,7 +82,7 @@ describe('transport - initialize handshake', () => {
     const result = initResult!.result as Record<string, unknown>;
     expect(result).toHaveProperty('protocolVersion');
     expect(result).toHaveProperty('serverInfo');
-    expect((result.serverInfo as Record<string, unknown>).name).toBe('index');
+    expect((result.serverInfo as Record<string, unknown>).name).toBe('index-server');
 
     const ready = frames.find(f => (f as Record<string, unknown>).method === 'server/ready');
     expect(ready, 'server/ready notification must be emitted').toBeDefined();

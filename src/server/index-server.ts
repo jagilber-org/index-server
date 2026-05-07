@@ -77,6 +77,17 @@ import { createShutdownGuard } from './shutdownGuard';
 import { runCertInit, formatPrintEnv, validateOptions as validateCertOptions } from './certInit';
 import { CertInitError } from './certInit.types';
 import type { PrintEnvFormat } from './certInit.types';
+import {
+  getServer,
+  listServers,
+  removeServer,
+  restoreLatestBackup,
+  upsertServer,
+  validateFile,
+  type McpClientTarget,
+  type McpOperationOptions,
+  type McpScope,
+} from '../services/mcpConfig';
 
 // Singleton shutdown guard — all exit paths funnel through this (Issue #36 fix)
 export const shutdownGuard = createShutdownGuard();
@@ -307,6 +318,70 @@ function launchSetupWizard(argv: string[]): never {
   process.exit(0);
 }
 
+const MCP_CONFIG_COMMANDS = new Set(['--mcp-list', '--mcp-get', '--mcp-upsert', '--mcp-remove', '--mcp-restore', '--mcp-validate']);
+
+function parseMcpConfigOptions(argv: string[]): { command?: string; options: McpOperationOptions; json: boolean } {
+  const args = argv.slice(2);
+  const command = args.find(arg => MCP_CONFIG_COMMANDS.has(arg));
+  const options: McpOperationOptions = {};
+  let json = false;
+  for (let i = 0; i < args.length; i += 1) {
+    const raw = args[i];
+    if (raw === '--target' && args[i + 1]) options.target = args[++i] as McpClientTarget;
+    else if (raw.startsWith('--target=')) options.target = raw.slice('--target='.length) as McpClientTarget;
+    else if (raw === '--scope' && args[i + 1]) options.scope = args[++i] as McpScope;
+    else if (raw.startsWith('--scope=')) options.scope = raw.slice('--scope='.length) as McpScope;
+    else if (raw === '--name' && args[i + 1]) options.name = args[++i];
+    else if (raw.startsWith('--name=')) options.name = raw.slice('--name='.length);
+    else if (raw === '--from-profile' && args[i + 1]) options.profile = args[++i] as McpOperationOptions['profile'];
+    else if (raw.startsWith('--from-profile=')) options.profile = raw.slice('--from-profile='.length) as McpOperationOptions['profile'];
+    else if (raw === '--backup' && args[i + 1]) options.backup = args[++i];
+    else if (raw.startsWith('--backup=')) options.backup = raw.slice('--backup='.length);
+    else if (raw === '--dry-run') options.dryRun = true;
+    else if (raw === '--json') json = true;
+    else if (raw === '--env' && args[i + 1]) {
+      const pair = args[++i];
+      const idx = pair.indexOf('=');
+      if (idx <= 0) throw new Error(`Invalid --env value: ${pair}. Expected KEY=VALUE.`);
+      options.env = options.env ?? {};
+      options.env[pair.slice(0, idx)] = pair.slice(idx + 1);
+    }
+  }
+  return { command, options, json };
+}
+
+function handleMcpConfigCli(argv: string[]): void {
+  const hasMcpCommand = argv.some(arg => MCP_CONFIG_COMMANDS.has(arg));
+  if (!hasMcpCommand) return;
+  let json = argv.includes('--json');
+  try {
+    const parsed = parseMcpConfigOptions(argv);
+    const { command, options } = parsed;
+    json = parsed.json;
+    if (!command) return;
+    const result =
+      command === '--mcp-list' ? listServers(options) :
+      command === '--mcp-get' ? getServer(options) :
+      command === '--mcp-upsert' ? upsertServer(options) :
+      command === '--mcp-remove' ? removeServer(options) :
+      command === '--mcp-restore' ? restoreLatestBackup(options) :
+      validateFile(options);
+    if (json) {
+      process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+    } else if (result.ok) {
+      process.stderr.write(`MCP config ${result.action} succeeded: ${result.path}\n`);
+      if (result.servers) process.stderr.write(`Servers: ${result.servers.join(', ')}\n`);
+      if (result.validation && !result.validation.ok) process.stderr.write(`Validation errors: ${result.validation.errors.join('; ')}\n`);
+    }
+    process.exit(result.ok ? 0 : 2);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (json) process.stdout.write(`${JSON.stringify({ ok: false, error: message }, null, 2)}\n`);
+    else process.stderr.write(`MCP config command failed: ${message}\n`);
+    process.exit(2);
+  }
+}
+
 function printHelpAndExit(){
   const help = `index-server - Model Context Protocol Server
 
@@ -318,6 +393,22 @@ MCP TRANSPORT (Client Communication):
 SETUP:
   --setup                  Launch interactive configuration wizard
   --configure              Alias for --setup
+
+MCP CONFIGURATION CRUD:
+  --mcp-list               List configured MCP servers for a target
+  --mcp-get                Get one configured MCP server entry
+  --mcp-upsert             Create or update one MCP server entry
+  --mcp-remove             Remove one MCP server entry
+  --mcp-restore            Restore the latest MCP config backup, or --backup PATH
+  --mcp-validate           Validate one MCP config file
+  --target TARGET          vscode | copilot-cli | claude (default: vscode)
+  --scope SCOPE            repo | global for VS Code (default: repo)
+  --name NAME              MCP server name (default: index-server)
+  --from-profile PROFILE   default | enhanced | experimental
+  --env KEY=VALUE          Add or override one INDEX_SERVER_* env value; repeatable
+  --backup PATH            Restore this explicit backup path with --mcp-restore
+  --dry-run                Validate and report without writing
+  --json                   Emit JSON result to stdout
 
 ADMIN DASHBOARD (Optional):
   --dashboard              Enable read-only admin dashboard (default off)
@@ -332,7 +423,9 @@ ADMIN DASHBOARD (Optional):
   Purpose: Local administrator monitoring only
 
 CERTIFICATE BOOTSTRAP (Optional, Self-Signed TLS):
-  --init-cert              Generate a self-signed TLS cert+key (requires openssl on PATH).
+  --init-cert              Generate a self-signed TLS cert+key.
+                           Requires openssl on PATH (Windows: C:\\Program Files\\Git\\usr\\bin).
+                           See docs/cert_init.md for setup.
                            Exits after generation unless --start is also given.
   --cert-dir PATH          Output directory (default: ~/.index-server/certs)
   --cert-file PATH         Override cert output path (must be under --cert-dir)
@@ -447,6 +540,7 @@ async function startDashboard(cfg: CliConfig): Promise<{ url: string; close: () 
 }
 
 export async function main(){
+  handleMcpConfigCli(process.argv);
   // Run startup preflight (module/data presence). Non-fatal unless INDEX_SERVER_PREFLIGHT_STRICT=1
   try { emitPreflightAndMaybeExit(); } catch { /* ignore preflight wrapper errors */ }
   // -------------------------------------------------------------

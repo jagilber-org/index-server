@@ -166,6 +166,32 @@ node scripts/setup-wizard.mjs --non-interactive --target vscode,copilot-cli,clau
 node dist/server/index-server.js --setup
 ```
 
+Issue #317 adds a shared MCP configuration backend used by both `--setup` and the non-interactive CLI. The shared path structurally edits existing config files, preserves VS Code JSONC comments, validates the result, writes a manifest-backed backup before mutations, and supports restore.
+
+Non-interactive MCP config commands:
+
+```bash
+node dist/server/index-server.js --mcp-list --target vscode --json
+node dist/server/index-server.js --mcp-get --target vscode --name index-server --json
+node dist/server/index-server.js --mcp-upsert --target vscode --name index-server --from-profile default --json
+node dist/server/index-server.js --mcp-remove --target vscode --name index-server --json
+node dist/server/index-server.js --mcp-restore --target vscode --json
+node dist/server/index-server.js --mcp-validate --target vscode --json
+```
+
+Shared options:
+
+| Option | Values |
+| --- | --- |
+| `--target` | `vscode`, `copilot-cli`, `claude` |
+| `--scope` | `repo`, `global` for VS Code |
+| `--name` | MCP server entry name, default `index-server` |
+| `--from-profile` | `default`, `enhanced`, `experimental` |
+| `--env` | repeatable `INDEX_SERVER_KEY=value` override |
+| `--backup` | explicit backup path for `--mcp-restore` |
+| `--dry-run` | validate and report without writing |
+| `--json` | emit a machine-readable result to stdout |
+
 ## �🚀 Quick Start Configurations
 
 > **Note:** The examples below use the `mcpServers` format (Copilot CLI / Claude Desktop). For VS Code's `servers` format, see the [Config File Formats](#config-file-formats) section above, or use `npx -y @jagilber-org/index-server@latest --setup` to generate either format.

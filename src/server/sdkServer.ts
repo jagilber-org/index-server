@@ -69,7 +69,7 @@ export function createSdkServer(ServerClass: any) {
     logging: {},
     ...getReadOnlySurfaceCapabilities(),
   };
-  const server: any = new ServerClass({ name: 'index', version }, { capabilities: serverCapabilities });
+  const server: any = new ServerClass({ name: 'index-server', version }, { capabilities: serverCapabilities });
   (server as any).__declaredVersion = version;
 
   // Register server with the MCP log bridge (activated later after ready)
@@ -125,7 +125,7 @@ export function createSdkServer(ServerClass: any) {
       const versionDeclared = (server as any).__declaredVersion || (server as any).version || '0.0.0';
       const result: any = {
         protocolVersion: negotiated,
-        serverInfo: { name: 'index', version: versionDeclared },
+        serverInfo: { name: 'index-server', version: versionDeclared },
         capabilities: serverCapabilities,
         instructions: 'Use initialize -> tools/list -> tools/call { name, arguments }. Prompts: prompts/list and prompts/get. Resources: resources/list and resources/read. Health: tools/call health_check. Metrics: tools/call metrics_snapshot. Ping: ping.'
       };

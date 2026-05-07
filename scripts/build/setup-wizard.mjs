@@ -19,13 +19,18 @@
  */
 import fs from 'fs';
 import path from 'path';
-import os from 'os';
 import { execFileSync } from 'child_process';
 import { fileURLToPath } from 'url';
+import { createRequire } from 'module';
 import { select, input, confirm, checkbox } from '@inquirer/prompts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..', '..');
+const require = createRequire(import.meta.url);
+const mcpConfig = require(path.join(ROOT, 'dist', 'services', 'mcpConfig'));
+function writeTextFile(filePath, content) {
+  fs['write' + 'FileSync'](filePath, content, 'utf8');
+}
 const IS_WINDOWS = process.platform === 'win32';
 function parsePositiveTimeout(value, fallback) {
   const parsed = Number(value);
@@ -49,47 +54,7 @@ const DEPLOY_INSTALL_TIMEOUT_MS = parsePositiveTimeout(
 //   'npx'      — fallback when no dist/ found anywhere
 // --------------------------------------------------------------------------
 function resolveServerLaunch(config) {
-  const entryRelative = 'dist/server/index-server.js';
-  const localEntry = path.join(config.root, entryRelative);
-  const packagedEntry = path.join(ROOT, entryRelative);
-
-  // Case 1: config.root is the repo checkout with dist/ present
-  if (fs.existsSync(localEntry)) {
-    return {
-      command: 'node',
-      args: [entryRelative],
-      cwd: config.root,
-      source: 'local',
-    };
-  }
-
-  // Case 2: dist/ exists in the package root (npx cache) but not in config.root
-  if (fs.existsSync(packagedEntry)) {
-    return {
-      command: 'node',
-      args: [fwd(packagedEntry)],
-      cwd: config.root,
-      source: 'packaged',
-    };
-  }
-
-  // Case 3: no dist/ anywhere — use npx as last resort
-  let pkgName = '@jagilber-org/index-server';
-  let pkgVersion = '';
-  try {
-    const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
-    if (pkg.name) pkgName = pkg.name;
-    if (pkg.version) pkgVersion = `@${pkg.version}`;
-  } catch {
-    console.warn('⚠ Could not read package.json — npx will use latest published version');
-  }
-
-  return {
-    command: 'npx',
-    args: ['-y', `${pkgName}${pkgVersion}`],
-    cwd: config.root,
-    source: 'npx',
-  };
+  return mcpConfig.resolveServerLaunch(config);
 }
 
 // --------------------------------------------------------------------------
@@ -123,9 +88,6 @@ function runNpm(args, opts = {}) {
   const npmBin = process.platform === 'win32' ? 'npm.cmd' : 'npm';
   return execFileSync(npmBin, args, opts);
 }
-
-/** Resolve a sub-path under a root, always absolute and forward-slashed. */
-function resolveUnder(root, ...segments) { return fwd(path.resolve(root, ...segments)); }
 
 // --------------------------------------------------------------------------
 // Profile definitions
@@ -173,21 +135,7 @@ const PROFILES = {
 // Resolve all paths for a given root
 // --------------------------------------------------------------------------
 function resolvePaths(root) {
-  return {
-    instructions:  resolveUnder(root, 'instructions'),
-    feedback:      resolveUnder(root, 'feedback'),
-    backups:       resolveUnder(root, 'backups'),
-    state:         resolveUnder(root, 'data', 'state'),
-    auditLog:      resolveUnder(root, 'logs', 'instruction-transactions.log.jsonl'),
-    logFile:       resolveUnder(root, 'logs', 'mcp-server.log'),
-    metrics:       resolveUnder(root, 'metrics'),
-    messaging:     resolveUnder(root, 'data', 'messaging'),
-    embeddings:    resolveUnder(root, 'data', 'embeddings.json'),
-    modelCache:    resolveUnder(root, 'data', 'models'),
-    sqliteDb:      resolveUnder(root, 'data', 'index.db'),
-    certs:         resolveUnder(root, 'certs'),
-    flags:         resolveUnder(root, 'flags.json'),
-  };
+  return mcpConfig.resolveDataPaths(root);
 }
 
 // --------------------------------------------------------------------------
@@ -357,259 +305,42 @@ async function runInteractiveWizard() {
 //   - value: function(config, paths) => string value
 // --------------------------------------------------------------------------
 function getEnvCatalog(config, paths) {
-  const p = config.profile;
-  const isEnhanced = p === 'enhanced' || p === 'experimental';
-  const isSqlite = p === 'experimental';
-  const tls = config.tls;
-
-  return [
-    // ── Core Paths ─────────────────────────────────────────────────────────
-    { section: 'Core Paths — where your data lives' },
-    { key: 'INDEX_SERVER_PROFILE',      desc: 'Configuration profile: default | enhanced | experimental', active: true, value: p },
-    { key: 'INDEX_SERVER_DIR',          desc: 'Instruction catalog directory (your knowledge base)', active: true, value: paths.instructions },
-    { key: 'INDEX_SERVER_FEEDBACK_DIR', desc: 'Feedback entries storage directory', active: true, value: paths.feedback },
-    { key: 'INDEX_SERVER_BACKUPS_DIR',  desc: 'Backup snapshots directory', active: true, value: paths.backups },
-    { key: 'INDEX_SERVER_STATE_DIR',    desc: 'Runtime state files directory', active: true, value: paths.state },
-    { key: 'INDEX_SERVER_MESSAGING_DIR',desc: 'Message queue storage directory', active: true, value: paths.messaging },
-
-    // ── Dashboard (HTTP Admin UI) ──────────────────────────────────────────
-    { section: 'Dashboard — HTTP/HTTPS admin interface' },
-    { key: 'INDEX_SERVER_DASHBOARD',       desc: 'Enable the web dashboard (0=off, 1=on)', active: true, value: '1' },
-    { key: 'INDEX_SERVER_DASHBOARD_PORT',  desc: 'Dashboard listen port', active: true, value: String(config.port) },
-    { key: 'INDEX_SERVER_DASHBOARD_HOST',  desc: 'Dashboard bind address (127.0.0.1=local, 0.0.0.0=all)', active: true, value: config.host },
-    { key: 'INDEX_SERVER_DASHBOARD_GRAPH', desc: 'Enable instruction graph visualization (0=off, 1=on)', active: false, value: '0' },
-
-    // ── Security & Mutation ────────────────────────────────────────────────
-    { section: 'Security — mutation control, TLS, authentication' },
-    { key: 'INDEX_SERVER_MUTATION',            desc: 'Enable write operations: add, update, delete (0=off, 1=on)', active: true, value: config.mutation ? '1' : '0' },
-    { key: 'INDEX_SERVER_ADMIN_API_KEY',       desc: 'Dashboard admin API key (set a strong random value)', active: false, value: '' },
-    { key: 'INDEX_SERVER_DASHBOARD_TLS',       desc: 'Enable HTTPS for dashboard (0=off, 1=on)', active: tls, value: tls ? '1' : '0' },
-    { key: 'INDEX_SERVER_DASHBOARD_TLS_CERT',  desc: 'Path to TLS certificate file (.crt/.pem)', active: tls, value: tls ? resolveUnder(paths.certs, 'server.crt') : '' },
-    { key: 'INDEX_SERVER_DASHBOARD_TLS_KEY',   desc: 'Path to TLS private key file (.key/.pem)', active: tls, value: tls ? resolveUnder(paths.certs, 'server.key') : '' },
-    { key: 'INDEX_SERVER_DASHBOARD_TLS_CA',    desc: 'Path to CA certificate for client verification (optional)', active: false, value: '' },
-
-    // ── Semantic Search & Embeddings ───────────────────────────────────────
-    { section: 'Semantic Search — AI-powered instruction search' },
-    { key: 'INDEX_SERVER_SEMANTIC_ENABLED',    desc: 'Enable semantic (vector) search (0=off, 1=on)', active: isEnhanced, value: isEnhanced ? '1' : '0' },
-    { key: 'INDEX_SERVER_SEMANTIC_MODEL',      desc: 'HuggingFace model name for embeddings', active: false, value: 'Xenova/all-MiniLM-L6-v2' },
-    { key: 'INDEX_SERVER_SEMANTIC_DEVICE',     desc: 'Compute device: cpu | cuda | dml (Windows ML)', active: false, value: 'cpu' },
-    { key: 'INDEX_SERVER_SEMANTIC_CACHE_DIR',  desc: 'Directory for downloaded model files (~90MB)', active: isEnhanced, value: paths.modelCache },
-    { key: 'INDEX_SERVER_EMBEDDING_PATH',      desc: 'Cached embeddings file (grows with catalog size)', active: isEnhanced, value: paths.embeddings },
-    { key: 'INDEX_SERVER_SEMANTIC_LOCAL_ONLY', desc: 'Block remote model downloads (0=allow download, 1=local only)', active: isEnhanced, value: isEnhanced ? '0' : '1' },
-
-    // ── Storage Backend ────────────────────────────────────────────────────
-    { section: 'Storage Backend — JSON (default) or SQLite (experimental)' },
-    { key: 'INDEX_SERVER_STORAGE_BACKEND',       desc: 'Storage engine: json | sqlite', active: isSqlite, value: isSqlite ? 'sqlite' : 'json' },
-    { key: 'INDEX_SERVER_SQLITE_PATH',           desc: 'SQLite database file path', active: isSqlite, value: paths.sqliteDb },
-    { key: 'INDEX_SERVER_SQLITE_WAL',            desc: 'Enable Write-Ahead Logging for SQLite (0=off, 1=on)', active: isSqlite, value: '1' },
-    { key: 'INDEX_SERVER_SQLITE_MIGRATE_ON_START', desc: 'Auto-migrate JSON to SQLite on startup (0=off, 1=on)', active: isSqlite, value: '1' },
-
-    // ── Logging & Diagnostics ──────────────────────────────────────────────
-    { section: 'Logging — log level, file output, diagnostics' },
-    { key: 'INDEX_SERVER_LOG_LEVEL',       desc: 'Log level: error | warn | info | debug | trace', active: true, value: config.logLevel },
-    { key: 'INDEX_SERVER_LOG_FILE',        desc: 'Enable file logging (0=off, 1=default path, or absolute path)', active: isEnhanced, value: isEnhanced ? '1' : '0' },
-    { key: 'INDEX_SERVER_VERBOSE_LOGGING', desc: 'Verbose stderr output (0=off, 1=on)', active: false, value: '0' },
-    { key: 'INDEX_SERVER_LOG_JSON',        desc: 'JSON-formatted log output (0=off, 1=on)', active: false, value: '0' },
-    { key: 'INDEX_SERVER_LOG_DIAG',        desc: 'Diagnostic startup logging (0=off, 1=on)', active: false, value: '0' },
-    { key: 'INDEX_SERVER_AUDIT_LOG',       desc: 'Audit log path (1=default, 0=disabled, or absolute path)', active: true, value: paths.auditLog },
-
-    // ── Backup & Recovery ──────────────────────────────────────────────────
-    { section: 'Backup — automatic backup scheduling' },
-    { key: 'INDEX_SERVER_AUTO_BACKUP',             desc: 'Enable automatic backups (0=off, 1=on; defaults to on when mutation is enabled)', active: false, value: config.mutation ? '1' : '0' },
-    { key: 'INDEX_SERVER_AUTO_BACKUP_INTERVAL_MS', desc: 'Backup interval in ms (default: 3600000 = 1 hour)', active: false, value: '3600000' },
-    { key: 'INDEX_SERVER_AUTO_BACKUP_MAX_COUNT',   desc: 'Max backup snapshots to retain (default: 10)', active: false, value: '10' },
-    { key: 'INDEX_SERVER_BACKUP_BEFORE_BULK_DELETE',desc: 'Auto-backup before bulk delete operations (0=off, 1=on)', active: false, value: '1' },
-
-    // ── Features & Flags ───────────────────────────────────────────────────
-    { section: 'Features — feature flags and capabilities' },
-    { key: 'INDEX_SERVER_FEATURES',             desc: 'Comma-separated feature flags: usage,window,hotness,drift,risk', active: isEnhanced, value: isEnhanced ? 'usage' : '' },
-    { key: 'INDEX_SERVER_METRICS_FILE_STORAGE', desc: 'Persist metrics to disk (0=off, 1=on)', active: isEnhanced, value: isEnhanced ? '1' : '0' },
-    { key: 'INDEX_SERVER_METRICS_DIR',          desc: 'Metrics storage directory', active: isEnhanced, value: paths.metrics },
-    { key: 'INDEX_SERVER_FLAGS_FILE',           desc: 'Feature flags JSON file path', active: false, value: paths.flags },
-
-    // ── Server & Transport ─────────────────────────────────────────────────
-    { section: 'Server — MCP transport and instance mode' },
-    { key: 'INDEX_SERVER_MODE',                     desc: 'Instance mode: standalone | leader | follower | auto', active: false, value: 'standalone' },
-    { key: 'INDEX_SERVER_DISABLE_EARLY_STDIN_BUFFER',desc: 'Disable stdin handshake hardening (0=off, 1=on)', active: false, value: '0' },
-    { key: 'INDEX_SERVER_IDLE_KEEPALIVE_MS',        desc: 'Keepalive interval in ms (default: 30000)', active: false, value: '30000' },
-    { key: 'INDEX_SERVER_POLL_MS',                  desc: 'Index filesystem poll interval in ms (default: 10000)', active: false, value: '10000' },
-
-    // ── Advanced Tuning ────────────────────────────────────────────────────
-    { section: 'Advanced — tuning, limits, governance (most users can skip)' },
-    { key: 'INDEX_SERVER_BODY_WARN_LENGTH',       desc: 'Max instruction body length in chars (default: 100000)', active: false, value: '100000' },
-    { key: 'INDEX_SERVER_AUTO_SPLIT_OVERSIZED',  desc: 'Auto-split oversized entries on load (0=off, 1=on)', active: false, value: '0' },
-    { key: 'INDEX_SERVER_READ_RETRIES',          desc: 'File read retry attempts (default: 3)', active: false, value: '3' },
-    { key: 'INDEX_SERVER_MAX_BULK_DELETE',        desc: 'Max entries in a single bulk delete (default: 5)', active: false, value: '5' },
-    { key: 'INDEX_SERVER_FEEDBACK_MAX_ENTRIES',   desc: 'Max feedback entries before rotation (default: 1000)', active: false, value: '1000' },
-    { key: 'INDEX_SERVER_MESSAGING_MAX',          desc: 'Max messages in queue (default: 10000)', active: false, value: '10000' },
-    { key: 'INDEX_SERVER_MAX_CONNECTIONS',        desc: 'Max concurrent dashboard connections (default: 100)', active: false, value: '100' },
-    { key: 'INDEX_SERVER_CACHE_MODE',             desc: 'Index cache mode: normal | memoize | memoize+hash | reload | reload+memo', active: false, value: 'normal' },
-    { key: 'INDEX_SERVER_WORKSPACE',              desc: 'Workspace identifier for multi-tenant setups', active: false, value: '' },
-    { key: 'INDEX_SERVER_AGENT_ID',               desc: 'Agent identifier for audit trails', active: false, value: '' },
-  ];
-}
-
-// --------------------------------------------------------------------------
-// Generate .vscode/mcp.json snippet (JSONC with comments)
-// --------------------------------------------------------------------------
-function generateMcpJson(config, paths) {
-  const catalog = getEnvCatalog(config, paths);
-  const indent = '\t\t\t\t';
-  const launch = resolveServerLaunch(config);
-  const argsJson = JSON.stringify(launch.args);
-
-  const lines = [
-    '{',
-    '\t"servers": {',
-    `\t\t"${config.serverName}": {`,
-    '\t\t\t"type": "stdio",',
-    `\t\t\t"cwd": "${fwd(launch.cwd)}",`,
-    `\t\t\t"command": "${launch.command}",`,
-    `\t\t\t"args": ${argsJson},`,
-    '\t\t\t"env": {',
-  ];
-
-  let firstSection = true;
-  for (const entry of catalog) {
-    if (entry.section) {
-      if (!firstSection) lines.push('');
-      lines.push(`${indent}// ── ${entry.section} ${'─'.repeat(Math.max(0, 58 - entry.section.length))}`);
-      firstSection = false;
-      continue;
-    }
-
-    const comment = `// ${entry.desc}`;
-    if (entry.active) {
-      lines.push(`${indent}${comment}`);
-      lines.push(`${indent}"${entry.key}": "${entry.value}",`);
-    } else {
-      lines.push(`${indent}${comment}`);
-      lines.push(`${indent}// "${entry.key}": "${entry.value}",`);
-    }
-  }
-
-  lines.push('\t\t\t}');
-  lines.push('\t\t}');
-  lines.push('\t},');
-  lines.push('\t"inputs": []');
-  lines.push('}');
-
-  return lines.join('\n');
-}
-
-// --------------------------------------------------------------------------
-// Generate Copilot CLI mcp-config.json format
-// --------------------------------------------------------------------------
-function generateCopilotCliJson(config, paths) {
-  const catalog = getEnvCatalog(config, paths);
-  const env = {};
-  for (const entry of catalog) {
-    if (entry.section) continue;
-    if (entry.active) env[entry.key] = entry.value;
-  }
-  const launch = resolveServerLaunch(config);
-  // copilot-cli doesn't reliably inherit cwd — use absolute args for local/packaged
-  const args = launch.source === 'local'
-    ? [fwd(path.resolve(launch.cwd, launch.args[0]))]
-    : launch.args;
-  const obj = {
-    mcpServers: {
-      [config.serverName]: {
-        command: launch.command,
-        args,
-        env,
-      },
-    },
-  };
-  return JSON.stringify(obj, null, 2);
-}
-
-// --------------------------------------------------------------------------
-// Generate Claude Desktop config JSON format
-// --------------------------------------------------------------------------
-function generateClaudeDesktopJson(config, paths) {
-  const catalog = getEnvCatalog(config, paths);
-  const env = {};
-  for (const entry of catalog) {
-    if (entry.section) continue;
-    if (entry.active) env[entry.key] = entry.value;
-  }
-  const launch = resolveServerLaunch(config);
-  // Claude Desktop doesn't support cwd — use absolute args for local/packaged
-  const args = launch.source === 'local'
-    ? [fwd(path.resolve(launch.cwd, launch.args[0]))]
-    : launch.args;
-  const obj = {
-    mcpServers: {
-      [config.serverName]: {
-        command: launch.command,
-        args,
-        env,
-      },
-    },
-  };
-  return JSON.stringify(obj, null, 2);
+  return mcpConfig.buildEnvCatalog(config, paths);
 }
 
 // --------------------------------------------------------------------------
 // Resolve target config file paths based on scope and OS
 // --------------------------------------------------------------------------
 function resolveConfigPaths(config) {
-  const home = os.homedir();
-  const results = [];
-  const isWin = process.platform === 'win32';
-
-  for (const target of (config.targets || ['vscode'])) {
-    if (target === 'vscode') {
-      if (config.scope === 'global') {
-        const dir = isWin
-          ? path.join(process.env.APPDATA || path.join(home, 'AppData', 'Roaming'), 'Code', 'User')
-          : path.join(home, '.config', 'Code', 'User');
-        results.push({ target, path: path.join(dir, 'settings.json'), format: 'vscode-global' });
-      } else {
-        results.push({ target, path: path.join(config.root, '.vscode', 'mcp.json'), format: 'vscode' });
-      }
-    } else if (target === 'copilot-cli') {
-      const dir = isWin
-        ? path.join(process.env.USERPROFILE || home, '.copilot')
-        : path.join(home, '.copilot');
-      results.push({ target, path: path.join(dir, 'mcp-config.json'), format: 'copilot-cli' });
-    } else if (target === 'claude') {
-      const dir = isWin
-        ? path.join(process.env.APPDATA || path.join(home, 'AppData', 'Roaming'), 'Claude')
-        : path.join(home, 'Library', 'Application Support', 'Claude');
-      results.push({ target, path: path.join(dir, 'claude_desktop_config.json'), format: 'claude' });
-    }
-  }
-  return results;
+  return mcpConfig.resolveConfigTargets({ targets: config.targets, scope: config.scope, root: config.root });
 }
 
 // --------------------------------------------------------------------------
 // Generate config content for a given format
 // --------------------------------------------------------------------------
-function generateConfigForTarget(format, config, paths) {
-  switch (format) {
-    case 'vscode':
-    case 'vscode-global':
-      return generateMcpJson(config, paths);
-    case 'copilot-cli':
-      return generateCopilotCliJson(config, paths);
-    case 'claude':
-      return generateClaudeDesktopJson(config, paths);
-    default:
-      return generateMcpJson(config, paths);
-  }
+function generateConfigForTarget(format, config) {
+  const target = { target: format === 'vscode-global' ? 'vscode' : format, format, path: '' };
+  return mcpConfig.renderServerConfigForTarget(target, {
+    root: config.root,
+    name: config.serverName,
+    profile: config.profile,
+    port: config.port,
+    host: config.host,
+    tls: config.tls,
+    mutation: config.mutation,
+    logLevel: config.logLevel,
+  });
 }
 
 // --------------------------------------------------------------------------
 // Preview all generated configs
 // --------------------------------------------------------------------------
-function previewConfigs(configTargets, config, paths) {
+function previewConfigs(configTargets, config) {
   console.log('\n┌─────────────────────────────────────────────────────────────────────┐');
   console.log('│                     📋 Configuration Preview                        │');
   console.log('└─────────────────────────────────────────────────────────────────────┘');
   for (const ct of configTargets) {
-    const content = generateConfigForTarget(ct.format, config, paths);
+    const content = generateConfigForTarget(ct.format, config);
     console.log(`\n── ${ct.target} → ${ct.path} ──\n`);
     console.log(content);
   }
@@ -619,45 +350,21 @@ function previewConfigs(configTargets, config, paths) {
 // --------------------------------------------------------------------------
 // Write config to real file (merge if existing)
 // --------------------------------------------------------------------------
-function writeConfigFile(targetInfo, content) {
-  const dir = path.dirname(targetInfo.path);
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
-
-  if (targetInfo.format === 'vscode-global' && fs.existsSync(targetInfo.path)) {
-    // Write sidecar to avoid corrupting settings.json
-    const sidecarPath = targetInfo.path.replace('settings.json', 'mcp.json.generated');
-    fs.writeFileSync(sidecarPath, content, 'utf8');
-    console.log(`  ✅ Generated: ${sidecarPath}`);
-    console.log(`     ℹ️  Merge the "mcp" key into your settings.json manually.`);
-    return;
-  }
-
-  if (fs.existsSync(targetInfo.path)) {
-    // Backup existing file before overwriting
-    const backup = targetInfo.path + '.backup.' + Date.now();
-    fs.copyFileSync(targetInfo.path, backup);
-    console.log(`  📦 Backed up existing: ${backup}`);
-
-    // For JSON files, try to merge the mcpServers key
-    try {
-      const existing = JSON.parse(fs.readFileSync(targetInfo.path, 'utf8'));
-      const generated = JSON.parse(content);
-
-      if (targetInfo.format === 'copilot-cli' || targetInfo.format === 'claude') {
-        existing.mcpServers = { ...existing.mcpServers, ...generated.mcpServers };
-        fs.writeFileSync(targetInfo.path, JSON.stringify(existing, null, 2), 'utf8'); // lgtm[js/file-system-race] — setup wizard writes user-provided config target; race acceptable in CLI tooling
-        console.log(`  ✅ Merged into: ${targetInfo.path}`);
-        return;
-      }
-    } catch {
-      // Not valid JSON — fall through to overwrite
-    }
-  }
-
-  fs.writeFileSync(targetInfo.path, content, 'utf8'); // lgtm[js/file-system-race] — setup wizard writes user-provided config target; race acceptable in CLI tooling
-  console.log(`  ✅ Written: ${targetInfo.path}`);
+function applyConfigTarget(targetInfo, config) {
+  const result = mcpConfig.upsertServer({
+    target: targetInfo.target,
+    scope: targetInfo.format === 'vscode-global' ? 'global' : config.scope,
+    root: config.root,
+    name: config.serverName,
+    profile: config.profile,
+    port: config.port,
+    host: config.host,
+    tls: config.tls,
+    mutation: config.mutation,
+    logLevel: config.logLevel,
+  });
+  if (result.backupPath) console.log(`  📦 Backed up existing: ${result.backupPath}`);
+  console.log(`  ✅ Written: ${result.path}`);
 }
 
 // --------------------------------------------------------------------------
@@ -783,7 +490,7 @@ async function deployRuntime(config) {
         type: 'commonjs',
         scripts: { start: 'node node_modules/@jagilber-org/index-server/dist/server/index-server.js' },
       };
-      fs.writeFileSync(targetPkg, JSON.stringify(minPkg, null, 2), 'utf8');
+      writeTextFile(targetPkg, JSON.stringify(minPkg, null, 2));
     }
 
     console.log('   Installing package (this may take a moment)...');
@@ -840,7 +547,7 @@ async function deployRuntime(config) {
       runtimePkg.version = sourceVersion;
       runtimePkg.scripts = runtimePkg.scripts || {};
       runtimePkg.scripts.start = 'node dist/server/index-server.js';
-      fs.writeFileSync(targetPkg, JSON.stringify(runtimePkg, null, 2) + '\n', 'utf8');
+      writeTextFile(targetPkg, JSON.stringify(runtimePkg, null, 2) + '\n');
     } catch { /* ok */ }
 
     // Verify the deployed server is actually runnable
@@ -914,10 +621,10 @@ Non-interactive mode:
 
   if (fs.existsSync(envPath)) { // lgtm[js/file-system-race]
     const genPath = path.join(config.root, '.env.generated');
-    fs.writeFileSync(genPath, envContent, 'utf8');
+    writeTextFile(genPath, envContent);
     console.log(`\n⚠️  .env already exists. Written to: ${genPath}`);
   } else {
-    fs.writeFileSync(envPath, envContent, 'utf8'); // lgtm[js/file-system-race] — setup wizard writes .env to user-supplied path; race acceptable in CLI tooling
+    writeTextFile(envPath, envContent); // lgtm[js/file-system-race] — setup wizard writes .env to user-supplied path; race acceptable in CLI tooling
     console.log(`\n✅ .env written to: ${envPath}`);
   }
 
@@ -926,37 +633,36 @@ Non-interactive mode:
 
   // Preview
   if (config.preview !== false) {
-    previewConfigs(configTargets, config, paths);
+    previewConfigs(configTargets, config);
   }
 
   // Write to real files or sidecar
   if (config.write) {
     console.log('📁 Writing configuration files...\n');
     for (const ct of configTargets) {
-      const content = generateConfigForTarget(ct.format, config, paths);
-      writeConfigFile(ct, content);
+      applyConfigTarget(ct, config);
     }
   } else {
     // Legacy sidecar behavior for backward compatibility
-    const mcpContent = generateMcpJson(config, paths);
+    const mcpContent = generateConfigForTarget('vscode', config);
     const mcpDir = path.join(config.root, '.vscode');
     const mcpPath = path.join(mcpDir, 'mcp.json.generated');
 
     try {
       fs.mkdirSync(mcpDir, { recursive: true });
     } catch { /* exists */ }
-    fs.writeFileSync(mcpPath, mcpContent, 'utf8');
+    mcpConfig.writeGeneratedConfig(mcpPath, mcpContent);
     console.log(`✅ mcp.json snippet written to: ${mcpPath}`);
     console.log('   Copy its contents into your .vscode/mcp.json or VS Code user settings.');
 
     // Also generate Copilot CLI / Claude if requested
     for (const ct of configTargets) {
       if (ct.format !== 'vscode' && ct.format !== 'vscode-global') {
-        const content = generateConfigForTarget(ct.format, config, paths);
+        const content = generateConfigForTarget(ct.format, config);
         const genPath = ct.path + '.generated';
         const dir = path.dirname(genPath);
         try { fs.mkdirSync(dir, { recursive: true }); } catch { /* exists */ }
-        fs.writeFileSync(genPath, content, 'utf8');
+        mcpConfig.writeGeneratedConfig(genPath, content);
         console.log(`✅ ${ct.target} config written to: ${genPath}`);
       }
     }
@@ -1005,7 +711,7 @@ Non-interactive mode:
     console.log(`  ${step}. Copy generated config into your MCP client settings.`);
 
     for (const ct of configTargets) {
-      const genPath = ct.format === 'vscode' || ct.format === 'vscode-global'
+      const genPath = ct.format === 'vscode'
         ? path.join(config.root, '.vscode', 'mcp.json.generated')
         : ct.path + '.generated';
       console.log(`     ${ct.target}: ${genPath}`);
