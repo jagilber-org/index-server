@@ -51,6 +51,8 @@ index-server --dashboard
 
 > **No-install alternative:** `npx -y @jagilber-org/index-server@latest --setup` works too (resolves from npmjs.org). Use it for a one-shot try; prefer `-g` for routine use. The GitHub Packages mirror requires authentication, so `npx` against `npm.pkg.github.com` needs a per-scope `.npmrc` plus a `GITHUB_TOKEN` with `read:packages`.
 
+> **Upgrading or hitting "unsupported INDEX_SERVER key" / "Cannot find module" errors after install?** See [Upgrading and Uninstalling](docs/quickstart.md#upgrading-and-uninstalling) for the clean-uninstall steps that clear stale non-global installs.
+
 #### Bootstrap HTTPS for the dashboard
 
 Generate a self-signed TLS cert+key in one command:

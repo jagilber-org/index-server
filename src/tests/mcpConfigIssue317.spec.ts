@@ -322,8 +322,11 @@ describe('Issue #317 CLI, docs, workflow, and parity', () => {
   });
 
   it.each(PROFILES)('--setup and --mcp-upsert produce byte-identical vscode configs for %s profile', profile => {
-    const setupRoot = fs.mkdtempSync(path.join(os.tmpdir(), `issue-317-setup-${profile}-`));
-    const cliRoot = fs.mkdtempSync(path.join(os.tmpdir(), `issue-317-cli-${profile}-`));
+    // Parity check: identical logical inputs (root, profile) must produce
+    // byte-identical config from both write paths. Root is shared because some
+    // env values (e.g. TLS cert paths) are derived from the root, so divergent
+    // temp dirs would not be byte-identical even when behavior is correct.
+    const sharedRoot = fs.mkdtempSync(path.join(os.tmpdir(), `issue-317-${profile}-`));
     const home = fs.mkdtempSync(path.join(os.tmpdir(), `issue-317-home-${profile}-`));
     try {
       const setup = runNode([
@@ -332,7 +335,7 @@ describe('Issue #317 CLI, docs, workflow, and parity', () => {
         '--profile',
         profile,
         '--root',
-        setupRoot,
+        sharedRoot,
         '--target',
         'vscode',
         '--write',
@@ -340,6 +343,7 @@ describe('Issue #317 CLI, docs, workflow, and parity', () => {
         '--no-preview',
       ], { env: { HOME: home, USERPROFILE: home } });
       expect(setup.status, `${setup.stdout}\n${setup.stderr}`).toBe(0);
+      const setupConfig = fs.readFileSync(path.join(sharedRoot, '.vscode', 'mcp.json'), 'utf8');
 
       const cli = runNode([
         SERVER_ENTRY,
@@ -355,17 +359,15 @@ describe('Issue #317 CLI, docs, workflow, and parity', () => {
         env: {
           HOME: home,
           USERPROFILE: home,
-          INDEX_SERVER_MCP_CONFIG_ROOT: cliRoot,
+          INDEX_SERVER_MCP_CONFIG_ROOT: sharedRoot,
         },
       });
       expect(cli.status, `${cli.stdout}\n${cli.stderr}`).toBe(0);
 
-      const setupConfig = fs.readFileSync(path.join(setupRoot, '.vscode', 'mcp.json'), 'utf8');
-      const cliConfig = fs.readFileSync(path.join(cliRoot, '.vscode', 'mcp.json'), 'utf8');
+      const cliConfig = fs.readFileSync(path.join(sharedRoot, '.vscode', 'mcp.json'), 'utf8');
       expect(cliConfig).toBe(setupConfig);
     } finally {
-      fs.rmSync(setupRoot, { recursive: true, force: true });
-      fs.rmSync(cliRoot, { recursive: true, force: true });
+      fs.rmSync(sharedRoot, { recursive: true, force: true });
       fs.rmSync(home, { recursive: true, force: true });
     }
   }, 30_000);
