@@ -186,6 +186,43 @@ Different MCP clients discover tools differently:
 > **VS Code tip:** You can also invoke tools without `#index-server` if the server is in your
 > `.vscode/mcp.json` — Copilot will auto-discover available MCP tools.
 
+## Upgrading and Uninstalling
+
+### Upgrade to the latest release
+
+```powershell
+npm install -g @jagilber-org/index-server@latest
+index-server --version
+```
+
+### Clean uninstall (and how to recover from a stale install)
+
+If `index-server --setup` fails with errors like `env contains unsupported INDEX_SERVER key: …` or `Cannot find module …\node_modules\@jagilber-org\index-server\dist\server\index-server.js`, you almost certainly have a stale non-global install shadowing the upgraded global one. Wipe everything and reinstall:
+
+```powershell
+# 1. Remove the global install
+npm uninstall -g @jagilber-org/index-server
+
+# 2. Clear the npm cache (forces a fresh download)
+npm cache clean --force
+
+# 3. Remove any stray non-global install in your home directory
+#    (left behind by an earlier `npm install` without -g)
+Remove-Item "$env:USERPROFILE\node_modules\@jagilber-org" -Recurse -Force -ErrorAction SilentlyContinue
+Remove-Item "$env:USERPROFILE\index-server.ps1","$env:USERPROFILE\index-server.cmd","$env:USERPROFILE\index-server" -Force -ErrorAction SilentlyContinue
+
+# 4. Reinstall fresh
+npm install -g @jagilber-org/index-server@latest
+
+# 5. Verify the resolution points at your npm global prefix
+Get-Command index-server -All | Format-Table Source
+node -e "console.log(require('@jagilber-org/index-server/package.json').version)"
+```
+
+On macOS / Linux replace step 3 with `rm -rf ~/node_modules/@jagilber-org ~/.local/bin/index-server`.
+
+> Why this happens: a previous `npm install @jagilber-org/index-server` (without `-g`) creates `~/node_modules/@jagilber-org/index-server`. Node's CommonJS resolver walks parent directories from the cwd and finds that copy *before* the global prefix, so future global upgrades appear to "not take effect". `npm uninstall -g` does not touch the home-directory copy.
+
 ## What's Next
 
 - **[Use Case Scenarios](use-cases.md)** — Real-world examples

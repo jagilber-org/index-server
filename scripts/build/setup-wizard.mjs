@@ -32,6 +32,18 @@ function writeTextFile(filePath, content) {
   fs['write' + 'FileSync'](filePath, content, 'utf8');
 }
 const IS_WINDOWS = process.platform === 'win32';
+
+// Default install root for non-repo installs. Lives under the user profile so
+// neither admin/elevated rights nor a cluttered C:\ root are required, and the
+// runtime self-deploys cleanly there (args + cwd resolve under this root).
+function defaultUserRoot() {
+  if (IS_WINDOWS) {
+    const base = process.env.LOCALAPPDATA || process.env.APPDATA || process.env.USERPROFILE || process.cwd();
+    return path.join(base, 'index-server');
+  }
+  const home = process.env.HOME || process.cwd();
+  return path.join(home, '.local', 'share', 'index-server');
+}
 function parsePositiveTimeout(value, fallback) {
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
@@ -147,6 +159,10 @@ function parseNonInteractiveArgs() {
 
   const config = {
     profile: 'default',
+    // Non-interactive default stays at ROOT (package install dir) so scripted
+    // / CI flows that pass no --root don't trigger deployRuntime. Callers who
+    // want a user-profile install pass --root explicitly. Interactive flow
+    // defaults to defaultUserRoot() instead.
     root: ROOT,
     port: 8787,
     host: '127.0.0.1',
@@ -188,6 +204,8 @@ function parseNonInteractiveArgs() {
   if (config.profile === 'experimental') {
     config.logLevel = 'debug';
   }
+  // When certs are generated, TLS must be active so mcp.json env wires cert paths.
+  if (config.generateCerts) config.tls = true;
 
   return config;
 }
@@ -214,7 +232,7 @@ async function runInteractiveWizard() {
   });
 
   // Step 2: Root directory
-  const defaultRoot = IS_WINDOWS ? 'C:\\mcp\\index-server' : '/opt/index-server';
+  const defaultRoot = defaultUserRoot();
   const root = path.resolve(await input({
     message: 'Base directory (all data paths resolve under this root)',
     default: defaultRoot,
@@ -294,7 +312,9 @@ async function runInteractiveWizard() {
     default: 'repo',
   });
 
-  return { profile, root, serverName, port, host, mutation, logLevel, generateCerts, targets, scope, write: true, preview: true, deploy: true };
+  // When certs are generated TLS must be enabled so mcp.json env wires up cert paths.
+  const tls = generateCerts || profile === 'enhanced' || profile === 'experimental';
+  return { profile, root, serverName, port, host, tls, mutation, logLevel, generateCerts, targets, scope, write: true, preview: true, deploy: true };
 }
 
 // --------------------------------------------------------------------------
@@ -636,6 +656,23 @@ Non-interactive mode:
     previewConfigs(configTargets, config);
   }
 
+  // ── Generate TLS certs BEFORE writing configs so cert paths exist
+  //    and the user sees a consistent flow (certs → config wired to them).
+  if (config.generateCerts) {
+    console.log('\n🔐 Generating TLS certificates...');
+    try {
+      const certDir = path.join(config.root, 'certs');
+      execFileSync(
+        process.execPath,
+        [path.join(ROOT, 'scripts', 'build', 'generate-certs.mjs'), '--hostname', 'localhost', '--output', certDir],
+        { stdio: 'inherit' }
+      );
+    } catch {
+      console.error('❌ Certificate generation failed. Run manually:');
+      console.error(`   node scripts/build/generate-certs.mjs --output "${path.join(config.root, 'certs')}"`);
+    }
+  }
+
   // Write to real files or sidecar
   if (config.write) {
     console.log('📁 Writing configuration files...\n');
@@ -670,22 +707,6 @@ Non-interactive mode:
 
   // ── Deploy runtime if target root differs from package root ─────────
   await deployRuntime(config);
-
-  // ── Generate TLS certs ──────────────────────────────────────────────
-  if (config.generateCerts) {
-    console.log('\n🔐 Generating TLS certificates...');
-    try {
-      const certDir = path.join(config.root, 'certs');
-      execFileSync(
-        process.execPath,
-        [path.join(ROOT, 'scripts', 'build', 'generate-certs.mjs'), '--hostname', 'localhost', '--output', certDir],
-        { stdio: 'inherit' }
-      );
-    } catch {
-      console.error('❌ Certificate generation failed. Run manually:');
-      console.error(`   node scripts/build/generate-certs.mjs --output "${path.join(config.root, 'certs')}"`);
-    }
-  }
 
   // ── Next steps ──────────────────────────────────────────────────────
   const proto = (config.profile === 'enhanced' || config.profile === 'experimental') ? 'https' : 'http';
@@ -723,6 +744,13 @@ Non-interactive mode:
   console.log(`  ${step}. Open the dashboard:`);
   console.log(`     ${proto}://localhost:${config.port}\n`);
   step++;
+
+  if (config.tls && config.generateCerts) {
+    console.log(`  ${step}. TLS certificates wired into your MCP config:`);
+    console.log(`     INDEX_SERVER_DASHBOARD_TLS_CERT = ${fwd(path.join(config.root, 'certs', 'server.crt'))}`);
+    console.log(`     INDEX_SERVER_DASHBOARD_TLS_KEY  = ${fwd(path.join(config.root, 'certs', 'server.key'))}\n`);
+    step++;
+  }
 
   if (config.profile === 'enhanced' || config.profile === 'experimental') {
     console.log(`  ${step}. First-time semantic search:`);

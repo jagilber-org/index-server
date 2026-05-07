@@ -382,9 +382,9 @@ function Invoke-HumanPublish {
         }
     }
 
-    Invoke-Step "HUMAN ONLY - Publish-ToMirror.ps1 ($((Get-DeliveryMode)))" {
+    Invoke-Step "HUMAN ONLY - Publish-ToMirror.ps1 ($((Get-DeliveryMode)))" ({
         & (Join-Path $PSScriptRoot 'Publish-ToMirror.ps1') @publishArgs
-    } -SkipWhenDryRun
+    }.GetNewClosure()) -SkipWhenDryRun
 }
 
 Write-Phase 'Phase 0: Resolve release/publish inputs'
