@@ -28,6 +28,10 @@ export default defineConfig({
       'src/tests._legacy/**'
   ,'dist/**'
   ,'node_modules/**'
+  // Performance benchmark — ~5s wall time + heavy CPU loop occasionally trips
+  // vitest worker RPC heartbeat ("Timeout calling onTaskUpdate"). It's a
+  // benchmark, not a unit test; run via npm run test:perf when needed.
+  ,'src/tests/coverageLift.performanceBaseline.spec.ts'
     ],
     coverage: {
       // Ensure CI artifact presence: generate multiple reporters including cobertura (coverage.xml)
