@@ -18,6 +18,24 @@ on:
         options:
           - 'true'
           - 'false'
+      publish_npmjs:
+        description: 'Publish to public npmjs.org (also required for MCP Registry validation)'
+        required: false
+        default: 'auto'
+        type: choice
+        options:
+          - 'auto'
+          - 'true'
+          - 'false'
+      publish_ghpackages:
+        description: 'Publish to GitHub Packages npm registry'
+        required: false
+        default: 'auto'
+        type: choice
+        options:
+          - 'auto'
+          - 'true'
+          - 'false'
 
 permissions:
   contents: write
@@ -181,6 +199,22 @@ jobs:
       ALLOW_EXTERNAL_PUBLISH: ${{ github.repository_owner == 'jagilber-org' }}
       MCP_USE_GITHUB_OIDC: ${{ github.repository_owner == 'jagilber-org' }}
       HAS_MCP_GITHUB_TOKEN: ${{ secrets.MCP_GITHUB_TOKEN != '' }}
+      # Publish target toggles. Resolution order:
+      #   1. workflow_dispatch input (when not 'auto')
+      #   2. Repo-level variables PUBLISH_NPMJS / PUBLISH_GHPACKAGES ('true'/'false')
+      #   3. Defaults below (npmjs=false, ghpackages=true)
+      # Toggle these by setting `vars.PUBLISH_NPMJS` / `vars.PUBLISH_GHPACKAGES` in
+      # repo settings, or by re-running the workflow via workflow_dispatch.
+      PUBLISH_NPMJS: >-
+        ${{ (github.event.inputs.publish_npmjs != null && github.event.inputs.publish_npmjs != 'auto')
+            && github.event.inputs.publish_npmjs
+            || (vars.PUBLISH_NPMJS != '' && vars.PUBLISH_NPMJS)
+            || 'false' }}
+      PUBLISH_GHPACKAGES: >-
+        ${{ (github.event.inputs.publish_ghpackages != null && github.event.inputs.publish_ghpackages != 'auto')
+            && github.event.inputs.publish_ghpackages
+            || (vars.PUBLISH_GHPACKAGES != '' && vars.PUBLISH_GHPACKAGES)
+            || 'true' }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -224,18 +258,64 @@ jobs:
           echo "$SECTION" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
-      # NOTE: Publishing to npmjs is disabled. All npm package releases
-      # go only to GitHub Packages (@jagilber-org/index-server).
-      # See: https://github.com/jagilber-org/index-server/pkgs/npm/index-server
+      - name: Resolve publish targets
+        id: targets
+        run: |
+          echo "npmjs=${PUBLISH_NPMJS}" >> "$GITHUB_OUTPUT"
+          echo "ghpackages=${PUBLISH_GHPACKAGES}" >> "$GITHUB_OUTPUT"
+          echo "Publish targets resolved:"
+          echo "  npmjs.org           : ${PUBLISH_NPMJS}"
+          echo "  GitHub Packages     : ${PUBLISH_GHPACKAGES}"
+          echo "  HAS_NPM_TOKEN       : ${HAS_NPM_TOKEN}"
 
       # ──────────────────────────────────────────────────────────────────
-      # Publish to GitHub Packages npm registry (parallel target to npmjs).
-      # Auth uses the workflow's GITHUB_TOKEN (no extra secret). The package
-      # name @jagilber-org/index-server already aligns with the org owner,
-      # so no rename is needed.
+      # Publish to public npmjs.org. Required for MCP Registry validation
+      # (the registry queries npmjs to verify the package exists).
+      # ──────────────────────────────────────────────────────────────────
+      - name: Require NPM_TOKEN when npmjs publish requested
+        if: steps.targets.outputs.npmjs == 'true' && env.HAS_NPM_TOKEN != 'true'
+        run: |
+          echo "PUBLISH_NPMJS is true but secrets.NPM_TOKEN is not configured." >&2
+          echo "Either configure NPM_TOKEN or set PUBLISH_NPMJS=false (or vars.PUBLISH_NPMJS=false)." >&2
+          exit 1
+
+      - name: Configure npmjs registry
+        if: steps.targets.outputs.npmjs == 'true'
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          registry-url: 'https://registry.npmjs.org'
+          scope: '@jagilber-org'
+
+      - name: Check npmjs version status
+        id: npmjs_status
+        if: steps.targets.outputs.npmjs == 'true'
+        run: |
+          PKG=$(node -p "require('./package.json').name")
+          VERSION="${{ steps.version.outputs.version }}"
+          if npm view "$PKG@$VERSION" version --registry=https://registry.npmjs.org >/dev/null 2>&1; then
+            echo "already_published=true" >> $GITHUB_OUTPUT
+          else
+            echo "already_published=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Publish to npmjs
+        if: steps.targets.outputs.npmjs == 'true' && steps.npmjs_status.outputs.already_published != 'true'
+        run: |
+          TARBALL=$(ls *.tgz 2>/dev/null | head -1)
+          if [ -n "$TARBALL" ]; then
+            npm publish "$TARBALL" --provenance --access public --registry=https://registry.npmjs.org
+          else
+            npm publish --ignore-scripts --provenance --access public --registry=https://registry.npmjs.org
+          fi
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      # ──────────────────────────────────────────────────────────────────
+      # Publish to GitHub Packages npm registry. Auth uses GITHUB_TOKEN.
       # ──────────────────────────────────────────────────────────────────
       - name: Configure GitHub Packages registry
-        if: env.ALLOW_EXTERNAL_PUBLISH == 'true'
+        if: steps.targets.outputs.ghpackages == 'true' && env.ALLOW_EXTERNAL_PUBLISH == 'true'
         uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -244,7 +324,7 @@ jobs:
 
       - name: Check GitHub Packages version status
         id: gpr_status
-        if: env.ALLOW_EXTERNAL_PUBLISH == 'true'
+        if: steps.targets.outputs.ghpackages == 'true' && env.ALLOW_EXTERNAL_PUBLISH == 'true'
         run: |
           PKG=$(node -p "require('./package.json').name")
           VERSION="${{ steps.version.outputs.version }}"
@@ -256,17 +336,12 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # NOTE: continue-on-error is intentional. The jagilber-org organization
-      # currently has package creation locked down (org settings → Packages →
-      # Package Creation). First-time creation of @jagilber-org/index-server
-      # via GITHUB_TOKEN returns 403 permission_denied: write_package until
-      # either (a) org owner enables Public package creation, or (b) the
-      # package is pre-created / repo added to the allowlist. Once the
-      # package exists and is linked to this repo, this step starts
-      # succeeding automatically — no workflow change needed. Until then we
-      # don't want a redundant publish target to fail the entire release.
+      # NOTE: continue-on-error is intentional. First-time package creation in
+      # the jagilber-org org may return 403 until the package is pre-created
+      # or the org enables public package creation. Don't fail the release on
+      # this redundant target.
       - name: Publish to GitHub Packages
-        if: env.ALLOW_EXTERNAL_PUBLISH == 'true' && steps.gpr_status.outputs.already_published != 'true'
+        if: steps.targets.outputs.ghpackages == 'true' && env.ALLOW_EXTERNAL_PUBLISH == 'true' && steps.gpr_status.outputs.already_published != 'true'
         continue-on-error: true
         run: |
           TARBALL=$(ls *.tgz 2>/dev/null | head -1)
@@ -278,14 +353,16 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      # MCP Registry validates packages by querying public npmjs.org. Skip the
+      # entire MCP publish path unless we also published to npmjs in this run.
       - name: Install mcp-publisher
-        if: env.ALLOW_EXTERNAL_PUBLISH == 'true' && (env.MCP_USE_GITHUB_OIDC == 'true' || env.HAS_MCP_GITHUB_TOKEN == 'true')
+        if: steps.targets.outputs.npmjs == 'true' && env.ALLOW_EXTERNAL_PUBLISH == 'true' && (env.MCP_USE_GITHUB_OIDC == 'true' || env.HAS_MCP_GITHUB_TOKEN == 'true')
         run: |
           curl -L "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" | tar xz mcp-publisher
 
       - name: Select MCP Registry auth mode
         id: mcp_auth
-        if: env.ALLOW_EXTERNAL_PUBLISH == 'true'
+        if: steps.targets.outputs.npmjs == 'true' && env.ALLOW_EXTERNAL_PUBLISH == 'true'
         run: |
           if [ "${{ env.MCP_USE_GITHUB_OIDC }}" = "true" ]; then
             echo "mode=oidc" >> "$GITHUB_OUTPUT"
@@ -296,22 +373,22 @@ jobs:
           fi
 
       - name: Require MCP Registry auth for release publish
-        if: env.ALLOW_EXTERNAL_PUBLISH == 'true' && steps.mcp_auth.outputs.mode == 'missing'
+        if: steps.targets.outputs.npmjs == 'true' && env.ALLOW_EXTERNAL_PUBLISH == 'true' && steps.mcp_auth.outputs.mode == 'missing'
         run: |
           echo "MCP Registry publish is enabled in this workflow, but no usable auth mode was found." >&2
           echo "Private repo releases must provide MCP_GITHUB_TOKEN; public mirror releases may use GitHub OIDC." >&2
           exit 1
 
       - name: Authenticate to MCP Registry via GitHub OIDC
-        if: env.ALLOW_EXTERNAL_PUBLISH == 'true' && steps.mcp_auth.outputs.mode == 'oidc'
+        if: steps.targets.outputs.npmjs == 'true' && env.ALLOW_EXTERNAL_PUBLISH == 'true' && steps.mcp_auth.outputs.mode == 'oidc'
         run: ./mcp-publisher login github-oidc
 
       - name: Authenticate to MCP Registry via PAT fallback
-        if: env.ALLOW_EXTERNAL_PUBLISH == 'true' && steps.mcp_auth.outputs.mode == 'pat'
+        if: steps.targets.outputs.npmjs == 'true' && env.ALLOW_EXTERNAL_PUBLISH == 'true' && steps.mcp_auth.outputs.mode == 'pat'
         run: ./mcp-publisher login github --token "${{ secrets.MCP_GITHUB_TOKEN }}"
 
       - name: Publish to MCP Registry
-        if: env.ALLOW_EXTERNAL_PUBLISH == 'true' && (steps.mcp_auth.outputs.mode == 'oidc' || steps.mcp_auth.outputs.mode == 'pat')
+        if: steps.targets.outputs.npmjs == 'true' && env.ALLOW_EXTERNAL_PUBLISH == 'true' && (steps.mcp_auth.outputs.mode == 'oidc' || steps.mcp_auth.outputs.mode == 'pat')
         run: |
           set +e
           output=$(./mcp-publisher publish 2>&1)
