@@ -359,32 +359,31 @@ function Write-PublishCommand {
 }
 
 function Invoke-HumanPublish {
-    $publishArgs = @(
-        '-SourcePath', $CleanRoomPath,
-        '-RemoteUrl', $RemoteUrl,
-        '-Tag', $Tag
-    )
+    $publishArgs = @{
+        SourcePath = $CleanRoomPath
+        RemoteUrl  = $RemoteUrl
+        Tag        = $Tag
+    }
 
     if ($CreatePR) {
-        $publishArgs += '-CreatePR'
+        $publishArgs['CreatePR'] = $true
         if ($WaitForMerge) {
-            $publishArgs += '-WaitForMerge'
-            $publishArgs += '-WaitForMergeTimeoutMinutes'
-            $publishArgs += $WaitForMergeTimeoutMinutes
+            $publishArgs['WaitForMerge'] = $true
+            $publishArgs['WaitForMergeTimeoutMinutes'] = $WaitForMergeTimeoutMinutes
         }
     } elseif ($DirectPublish) {
-        $publishArgs += '-DirectPublish'
+        $publishArgs['DirectPublish'] = $true
     } elseif ($CreateReviewRepo) {
-        $publishArgs += '-CreateReviewRepo'
+        $publishArgs['CreateReviewRepo'] = $true
         if ($ReviewOrg) {
-            $publishArgs += '-ReviewOrg'
-            $publishArgs += $ReviewOrg
+            $publishArgs['ReviewOrg'] = $ReviewOrg
         }
     }
 
-    Invoke-Step "HUMAN ONLY - Publish-ToMirror.ps1 ($((Get-DeliveryMode)))" {
-        & (Join-Path $PSScriptRoot 'Publish-ToMirror.ps1') @publishArgs
-    } -SkipWhenDryRun
+    $publishScript = Join-Path $PSScriptRoot 'Publish-ToMirror.ps1'
+    Invoke-Step "HUMAN ONLY - Publish-ToMirror.ps1 ($((Get-DeliveryMode)))" ({
+        & $publishScript @publishArgs
+    }.GetNewClosure()) -SkipWhenDryRun
 }
 
 Write-Phase 'Phase 0: Resolve release/publish inputs'

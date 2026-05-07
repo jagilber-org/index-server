@@ -31,10 +31,14 @@ describe('setup wizard and mcpConfig CLI shared write path parity', () => {
   it.each(PROFILES.flatMap(profile => TARGETS.map(target => [profile, target] as const)))(
     'produces byte-identical %s %s config from --setup and --mcp-upsert',
     (profile, target) => {
-      const setupRoot = fs.mkdtempSync(path.join(os.tmpdir(), `setup-parity-${profile}-${target}-`));
-      const cliRoot = fs.mkdtempSync(path.join(os.tmpdir(), `cli-parity-${profile}-${target}-`));
-      const setupHome = fs.mkdtempSync(path.join(os.tmpdir(), `setup-parity-home-${profile}-${target}-`));
-      const cliHome = fs.mkdtempSync(path.join(os.tmpdir(), `cli-parity-home-${profile}-${target}-`));
+      // Parity check: identical logical inputs (root, home, profile, target) must
+      // produce byte-identical config from both write paths. Root/home are shared
+      // because some env values (e.g. TLS cert paths) are derived from the root,
+      // so divergent temp dirs would not be byte-identical even when behavior is
+      // correct. We snapshot the setup-wizard output, then let the CLI overwrite
+      // and compare against the snapshot.
+      const sharedRoot = fs.mkdtempSync(path.join(os.tmpdir(), `parity-${profile}-${target}-`));
+      const sharedHome = fs.mkdtempSync(path.join(os.tmpdir(), `parity-home-${profile}-${target}-`));
       try {
         const setup = runNode([
           WIZARD_SCRIPT,
@@ -42,14 +46,15 @@ describe('setup wizard and mcpConfig CLI shared write path parity', () => {
           '--profile',
           profile,
           '--root',
-          setupRoot,
+          sharedRoot,
           '--target',
           target,
           '--write',
           '--no-deploy',
           '--no-preview',
-        ], { HOME: setupHome, USERPROFILE: setupHome, APPDATA: path.join(setupHome, 'AppData', 'Roaming') });
+        ], { HOME: sharedHome, USERPROFILE: sharedHome, APPDATA: path.join(sharedHome, 'AppData', 'Roaming') });
         expect(setup.status, `${setup.stdout}\n${setup.stderr}`).toBe(0);
+        const setupOutput = fs.readFileSync(configPath(target, sharedRoot, sharedHome), 'utf8');
 
         const cli = runNode([
           SERVER_ENTRY,
@@ -60,20 +65,17 @@ describe('setup wizard and mcpConfig CLI shared write path parity', () => {
           profile,
           '--json',
         ], {
-          INDEX_SERVER_MCP_CONFIG_ROOT: cliRoot,
-          HOME: cliHome,
-          USERPROFILE: cliHome,
-          APPDATA: path.join(cliHome, 'AppData', 'Roaming'),
+          INDEX_SERVER_MCP_CONFIG_ROOT: sharedRoot,
+          HOME: sharedHome,
+          USERPROFILE: sharedHome,
+          APPDATA: path.join(sharedHome, 'AppData', 'Roaming'),
         });
         expect(cli.status, `${cli.stdout}\n${cli.stderr}`).toBe(0);
 
-        expect(fs.readFileSync(configPath(target, cliRoot, cliHome), 'utf8'))
-          .toBe(fs.readFileSync(configPath(target, setupRoot, setupHome), 'utf8'));
+        expect(fs.readFileSync(configPath(target, sharedRoot, sharedHome), 'utf8')).toBe(setupOutput);
       } finally {
-        fs.rmSync(setupRoot, { recursive: true, force: true });
-        fs.rmSync(cliRoot, { recursive: true, force: true });
-        fs.rmSync(setupHome, { recursive: true, force: true });
-        fs.rmSync(cliHome, { recursive: true, force: true });
+        fs.rmSync(sharedRoot, { recursive: true, force: true });
+        fs.rmSync(sharedHome, { recursive: true, force: true });
       }
     },
     45_000,
