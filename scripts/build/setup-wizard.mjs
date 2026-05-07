@@ -648,6 +648,12 @@ Non-interactive mode:
     console.log(`\n✅ .env written to: ${envPath}`);
   }
 
+  // ── Deploy runtime BEFORE config generation ─────────────────────────
+  // resolveServerLaunch picks 'local' source (cwd = config.root) only when
+  // <config.root>/dist/server/index-server.js exists. Deploy first so configs
+  // are emitted with stable user-data-root paths instead of npm-global paths.
+  await deployRuntime(config);
+
   // ── Multi-target config generation ──────────────────────────────────
   const configTargets = resolveConfigPaths(config);
 
@@ -704,9 +710,6 @@ Non-interactive mode:
       }
     }
   }
-
-  // ── Deploy runtime if target root differs from package root ─────────
-  await deployRuntime(config);
 
   // ── Next steps ──────────────────────────────────────────────────────
   const proto = (config.profile === 'enhanced' || config.profile === 'experimental') ? 'https' : 'http';

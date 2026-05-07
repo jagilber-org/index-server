@@ -77,8 +77,12 @@ export function buildServerEntry(format: McpConfigFormat, config: ServerBuildCon
   if (format === 'vscode' && launch.cwd) entry.cwd = toForwardSlashes(launch.cwd);
   if (format === 'vscode-global' && launch.command === 'node') {
     const firstArg = launch.args[0] ?? '';
-    entry.args = [path.isAbsolute(firstArg) ? toForwardSlashes(firstArg) : toForwardSlashes(path.resolve(launch.cwd ?? config.root, firstArg))];
-    entry.cwd = toForwardSlashes(path.resolve(__dirname, '..', '..', '..'));
+    const baseCwd = launch.cwd ?? config.root;
+    entry.args = [path.isAbsolute(firstArg) ? toForwardSlashes(firstArg) : toForwardSlashes(path.resolve(baseCwd, firstArg))];
+    // Prefer the launch cwd (config.root for 'local' source — a stable user-scope
+    // directory). Fall back to package root only when the runtime hasn't been
+    // self-deployed under config.root (e.g. 'packaged' source straight out of npm-global).
+    entry.cwd = toForwardSlashes(launch.cwd ?? path.resolve(__dirname, '..', '..', '..'));
   }
   return entry;
 }
