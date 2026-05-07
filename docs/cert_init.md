@@ -39,13 +39,15 @@ After successful generation, the cert and key files are written to
 `<cert-dir>/index-server.crt` and `<cert-dir>/index-server.key` (or the paths
 you specified via `--cert-file` / `--key-file`).
 
-## Requirements
+## Prerequisites
 
 - **`openssl` on `PATH`.** The switch invokes the system `openssl` binary via
   `child_process.execFile` (no shell). If `openssl` is missing, generation
   fails with a stable error code `OPENSSL_NOT_FOUND`. Install OpenSSL:
-  - Windows: Git for Windows ships an `openssl.exe`, or use Chocolatey
-    (`choco install openssl`) or [openssl.org downloads][openssl-dl].
+  - Windows: Git for Windows ships `openssl.exe` at
+    `C:\Program Files\Git\usr\bin\openssl.exe`. Add
+    `C:\Program Files\Git\usr\bin` to `PATH` for your shell session, or use
+    Chocolatey (`choco install openssl`) or [openssl.org downloads][openssl-dl].
   - macOS: `brew install openssl@3` (and ensure it is on `PATH`).
   - Linux: `apt install openssl` / `dnf install openssl`.
 
@@ -199,7 +201,7 @@ The new cert will have a different serial number and `notBefore` timestamp.
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| `[init-cert] FAILED (code=OPENSSL_NOT_FOUND)` | `openssl` not on `PATH` | Install OpenSSL (see Requirements) and reopen your shell. |
+| `[init-cert] FAILED (code=OPENSSL_NOT_FOUND)` | `openssl` not on `PATH` | Install OpenSSL (see Prerequisites) and reopen your shell. |
 | `[init-cert] FAILED (code=INVALID_SAN)` | SAN entry missing `DNS:`/`IP:` prefix | Use `--san DNS:host,IP:192.0.2.4` (each entry needs the prefix). <!-- # pii-allowlist: RFC 5737 documentation IP --> |
 | `[init-cert] FAILED (code=PATH_OUTSIDE_CERT_DIR)` | `--cert-file` / `--key-file` escapes `--cert-dir` | Pass an explicit `--cert-dir` that contains both paths. |
 | Browser still warns after using `--start` | Self-signed cert is not trusted by your OS | Either trust the cert in the OS store, or accept the browser's "proceed" dialog (loopback only). |

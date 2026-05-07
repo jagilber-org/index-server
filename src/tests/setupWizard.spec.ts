@@ -11,9 +11,20 @@ import { execSync, ExecSyncOptions, spawnSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
+import { parse as parseJsoncValue } from 'jsonc-parser';
 
 const EXEC_OPTS: ExecSyncOptions = { stdio: 'pipe', timeout: 60_000 };
-const DEPLOY_EXEC_OPTS: ExecSyncOptions = { stdio: 'pipe', timeout: 90_000 };
+// Runtime deploy invokes nested `npm install` inside a temp dir. The wizard itself
+// budgets 420s on Windows for that nested install (see setup-wizard.mjs); the outer
+// execSync timeout must comfortably exceed that to avoid spawnSync ETIMEDOUT on
+// slow Windows GitHub runners. Linux runners are dramatically faster, so a smaller
+// budget is fine there.
+const IS_WINDOWS = process.platform === 'win32';
+const DEPLOY_EXEC_OPTS: ExecSyncOptions = {
+  stdio: 'pipe',
+  timeout: IS_WINDOWS ? 600_000 : 180_000,
+};
+const DEPLOY_TEST_TIMEOUT_MS = IS_WINDOWS ? 720_000 : 240_000;
 const ROOT = path.resolve(__dirname, '..', '..');
 const WIZARD_SCRIPT = path.join(ROOT, 'scripts', 'build', 'setup-wizard.mjs');
 
@@ -44,6 +55,10 @@ function readGeneratedEnv(): string {
   if (fs.existsSync(envPath)) return fs.readFileSync(envPath, 'utf8');
   if (fs.existsSync(mainPath)) return fs.readFileSync(mainPath, 'utf8');
   return '';
+}
+
+function parseJsonc(text: string): unknown {
+  return parseJsoncValue(text);
 }
 
 describe('Setup Wizard Non-Interactive Mode', () => {
@@ -134,6 +149,43 @@ describe('Setup Wizard Multi-Target Config', () => {
     expect(output).toBeDefined();
   });
 
+  it('should write VS Code global config to user mcp.json', () => {
+    const fakeHome = path.join(os.tmpdir(), `wizard-vscode-global-${Date.now()}`);
+    const fakeAppData = path.join(fakeHome, 'AppData', 'Roaming');
+    const mcpPath = process.platform === 'win32'
+      ? path.join(fakeAppData, 'Code', 'User', 'mcp.json')
+      : path.join(fakeHome, '.config', 'Code', 'User', 'mcp.json');
+
+    try {
+      fs.mkdirSync(fakeAppData, { recursive: true });
+
+      execSync(
+        `node "${WIZARD_SCRIPT}" --non-interactive --target vscode --scope global --write --no-deploy --no-preview`,
+        {
+          ...EXEC_OPTS,
+          cwd: ROOT,
+          env: {
+            ...process.env,
+            HOME: fakeHome,
+            USERPROFILE: fakeHome,
+            APPDATA: fakeAppData,
+          },
+        },
+      );
+
+      expect(fs.existsSync(mcpPath)).toBe(true);
+      expect(fs.existsSync(path.join(path.dirname(mcpPath), 'mcp.json.generated'))).toBe(false);
+      const config = parseJsonc(fs.readFileSync(mcpPath, 'utf8')) as {
+        servers?: Record<string, { type?: string; command?: string; args?: string[] }>;
+      };
+      expect(config.servers?.['index-server']?.type).toBe('stdio');
+      expect(config.servers?.['index-server']?.command).toBe('node');
+      expect(Array.isArray(config.servers?.['index-server']?.args)).toBe(true);
+    } finally {
+      fs.rmSync(fakeHome, { recursive: true, force: true });
+    }
+  });
+
   it('should accept --no-preview flag', () => {
     const output = runWizard('--no-preview');
     // Should suppress preview output
@@ -166,6 +218,37 @@ describe('Setup Wizard Multi-Target Config', () => {
     expect(content).toContain('"servers"');
   });
 
+  it('should merge existing VS Code mcp.json JSONC and create a backup', () => {
+    fs.mkdirSync(path.join(tmpDir, '.vscode'), { recursive: true });
+    const mcpPath = path.join(tmpDir, '.vscode', 'mcp.json');
+    const existing = `{
+      // keep existing servers
+      "servers": {
+        "existing-server": {
+          "type": "stdio",
+          "command": "node", // inline JSONC comment
+          "args": ["existing.js"],
+        },
+      },
+      "inputs": []
+    }`;
+    fs.writeFileSync(mcpPath, existing, 'utf8');
+
+    runWizard(`--root "${tmpDir}" --target vscode --scope repo --write --no-deploy --no-preview`);
+
+    const merged = parseJsonc(fs.readFileSync(mcpPath, 'utf8')) as {
+      servers?: Record<string, { command?: string; args?: string[] }>;
+      inputs?: unknown[];
+    };
+    expect(merged.servers?.['existing-server']?.command).toBe('node');
+    expect(merged.servers?.['index-server']?.command).toBe('node');
+    expect(Array.isArray(merged.inputs)).toBe(true);
+
+    const backups = fs.readdirSync(path.dirname(mcpPath)).filter(name => name.startsWith('mcp.json.backup.'));
+    expect(backups).toHaveLength(1);
+    expect(fs.readFileSync(path.join(path.dirname(mcpPath), backups[0]), 'utf8')).toBe(existing);
+  });
+
   it('should write Copilot CLI config to the .copilot directory', () => {
     const fakeHome = path.join(os.tmpdir(), `wizard-home-${Date.now()}`);
     fs.mkdirSync(fakeHome, { recursive: true });
@@ -185,6 +268,47 @@ describe('Setup Wizard Multi-Target Config', () => {
     expect(content).toContain('"mcpServers"');
 
     fs.rmSync(fakeHome, { recursive: true, force: true });
+  });
+
+  it('should merge existing Copilot CLI mcp-config.json and create a backup', () => {
+    const fakeHome = path.join(os.tmpdir(), `wizard-home-${Date.now()}`);
+    const copilotDir = path.join(fakeHome, '.copilot');
+    const mcpPath = path.join(copilotDir, 'mcp-config.json');
+    const existing = JSON.stringify({
+      mcpServers: {
+        'existing-server': {
+          command: 'node',
+          args: ['existing.js'],
+          env: { EXISTING: '1' },
+        },
+      },
+    }, null, 2);
+
+    try {
+      fs.mkdirSync(copilotDir, { recursive: true });
+      fs.writeFileSync(mcpPath, existing, 'utf8');
+
+      execSync(
+        `node "${WIZARD_SCRIPT}" --non-interactive --target copilot-cli --write --no-deploy --no-preview`,
+        {
+          ...EXEC_OPTS,
+          cwd: ROOT,
+          env: { ...process.env, HOME: fakeHome, USERPROFILE: fakeHome },
+        },
+      );
+
+      const merged = JSON.parse(fs.readFileSync(mcpPath, 'utf8')) as {
+        mcpServers?: Record<string, { command?: string; args?: string[] }>;
+      };
+      expect(merged.mcpServers?.['existing-server']?.command).toBe('node');
+      expect(merged.mcpServers?.['index-server']?.command).toBe('node');
+
+      const backups = fs.readdirSync(copilotDir).filter(name => name.startsWith('mcp-config.json.backup.'));
+      expect(backups).toHaveLength(1);
+      expect(fs.readFileSync(path.join(copilotDir, backups[0]), 'utf8')).toBe(existing);
+    } finally {
+      fs.rmSync(fakeHome, { recursive: true, force: true });
+    }
   });
 
   it('should include help text for --target flag', () => {
@@ -326,7 +450,7 @@ describe('Setup Wizard Runtime Deployment', () => {
     expect(fs.existsSync(path.join(tmpDir, 'dist', 'server', 'index-server.js'))).toBe(true);
     // schemas/ should exist
     expect(fs.existsSync(path.join(tmpDir, 'schemas'))).toBe(true);
-  }, 120_000);
+  }, DEPLOY_TEST_TIMEOUT_MS);
 
   it('should skip deploy when root equals package root', () => {
     const output = runWizard('--no-preview');
@@ -339,7 +463,7 @@ describe('Setup Wizard Runtime Deployment', () => {
     // Next steps should NOT show build step since dist was just deployed
     expect(output).not.toContain('Build the server');
     expect(output).not.toContain('npm run build');
-  }, 120_000);
+  }, DEPLOY_TEST_TIMEOUT_MS);
 });
 
 describe('Setup Wizard Runtime Deployment Timeouts', () => {
@@ -402,12 +526,13 @@ describe('Setup Wizard Launch Resolution', () => {
     }
   });
 
-  it('should set cwd to data root in generated vscode config', () => {
+  it('should use a portable VS Code config for data-only roots', () => {
     fs.mkdirSync(dataDir, { recursive: true });
     runWizard(`--root "${dataDir}" --target vscode --scope repo --write --no-deploy`);
     const mcpPath = path.join(dataDir, '.vscode', 'mcp.json');
     const content = fs.readFileSync(mcpPath, 'utf8');
-    expect(content).toContain(`"cwd": "${dataDir.replace(/\\/g, '/')}"`);
+    expect(content).toContain(ROOT.replace(/\\/g, '/'));
+    expect(content).not.toContain(`"args": ["dist/server/index-server.js"]`);
   });
 });
 

@@ -22,8 +22,8 @@ const pkg = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'package.json'), 'ut
 describe('npm publish readiness', () => {
 
   describe('package.json configuration', () => {
-    it('publishConfig.registry points to npmjs.org', () => {
-      expect(pkg.publishConfig?.registry).toBe('https://registry.npmjs.org/');
+    it('publishConfig.registry points to GitHub Packages', () => {
+      expect(pkg.publishConfig?.registry).toBe('https://npm.pkg.github.com');
     });
 
     it('package is not marked private', () => {

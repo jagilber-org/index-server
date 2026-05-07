@@ -96,6 +96,7 @@ interface IndexConfig {
   bodyMaxLength: number;
   autoSplitOversized: boolean; // Auto-split oversized entries on startup instead of truncating (default false)
   autoUsageTrack: boolean; // Automatically track usage on get/search responses (default true)
+  omitZeroResultQuery: boolean;
 }
 
 interface InstructionsManifestConfig {
@@ -343,6 +344,7 @@ function parseIndexConfig(): IndexConfig {
     bodyMaxLength,
     autoSplitOversized: getBooleanEnv('INDEX_SERVER_AUTO_SPLIT_OVERSIZED'),
     autoUsageTrack: parseBooleanEnv(process.env.INDEX_SERVER_AUTO_USAGE_TRACK, true),
+    omitZeroResultQuery: getBooleanEnv('INDEX_SERVER_SEARCH_OMIT_ZERO_QUERY'),
   };
 }
 

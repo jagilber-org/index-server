@@ -47,7 +47,7 @@ npx -y @jagilber-org/index-server@latest --dashboard
 
 #### Bootstrap HTTPS for the dashboard
 
-Generate a self-signed TLS cert+key in one command (requires `openssl` on PATH):
+Generate a self-signed TLS cert+key in one command:
 
 ```bash
 # Generate at ~/.index-server/certs/, then start with HTTPS automatically
@@ -56,8 +56,12 @@ npx -y @jagilber-org/index-server@latest --init-cert --start --dashboard
 
 `--init-cert` alone exits after generation. `--init-cert --start` continues
 into normal startup with the generated cert wired into `--dashboard-tls`
-automatically. See [`docs/cert_init.md`](docs/cert_init.md) for the full
-flag reference, security notes, and troubleshooting.
+automatically.
+
+**Prerequisite:** `openssl` must be on `PATH`. On Windows, Git for Windows
+typically includes it at `C:\Program Files\Git\usr\bin\openssl.exe`. See
+[`docs/cert_init.md`](docs/cert_init.md) for setup guidance, the full flag
+reference, security notes, and troubleshooting.
 
 ### Option B: VS Code MCP configuration
 

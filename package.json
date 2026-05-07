@@ -1,10 +1,10 @@
 {
   "name": "@jagilber-org/index-server",
-  "version": "1.28.2",
+  "version": "1.28.3",
   "mcpName": "io.github.jagilber-org/index-server",
   "description": "MCP instruction indexing server with search, CRUD, validation, and cross-repo knowledge promotion.",
   "publishConfig": {
-    "registry": "https://registry.npmjs.org/",
+    "registry": "https://npm.pkg.github.com",
     "access": "public"
   },
   "type": "commonjs",
@@ -134,6 +134,7 @@
     "ajv-formats": "^2.1.1",
     "express": "^5.2.1",
     "express-rate-limit": "^8.3.2",
+    "jsonc-parser": "^3.3.1",
     "safe-regex2": "^5.1.1",
     "sqlite-vec": "0.1.9",
     "ws": "^8.19.0",

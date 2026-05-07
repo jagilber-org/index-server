@@ -224,35 +224,9 @@ jobs:
           echo "$SECTION" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
-      - name: Check npmjs version status
-        id: npm_status
-        if: env.ALLOW_EXTERNAL_PUBLISH == 'true'
-        run: |
-          PKG=$(node -p "require('./package.json').name")
-          VERSION="${{ steps.version.outputs.version }}"
-          if npm view "$PKG@$VERSION" version --registry=https://registry.npmjs.org >/dev/null 2>&1; then
-            echo "already_published=true" >> $GITHUB_OUTPUT
-          else
-            echo "already_published=false" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Publish to npmjs
-        if: env.ALLOW_EXTERNAL_PUBLISH == 'true' && steps.npm_status.outputs.already_published != 'true' && env.HAS_NPM_TOKEN == 'true'
-        run: |
-          TARBALL=$(ls *.tgz 2>/dev/null | head -1)
-          if [ -n "$TARBALL" ]; then
-            npm publish "$TARBALL" --provenance
-          else
-            npm publish --ignore-scripts --provenance
-          fi
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-      - name: Attest npm package
-        if: env.ALLOW_EXTERNAL_PUBLISH == 'true' && steps.npm_status.outputs.already_published != 'true' && env.HAS_NPM_TOKEN == 'true' && github.event.repository.visibility == 'public'
-        uses: actions/attest-build-provenance@v4
-        with:
-          subject-path: '*.tgz'
+      # NOTE: Publishing to npmjs is disabled. All npm package releases
+      # go only to GitHub Packages (@jagilber-org/index-server).
+      # See: https://github.com/jagilber-org/index-server/pkgs/npm/index-server
 
       # ──────────────────────────────────────────────────────────────────
       # Publish to GitHub Packages npm registry (parallel target to npmjs).

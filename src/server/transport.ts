@@ -170,7 +170,7 @@ export function startTransport(opts: TransportOptions = {}){
       const p = params as { protocolVersion?: string } | undefined;
       return {
         protocolVersion: p?.protocolVersion || '2025-06-18',
-        serverInfo: { name: 'index', version: VERSION },
+        serverInfo: { name: 'index-server', version: VERSION },
         capabilities: { roots: { listChanged: true }, tools: { listChanged: true } }
       };
     },
@@ -241,7 +241,7 @@ export function startTransport(opts: TransportOptions = {}){
       try {
         resultPayload = initHandler ? initHandler(req.params) : {
           protocolVersion: p?.protocolVersion || '2025-06-18',
-          serverInfo: { name: 'index', version: VERSION },
+          serverInfo: { name: 'index-server', version: VERSION },
           capabilities: { roots: { listChanged: true }, tools: { listChanged: true } }
         };
       } catch(e){

@@ -46,6 +46,7 @@ export const FLAG_REGISTRY: FlagMeta[] = [
   { name:'INDEX_SERVER_TEST_STRICT_VISIBILITY', category:'instructions', description:'Test-only strict fallback path for immediate get/query discoverability.', stability:'diagnostic', default:'off', type:'boolean', since:'1.1.1' },
   { name:'INDEX_SERVER_REQUIRE_CATEGORY', category:'instructions', description:'Reject instructions missing category unless lax override set.', stability:'stable', default:'off', type:'boolean', since:'1.0.0' },
   { name:'INDEX_SERVER_CANONICAL_DISABLE', category:'instructions', description:'Disable canonical sourceHash persistence (forces runtime recompute).', stability:'diagnostic', default:'off', type:'boolean', since:'1.1.1' },
+  { name:'INDEX_SERVER_SEARCH_OMIT_ZERO_QUERY', category:'instructions', description:'Omit echoed query metadata from zero-result search responses.', stability:'diagnostic', default:'off', type:'boolean', since:'1.28.2' },
   { name:'INDEX_SERVER_READ_RETRIES', category:'instructions', description:'Retries for post-add disk visibility checks.', stability:'diagnostic', default:'5', type:'number', since:'1.1.1' },
   { name:'INDEX_SERVER_READ_BACKOFF_MS', category:'instructions', description:'Backoff ms between read retries.', stability:'diagnostic', default:'10', type:'number', since:'1.1.1' },
 

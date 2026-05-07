@@ -1,11 +1,11 @@
 {
-  "manifestVersion": 2,
-  "fileCount": 1163,
-  "contentHash": "a7249e0df5125840e9c73d8a1a82522882f897530c2aa3ae92483db553089db3",
-  "sourceRepo": "index-server",
+  "preparedAt": "2026-05-07T14:16:01.4232465Z",
   "piiScanPassed": true,
-  "commitSha": "8137bf2fbc3e1fa5d18e167253d30452e7a35257",
-  "forbiddenArtifactCheck": "passed",
-  "preparedAt": "2026-05-06T02:07:58.2731867Z",
-  "tag": "v1.28.2"
+  "manifestVersion": 2,
+  "contentHash": "be78463d4dc693aa1580d50b3ebb7d43a8ac06d5ac7d9e83713388230b69aed8",
+  "fileCount": 1183,
+  "commitSha": "6fa92d7fefe1652836c7276dca1c74d17c732597",
+  "sourceRepo": "index-server",
+  "tag": "v1.28.3",
+  "forbiddenArtifactCheck": "passed"
 }

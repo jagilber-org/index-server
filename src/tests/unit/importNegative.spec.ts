@@ -61,10 +61,12 @@ describe('index_import NEGATIVE tests — failure paths', () => {
   });
 
   it('handles empty entries array gracefully', async () => {
+    const before = fs.readdirSync(instructionsDir).filter((name) => name.endsWith('.json')).sort();
+
     const resp = await client.importBulk([]);
-    // Should not crash — either succeeds with 0 imported or returns a controlled error
-    const crashed = resp === undefined || resp === null;
-    expect(crashed, 'empty import should not crash').toBe(false);
+
+    expect(resp?.error, 'empty import should return a controlled error: ' + JSON.stringify(resp)).toMatch(/no entries/i);
+    expect(fs.readdirSync(instructionsDir).filter((name) => name.endsWith('.json')).sort()).toEqual(before);
   });
 
   it('skip mode does not overwrite existing entries', async () => {
@@ -129,12 +131,11 @@ describe('index_import NEGATIVE tests — failure paths', () => {
   }, 20000);
 
   it('import with non-array entries value fails', async () => {
+    const before = fs.readdirSync(instructionsDir).filter((name) => name.endsWith('.json')).sort();
+
     const resp = await client.callToolJSON('index_dispatch', { action: 'import', entries: 'not-an-array' as unknown });
-    // Should fail or return error
-    const errish = resp?.error || resp?.isError || resp?.status === 'error'; // lgtm[js/unused-local-variable] — diagnostic capture; assertion only requires resp defined
-    void errish;
-    // If it somehow parsed the string as a path, it should still fail since it's not a valid path
-    // Accept either error response or empty result (not a crash)
-    expect(resp !== undefined, 'should not crash on non-array entries').toBe(true);
+
+    expect(resp?.error, 'non-array import should fail loudly: ' + JSON.stringify(resp)).toMatch(/entries file not found|path is outside allowed directories/i);
+    expect(fs.readdirSync(instructionsDir).filter((name) => name.endsWith('.json')).sort()).toEqual(before);
   });
 });

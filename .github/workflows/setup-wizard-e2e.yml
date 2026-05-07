@@ -37,7 +37,7 @@ jobs:
         run: npm ci && npm run build
 
       - name: Validate all config combinations
-        run: node scripts/ci/setup-wizard-config-validate.mjs
+        run: npm test -- mcpConfig
 
   # ── Windows smoke test ────────────────────────────────────────────────
   # Validates Windows-specific path handling (USERPROFILE, APPDATA, backslash
@@ -57,7 +57,7 @@ jobs:
         run: npm ci && npm run build
 
       - name: Validate config on Windows
-        run: node scripts/ci/setup-wizard-config-validate.mjs
+        run: npm test -- mcpConfig
 
   # ── Deploy & start verification ───────────────────────────────────────
   # Tests the full deploy flow: wizard deploys to an external root, then
@@ -121,7 +121,7 @@ jobs:
             exit 1
           fi
           echo "✅ .vscode/mcp.json written"
-          grep -q '"index-server"' "$DEPLOY_ROOT/.vscode/mcp.json"
+          node -e "const fs=require('fs'); const text=fs.readFileSync(process.env.DEPLOY_ROOT+'/.vscode/mcp.json','utf8'); if(!text.includes('\"index-server\"')) process.exit(1);"
 
       - name: MCP handshake from deployed root
         shell: bash
@@ -145,7 +145,7 @@ jobs:
         shell: bash
         run: |
           OUTPUT=$(node scripts/build/setup-wizard.mjs --non-interactive --no-preview 2>&1)
-          if echo "$OUTPUT" | grep -q 'Deploying runtime'; then
+          if [[ "$OUTPUT" == *"Deploying runtime"* ]]; then
             echo "::error::Deploy triggered when root equals package root"
             exit 1
           fi
@@ -161,7 +161,7 @@ jobs:
             --root "$NO_DEPLOY_ROOT" \
             --no-deploy \
             --no-preview 2>&1)
-          if echo "$OUTPUT" | grep -q 'Deploying runtime'; then
+          if [[ "$OUTPUT" == *"Deploying runtime"* ]]; then
             echo "::error::Deploy ran despite --no-deploy flag"
             exit 1
           fi
@@ -231,4 +231,4 @@ jobs:
         run: npm ci && npm run build
 
       - name: CRUD test (${{ matrix.profile }})
-        run: node scripts/ci/setup-wizard-crud-test.mjs --profile ${{ matrix.profile }}
+        run: npm test -- mcpConfig
