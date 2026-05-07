@@ -79,6 +79,13 @@ param(
     [int]$InternalChecksTimeoutMinutes = 45,
     [switch]$DryRun,
 
+    # Promotion channel for the public release. Default 'gh-only' produces a
+    # GitHub Release with the tarball attached but does NOT publish to npmjs.
+    # Promote to 'next' or 'latest' later by re-dispatching release.yml on the
+    # mirror with `release_channel=<value>` (this script prints the command).
+    [ValidateSet('gh-only','next','latest','auto')]
+    [string]$Channel = 'gh-only',
+
     [Parameter(ParameterSetName = 'CreatePR')]
     [switch]$CreatePR,
 
@@ -539,4 +546,56 @@ if ($deliveryMode -eq 'PrepareOnly') {
 if ($DryRun) {
     Write-Host ''
     Write-Host '[publish] Dry run complete. No checks, build, deploy, clean-room copy, push, or public delivery was executed.' -ForegroundColor Green
+}
+
+# ----------------------------------------------------------------
+# Phase 6: Promotion guidance
+# ----------------------------------------------------------------
+Write-Phase 'Phase 6: Promotion channel summary'
+
+$mirrorRepo = $null
+if ($RemoteUrl -match 'github\.com[:/]+([^/]+/[^/.]+)') {
+    $mirrorRepo = $Matches[1]
+}
+
+Write-Host "Channel        : $Channel" -ForegroundColor Cyan
+if ($mirrorRepo) {
+    Write-Host "Mirror repo    : $mirrorRepo" -ForegroundColor Cyan
+}
+Write-Host "Tag            : $Tag" -ForegroundColor Cyan
+Write-Host ''
+
+switch ($Channel) {
+    'gh-only' {
+        Write-Host 'gh-only: tag push will produce a GitHub Release with the tarball attached.' -ForegroundColor Green
+        Write-Host 'No npmjs publish will occur. Testers install via:' -ForegroundColor Green
+        if ($mirrorRepo) {
+            Write-Host "  npm install -g https://github.com/$mirrorRepo/releases/download/$Tag/jagilber-org-index-server-$($Tag.TrimStart('v')).tgz" -ForegroundColor White
+        }
+        Write-Host ''
+        Write-Host 'When ready to promote to npmjs, run on the mirror:' -ForegroundColor Yellow
+        if ($mirrorRepo) {
+            Write-Host "  gh workflow run release.yml -R $mirrorRepo -f release_channel=next   # → publishes @next" -ForegroundColor White
+            Write-Host "  gh workflow run release.yml -R $mirrorRepo -f release_channel=latest # → publishes @latest" -ForegroundColor White
+        }
+    }
+    'next' {
+        Write-Host 'next: release will publish to npmjs with --tag next (does NOT touch @latest).' -ForegroundColor Green
+        Write-Host 'Users opt in via:' -ForegroundColor Green
+        Write-Host '  npm install -g @jagilber-org/index-server@next' -ForegroundColor White
+    }
+    'latest' {
+        Write-Host 'latest: release will publish to npmjs with --tag latest (default channel).' -ForegroundColor Green
+        Write-Host 'Users install via:' -ForegroundColor Green
+        Write-Host '  npm install -g @jagilber-org/index-server' -ForegroundColor White
+    }
+    'auto' {
+        Write-Host 'auto: release.yml will infer channel from version (prerelease => next, clean semver => latest).' -ForegroundColor Green
+    }
+}
+
+if ($Channel -ne 'gh-only' -and $mirrorRepo) {
+    Write-Host ''
+    Write-Host 'NOTE: tag push triggers release.yml in gh-only mode by default. To run with this channel, dispatch explicitly:' -ForegroundColor Yellow
+    Write-Host "  gh workflow run release.yml -R $mirrorRepo -f release_channel=$Channel" -ForegroundColor White
 }

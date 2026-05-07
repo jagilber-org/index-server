@@ -18,8 +18,18 @@ on:
         options:
           - 'true'
           - 'false'
+      release_channel:
+        description: 'Promotion channel: gh-only=GitHub Release tarball only; next=npmjs @next dist-tag; latest=npmjs @latest; auto=infer from version (-rc/-beta/-alpha => next, clean semver => latest)'
+        required: false
+        default: 'gh-only'
+        type: choice
+        options:
+          - 'gh-only'
+          - 'next'
+          - 'latest'
+          - 'auto'
       publish_npmjs:
-        description: 'Publish to public npmjs.org (also required for MCP Registry validation)'
+        description: '[Override] Publish to public npmjs.org. Normally derived from release_channel; set to true/false to force.'
         required: false
         default: 'auto'
         type: choice
@@ -200,14 +210,22 @@ jobs:
       MCP_USE_GITHUB_OIDC: ${{ github.repository_owner == 'jagilber-org' }}
       HAS_MCP_GITHUB_TOKEN: ${{ secrets.MCP_GITHUB_TOKEN != '' }}
       # Publish target toggles. Resolution order:
-      #   1. workflow_dispatch input (when not 'auto')
-      #   2. Repo-level variables PUBLISH_NPMJS / PUBLISH_GHPACKAGES ('true'/'false')
-      #   3. Defaults below (npmjs=false, ghpackages=true)
-      # Toggle these by setting `vars.PUBLISH_NPMJS` / `vars.PUBLISH_GHPACKAGES` in
-      # repo settings, or by re-running the workflow via workflow_dispatch.
+      #   1. release_channel input (when not 'auto')
+      #      - gh-only => npmjs=false (only GH Release tarball is produced)
+      #      - next    => npmjs=true (publish with --tag next)
+      #      - latest  => npmjs=true (publish with --tag latest)
+      #   2. release_channel='auto' => infer from version string
+      #      - prerelease (-rc.*/-beta.*/-alpha.*) => next
+      #      - clean semver                        => latest
+      #   3. publish_npmjs override input (when not 'auto') overrides #1/#2
+      #   4. Repo-level variable PUBLISH_NPMJS ('true'/'false')
+      #   5. Default 'false' (gh-only behavior)
+      RELEASE_CHANNEL: ${{ github.event.inputs.release_channel || 'gh-only' }}
       PUBLISH_NPMJS: >-
         ${{ (github.event.inputs.publish_npmjs != null && github.event.inputs.publish_npmjs != 'auto')
             && github.event.inputs.publish_npmjs
+            || (github.event.inputs.release_channel == 'next' || github.event.inputs.release_channel == 'latest') && 'true'
+            || (github.event.inputs.release_channel == 'gh-only') && 'false'
             || (vars.PUBLISH_NPMJS != '' && vars.PUBLISH_NPMJS)
             || 'false' }}
       PUBLISH_GHPACKAGES: >-
@@ -261,9 +279,29 @@ jobs:
       - name: Resolve publish targets
         id: targets
         run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          CHANNEL="${RELEASE_CHANNEL:-gh-only}"
+          # Resolve npm dist-tag based on channel + version string
+          if [ "$CHANNEL" = "latest" ]; then
+            DIST_TAG="latest"
+          elif [ "$CHANNEL" = "next" ]; then
+            DIST_TAG="next"
+          elif [ "$CHANNEL" = "gh-only" ]; then
+            DIST_TAG=""   # not published to npmjs
+          else
+            # auto: prerelease => next, clean => latest
+            case "$VERSION" in
+              *-rc.*|*-beta.*|*-alpha.*|*-pre.*) DIST_TAG="next" ;;
+              *)                                  DIST_TAG="latest" ;;
+            esac
+          fi
           echo "npmjs=${PUBLISH_NPMJS}" >> "$GITHUB_OUTPUT"
           echo "ghpackages=${PUBLISH_GHPACKAGES}" >> "$GITHUB_OUTPUT"
+          echo "channel=${CHANNEL}" >> "$GITHUB_OUTPUT"
+          echo "dist_tag=${DIST_TAG}" >> "$GITHUB_OUTPUT"
           echo "Publish targets resolved:"
+          echo "  release_channel     : ${CHANNEL}"
+          echo "  npm dist-tag        : ${DIST_TAG:-(none)}"
           echo "  npmjs.org           : ${PUBLISH_NPMJS}"
           echo "  GitHub Packages     : ${PUBLISH_GHPACKAGES}"
           echo "  HAS_NPM_TOKEN       : ${HAS_NPM_TOKEN}"
@@ -303,10 +341,12 @@ jobs:
         if: steps.targets.outputs.npmjs == 'true' && steps.npmjs_status.outputs.already_published != 'true'
         run: |
           TARBALL=$(ls *.tgz 2>/dev/null | head -1)
+          DIST_TAG="${{ steps.targets.outputs.dist_tag }}"
+          DIST_TAG="${DIST_TAG:-latest}"
           if [ -n "$TARBALL" ]; then
-            npm publish "$TARBALL" --provenance --access public --registry=https://registry.npmjs.org
+            npm publish "$TARBALL" --provenance --access public --tag "$DIST_TAG" --registry=https://registry.npmjs.org
           else
-            npm publish --ignore-scripts --provenance --access public --registry=https://registry.npmjs.org
+            npm publish --ignore-scripts --provenance --access public --tag "$DIST_TAG" --registry=https://registry.npmjs.org
           fi
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
@@ -334,7 +374,7 @@ jobs:
             echo "already_published=false" >> $GITHUB_OUTPUT
           fi
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.GH_PACKAGES_TOKEN || secrets.GITHUB_TOKEN }}
 
       # NOTE: continue-on-error is intentional. First-time package creation in
       # the jagilber-org org may return 403 until the package is pre-created
@@ -351,7 +391,7 @@ jobs:
             npm publish --ignore-scripts --registry=https://npm.pkg.github.com
           fi
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.GH_PACKAGES_TOKEN || secrets.GITHUB_TOKEN }}
 
       # MCP Registry validates packages by querying public npmjs.org. Skip the
       # entire MCP publish path unless we also published to npmjs in this run.
@@ -417,13 +457,20 @@ jobs:
             ---
 
             ### Artifacts
-            - **npm**: `@jagilber-org/index-server@${{ steps.version.outputs.version }}` ([npmjs](https://www.npmjs.com/package/@jagilber-org/index-server))
+            - **GitHub Release tarball**: attached below (`*.tgz`) — installable without auth
+            - **npm**: `@jagilber-org/index-server@${{ steps.version.outputs.version }}` (channel: `${{ steps.targets.outputs.channel }}`, dist-tag: `${{ steps.targets.outputs.dist_tag || 'n/a' }}`)
             - **Docker**: `ghcr.io/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}`
             - **MCP Registry name**: `io.github.jagilber-org/index-server`
 
             ### Install
             ```bash
-            npx @jagilber-org/index-server@latest --setup
+            # From GitHub Release tarball (no auth required, always available):
+            npm install -g https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.tag }}/jagilber-org-index-server-${{ steps.version.outputs.version }}.tgz
+            index-server --setup
+
+            # From npmjs (only if channel is 'next' or 'latest'):
+            npm install -g @jagilber-org/index-server@${{ steps.targets.outputs.dist_tag || 'latest' }}
+            index-server --setup
             ```
 
             ### Docker Quick Start
@@ -434,5 +481,5 @@ jobs:
           files: |
             *.tgz
           draft: false
-          prerelease: ${{ contains(steps.version.outputs.version, '-') }}
+          prerelease: ${{ contains(steps.version.outputs.version, '-') || steps.targets.outputs.channel != 'latest' }}
           generate_release_notes: false

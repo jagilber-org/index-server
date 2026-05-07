@@ -29,21 +29,27 @@ winget install nodejs
 
 ## Quick Start Options
 
-### Option A: MCP-native via `npx` (recommended)
+### Option A: Global install via `npm` (recommended)
 
-Run the latest published package without cloning the repo. Choose this when you want the fastest local start and already have Node.js installed.
-
-Start with the setup wizard so it can generate the right MCP client config for VS Code, Copilot CLI, or Claude Desktop:
+Install once and run from anywhere. Choose this when you want a stable `index-server` command on your `PATH` with no per-invocation download.
 
 ```bash
-npx -y @jagilber-org/index-server@latest --setup
+npm install -g @jagilber-org/index-server
+```
+
+Then launch the setup wizard to generate the right MCP client config for VS Code, Copilot CLI, or Claude Desktop:
+
+```bash
+index-server --setup
 ```
 
 To launch the server directly without the wizard:
 
 ```bash
-npx -y @jagilber-org/index-server@latest --dashboard
+index-server --dashboard
 ```
+
+> **No-install alternative:** `npx -y @jagilber-org/index-server@latest --setup` works too (resolves from npmjs.org). Use it for a one-shot try; prefer `-g` for routine use. The GitHub Packages mirror requires authentication, so `npx` against `npm.pkg.github.com` needs a per-scope `.npmrc` plus a `GITHUB_TOKEN` with `read:packages`.
 
 #### Bootstrap HTTPS for the dashboard
 
@@ -51,7 +57,7 @@ Generate a self-signed TLS cert+key in one command:
 
 ```bash
 # Generate at ~/.index-server/certs/, then start with HTTPS automatically
-npx -y @jagilber-org/index-server@latest --init-cert --start --dashboard
+index-server --init-cert --start --dashboard
 ```
 
 `--init-cert` alone exits after generation. `--init-cert --start` continues
@@ -65,7 +71,7 @@ reference, security notes, and troubleshooting.
 
 ### Option B: VS Code MCP configuration
 
-Use VS Code's built-in MCP support with `.vscode/mcp.json` or your global `mcp.json`. You can add the server entry manually or run `npx -y @jagilber-org/index-server@latest --setup` to generate the config for you.
+Use VS Code's built-in MCP support with `.vscode/mcp.json` or your global `mcp.json`. You can add the server entry manually or run `index-server --setup` (after `npm install -g @jagilber-org/index-server`) to generate the config for you.
 
 ### Option C: Docker
 
@@ -87,6 +93,14 @@ git clone https://github.com/jagilber-org/index-server.git
 cd index-server
 npm install
 npm run build
+```
+
+After the build completes, run the interactive setup wizard to generate `.env` and your MCP client config:
+
+```bash
+node dist/server/index-server.js --setup
+# or
+npm run setup
 ```
 
 ## Configure Your MCP Client
@@ -283,6 +297,7 @@ See [SECURITY.md](SECURITY.md) for vulnerability reporting, [PRIVACY.md](PRIVACY
 ```bash
 npm install          # Install dependencies
 npm run build        # Build TypeScript
+npm run setup        # Interactive configuration wizard (generates .env + mcp.json)
 npm test             # Run the fast default suite
 npm run test:slow    # Run heavy integration/perf tests
 npm run test:all     # Run the full Vitest suite

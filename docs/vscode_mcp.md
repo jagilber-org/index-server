@@ -32,7 +32,7 @@ VS Code uses the `servers` key. Copilot CLI and Claude Desktop use the `mcpServe
 
 VS Code can auto-discover Copilot CLI servers when `chat.mcp.discovery.enabled` is set to `true`.
 
-Use `npx -y @jagilber-org/index-server@latest --setup` to generate the correct format for your target client.
+Use `index-server --setup` (after `npm install -g @jagilber-org/index-server`) to generate the correct format for your target client.
 
 See [MCP Configuration Guide](mcp_configuration.md#config-file-formats) for full format comparison and detailed examples.
 
@@ -104,7 +104,7 @@ Use a stable `INDEX_SERVER_DIR` outside VS Code config/install paths so your cat
 
 ### Troubleshooting
 
-- Use `npx -y @jagilber-org/index-server@latest --setup` if you want the CLI to generate `mcp.json` for you.
+- Run `index-server --setup` (after `npm install -g @jagilber-org/index-server`) if you want the CLI to generate `mcp.json` for you.
 - Set `INDEX_SERVER_VERBOSE_LOGGING=1` for detailed stderr diagnostics.
 - Port conflicts: server auto-increments; check stderr for chosen port.
 

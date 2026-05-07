@@ -21,7 +21,7 @@ Different MCP clients use different configuration file formats. Choose the right
 | **Copilot CLI** | `~/.copilot/mcp-config.json` | `mcpServers` | `cwd`, `tools` | All env values are quoted strings |
 | **Claude Desktop** | `claude_desktop_config.json` | `mcpServers` | `cwd` | Same root key as Copilot CLI |
 
-> **Tip:** VS Code can auto-discover servers configured for Copilot CLI via `chat.mcp.discovery.enabled`. The `npx -y @jagilber-org/index-server@latest --setup` flow generates both formats without relying on the legacy extension.
+> **Tip:** VS Code can auto-discover servers configured for Copilot CLI via `chat.mcp.discovery.enabled`. The `index-server --setup` flow (after `npm install -g @jagilber-org/index-server`) generates both formats without relying on the legacy extension.
 
 #### VS Code format (`servers`)
 
@@ -150,7 +150,11 @@ Search the index for security guidelines
 Generate config for any target client with the interactive setup wizard (arrow-key menus):
 
 ```bash
-# Via npx (no clone required)
+# Global install (recommended)
+npm install -g @jagilber-org/index-server
+index-server --setup
+
+# Or one-shot via npx (no clone required)
 npx -y @jagilber-org/index-server@latest --setup
 
 # Via npm script (from repo)
@@ -194,7 +198,7 @@ Shared options:
 
 ## �🚀 Quick Start Configurations
 
-> **Note:** The examples below use the `mcpServers` format (Copilot CLI / Claude Desktop). For VS Code's `servers` format, see the [Config File Formats](#config-file-formats) section above, or use `npx -y @jagilber-org/index-server@latest --setup` to generate either format.
+> **Note:** The examples below use the `mcpServers` format (Copilot CLI / Claude Desktop). For VS Code's `servers` format, see the [Config File Formats](#config-file-formats) section above, or run `index-server --setup` (after `npm install -g @jagilber-org/index-server`) to generate either format.
 >
 > **Best practice:** keep `INDEX_SERVER_DIR` in a stable data folder outside MCP client config paths and application install folders so backups and reinstalls do not disturb your catalog.
 
