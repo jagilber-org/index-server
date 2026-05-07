@@ -20,6 +20,28 @@ describe('mcpConfig flag catalog drift guard', () => {
     expect(missing).toEqual([]);
   });
 
+  // Inverse of the documented⊆catalog check: every catalog key must also be
+  // in DOCUMENTED_INDEX_SERVER_FLAGS, because validate.ts uses DOCUMENTED as
+  // the allow-list when reading user mcp.json files. If the catalog ever
+  // emits a key that DOCUMENTED doesn't include, upsertServer will throw
+  // "env contains unsupported INDEX_SERVER key: …" the next time a user runs
+  // `index-server --setup` against an existing config that contains it.
+  it('lists every catalog key in DOCUMENTED_INDEX_SERVER_FLAGS (validate.ts allow-list parity)', () => {
+    const paths = resolveDataPaths('C:/repo/index-server');
+    const catalog = buildEnvCatalog({
+      profile: 'experimental',
+      root: 'C:/repo/index-server',
+      port: 8787,
+      host: '127.0.0.1',
+      tls: true,
+      mutation: true,
+      logLevel: 'debug',
+    }, paths);
+    const catalogKeys = catalog.flatMap(entry => 'key' in entry ? [entry.key] : []);
+    const undocumented = catalogKeys.filter(key => !DOCUMENTED_INDEX_SERVER_FLAGS.includes(key as never));
+    expect(undocumented).toEqual([]);
+  });
+
   it('surfaces every documented key through buildEnvCatalog metadata', () => {
     const paths = resolveDataPaths('C:/repo/index-server');
     const catalog = buildEnvCatalog({

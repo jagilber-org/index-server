@@ -13,15 +13,19 @@ Get Index Server running with HTTPS and semantic search in 5 minutes.
 ### Recommended: use the published package and setup wizard
 
 ```bash
-npx -y @jagilber-org/index-server@latest --setup
+npm install -g @jagilber-org/index-server
+index-server --setup
 ```
 
 This generates MCP client configuration for VS Code, Copilot CLI, or Claude Desktop and keeps the install flow MCP-native from the start.
 
+> No-install alternative: `npx -y @jagilber-org/index-server@latest --setup` (resolves from npmjs.org; GitHub Packages requires authentication).
+
 ### Alternative: install or build locally
 
 ```bash
-npm install @jagilber-org/index-server
+npm install -g @jagilber-org/index-server
+index-server --setup        # generate .env + MCP client config
 ```
 
 Or build from source:
@@ -31,6 +35,7 @@ git clone https://github.com/jagilber-org/index-server.git
 cd index-server
 npm install
 npm run build
+npm run setup               # interactive configuration wizard
 ```
 
 ## 2. Configure MCP Client

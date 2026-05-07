@@ -16,8 +16,9 @@ Maintainers may use additional private development and publishing workflows inte
 
 1. Node 22+
 2. `npm install`
-3. `npm test`
-4. `npm run build`
+3. `npm run build`
+4. `npm run setup` — interactive configuration wizard (generates `.env` and MCP client config). Equivalent to `node dist/server/index-server.js --setup`.
+5. `npm test`
 
 ## Branching
 

@@ -217,6 +217,12 @@ Steps:
   npm install --production
   ```
 
+1. (First-time only) Generate `.env` and MCP client config via the setup wizard:
+
+  ```powershell
+  node dist/server/index-server.js --setup
+  ```
+
 1. Start server (PowerShell):
 
   ```powershell
