@@ -99,7 +99,14 @@ describe('npm publish readiness', () => {
     });
 
     it('files array does NOT include scripts/ build helpers (except allowed helpers)', () => {
-      const allowedScripts = ['scripts/build/copy-dashboard-assets.mjs', 'scripts/hooks/setup-hooks.cjs', 'scripts/build/generate-certs.mjs', 'scripts/build/setup-wizard.mjs'];
+      const allowedScripts = [
+        'scripts/build/copy-dashboard-assets.mjs',
+        'scripts/hooks/setup-hooks.cjs',
+        'scripts/build/generate-certs.mjs',
+        'scripts/build/setup-wizard.mjs',
+        // Client wrapper scripts shipped for the dashboard /api/scripts/:name route (v1.28.12).
+        'scripts/client/',
+      ];
       const hasDisallowedScripts = pkg.files.some(
         (f: string) => f.startsWith('scripts/') && !allowedScripts.includes(f)
       );
