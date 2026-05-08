@@ -221,11 +221,16 @@ jobs:
       #   4. Repo-level variable PUBLISH_NPMJS ('true'/'false')
       #   5. Default 'false' (gh-only behavior)
       RELEASE_CHANNEL: ${{ github.event.inputs.release_channel || 'gh-only' }}
+      # On tag push (no workflow_dispatch inputs), release_channel is null/empty
+      # and we treat that as 'gh-only' — i.e. npmjs publish stays OFF unless the
+      # caller explicitly opts in via workflow_dispatch. Repo variable
+      # PUBLISH_NPMJS is honored ONLY for workflow_dispatch with release_channel='auto'
+      # so a stale repo var can't silently re-enable npmjs publishes on tag push.
       PUBLISH_NPMJS: >-
         ${{ (github.event.inputs.publish_npmjs != null && github.event.inputs.publish_npmjs != 'auto')
             && github.event.inputs.publish_npmjs
             || (github.event.inputs.release_channel == 'next' || github.event.inputs.release_channel == 'latest') && 'true'
-            || (github.event.inputs.release_channel == 'gh-only') && 'false'
+            || (github.event.inputs.release_channel == 'gh-only' || github.event.inputs.release_channel == null || github.event.inputs.release_channel == '') && 'false'
             || (vars.PUBLISH_NPMJS != '' && vars.PUBLISH_NPMJS)
             || 'false' }}
       PUBLISH_GHPACKAGES: >-

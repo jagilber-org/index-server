@@ -160,6 +160,13 @@ export class IndexLoader {
   // Exclude internal manifest file if present
   const MANIFEST_NAME = '_manifest.json';
   files = files.filter(f => f !== MANIFEST_NAME);
+  // Exclude bootstrap gating state files (owned by bootstrapGating.ts). These
+  // co-reside with instruction JSON in the instructions dir but are runtime
+  // state, NOT instructions. Without this filter they leak into the loader
+  // (rejected as schema-invalid) and into index_repair's disk-scan path
+  // (reported as 'missing required fields'). RCA 2026-05-07.
+  const STATE_FILES = new Set(['bootstrap.confirmed.json', 'bootstrap.pending.json']);
+  files = files.filter(f => !STATE_FILES.has(f));
 
   // Optional index size limit for performance (INDEX_SERVER_MAX_FILES)
   const maxFiles = IndexConfig.maxFiles;

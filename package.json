@@ -1,6 +1,6 @@
 {
   "name": "@jagilber-org/index-server",
-  "version": "1.28.10",
+  "version": "1.28.11",
   "mcpName": "io.github.jagilber-org/index-server",
   "description": "MCP instruction indexing server with search, CRUD, validation, and cross-repo knowledge promotion.",
   "publishConfig": {

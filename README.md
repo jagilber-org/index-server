@@ -29,27 +29,23 @@ winget install nodejs
 
 ## Quick Start Options
 
-### Option A: Global install via `npm` (recommended)
+### Option A: MCP-native via `npx` (recommended)
 
-Install once and run from anywhere. Choose this when you want a stable `index-server` command on your `PATH` with no per-invocation download.
+Run the latest published package without cloning the repo. Choose this when you want the fastest local start and already have Node.js installed.
 
-```bash
-npm install -g @jagilber-org/index-server
-```
-
-Then launch the setup wizard to generate the right MCP client config for VS Code, Copilot CLI, or Claude Desktop:
+Start with the setup wizard so it can generate the right MCP client config for VS Code, Copilot CLI, or Claude Desktop:
 
 ```bash
-index-server --setup
+npx -y @jagilber-org/index-server@latest --setup
 ```
 
 To launch the server directly without the wizard:
 
 ```bash
-index-server --dashboard
+npx -y @jagilber-org/index-server@latest --dashboard
 ```
 
-> **No-install alternative:** `npx -y @jagilber-org/index-server@latest --setup` works too (resolves from npmjs.org). Use it for a one-shot try; prefer `-g` for routine use. The GitHub Packages mirror requires authentication, so `npx` against `npm.pkg.github.com` needs a per-scope `.npmrc` plus a `GITHUB_TOKEN` with `read:packages`.
+> **Prefer a stable `index-server` command on `PATH`?** Install globally instead: `npm install -g @jagilber-org/index-server`, then run `index-server --setup` / `index-server --dashboard`. The GitHub Packages mirror requires authentication, so `npx` against `npm.pkg.github.com` needs a per-scope `.npmrc` plus a `GITHUB_TOKEN` with `read:packages`.
 
 > **Upgrading or hitting "unsupported INDEX_SERVER key" / "Cannot find module" errors after install?** See [Upgrading and Uninstalling](docs/quickstart.md#upgrading-and-uninstalling) for the clean-uninstall steps that clear stale non-global installs.
 
@@ -59,7 +55,7 @@ Generate a self-signed TLS cert+key in one command:
 
 ```bash
 # Generate at ~/.index-server/certs/, then start with HTTPS automatically
-index-server --init-cert --start --dashboard
+npx -y @jagilber-org/index-server@latest --init-cert --start --dashboard
 ```
 
 `--init-cert` alone exits after generation. `--init-cert --start` continues
@@ -73,7 +69,7 @@ reference, security notes, and troubleshooting.
 
 ### Option B: VS Code MCP configuration
 
-Use VS Code's built-in MCP support with `.vscode/mcp.json` or your global `mcp.json`. You can add the server entry manually or run `index-server --setup` (after `npm install -g @jagilber-org/index-server`) to generate the config for you.
+Use VS Code's built-in MCP support with `.vscode/mcp.json` or your global `mcp.json`. You can add the server entry manually or run `npx -y @jagilber-org/index-server@latest --setup` to generate the config for you.
 
 ### Option C: Docker
 

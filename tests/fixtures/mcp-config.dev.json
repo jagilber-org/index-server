@@ -3,7 +3,7 @@
     "Index": {
       "type": "stdio",
       "command": "node",
-      "cwd": "C:/mcp/index-server",
+      "cwd": "<user-data-dir>/index-server",
       "tools": [
         "*"
       ],
@@ -20,8 +20,8 @@
         "INDEX_SERVER_MUTATION": "1",
         "INDEX_SERVER_DASHBOARD": "0",
         "INDEX_SERVER_DASHBOARD_PORT": "8787",
-        "INDEX_SERVER_DASHBOARD_TLS_CERT": "C:/mcp/index-server/.certs/localhost.crt",
-        "INDEX_SERVER_DASHBOARD_TLS_KEY": "C:/mcp/index-server/.certs/localhost.key",
+        "INDEX_SERVER_DASHBOARD_TLS_CERT": "<user-data-dir>/index-server/.certs/localhost.crt",
+        "INDEX_SERVER_DASHBOARD_TLS_KEY": "<user-data-dir>/index-server/.certs/localhost.key",
         "INDEX_SERVER_AUTO_SPLIT_OVERSIZED": "1",
         "INDEX_SERVER_FEATURES": "usage,window,hotness,drift,risk",
         "INDEX_SERVER_DIR": "<root>/<org>/Internal/index-Index",

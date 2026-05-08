@@ -107,4 +107,64 @@ describe('autoSeedBootstrap', () => {
       expect(data.sourceHash).toMatch(/^[a-f0-9]{64}$/);
     }
   });
+
+  // Regression (RCA 2026-05-07): pre-v1.28.10 installs wrote
+  // requirement="required" / priorityTier="p1" which the current schema
+  // rejects. Earlier autoSeedBootstrap never overwrote existing files, so
+  // these stale seeds persisted forever and broke index_repair /
+  // integrity_verify across every upgrade. The upgrade-on-load path must
+  // detect schema-invalid enums and rewrite from canonical content.
+  it('upgrades stale seed files with invalid requirement enum', () => {
+    const dir = makeTempDir();
+    process.env.INDEX_SERVER_DIR = dir;
+    const stalePath = path.join(dir, '000-bootstrapper.json');
+    fs.writeFileSync(stalePath, JSON.stringify({
+      id: '000-bootstrapper',
+      title: 'Stale',
+      body: 'stale body',
+      requirement: 'required',  // invalid: should be 'mandatory'
+      priorityTier: 'P1',
+      schemaVersion: '5'
+    }, null, 2));
+    const summary = autoSeedBootstrap();
+    expect(summary.upgraded).toContain('000-bootstrapper.json');
+    expect(summary.created).not.toContain('000-bootstrapper.json');
+    const upgraded = JSON.parse(fs.readFileSync(stalePath,'utf8'));
+    expect(upgraded.requirement).toBe('mandatory');
+    expect(upgraded.sourceHash).toMatch(/^[a-f0-9]{64}$/);
+  });
+
+  it('upgrades stale seed files with invalid priorityTier enum', () => {
+    const dir = makeTempDir();
+    process.env.INDEX_SERVER_DIR = dir;
+    const stalePath = path.join(dir, '001-lifecycle-bootstrap.json');
+    fs.writeFileSync(stalePath, JSON.stringify({
+      id: '001-lifecycle-bootstrap',
+      title: 'Stale',
+      body: 'stale body',
+      requirement: 'recommended',
+      priorityTier: 'p1',  // invalid: lowercase
+      schemaVersion: '5'
+    }, null, 2));
+    const summary = autoSeedBootstrap();
+    expect(summary.upgraded).toContain('001-lifecycle-bootstrap.json');
+    const upgraded = JSON.parse(fs.readFileSync(stalePath,'utf8'));
+    expect(upgraded.priorityTier).toBe('P1');
+  });
+
+  it('does NOT upgrade an already-valid existing seed file', () => {
+    const dir = makeTempDir();
+    process.env.INDEX_SERVER_DIR = dir;
+    autoSeedBootstrap(); // create canonical seeds
+    // Mutate a non-enum field on disk; should NOT be reverted
+    const file = path.join(dir, '000-bootstrapper.json');
+    const data = JSON.parse(fs.readFileSync(file,'utf8'));
+    data.title = 'User Customized Title';
+    fs.writeFileSync(file, JSON.stringify(data, null, 2));
+    const second = autoSeedBootstrap();
+    expect(second.upgraded).toEqual([]);
+    expect(second.skipped).toContain('000-bootstrapper.json');
+    const after = JSON.parse(fs.readFileSync(file,'utf8'));
+    expect(after.title).toBe('User Customized Title');
+  });
 });

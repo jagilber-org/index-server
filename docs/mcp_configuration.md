@@ -50,7 +50,7 @@ Different MCP clients use different configuration file formats. Choose the right
       "type": "stdio",
       "command": "node",
       "args": ["dist/server/index-server.js"],
-      "cwd": "C:/mcp/index-server",
+      "cwd": "<user-data-dir>/index-server",
       "env": {
         "INDEX_SERVER_PROFILE": "default"
       },
@@ -213,12 +213,12 @@ Shared options:
       "description": "Production read-only Index",
       "command": "node",
       "args": [
-        "C:/mcp/index-server/dist/server/index-server.js"
+        "<user-data-dir>/index-server/dist/server/index-server.js"
       ],
       "transport": "stdio",
-      "cwd": "C:/mcp/index-server",
+      "cwd": "<user-data-dir>/index-server",
       "env": {
-        "INDEX_SERVER_DIR": "C:/mcp/instructions",
+        "INDEX_SERVER_DIR": "<user-data-dir>/index-server/instructions",
         "INDEX_SERVER_MUTATION": "0",
         "INDEX_SERVER_VERBOSE_LOGGING": "0"
       },
@@ -369,12 +369,12 @@ Use this profile when production must remain explicitly read-only. Governed prod
       "description": "High-security read-only configuration",
       "command": "node",
       "args": [
-        "/opt/index-server/dist/server/index-server.js"
+        "<user-data-dir>/index-server/dist/server/index-server.js"
       ],
       "transport": "stdio",
-      "cwd": "/opt/index-server",
+      "cwd": "<user-data-dir>/index-server",
       "env": {
-        "INDEX_SERVER_DIR": "/var/lib/mcp/instructions",
+        "INDEX_SERVER_DIR": "<user-data-dir>/index-server/instructions",
         "INDEX_SERVER_MUTATION": "0",
         "INDEX_SERVER_VERBOSE_LOGGING": "0",
         "INDEX_SERVER_LOG_MUTATION": "0"
