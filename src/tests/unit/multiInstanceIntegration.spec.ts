@@ -18,6 +18,12 @@ import { createMcpTransportRoutes } from '../../dashboard/server/HttpTransport';
 import { ThinClient } from '../../dashboard/server/ThinClient';
 
 describe('Multi-Instance Integration', () => {
+  // The afterEach hook closes HTTP servers + stops LeaderElection heartbeat timers.
+  // Under heavy parallel-suite contention on Windows the default 60s hook
+  // timeout has been observed to expire even though server.close() ultimately
+  // resolves. Give teardown plenty of headroom; isolated runs complete in <1s.
+  const HOOK_TIMEOUT_MS = 120_000;
+
   let tempDir: string;
   let elections: LeaderElection[] = [];
   let servers: http.Server[] = [];
@@ -40,7 +46,7 @@ describe('Multi-Instance Integration', () => {
 
   beforeEach(() => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-integration-'));
-  });
+  }, HOOK_TIMEOUT_MS);
 
   afterEach(async () => {
     for (const e of elections) { e.stop(); }
@@ -50,7 +56,7 @@ describe('Multi-Instance Integration', () => {
     }
     servers = [];
     try { fs.rmSync(tempDir, { recursive: true, force: true }); } catch { /* ignore */ }
-  });
+  }, HOOK_TIMEOUT_MS);
 
   async function startLeaderServer(): Promise<{ election: LeaderElection; port: number; url: string }> {
     const app = express();

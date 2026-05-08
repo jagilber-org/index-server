@@ -6,6 +6,12 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 
 ## [Unreleased]
 
+## [1.28.13] - 2026-05-08
+
+### Fixed
+
+- **Release workflow: transient git-clone failures in `Publish-ToMirror.ps1`**: the public-mirror clone step now retries (3 attempts, exponential backoff: 5s, 10s) on transient Windows networking errors (`getaddrinfo() thread failed to start`, `Could not resolve host`, connection resets, RPC failures, 5xx responses, etc.) before giving up. The PR-branch push retries the same way. Previously a single transient DNS hiccup would abort `Invoke-ReleaseWorkflow.ps1 -CreatePR` mid-flight and force manual recovery.
+
 ## [1.28.12] - 2026-05-07
 
 ### Fixed

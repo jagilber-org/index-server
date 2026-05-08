@@ -171,6 +171,32 @@ function Copy-PreparedContent {
     }
 }
 
+function Test-TransientGitError {
+    param([string]$Output)
+    if (-not $Output) { return $false }
+    # Patterns observed from intermittent Windows networking glitches that
+    # are safe to retry without changing semantics. Keep this list narrow:
+    # only failures that occur BEFORE any server-side state change.
+    $patterns = @(
+        'getaddrinfo\(\) thread failed to start',
+        'Could not resolve host',
+        'Failed to connect to .* Network is unreachable',
+        'Connection timed out',
+        'Connection reset by peer',
+        'Operation timed out',
+        'TLS connection was non-properly terminated',
+        'unexpected disconnect while reading sideband packet',
+        'RPC failed; (curl|HTTP)',
+        'The requested URL returned error: 5\d\d',
+        'fatal: early EOF',
+        'fatal: the remote end hung up unexpectedly'
+    )
+    foreach ($p in $patterns) {
+        if ($Output -match $p) { return $true }
+    }
+    return $false
+}
+
 function Invoke-Git {
     param(
         [Parameter(Mandatory)]
@@ -474,9 +500,31 @@ try {
         # The remote is named 'public' to match the rest of the script.
         $branchName = if ($PrBranch) { $PrBranch } elseif ($Tag) { "publish/$Tag" } else { 'publish/latest' }
 
-        & git clone --origin public --branch main --single-branch --depth 1 -- $RemoteUrl $publishWorkspace 2>&1 |
-            ForEach-Object { Write-Host $_ }
-        if ($LASTEXITCODE -ne 0 -or -not (Test-Path (Join-Path $publishWorkspace '.git'))) {
+        $cloneAttempts = 3
+        $cloneBackoff = 5
+        $cloneSucceeded = $false
+        for ($cloneAttempt = 1; $cloneAttempt -le $cloneAttempts; $cloneAttempt++) {
+            $cloneOutput = & git clone --origin public --branch main --single-branch --depth 1 -- $RemoteUrl $publishWorkspace 2>&1
+            $cloneExit = $LASTEXITCODE
+            $cloneOutStr = ($cloneOutput | Out-String)
+            $cloneOutStr.TrimEnd() -split "`r?`n" | ForEach-Object { if ($_) { Write-Host $_ } }
+            if ($cloneExit -eq 0 -and (Test-Path (Join-Path $publishWorkspace '.git'))) {
+                $cloneSucceeded = $true
+                break
+            }
+            if ($cloneAttempt -lt $cloneAttempts -and (Test-TransientGitError -Output $cloneOutStr)) {
+                $delay = $cloneBackoff * [Math]::Pow(2, $cloneAttempt - 1)
+                Write-Warning "git clone failed with transient network error (attempt $cloneAttempt/$cloneAttempts). Retrying in ${delay}s..."
+                # Clean partial clone before retry so the next attempt starts fresh.
+                if (Test-Path $publishWorkspace) {
+                    Remove-Item -LiteralPath $publishWorkspace -Recurse -Force -ErrorAction SilentlyContinue
+                }
+                Start-Sleep -Seconds $delay
+                continue
+            }
+            break
+        }
+        if (-not $cloneSucceeded) {
             Write-Error "Failed to clone '$RemoteUrl' (branch main). Verify the remote exists, 'main' is the default branch, and you have read access."
             return
         }
@@ -617,10 +665,33 @@ try {
             Invoke-Git -Arguments @('remote', 'add', 'public', $RemoteUrl) -WorkingDirectory $publishWorkspace
         }
 
-        # Push to the PR branch (not main)
-        Invoke-Git -Arguments @('push', 'public', "HEAD:refs/heads/$branchName", '--force') `
-            -WorkingDirectory $publishWorkspace `
-            -Environment $publishEnv
+        # Push to the PR branch (not main). Retry on transient network failures
+        # (idempotent: pushing the same commits twice is a no-op on the remote).
+        $pushAttempts = 3
+        $pushBackoff = 5
+        $pushSucceeded = $false
+        for ($pushAttempt = 1; $pushAttempt -le $pushAttempts; $pushAttempt++) {
+            try {
+                Invoke-Git -Arguments @('push', 'public', "HEAD:refs/heads/$branchName", '--force') `
+                    -WorkingDirectory $publishWorkspace `
+                    -Environment $publishEnv
+                $pushSucceeded = $true
+                break
+            }
+            catch {
+                $pushOutput = "$_"
+                if ($pushAttempt -lt $pushAttempts -and (Test-TransientGitError -Output $pushOutput)) {
+                    $delay = $pushBackoff * [Math]::Pow(2, $pushAttempt - 1)
+                    Write-Warning "git push failed with transient network error (attempt $pushAttempt/$pushAttempts). Retrying in ${delay}s..."
+                    Start-Sleep -Seconds $delay
+                    continue
+                }
+                throw
+            }
+        }
+        if (-not $pushSucceeded) {
+            throw "git push to '$branchName' failed after $pushAttempts attempts."
+        }
 
         # Extract org/repo from RemoteUrl for gh pr create
         $normalizedPrUrl = Normalize-GitUrl $RemoteUrl
