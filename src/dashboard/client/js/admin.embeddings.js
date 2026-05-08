@@ -436,10 +436,76 @@
     }
   };
 
+  window.clearEmbeddingsCache = async function clearEmbeddingsCache() {
+    var statusEl = document.getElementById('emb-status');
+    var ok = window.confirm(
+      'Clear cached embeddings?\n\nNext Compute will rebuild them and download the embedding model if not already cached.'
+    );
+    if (!ok) return;
+    try {
+      if (statusEl) statusEl.textContent = 'Clearing embeddings cache…';
+      var res = await adminAuth.adminFetch('/api/embeddings/reset', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clearModel: false }),
+      });
+      var data = await res.json().catch(function () { return {}; });
+      if (!res.ok) {
+        if (statusEl) statusEl.textContent = 'Clear failed: ' + (data.error || res.statusText);
+        return;
+      }
+      if (statusEl) statusEl.textContent = 'Cleared (embeddingsCleared=' + !!data.embeddingsCleared + '). Click Compute to rebuild.';
+      window.loadEmbeddingsStatus();
+    } catch (e) {
+      if (statusEl) statusEl.textContent = 'Clear failed: ' + e.message;
+    }
+  };
+
   window.computeEmbeddings = async function computeEmbeddings() {
     if (!canvas) init();
     var statusEl = document.getElementById('emb-status');
-    if (statusEl) statusEl.textContent = 'Computing embeddings (model download on first run)…';
+
+    // Pre-flight: fetch status so we can give the user actionable info.
+    var pre = null;
+    try {
+      var sres = await adminAuth.adminFetch('/api/embeddings/status');
+      if (sres.ok) pre = await sres.json();
+    } catch (_e) { void _e; }
+
+    if (pre && pre.success) {
+      if (pre.state === 'disabled') {
+        if (statusEl) statusEl.textContent = 'Embeddings are disabled. Set INDEX_SERVER_SEMANTIC_ENABLED=1 and restart.';
+        return;
+      }
+      if (pre.state === 'missing') {
+        if (statusEl) statusEl.textContent = 'Model is not cached and remote downloads are disabled (localOnly=true). Set INDEX_SERVER_SEMANTIC_LOCAL_ONLY=0 and restart, or pre-stage the model.';
+        return;
+      }
+      if (pre.state === 'ready') {
+        var ok = window.confirm(
+          'Embeddings are already up to date (' + (pre.embeddingsCount || 0) + ' cached, model=' + (pre.model || '?') + ').\n\nCompute will be a no-op unless the index has changed.\n\nProceed anyway?'
+        );
+        if (!ok) {
+          if (statusEl) statusEl.textContent = 'Cancelled. Use "Clear Cache" to force a full rebuild.';
+          return;
+        }
+      }
+      if (pre.state === 'will-download') {
+        var ok2 = window.confirm(
+          'Model "' + (pre.model || '?') + '" is not cached. Compute will download ~25MB to:\n\n' + (pre.cacheDir || '?') + '\n\nProceed?'
+        );
+        if (!ok2) {
+          if (statusEl) statusEl.textContent = 'Cancelled.';
+          return;
+        }
+        if (statusEl) statusEl.textContent = 'Downloading model + computing embeddings (this may take 30-60s)…';
+      } else if (statusEl) {
+        statusEl.textContent = 'Computing embeddings…';
+      }
+    } else if (statusEl) {
+      statusEl.textContent = 'Computing embeddings (model download on first run)…';
+    }
+
     try {
       var res = await adminAuth.adminFetch('/api/embeddings/compute', { method: 'POST', headers: { 'Content-Type': 'application/json' } });
       if (!res.ok) {
@@ -448,13 +514,20 @@
         if (err.hint) detail += ' — ' + err.hint;
         else if (err.message) detail += ' — ' + err.message;
         if (statusEl) statusEl.textContent = 'Error: ' + detail;
-        // Refresh banner so user sees the actionable state machine.
         window.loadEmbeddingsStatus();
         return;
       }
       var result = await res.json();
-      if (statusEl) statusEl.textContent = 'Computed ' + result.count + ' embeddings (' + result.model + ', ' + result.elapsedMs + 'ms). Loading visualization…';
-      // Auto-load the projection + refresh banner
+      if (statusEl) {
+        if (result.cacheHit) {
+          statusEl.textContent = 'Cache hit: ' + result.count + ' embeddings already current (no work done, ' + result.elapsedMs + 'ms). Use "Clear Cache" to force a rebuild.';
+        } else {
+          var summary = 'Computed ' + (result.computed != null ? result.computed : result.count) + ' new'
+            + (result.reused != null && result.reused > 0 ? ' (' + result.reused + ' reused)' : '')
+            + ' · model=' + result.model + ' · ' + result.elapsedMs + 'ms. Loading visualization…';
+          statusEl.textContent = summary;
+        }
+      }
       window.loadEmbeddingsStatus();
       await window.loadEmbeddings();
     } catch (e) {
@@ -472,6 +545,7 @@
       if (action === 'compute') window.computeEmbeddings();
       else if (action === 'load') window.loadEmbeddings();
       else if (action === 'reset') window.resetEmbeddingsView();
+      else if (action === 'clear') window.clearEmbeddingsCache();
       else if (action === 'norm') window.toggleNormColor();
     });
   }

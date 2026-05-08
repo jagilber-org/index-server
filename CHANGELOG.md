@@ -6,6 +6,16 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 
 ## [Unreleased]
 
+## [1.28.12] - 2026-05-07
+
+### Fixed
+
+- **Dashboard `/api/scripts/:name` 404**: client wrapper scripts (`index-server-client.ps1`, `index-server-client.sh`) are now packaged in the npm tarball and the route resolves them from the installed package directory instead of `process.cwd()`. Previously every install returned `Script file not found on disk`.
+
+### Added
+
+- **Embeddings panel — Clear Cache button + smarter Compute**: new `POST /api/embeddings/reset` endpoint clears the cached embeddings (works for both JSON and SQLite stores). The Compute button now pre-checks status and: warns when the model will download (~25MB), short-circuits when embeddings are already up to date with a confirm prompt, and surfaces an honest `cacheHit` / `computed` / `reused` summary instead of always reporting "Computed N embeddings". The old `Reset` button was renamed to `Reset View` to clarify that it only resets pan/zoom.
+
 ## [1.28.2] - 2026-05-06
 
 ### Added
