@@ -57,30 +57,54 @@ export function createScriptsRoutes(): Router {
       return;
     }
 
-    try {
-      const scriptsDir = path.join(process.cwd(), 'scripts', 'dist');
-      const filePath = path.join(scriptsDir, meta.file); // nosemgrep: javascript.express.security.audit.express-path-join-resolve-traversal.express-path-join-resolve-traversal -- path validated below via startsWith check
+    // Candidate dirs (first existing wins):
+    //  1. Installed package layout: <pkg-root>/scripts/client (resolved from __dirname = dist/dashboard/server/routes)
+    //  2. Installed package layout (alt): <pkg-root>/scripts/dist (legacy)
+    //  3. Repo dev layout: <cwd>/scripts/client
+    //  4. Repo dev layout (legacy): <cwd>/scripts/dist
+    const pkgRoot = path.resolve(__dirname, '..', '..', '..', '..');
+    const candidateDirs = [
+      path.join(pkgRoot, 'scripts', 'client'),
+      path.join(pkgRoot, 'scripts', 'dist'),
+      path.join(process.cwd(), 'scripts', 'client'),
+      path.join(process.cwd(), 'scripts', 'dist'),
+    ];
 
+    let content: string | undefined;
+    let lastErr: unknown;
+    for (const scriptsDir of candidateDirs) {
+      const filePath = path.join(scriptsDir, meta.file); // nosemgrep: javascript.express.security.audit.express-path-join-resolve-traversal.express-path-join-resolve-traversal -- path validated below via startsWith check
       let resolved: string;
       try {
         resolved = validatePathContainment(path.resolve(filePath), scriptsDir); // nosemgrep: javascript.express.security.audit.express-path-join-resolve-traversal.express-path-join-resolve-traversal -- containment validated by shared helper
       } catch {
-        res.status(400).json({ error: 'Invalid script path' });
+        continue;
+      }
+      try {
+        content = await readFile(resolved, 'utf-8');
+        break;
+      } catch (err) {
+        lastErr = err;
+      }
+    }
+
+    try {
+      if (content === undefined) {
+        const message = lastErr instanceof Error ? lastErr.message : String(lastErr);
+        if (!lastErr || message.includes('ENOENT')) {
+          res.status(404).json({ error: `Script file not found on disk: ${name}` });
+        } else {
+          res.status(500).json({ error: `Failed to read script: ${message}` });
+        }
         return;
       }
-
-      const content = await readFile(resolved, 'utf-8');
       res.setHeader('Content-Type', meta.contentType);
       res.setHeader('Content-Disposition', `attachment; filename="${meta.file}"`);
       res.setHeader('X-Content-Type-Options', 'nosniff');
       res.send(content); // nosemgrep: javascript.express.security.audit.xss.direct-response-write.direct-response-write -- content served with Content-Type, Content-Disposition attachment, and X-Content-Type-Options: nosniff headers
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      if (message.includes('ENOENT')) {
-        res.status(404).json({ error: `Script file not found on disk: ${name}` });
-      } else {
-        res.status(500).json({ error: `Failed to read script: ${message}` });
-      }
+      res.status(500).json({ error: `Failed to send script: ${message}` });
     }
   });
 

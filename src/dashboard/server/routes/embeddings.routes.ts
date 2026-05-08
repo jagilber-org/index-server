@@ -354,16 +354,49 @@ export function createEmbeddingsRoutes(embeddingPathOverride?: string, embedding
         });
       }
 
+      // Pre-flight: detect a no-op (full cache hit) so we can return a clearer
+      // signal to the dashboard instead of pretending we just computed N items.
+      const readiness = checkModelReadiness(sem.model, sem.cacheDir, sem.localOnly);
+      let preCached: { indexHash?: string; modelName?: string; entryHashes?: Record<string, string>; embeddings?: Record<string, number[]> } | null = null;
+      try {
+        if (embeddingStore) {
+          preCached = embeddingStore.load();
+        } else {
+          const file = embeddingPathOverride ?? sem.embeddingPath;
+          if (file && fs.existsSync(file)) {
+            preCached = JSON.parse(fs.readFileSync(file, 'utf8'));
+          }
+        }
+      } catch { /* tolerate */ }
+
+      const currentIds = new Set(state.list.map(i => i.id));
+      const cachedIds = preCached?.embeddings ? new Set(Object.keys(preCached.embeddings)) : new Set<string>();
+      const cachedHashes = preCached?.entryHashes ?? {};
+      const sameModel = preCached?.modelName === sem.model;
+      const sameIndex = preCached?.indexHash === state.hash;
+      const toCompute = state.list.filter(inst => {
+        if (!sameModel) return true;
+        const h = cachedHashes[inst.id];
+        return !h || h !== inst.sourceHash || !cachedIds.has(inst.id);
+      });
+      const fullHit = sameModel && sameIndex && toCompute.length === 0 && cachedIds.size > 0;
+
       const start = performance.now();
       const embeddings = await getInstructionEmbeddings(
         state.list, state.hash, sem.embeddingPath, sem.model, sem.cacheDir, sem.device, sem.localOnly
       );
       const elapsed = (performance.now() - start).toFixed(0);
       const count = Object.keys(embeddings).length;
+      const computed = fullHit ? 0 : toCompute.length;
+      const reused = count - computed;
 
       return res.json({
         success: true,
         count,
+        computed,
+        reused,
+        cacheHit: fullHit,
+        modelDownloaded: !readiness.cached, // best-effort: model wasn't cached before this call
         model: sem.model,
         device: sem.device,
         elapsedMs: Number(elapsed),
@@ -386,6 +419,49 @@ export function createEmbeddingsRoutes(embeddingPathOverride?: string, embedding
           ? 'The embedding model is not cached locally and remote downloads are disabled. ' +
             'Set INDEX_SERVER_SEMANTIC_LOCAL_ONLY=0 and restart, or pre-stage the model in INDEX_SERVER_SEMANTIC_CACHE_DIR.'
           : undefined,
+      });
+    }
+  });
+
+  // POST /embeddings/reset — clear cached embeddings (forces full recompute on next compute).
+  // Optionally clears the on-disk model cache so the next compute re-downloads the model.
+  router.post('/embeddings/reset', dashboardAdminAuth, async (req: Request, res: Response) => {
+    try {
+      const sem = getRuntimeConfig().semantic;
+      const clearModel = req.body && (req.body as { clearModel?: boolean }).clearModel === true;
+      let embeddingsCleared = false;
+      let modelCacheCleared = false;
+
+      // Clear embeddings cache (works for both JSON file and SQLite store).
+      if (embeddingStore) {
+        embeddingStore.save({ indexHash: '', modelName: '', entryHashes: {}, embeddings: {} });
+        embeddingsCleared = true;
+      } else {
+        const file = embeddingPathOverride ?? sem.embeddingPath;
+        if (file && fs.existsSync(file)) {
+          fs.rmSync(file, { force: true });
+          embeddingsCleared = true;
+        }
+      }
+
+      // Optionally clear the model cache directory to force a re-download.
+      if (clearModel && sem.cacheDir && fs.existsSync(sem.cacheDir)) {
+        fs.rmSync(sem.cacheDir, { recursive: true, force: true });
+        modelCacheCleared = true;
+      }
+
+      return res.json({
+        success: true,
+        embeddingsCleared,
+        modelCacheCleared,
+        embeddingPath: embeddingPathOverride ?? sem.embeddingPath,
+        cacheDir: sem.cacheDir,
+      });
+    } catch (err) {
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to reset embeddings',
+        message: (err as Error).message,
       });
     }
   });
