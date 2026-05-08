@@ -197,6 +197,19 @@ describe('AgentMailbox', () => {
       mailbox.ack([id], 'bob');
       expect(mailbox.getMessage(id)?.readBy?.filter(r => r === 'bob')).toHaveLength(1);
     });
+
+    // Regression: cold-client stress test (v1.28.9) reported messaging_ack
+    // returned acknowledged=0 for a requiresAck=true message that had already
+    // been added to readBy by a prior messaging_read({ markRead: true }) call.
+    // ack() must be idempotent — the count is the number of resolved IDs, not
+    // the number of newly-added readBy entries.
+    it('is idempotent: counts resolved IDs even when already in readBy', async () => {
+      const id = await mailbox.send({ channel: 'c', sender: 'a', recipients: ['*'], body: 'x' });
+      expect(mailbox.ack([id], 'bob')).toBe(1);
+      // Second ack: readBy already contains 'bob' but caller still asked us to
+      // ack a known message — must return 1, not 0.
+      expect(mailbox.ack([id], 'bob')).toBe(1);
+    });
   });
 
   describe('getStats()', () => {

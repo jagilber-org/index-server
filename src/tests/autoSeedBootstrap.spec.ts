@@ -2,8 +2,12 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import Ajv from 'ajv';
+import addFormats from 'ajv-formats';
+import draft7MetaSchema from 'ajv/dist/refs/json-schema-draft-07.json'; // hallucination-allowlist: AJV publishes this draft-07 meta-schema path.
 import { autoSeedBootstrap, _getCanonicalSeeds } from '../services/seedBootstrap';
 import { reloadRuntimeConfig } from '../config/runtimeConfig';
+import schema from '../../schemas/instruction.schema.json';
 
 function makeTempDir(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-auto-seed-'));
@@ -70,6 +74,37 @@ describe('autoSeedBootstrap', () => {
     expect(summary.created.length).toBe(0);
     for(const s of seeds){
       expect(fs.existsSync(path.join(dir, s.file))).toBe(false);
+    }
+  });
+
+  // Regression: cold-client stress test (v1.28.9) reported that baseline seeds
+  // violated the strict instruction schema (audience='agents', requirement='required',
+  // priorityTier='p1', version=<number>, missing contentType, missing sourceHash).
+  // This test pins each written seed against the live JSON schema so a future
+  // edit to CANONICAL_SEEDS that drifts from the schema fails fast.
+  it('written seed files validate against instruction.schema.json', () => {
+    const dir = makeTempDir();
+    process.env.INDEX_SERVER_DIR = dir;
+    autoSeedBootstrap();
+    const ajv = new Ajv({ allErrors: true, strict: false });
+    addFormats(ajv);
+    try {
+      const httpsIdNoHash = 'https://json-schema.org/draft-07/schema';
+      const httpsIdHash = 'https://json-schema.org/draft-07/schema#';
+      if (!ajv.getSchema(httpsIdNoHash)) ajv.addMetaSchema({ ...draft7MetaSchema, $id: httpsIdNoHash });
+      if (!ajv.getSchema(httpsIdHash)) ajv.addMetaSchema({ ...draft7MetaSchema, $id: httpsIdHash });
+    } catch { /* ignore meta-schema registration issues */ }
+    const validate = ajv.compile(JSON.parse(JSON.stringify(schema)));
+    for(const s of seeds){
+      const data = JSON.parse(fs.readFileSync(path.join(dir, s.file),'utf8')) as { sourceHash?: string };
+      const ok = validate(data);
+      if(!ok){
+        // Surface ajv errors in the failure message for easy diagnosis.
+        throw new Error(`seed ${s.file} failed schema: ${JSON.stringify(validate.errors, null, 2)}`);
+      }
+      // Also assert sourceHash is the sha256 of body so integrity_verify is clean
+      // on a fresh install (cold-client stress test "expected hash empty" finding).
+      expect(data.sourceHash).toMatch(/^[a-f0-9]{64}$/);
     }
   });
 });

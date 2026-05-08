@@ -174,12 +174,14 @@ docker compose up  # HTTP on :8787
 Restart your MCP client after configuration changes. Verify with \`health_check\`.
 
 For full configuration options: see \`docs/mcp_configuration.md\` and \`docs/configuration.md\`.`,
-      audience: 'agents',
-      requirement: 'required',
+      audience: 'all',
+      requirement: 'mandatory',
       priority: 100,
+      priorityTier: 'P1',
+      contentType: 'instruction',
       categories: ['bootstrap','mcp-activation','quick-start','documentation'],
       owner: 'system',
-      version: 3,
+      version: '3.0.0',
       schemaVersion: '5',
       semanticSummary: 'Index Server quick start: search-first workflow, knowledge contribution, copilot instructions setup, and MCP client configuration for AI agents'
     }
@@ -191,12 +193,14 @@ For full configuration options: see \`docs/mcp_configuration.md\` and \`docs/con
       id: '001-lifecycle-bootstrap',
       title: 'Lifecycle Bootstrap: Local-First Instruction Strategy',
       body: 'Purpose: Early lifecycle guidance after bootstrap confirmation. Keep index minimal; prefer local-first P0/P1 additions; promote only after stability.',
-      audience: 'agents',
+      audience: 'all',
       requirement: 'recommended',
-      priorityTier: 'p1',
+      priority: 99,
+      priorityTier: 'P1',
+      contentType: 'instruction',
       categories: ['bootstrap','lifecycle'],
       owner: 'system',
-      version: 1,
+      version: '1.0.0',
       schemaVersion: '5',
       semanticSummary: 'Lifecycle and promotion guardrails after bootstrap confirmation',
       reviewIntervalDays: 120
@@ -239,7 +243,12 @@ export function autoSeedBootstrap(): SeedSummary {
       // Inject timestamps at write time so loaders never trigger
       // [invariant-repair] firstSeenTs WARN noise on subsequent reads.
       const nowIso = new Date().toISOString();
-      const stamped = { createdAt: nowIso, firstSeenTs: nowIso, ...seed.json };
+      // Bake-in sourceHash so integrity_verify reports zero drift on a fresh install.
+      // Schema requires sha256(body) for the body field; without this seeds appear
+      // as drift forever (expected hash empty, actual populated).
+      const bodyStr = typeof seed.json.body === 'string' ? seed.json.body : '';
+      const sourceHash = crypto.createHash('sha256').update(bodyStr, 'utf8').digest('hex');
+      const stamped = { createdAt: nowIso, updatedAt: nowIso, firstSeenTs: nowIso, sourceHash, ...seed.json };
       fs.writeFileSync(tmp, JSON.stringify(stamped, null, 2), { encoding: 'utf8' });
       fs.renameSync(tmp, target);
       summary.created.push(seed.file);
