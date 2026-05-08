@@ -165,10 +165,16 @@ export class AgentMailbox {
     }));
   }
 
-  /** Acknowledge messages by marking them read. Returns count acknowledged. */
+  /**
+   * Acknowledge messages by marking them read.
+   * Idempotent: returns the count of message IDs successfully resolved and ack'd
+   * for the reader, regardless of whether the reader had already been added by a
+   * prior `read({ markRead: true })` call. Unknown IDs are silently skipped.
+   */
   ack(messageIds: string[], reader: string): number {
     this.ensureLoaded();
     let count = 0;
+    let dirty = false;
 
     for (const id of messageIds) {
       const key = this.idIndex.get(id);
@@ -179,11 +185,12 @@ export class AgentMailbox {
       if (!msg.readBy) msg.readBy = [];
       if (!msg.readBy.includes(reader)) {
         msg.readBy.push(reader);
-        count++;
+        dirty = true;
       }
+      count++;
     }
 
-    if (count > 0) this.persistAll();
+    if (dirty) this.persistAll();
     return count;
   }
 
