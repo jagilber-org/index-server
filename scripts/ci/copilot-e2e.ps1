@@ -66,7 +66,7 @@ if (-not (Test-Path $mcpConfig)) {
       "type": "stdio",
       "command": "node",
       "args": ["dist/server/index-server.js"],
-      "cwd": "C:/mcp/index-server"
+      "cwd": "<user-data-dir>/index-server"
     }
   }
 }

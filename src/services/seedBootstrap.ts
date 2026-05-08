@@ -22,6 +22,7 @@ export interface SeedSummary {
   created: string[];       // file basenames created this invocation
   existing: string[];      // seeds already present
   skipped: string[];       // seeds skipped (already existed)
+  upgraded: string[];      // seeds rewritten because the on-disk file violated the canonical schema
   disabled: boolean;       // seeding disabled by env
   reason?: string;         // explanatory note
   hash: string;            // hash of canonical content (determinism aid)
@@ -222,7 +223,7 @@ export function autoSeedBootstrap(): SeedSummary {
   const cfg = getRuntimeConfig().bootstrapSeed;
   const disabled = !cfg.autoSeed;
   const dir = safeInstructionsDir();
-  const summary: SeedSummary = { dir, created: [], existing: [], skipped: [], disabled, hash: computeCanonicalHash() };
+  const summary: SeedSummary = { dir, created: [], existing: [], skipped: [], upgraded: [], disabled, hash: computeCanonicalHash() };
   if(disabled){ summary.reason = 'disabled_by_env'; return summary; }
 
   try { fs.mkdirSync(dir, { recursive: true }); } catch { /* ignore */ }
@@ -233,9 +234,35 @@ export function autoSeedBootstrap(): SeedSummary {
     const target = path.join(dir, seed.file);
     const exists = fs.existsSync(target);
     if(exists){
-      summary.existing.push(seed.file);
-      summary.skipped.push(seed.file);
-      continue; // do not overwrite
+      // Detect schema-invalid stale seeds from earlier versions and rewrite
+      // them. Pre-v1.28.10 wrote `requirement: 'required'` and
+      // `priorityTier: 'p1'` (lowercase), both rejected by the current
+      // instruction.schema.json. Without this upgrade path, broken seeds
+      // persist forever because we previously never overwrote existing files.
+      // We deliberately scope the upgrade to enum violations (not arbitrary
+      // user edits) so hand-curated valid seeds are preserved. RCA 2026-05-07.
+      let stale = false;
+      let staleReason = '';
+      try {
+        const existing = JSON.parse(fs.readFileSync(target,'utf8')) as Record<string, unknown>;
+        const validRequirement = ['mandatory','critical','recommended','optional','deprecated'];
+        const validPriorityTier = ['P1','P2','P3','P4'];
+        if(typeof existing.requirement === 'string' && !validRequirement.includes(existing.requirement)){
+          stale = true; staleReason = `invalid requirement="${existing.requirement}"`;
+        } else if(typeof existing.priorityTier === 'string' && !validPriorityTier.includes(existing.priorityTier)){
+          stale = true; staleReason = `invalid priorityTier="${existing.priorityTier}"`;
+        }
+      } catch (e) {
+        stale = true; staleReason = `unparseable_json: ${(e instanceof Error)? e.message : String(e)}`;
+      }
+      if(!stale){
+        summary.existing.push(seed.file);
+        summary.skipped.push(seed.file);
+        continue; // valid existing seed; do not overwrite
+      }
+      try { fs.unlinkSync(target); } catch { /* fall through to write */ }
+      try { process.stderr.write(`[seed] upgrading stale seed ${seed.file}: ${staleReason}\n`); } catch { /* ignore */ }
+      // fall through to write canonical content
     }
     // Directory empty OR missing seed triggers creation.
     try {
@@ -251,7 +278,8 @@ export function autoSeedBootstrap(): SeedSummary {
       const stamped = { createdAt: nowIso, updatedAt: nowIso, firstSeenTs: nowIso, sourceHash, ...seed.json };
       fs.writeFileSync(tmp, JSON.stringify(stamped, null, 2), { encoding: 'utf8' });
       fs.renameSync(tmp, target);
-      summary.created.push(seed.file);
+      if(exists) summary.upgraded.push(seed.file);
+      else summary.created.push(seed.file);
     } catch (e){
       summary.reason = `partial_failure ${(e instanceof Error)? e.message: String(e)}`;
     }

@@ -36,9 +36,11 @@ Write-Host "  Has priority: $($json.PSObject.Properties.Name -contains 'priority
 
 # Test using Node.js directly
 Write-Host "`nTesting migration using Node.js..." -ForegroundColor Cyan
+$prodRoot = if ($env:INDEX_SERVER_PROD_ROOT) { $env:INDEX_SERVER_PROD_ROOT } else { Join-Path $env:LOCALAPPDATA 'index-server' }
+$schemaVersionJs = (Join-Path $prodRoot 'dist\versioning\schemaVersion.js') -replace '\\','/'
 $nodeTest = @"
 const fs = require('fs');
-const { migrateInstructionRecord } = require('C:/mcp/index-server-prod/dist/versioning/schemaVersion.js');
+const { migrateInstructionRecord } = require('$schemaVersionJs');
 const data = JSON.parse(fs.readFileSync('$($testFile.Replace('\','\\'))', 'utf8'));
 const result = migrateInstructionRecord(data);
 console.log('Migration result:', JSON.stringify(result, null, 2));

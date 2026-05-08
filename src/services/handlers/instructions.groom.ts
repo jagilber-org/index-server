@@ -88,7 +88,12 @@ registerHandler('index_repair', guard('index_repair', (_p: unknown) => {
   const skippedRepaired: string[] = []; const skippedErrors: { id: string; error: string }[] = [];
   try {
     const dir = getInstructionsDir();
-    const diskFiles = fs.readdirSync(dir).filter(f => f.endsWith('.json') && !f.startsWith('_'));
+    // Exclude internal manifest (_*) and bootstrap gating state files. These
+    // are runtime bookkeeping owned by bootstrapGating.ts, not instructions.
+    // Without this filter they surface as 'missing required fields' noise in
+    // every index_repair response. RCA 2026-05-07.
+    const STATE_FILES = new Set(['bootstrap.confirmed.json', 'bootstrap.pending.json']);
+    const diskFiles = fs.readdirSync(dir).filter(f => f.endsWith('.json') && !f.startsWith('_') && !STATE_FILES.has(f));
     // Use the compiled-in schema property set so disk-resident vs static-import
     // schemas can never diverge (review #211 finding 9).
     const schemaProps = getSchemaPropertyNames();

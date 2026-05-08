@@ -15,7 +15,7 @@
  *   npx @jagilber-org/index-server --setup
  *   npm run setup
  *   node scripts/build/setup-wizard.mjs
- *   node scripts/build/setup-wizard.mjs --non-interactive --profile enhanced --root C:/mcp/index-server
+ *   node scripts/build/setup-wizard.mjs --non-interactive --profile enhanced --root C:/.tools/index-server
  */
 import fs from 'fs';
 import path from 'path';
@@ -23,6 +23,7 @@ import { execFileSync } from 'child_process';
 import { fileURLToPath } from 'url';
 import { createRequire } from 'module';
 import { select, input, confirm, checkbox } from '@inquirer/prompts';
+import { defaultUserRoot } from './setup-wizard-paths.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..', '..');
@@ -33,17 +34,6 @@ function writeTextFile(filePath, content) {
 }
 const IS_WINDOWS = process.platform === 'win32';
 
-// Default install root for non-repo installs. Lives under the user profile so
-// neither admin/elevated rights nor a cluttered C:\ root are required, and the
-// runtime self-deploys cleanly there (args + cwd resolve under this root).
-function defaultUserRoot() {
-  if (IS_WINDOWS) {
-    const base = process.env.LOCALAPPDATA || process.env.APPDATA || process.env.USERPROFILE || process.cwd();
-    return path.join(base, 'index-server');
-  }
-  const home = process.env.HOME || process.cwd();
-  return path.join(home, '.local', 'share', 'index-server');
-}
 function parsePositiveTimeout(value, fallback) {
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
@@ -231,11 +221,10 @@ async function runInteractiveWizard() {
     default: 'default',
   });
 
-  // Step 2: Root directory
-  const defaultRoot = defaultUserRoot();
+  // Step 2: Root directory — defaults to per-user data dir (no admin rights, no hardcoded C:\ path)
   const root = path.resolve(await input({
     message: 'Base directory (all data paths resolve under this root)',
-    default: defaultRoot,
+    default: defaultUserRoot(),
   }));
 
   // Step 3: Server name for mcp.json entry
@@ -648,12 +637,6 @@ Non-interactive mode:
     console.log(`\n✅ .env written to: ${envPath}`);
   }
 
-  // ── Deploy runtime BEFORE config generation ─────────────────────────
-  // resolveServerLaunch picks 'local' source (cwd = config.root) only when
-  // <config.root>/dist/server/index-server.js exists. Deploy first so configs
-  // are emitted with stable user-data-root paths instead of npm-global paths.
-  await deployRuntime(config);
-
   // ── Multi-target config generation ──────────────────────────────────
   const configTargets = resolveConfigPaths(config);
 
@@ -710,6 +693,9 @@ Non-interactive mode:
       }
     }
   }
+
+  // ── Deploy runtime if target root differs from package root ─────────
+  await deployRuntime(config);
 
   // ── Next steps ──────────────────────────────────────────────────────
   const proto = (config.profile === 'enhanced' || config.profile === 'experimental') ? 'https' : 'http';

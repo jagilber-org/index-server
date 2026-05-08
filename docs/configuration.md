@@ -133,9 +133,9 @@ Agents should periodically re-query the bootstrap instruction to get latest guid
   "mcpServers": {
     "mcp-index-production": {
       "command": "node",
-      "args": ["C:/mcp/index-server/dist/server/index-server.js"],
+      "args": ["<user-data-dir>/index-server/dist/server/index-server.js"],
       "env": {
-        "INDEX_SERVER_DIR": "C:/mcp/instructions",
+        "INDEX_SERVER_DIR": "<user-data-dir>/index-server/instructions",
         "INDEX_SERVER_AUTO_SEED": "1"
       }
     }
@@ -833,13 +833,13 @@ Rationale: a single execution pathway (tools/call) eliminates duplicate validati
   "mcpServers": {
     "Index": {
       "command": "node",
-      "args": ["C:/mcp/index-server/dist/server/index-server.js"],
+      "args": ["<user-data-dir>/index-server/dist/server/index-server.js"],
       "env": {
         "INDEX_SERVER_STORAGE_BACKEND": "sqlite",
         "INDEX_SERVER_SQLITE_PATH": "C:/mcp/data/index.db",
         "INDEX_SERVER_SQLITE_WAL": "1",
         "INDEX_SERVER_SQLITE_MIGRATE_ON_START": "1",
-        "INDEX_SERVER_DIR": "C:/mcp/instructions"
+        "INDEX_SERVER_DIR": "<user-data-dir>/index-server/instructions"
       }
     }
   }
@@ -853,13 +853,13 @@ Rationale: a single execution pathway (tools/call) eliminates duplicate validati
   "mcpServers": {
     "Index": {
       "command": "node",
-      "args": ["C:/mcp/index-server/dist/server/index-server.js"],
+      "args": ["<user-data-dir>/index-server/dist/server/index-server.js"],
       "env": {
         "INDEX_SERVER_STORAGE_BACKEND": "sqlite",
         "INDEX_SERVER_SQLITE_PATH": "C:/mcp/data/index.db",
         "INDEX_SERVER_SQLITE_VEC_ENABLED": "1",
         "INDEX_SERVER_SEMANTIC_ENABLED": "1",
-        "INDEX_SERVER_DIR": "C:/mcp/instructions"
+        "INDEX_SERVER_DIR": "<user-data-dir>/index-server/instructions"
       }
     }
   }
