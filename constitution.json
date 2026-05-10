@@ -1,10 +1,10 @@
 {
   "schemaVersion": 2,
-  "version": "2.9.0",
+  "version": "2.10.0",
   "name": "Index",
   "ratifiedAt": "2026-02-16",
-  "lastAmendedAt": "2026-04-26",
-  "description": "Index Server — Enterprise instruction indexing platform for AI assistant governance. Aligned to the layered hook security template constitution v2.8.0.",
+  "lastAmendedAt": "2026-05-10",
+  "description": "Index Server — Enterprise instruction indexing platform for AI assistant governance. Aligned to the layered hook security template v1.31.0 (constitution v2.9.0).",
   "articles": {
     "governance": {
       "title": "Template Governance And Change Control",
@@ -268,6 +268,7 @@
           ],
           "enforcedBy": [
             "scripts/hooks/pre-commit.ps1",
+            "hooks/*",
             ".github/copilot-instructions.md"
           ]
         },
@@ -289,7 +290,8 @@
           ],
           "enforcedBy": [
             "scripts/hooks/pre-commit.ps1",
-            ".github/workflows/ci.yml"
+            "hooks/check-prompt-injection.ps1",
+            ".github/workflows/precommit.yml"
           ]
         },
         {
@@ -312,6 +314,7 @@
           ],
           "enforcedBy": [
             ".github/workflows/ci.yml",
+            ".github/workflows/precommit.yml",
             ".secrets.baseline"
           ]
         },
@@ -458,8 +461,33 @@
             "Narrow allowlist entries in .prompt-injection-allowlist or inline markers"
           ],
           "enforcedBy": [
-            "scripts/check-prompt-injection.ps1",
+            "hooks/check-prompt-injection.ps1",
             ".pre-commit-config.yaml"
+          ]
+        },
+        {
+          "id": "SH-11",
+          "severity": "warning",
+          "rule": "Repositories with security scanning hooks SHOULD include adversarial test fixtures that verify scanner effectiveness against known bypass patterns, evasion techniques, and edge cases.",
+          "rationale": "Scanner presence alone does not prove scanner effectiveness. Adversarial fixtures provide the narrowest falsifiable validation that a security control actually catches what it claims to catch, preventing false confidence from propagating to downstream adopters.",
+          "required": [
+            "Maintain test fixtures containing known-bad patterns (secrets, PII, prompt injections, env leaks) that MUST trigger the corresponding scanner.",
+            "Include evasion variants (encoding tricks, comment embedding, split patterns, unicode confusables) appropriate to the scanner's detection domain.",
+            "Run adversarial fixtures as part of hook regression testing (Pester or equivalent) to verify scanners catch them."
+          ],
+          "prohibited": [
+            "Do not treat scanner presence alone as proof of scanner effectiveness.",
+            "Do not allowlist adversarial test fixtures out of the scanner ΓÇö they should trigger and be validated as caught."
+          ],
+          "evidence": [
+            "Adversarial test fixture files under tests/adversarial/ or equivalent",
+            "Hook regression test output showing fixtures are caught",
+            "Evasion variant coverage for each active scanner category"
+          ],
+          "enforcedBy": [
+            "tests/ hook regression suite",
+            "CI pre-commit replay with adversarial fixtures",
+            "Security pattern review ceremony"
           ]
         },
         {
@@ -799,7 +827,7 @@
           "enforcedBy": [
             "shared test utilities",
             "lint rules or import restrictions",
-            "CI test configuration"
+            ".github/workflows/precommit.yml"
           ],
           "exceptions": [
             "Individual tests may opt out of the production wrapper with explicit documentation when testing framework internals or non-production behavior."
@@ -1108,7 +1136,8 @@
             "Successful pull request CI runs"
           ],
           "enforcedBy": [
-            ".github/workflows/*",
+            ".github/workflows/precommit.yml",
+            ".github/workflows/ci.yml",
             ".github/copilot-instructions.md",
             "README.md"
           ]
@@ -1134,7 +1163,7 @@
           "enforcedBy": [
             "release or publish scripts",
             "versioning or release docs",
-            "CI release workflows"
+            ".github/workflows/release.yml"
           ]
         },
         {
@@ -1170,7 +1199,9 @@
             "Required status check configuration"
           ],
           "enforcedBy": [
-            ".github/workflows/*",
+            ".github/workflows/ci.yml",
+            ".github/workflows/ci-enhanced.yml",
+            ".github/workflows/promotion-freshness.yml",
             "README.md",
             "branch protection rules"
           ]
@@ -1334,8 +1365,24 @@
         {
           "id": "DI-4",
           "severity": "error",
-          "rule": "Write paths MUST mirror read paths for normalization, migration, and validation. Any record passing through a writer MUST run the same migration and validation sequence the loader runs at read time so that round-trips are symmetric.",
-          "rationale": "Asymmetric write/read pipelines silently corrupt state: legacy records re-validated under newer schemas are rejected on write even though they load cleanly, and writes never observe the same defaults the loader applies. Symmetry prevents drift between in-memory state, persisted form, and on-load reconstruction."
+          "rule": "Write paths MUST mirror read paths for normalization, migration, and validation. Any record passing through a writer MUST run the same migration and validation sequence the loader runs at read time, so round-trips are symmetric.",
+          "rationale": "Asymmetric read/write paths cause silent data corruption: legacy records that load cleanly cannot be re-saved, and writes produce records whose normalized form differs from what the loader would synthesize.",
+          "required": [
+            "Writer pipelines must apply the same migration and validation steps as the corresponding reader/loader.",
+            "Round-trip tests must verify that read(write(record)) produces an identical record."
+          ],
+          "prohibited": [
+            "Do not add writer-side validation without ensuring the reader's migration pipeline feeds into it.",
+            "Do not assume records written today will bypass the loader's migration path when re-read."
+          ],
+          "evidence": [
+            "Round-trip integration test for each persisted record type",
+            "Shared migration/validation module used by both read and write paths"
+          ],
+          "enforcedBy": [
+            "Integration tests",
+            "Code review"
+          ]
         }
       ]
     }
@@ -1372,6 +1419,8 @@
     "prd": "docs/project_prd.md",
     "contributing": "CONTRIBUTING.md",
     "tools": "docs/tools.md",
-    "changelog": "CHANGELOG.md"
+    "changelog": "CHANGELOG.md",
+    "precommitWorkflow": ".github/workflows/precommit.yml",
+    "license": "LICENSE"
   }
 }

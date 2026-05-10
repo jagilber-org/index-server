@@ -28,6 +28,7 @@ const MINIMAL_PARAMS: Record<string, unknown> = {
     title: 'Smoke test feedback',
     description: 'Minimal smoke-test payload',
   },
+  feedback_manage: { action: 'stats' },
 };
 
 // Tools that throw for bad IDs (expected behavior, not a bug)

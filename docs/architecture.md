@@ -101,7 +101,7 @@ graph LR
 
 1. Loader enumerates `instructions/*.json`, applies Ajv validation (draft-07) and minimal bootstrap defaults.
 2. Classification normalizes + derives governance fields (version/status/owner/priorityTier/review dates/semantic summary) & risk score.
-3. Migration hook updates schemaVersion if older (current schemaVersion: 5 per instruction.schema.json).
+3. Migration hook updates schemaVersion if older (current schemaVersion: 6 per instruction.schema.json).
 4. index hash (id:sourceHash) and governance hash (projection set) computed.
 5. Entries cached (map + sorted list); enrichment persistence pass rewrites placeholders once.
 6. Tools served: diff / list / governanceHash / integrity / gates / prompt review / usage / metrics.
@@ -415,7 +415,7 @@ sqlite-vec backed embedding storage (`src/services/storage/sqliteEmbeddingStore.
 - **Configurable dimensions** — default 384 (MiniLM-L6-v2)
 - **Transaction-based save** — rollback on error
 - **Requires** Node.js ≥ 22.13.0 + `sqlite-vec` npm package
-- **Config**: `INDEX_SERVER_SQLITE_VEC_ENABLED=1`
+- **Config**: `INDEX_SERVER_SQLITE_VEC_ENABLED=1` (auto-enabled when `INDEX_SERVER_STORAGE_BACKEND=sqlite`; set `=0` to opt out)
 
 #### Embedding Device Probe
 

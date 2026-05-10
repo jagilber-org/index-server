@@ -123,7 +123,7 @@ describe('contentType preservation on add/import', () => {
     expect(diskEntry.contentType).toBe('workflow');
   });
 
-  it('normalizes legacy contentType: "chat-session" writes to "workflow"', async () => {
+  it('rejects removed contentType: "chat-session" writes', async () => {
     const dispatch = getHandler('index_dispatch')!;
     const id = 'test-chat-session-content-type';
 
@@ -132,7 +132,7 @@ describe('contentType preservation on add/import', () => {
       entry: {
         id,
         title: 'Test Legacy Chat Session',
-        body: 'This legacy chat-session entry should persist as workflow.',
+        body: 'This legacy chat-session entry should be rejected.',
         priority: 50,
         audience: 'all',
         requirement: 'optional',
@@ -143,15 +143,8 @@ describe('contentType preservation on add/import', () => {
       overwrite: true,
     }) as Record<string, unknown>;
 
-    expect(addResult.error).toBeFalsy();
-
-    const getResult = await dispatch({ action: 'get', id }) as Record<string, unknown>;
-    const item = getResult.item as Record<string, unknown>;
-    expect(item.contentType).toBe('workflow');
-
-    const diskEntry = JSON.parse(fs.readFileSync(path.join(TMP_DIR, `${id}.json`), 'utf8'));
-    expect(diskEntry.contentType).toBe('workflow');
-    expect(diskEntry.schemaVersion).toBe('5');
+    expect(addResult.error).toBeTruthy();
+    expect(fs.existsSync(path.join(TMP_DIR, `${id}.json`))).toBe(false);
   });
 
   it('overwrites contentType when updating an existing entry', async () => {
@@ -166,10 +159,10 @@ describe('contentType preservation on add/import', () => {
       overwrite: true,
     });
 
-    // Overwrite with contentType: "reference"
+    // Overwrite with contentType: "knowledge"
     const updateResult = await dispatch({
       action: 'add',
-      entry: { id, title: 'Overwrite Test', body: 'Updated body for version bump.', priority: 50, audience: 'all', requirement: 'optional', categories: ['test'], contentType: 'reference' },
+      entry: { id, title: 'Overwrite Test', body: 'Updated body for version bump.', priority: 50, audience: 'all', requirement: 'optional', categories: ['test'], contentType: 'knowledge' },
       lax: true,
       overwrite: true,
     }) as Record<string, unknown>;
@@ -178,7 +171,7 @@ describe('contentType preservation on add/import', () => {
 
     const getResult = await dispatch({ action: 'get', id }) as Record<string, unknown>;
     const item = getResult.item as Record<string, unknown>;
-    expect(item.contentType).toBe('reference');
+    expect(item.contentType).toBe('knowledge');
   });
 
   it('defaults contentType to "instruction" when not provided', async () => {

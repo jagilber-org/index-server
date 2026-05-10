@@ -91,4 +91,14 @@ describe('release/publication entrypoint safety', () => {
     expect(releaseScript).toContain('pre-commit run --all-files');
     expect(releaseScript).toContain('Remove-Item Env:\\SKIP');
   });
+
+  it('release workflow skips private tag-push jobs while preserving manual dispatch', () => {
+    const releaseWorkflow = fs.readFileSync(path.join(repoRoot, '.github', 'workflows', 'release.yml'), 'utf8');
+
+    expect(releaseWorkflow).toContain('Private development repository tag push detected');
+    expect(releaseWorkflow).toContain(
+      'if [ "${{ github.event_name }}" = "push" ] && [ "${{ github.repository_owner }}" != "jagilber-org" ]; then',
+    );
+    expect(releaseWorkflow).toContain("if: needs.release-scope.outputs.should_run == 'true'");
+  });
 });

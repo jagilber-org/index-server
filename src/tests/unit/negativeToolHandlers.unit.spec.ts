@@ -88,7 +88,7 @@ describe('negative tool handler coverage', () => {
       type: 'issue',
       severity: 'low',
       title: 'Missing description'
-    })).rejects.toThrow(/Missing required parameters/i);
+    })).rejects.toThrow(/Missing required parameter/i);
 
     expect(fs.existsSync(FEEDBACK_FILE)).toBe(false);
   });

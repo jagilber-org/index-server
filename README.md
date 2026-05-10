@@ -179,7 +179,7 @@ See [MCP Configuration Guide](docs/mcp_configuration.md) for advanced patterns, 
 ### Verify
 
 - Server appears in your MCP client's server list
-- Run `tools/list` to see 40+ available tools
+- Run `tools/list` to see 50+ available tools
 - Run `prompts/list` to discover setup/config/verification prompts
 - Run `resources/list` to discover quickstart and configuration guides
 - Dashboard (if enabled) at `http://localhost:8787`
@@ -256,7 +256,7 @@ See [dashboard.md](docs/dashboard.md) for full details. REST client scripts (`sc
 ## Key Features
 
 - **MCP protocol compliance** — Full JSON-RPC 2.0 over stdio with schema validation
-- **40+ tools** for search, CRUD, governance, analytics, messaging, and feedback
+- **50+ tools** for search, CRUD, governance, analytics, messaging, and feedback
 - **Semantic search** — Optional embedding-based similarity search (HuggingFace models)
 - **Bootstrap security** — Mutations gated until human confirmation on fresh installs
 - **Cross-repo knowledge promotion** — Validate locally, then promote proven patterns to the shared catalog

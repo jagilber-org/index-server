@@ -28,6 +28,10 @@ Use feature branches. Submit PRs to `main`.
 
 Fill out the PR template completely before requesting review.
 
+### Agent PR Preflight
+
+Agents MUST complete the mandatory pre-PR checklist in [`.instructions/local/agent-pr-preflight.md`](.instructions/local/agent-pr-preflight.md) before opening a pull request, handing a branch to a coordinator, or reporting a change as PR-ready. The checklist covers `npm test`, `npm run typecheck`, `npm run lint`, `pre-commit run --all-files`, `git diff --check`, and staged-diff review for unintended changes.
+
 ### Mandatory AI-Generated Code/Test Review
 
 If any code or tests in the PR were generated or materially edited by an AI agent, reviewers MUST confirm all of the following before merge:
@@ -116,6 +120,15 @@ Critical or actively-exploited vulnerabilities may be merged with **zero pre-mer
 5. **Scope limit** — this policy applies **only** to critical and actively-exploited vulnerabilities. Non-critical security issues follow the standard review process.
 
 If the post-merge audit reveals problems, a follow-up fix must be prioritized immediately. Abuse of this policy to bypass review for non-critical changes will be treated as a process violation.
+
+## Shared Instructions
+
+This project maintains shared instruction files in `.instructions/shared/` that define reusable patterns for security hooks, git workflow, observability, agent attestation, and more. Review these when contributing changes to the areas they cover:
+
+- **Security**: `repository-security-hooks.md`, `adopter-hook-patterns.md`, `public-mirror-guard.md`
+- **Workflow**: `git-workflow.md`, `template-adoption-workflow.md`, `mirrored-release-workflow.md`
+- **Analysis**: `language-ecosystem-patterns.md`, `codeql-configuration-patterns.md`, `iac-patterns.md`
+- **Operations**: `observability-logging.md`, `agent-attestation.md`, `index-server-bootstrap.md`
 
 ## Code Style
 

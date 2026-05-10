@@ -79,6 +79,7 @@ export const FLAG_REGISTRY: FlagMeta[] = [
   { name:'INDEX_SERVER_DISABLE_EARLY_STDIN_BUFFER', category:'diagnostics', description:'Disable early stdin buffering (compare fragmentation behavior).', stability:'diagnostic', default:'off', type:'boolean', since:'1.1.1' },
   { name:'INDEX_SERVER_FATAL_EXIT_DELAY_MS', category:'diagnostics', description:'Delay before forced fatal exit (ms).', stability:'diagnostic', default:'15', type:'number', since:'1.1.1' },
   { name:'INDEX_SERVER_IDLE_KEEPALIVE_MS', category:'diagnostics', description:'Keepalive interval for idle transports.', stability:'stable', default:'30000', type:'number', since:'1.0.0' },
+  { name:'INDEX_SERVER_DISABLE_PPID_WATCHDOG', category:'diagnostics', description:'Disable parent-process watchdog. Required for dev sandbox launchers that spawn through a transient shell (e.g. cmd /c start /B node).', stability:'experimental', default:'off', type:'boolean', since:'1.28.14' },
   { name:'INDEX_SERVER_ADD_TIMING', category:'diagnostics', description:'Embed per-tool timing phase marks in response envelope.', stability:'diagnostic', default:'off', type:'boolean', since:'1.1.1' },
   { name:'INDEX_SERVER_TRACE_DISPATCH_DIAG', category:'diagnostics', description:'Extra dispatcher timing/phase logs (use INDEX_SERVER_TRACE=dispatchDiag).', stability:'diagnostic', default:'off', type:'boolean', since:'1.1.1' },
 
@@ -121,7 +122,7 @@ export const FLAG_REGISTRY: FlagMeta[] = [
   { name:'INDEX_SERVER_SQLITE_PATH', category:'storage', description:'SQLite database file path.', stability:'experimental', default:'./data/index.db', type:'string', since:'1.25.0' },
   { name:'INDEX_SERVER_SQLITE_WAL', category:'storage', description:'Enable SQLite WAL journaling.', stability:'experimental', default:'on', type:'boolean', since:'1.25.0' },
   { name:'INDEX_SERVER_SQLITE_MIGRATE_ON_START', category:'storage', description:'Run schema migrations at startup.', stability:'experimental', default:'on', type:'boolean', since:'1.25.0' },
-  { name:'INDEX_SERVER_SQLITE_VEC_ENABLED', category:'storage', description:'Enable sqlite-vec extension for embeddings.', stability:'experimental', default:'off', type:'boolean', since:'1.25.0' },
+  { name:'INDEX_SERVER_SQLITE_VEC_ENABLED', category:'storage', description:'Enable sqlite-vec extension for embeddings. Auto-enabled when INDEX_SERVER_STORAGE_BACKEND=sqlite; set 0 to opt out. Falls back to JSON if native extension fails.', stability:'experimental', default:'on (when backend=sqlite), off otherwise', type:'boolean', since:'1.25.0' },
   { name:'INDEX_SERVER_SQLITE_VEC_PATH', category:'storage', description:'Path to sqlite-vec loadable extension.', stability:'experimental', default:'(unset)', type:'string', since:'1.25.0' },
 
   // Feedback & messaging

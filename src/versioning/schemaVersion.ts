@@ -2,7 +2,7 @@
 // Bump this when making a backward-incompatible on-disk schema change that
 // requires a migration rewrite. Migration logic should detect older versions
 // and transform + persist them once.
-export const SCHEMA_VERSION = '5';
+export const SCHEMA_VERSION = '6';
 
 import { RequirementLevel } from '../models/instruction';
 
@@ -61,15 +61,6 @@ export function migrateInstructionRecord(rec: Record<string, unknown>): Migratio
     notes.push('v3→v4: added optional metadata fields to schema');
   }
 
-  // v4 → v5 migration: public persisted contentType "chat-session" was renamed
-  // to "workflow". Preserve the workflow/runbook semantics instead of falling
-  // through the generic invalid-enum fallback to "instruction".
-  if (prevVersion === '4' && rec.contentType === 'chat-session') {
-    rec.contentType = 'workflow';
-    changed = true;
-    notes.push('v4→v5: migrated legacy contentType "chat-session" to "workflow"');
-  }
-
   // Clean optional nullable fields that upstream tools may emit as null
   // (riskScore must be number or absent — null causes AJV rejection)
   if ('riskScore' in rec && rec.riskScore === null) {
@@ -115,13 +106,9 @@ export function migrateInstructionRecord(rec: Record<string, unknown>): Migratio
     CRITICAL: 'critical', OPTIONAL: 'optional', MANDATORY: 'mandatory',
     DEPRECATED: 'deprecated', REQUIRED: 'mandatory',
   };
-  const legacyContentTypeMap: Record<string, string> = {
-    'chat-session': 'workflow',
-  };
   const enumDefaults: Record<string, { valid: readonly string[]; fallback: string; legacy?: Record<string, string> }> = {
     audience: { valid: ['individual', 'group', 'all'], fallback: 'all', legacy: legacyAudienceMap },
     requirement: { valid: ['mandatory', 'critical', 'recommended', 'optional', 'deprecated'], fallback: 'optional', legacy: legacyRequirementMap },
-    contentType: { valid: ['instruction', 'template', 'workflow', 'reference', 'example', 'agent'], fallback: 'instruction', legacy: legacyContentTypeMap },
     status: { valid: ['draft', 'review', 'approved', 'deprecated'], fallback: 'draft', legacy: legacyStatusMap },
     priorityTier: { valid: ['P1', 'P2', 'P3', 'P4'], fallback: 'P3' },
     classification: { valid: ['public', 'internal', 'restricted'], fallback: 'internal' },

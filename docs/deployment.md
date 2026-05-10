@@ -178,18 +178,18 @@ The first search request downloads a ~90MB embedding model (one-time). Subsequen
 
 #### Vector Embedding Storage (sqlite-vec)
 
-When using the SQLite storage backend, embeddings can optionally be stored in a sqlite-vec `vec0` virtual table for native KNN search instead of the default JSON file:
+When using the SQLite storage backend, embeddings are stored in a sqlite-vec `vec0` virtual table for native KNN search automatically. The `INDEX_SERVER_SQLITE_VEC_ENABLED` flag is **auto-enabled when `backend=sqlite`** — explicit `=1` is optional, and `=0` opts out:
 
 ```bash
 export INDEX_SERVER_STORAGE_BACKEND=sqlite
-export INDEX_SERVER_SQLITE_VEC_ENABLED=1
 export INDEX_SERVER_SEMANTIC_ENABLED=1
+# INDEX_SERVER_SQLITE_VEC_ENABLED defaults to on; set =0 to opt out
 ```
 
 ```powershell
 $env:INDEX_SERVER_STORAGE_BACKEND = 'sqlite'
-$env:INDEX_SERVER_SQLITE_VEC_ENABLED = '1'
 $env:INDEX_SERVER_SEMANTIC_ENABLED = '1'
+# INDEX_SERVER_SQLITE_VEC_ENABLED defaults to on; set '0' to opt out
 ```
 
 **Requirements:**

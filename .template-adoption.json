@@ -1,6 +1,6 @@
 {
   "templateName": "layered-hook-security-template",
-  "templateVersion": "1.25.0",
+  "templateVersion": "1.31.0",
   "hookStandardInstruction": "repository-hook-security-standard",
   "hookStandardVersion": "1.4.0",
   "adoptedAt": "2026-04-26T00:00:00.000Z",
@@ -23,16 +23,61 @@
     "v1.17.0–v1.22.0: Adopted adopter-hook-patterns.md, public-mirror-guard.md, mirrored-release-workflow.md, iac-patterns.md, language-ecosystem-patterns.md, codeql-configuration-patterns.md shared instructions. Migrated manifest to schemaVersion 2.",
     "v1.23.0: Adopted New-CleanRoomCopy.ps1 and Publish-ToMirror.ps1 two-step publish safety workflow. Added .publish-config.json with sanctioned remote enforcement. Replaced Publish-ToPublicRepo.ps1 with deprecated wrapper. Added Compare-TemplateSpec.ps1 and migrate-manifest-schema.ps1.",
     "v1.24.0: Deleted deprecated Publish-ToPublicRepo.ps1. Constitution bumped to v2.7.0 with agentBehavior article (AG-1..AG-4), SH-10 prompt-injection rule, OB-5, TS-4, IP-4, IP-5. Adopted prompt-injection scanning hook (hooks/check-prompt-injection.ps1), hallucination quality gates (hooks/check-hallucinations.ps1), agent attestation framework (.squad/templates/, .instructions/shared/agent-attestation.md, scripts/append-agent-provenance.ps1, hooks/validate-agent-trailers.ps1). Expanded env-leak scanner with identity vars, vault/tool-path keywords, username-in-path detection, and lockfile skips. Added commit-msg stage to .pre-commit-config.yaml.",
-    "v1.25.0: Adopted mandatory ESLint pre-push gate (hooks/eslint-pre-push.ps1) wired through .pre-commit-config.yaml at the pre-push stage with always_run: true, pass_filenames: false. JS/TS-aware: no-op for non-JS adopters; honors only explicit TEMPLATE_SKIP_LINT=1 emergency override (separate from any slow-suite skip flag). Mirrors CI npm run lint locally so passing CI lint with failing local lint can no longer slip through. Severity policy delegated to repo lint script (currently `eslint`). hookStandardVersion (1.4.0) and constitution (v2.9.0) remain ahead of template baseline (1.3.0 / 2.7.0); not regressed. Drift backlog (missing canonical .instructions/shared/* and hooks/* files claimed in v1.17.0..v1.22.0 notes, .pii-file-allowlist, etc.) deferred to a follow-up adoption pass per TG-1 (versioned deltas, no wholesale replace) — tracked in internal issue #217. Reconciliation advisories: two minor robustness improvements applied locally to hooks/eslint-pre-push.ps1 (& $npm dispatch + .mts/.cts flat-config candidates); tracked upstream in template issue #63 with a recorded localDeviation."
+    "v1.25.0: Adopted mandatory ESLint pre-push gate (hooks/eslint-pre-push.ps1) wired through .pre-commit-config.yaml at the pre-push stage with always_run: true, pass_filenames: false. JS/TS-aware: no-op for non-JS adopters; honors only explicit TEMPLATE_SKIP_LINT=1 emergency override (separate from any slow-suite skip flag). Mirrors CI npm run lint locally so passing CI lint with failing local lint can no longer slip through. Severity policy delegated to repo lint script (currently `eslint`). hookStandardVersion (1.4.0) and constitution (v2.9.0) remain ahead of template baseline (1.3.0 / 2.7.0); not regressed. Drift backlog (missing canonical .instructions/shared/* and hooks/* files claimed in v1.17.0..v1.22.0 notes, .pii-file-allowlist, etc.) deferred to a follow-up adoption pass per TG-1 (versioned deltas, no wholesale replace) — tracked in internal issue #217. Reconciliation advisories: two minor robustness improvements applied locally to hooks/eslint-pre-push.ps1 (& $npm dispatch + .mts/.cts flat-config candidates); tracked upstream in template issue #63 with a recorded localDeviation.",
+    "v1.26.0–v1.31.0: Shared instruction alignment pass. Created 6 missing shared instruction files that were deferred from the v1.17.0–v1.22.0 adoption notes: adopter-hook-patterns.md, public-mirror-guard.md, mirrored-release-workflow.md, iac-patterns.md, language-ecosystem-patterns.md, codeql-configuration-patterns.md. Added cross-reference sections to all existing shared instructions (repository-security-hooks, template-adoption-workflow, index-server-bootstrap, git-workflow, observability-logging). Updated layered hook model numbering to include ESLint, prompt-injection, hallucination, and agent-attestation hooks. Added shared instruction reference section to CONTRIBUTING.md. Closes drift backlog from issue #217 for shared instruction surfaces.",
+    "v1.26.0–v1.28.0: Adopted CodeQL local scan artifact exclusion (.codeql/ in .gitignore). Adopted squad agent charter and decision record templates (.squad/templates/). Content-type taxonomy expanded to eight types (instruction, template, workflow, reference, example, agent, chat-session). Messaging system (messaging_* tools) integrated into tool registry.",
+    "v1.29.0–v1.30.0: Adopted SQLite storage backend with sqlite-vec vector embedding support. Docker configuration updated for glibc-vs-musl awareness (BASE_IMAGE build arg). Dev-server scripts reorganized into semantic subdirectory taxonomy (build/, ci/, dev/, diagnostics/, governance/, testing/, perf/, migration/).",
+    "v1.31.0: Repo config alignment pass — README tool count updated from 40+ to 50+ (actual inventory ~60 tools), template-manifest.json bumped with v1.26–v1.31 version notes and new managed file entries (Dockerfile, docker-compose.yml, codecov.yml, .devsandbox/.gitignore). Clobber-detection awareness documented for parallel workstream coordination.",
+    "v1.27.0–v1.31.0: Constitution bumped to v2.10.0 with SH-11 (adversarial test fixtures), enriched DI-4 with structured required/prohibited/evidence fields, updated enforcedBy paths for SH-1..SH-3 and SH-10 to reference hooks/* and specific workflow files. Updated CD-1/CD-2/CD-4/TS-4 enforcedBy to specific workflow names. Added precommitWorkflow and license to references. Template manifest updated to v1.31.0 with 32 new managed files. All repo-specific rules (S-3, S-4, A-1..A-7, OB-6, TS-5..TS-12, G-6, PB-1..PB-6, CQ-1..CQ-7, DI-1..DI-3, thresholds) preserved per TG-1."
   ],
   "localDeviations": [
-    { "surface": ".pre-commit-config.yaml", "deviation": "PII and env-leak scanning remain in scripts/pre-commit.ps1; new hooks (prompt-injection, hallucination, agent-trailers) are registered as standalone entries in hooks/ alongside the consolidated script." },
-    { "surface": "instructions/", "deviation": "instructions/ remains the checked-in runtime instruction catalog; .instructions/ is reserved for repo-local guidance." },
-    { "surface": "scripts/sync-constitution.ps1", "deviation": "The Node entry point sync-constitution.cjs remains the source implementation, with scripts/sync-constitution.ps1 as the template-compatible wrapper." },
-    { "surface": ".github/workflows/precommit.yml", "deviation": "The precommit.yml workflow replays the dedicated security pre-push hooks directly; the existing repo-local slow pre-push suite remains enforced by its own workflow surfaces." },
-    { "surface": ".github/workflows/auto-tag.yml", "deviation": "The template auto-tag workflow is intentionally not adopted because this repository's git tags represent product releases rather than templateVersion milestones." },
-    { "surface": "scripts/test-hook-regressions.ps1", "deviation": "Validates the repo's consolidated scripts/pre-commit.ps1 behavior rather than canonical hooks/* entry points." },
-    { "surface": "scripts/validate-constitution-ci.ps1", "deviation": "Not yet adopted — CI constitution validation is handled by existing pre-commit and build-time checks." },
-    { "surface": "hooks/eslint-pre-push.ps1", "deviation": "Two minor robustness improvements applied locally pending upstream merge: (1) invoke the CommandInfo directly (& $npm) instead of & $npm.Source so PowerShell dispatch handles paths/aliases/functions uniformly; (2) added eslint.config.mts and eslint.config.cts to the flat-config candidate list (ESLint v9 supports both). Tracked upstream in template issue #63 — revert to byte-identical template source when the template repo merges the fix." }
+    {
+      "surface": ".pre-commit-config.yaml",
+      "deviation": "PII and env-leak scanning remain in scripts/hooks/pre-commit.ps1 and are exposed through the template-compatible hooks/check-dotenv-leaks.ps1 wrapper; additional hooks (prompt-injection, hallucination, agent-trailers) remain registered as standalone entries in hooks/."
+    },
+    {
+      "surface": ".env-leak-allowlist",
+      "deviation": "Not adopted as a tracked allowlist file. This repo's stricter dotenv policy treats path-shaped .env values as PII and hook regressions intentionally reject .env-leak-allowlist files."
+    },
+    {
+      "surface": "hooks/check-dotenv-leaks.ps1",
+      "deviation": "Implemented as a thin wrapper around the repo's consolidated scripts/hooks/pre-commit.ps1 scanner so the template-managed hook path exists without duplicating scanner logic."
+    },
+    {
+      "surface": "hooks/codeql-pre-push.ps1",
+      "deviation": "Implemented as a thin wrapper around scripts/hooks/run-codeql-pre-push.ps1 to preserve the repo's categorized script layout while exposing the canonical template hook path."
+    },
+    {
+      "surface": "scripts/setup-hooks.ps1",
+      "deviation": "Implemented as a thin wrapper around scripts/hooks/setup-hooks.ps1 to preserve the repo's categorized script layout while exposing the canonical template setup path."
+    },
+    {
+      "surface": "instructions/",
+      "deviation": "instructions/ remains the checked-in runtime instruction catalog; .instructions/ is reserved for repo-local guidance."
+    },
+    {
+      "surface": "scripts/sync-constitution.ps1",
+      "deviation": "The Node entry point sync-constitution.cjs remains the source implementation, with scripts/sync-constitution.ps1 as the template-compatible wrapper."
+    },
+    {
+      "surface": ".github/workflows/precommit.yml",
+      "deviation": "The precommit.yml workflow replays the dedicated security pre-push hooks directly; the existing repo-local slow pre-push suite remains enforced by its own workflow surfaces."
+    },
+    {
+      "surface": ".github/workflows/auto-tag.yml",
+      "deviation": "The template auto-tag workflow is intentionally not adopted because this repository's git tags represent product releases rather than templateVersion milestones."
+    },
+    {
+      "surface": "scripts/test-hook-regressions.ps1",
+      "deviation": "Validates the repo's consolidated scripts/pre-commit.ps1 behavior rather than canonical hooks/* entry points."
+    },
+    {
+      "surface": "scripts/validate-constitution-ci.ps1",
+      "deviation": "Not yet adopted — CI constitution validation is handled by existing pre-commit and build-time checks."
+    },
+    {
+      "surface": "hooks/eslint-pre-push.ps1",
+      "deviation": "Two minor robustness improvements applied locally pending upstream merge: (1) invoke the CommandInfo directly (& $npm) instead of & $npm.Source so PowerShell dispatch handles paths/aliases/functions uniformly; (2) added eslint.config.mts and eslint.config.cts to the flat-config candidate list (ESLint v9 supports both). Tracked upstream in template issue #63 — revert to byte-identical template source when the template repo merges the fix."
+    }
   ]
 }

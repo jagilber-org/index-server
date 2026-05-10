@@ -383,7 +383,8 @@ export function createEmbeddingsRoutes(embeddingPathOverride?: string, embedding
 
       const start = performance.now();
       const embeddings = await getInstructionEmbeddings(
-        state.list, state.hash, sem.embeddingPath, sem.model, sem.cacheDir, sem.device, sem.localOnly
+        state.list, state.hash, sem.embeddingPath, sem.model, sem.cacheDir, sem.device, sem.localOnly,
+        undefined, embeddingStore
       );
       const elapsed = (performance.now() - start).toFixed(0);
       const count = Object.keys(embeddings).length;

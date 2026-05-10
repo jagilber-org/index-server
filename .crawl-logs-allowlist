@@ -48,7 +48,7 @@ EXPERIMENTAL: SQLite (storage )?backend
 # to verify errors are surfaced consistently.
 \[import\] (entry rejected|rejected|complete with errors)
 \[rpc\] tools/call error
-\[registry\] Tool error: (index_search|index_dispatch)
+\[registry\] Tool error: (index_search|index_dispatch|usage_track)
 \[HttpTransport\] RPC handler error
 \[test\] surface-error
 
@@ -75,3 +75,8 @@ src[\\/]tests[\\/]eventBuffer\.spec\.ts
 # Invariant-repair fixture entries (salvage-* / failover-seed-*) are deliberate test
 # inputs missing usageCount/firstSeenTs to verify the repair WARN dedup latch.
 \[invariant-repair\] (firstSeenTs repair exhausted|usageCount defaulted)
+
+# Heap snapshot messages logged by the memory monitor after GC during long test runs.
+# Count scales with the number of parallel workers and test duration; not operator-actionable.
+# Note: allowlist tests against the raw msg field (no [ERROR] prefix).
+Heap snapshot taken\. Memory after GC:

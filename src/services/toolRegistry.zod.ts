@@ -1,6 +1,12 @@
 import { z } from 'zod';
 import { getToolRegistry, ToolRegistryEntry } from './toolRegistry';
 import { getRuntimeConfig } from '../config/runtimeConfig';
+import {
+  INPUT_KEYS,
+  REQUIRED_INPUT_KEYS,
+  SERVER_MANAGED_KEYS,
+} from '../schemas/instructionSchema';
+import { CONTENT_TYPES } from '../models/instruction';
 
 /**
  * Complete Zod schema registry for all MCP index tools.
@@ -34,7 +40,7 @@ const zDispatch = z.object({
   keywords: z.array(z.string()).optional(),
   ids: z.array(z.string()).optional(),
   category: z.string().optional(),
-  contentType: z.enum(['instruction', 'template', 'workflow', 'reference', 'example', 'agent', 'chat-session']).optional(),
+  contentType: z.enum(CONTENT_TYPES).optional(),
   text: z.string().optional(),
   includeCategories: z.boolean().optional(),
   caseSensitive: z.boolean().optional(),
@@ -78,55 +84,91 @@ function zInstructionBody() {
   return z.string().min(1).max(getRuntimeConfig().index.bodyWarnLength);
 }
 
-function buildZIndexEntry() {
-  return z.object({
+/**
+ * Per-field Zod refinements for the canonical INPUT_KEYS surface.
+ *
+ * The canonical schema (schemas/instruction.schema.json) is the single
+ * source of truth for which fields callers may submit on `index_add` /
+ * `index_import`. The Ajv `validateInput` validator (compiled from that
+ * canonical schema) is the authoritative type/format/length gate and runs
+ * inside the handler.
+ *
+ * This Zod schema sits in front of the handler in the default validation
+ * mode (transport.validateParams). Its job is therefore narrow:
+ *
+ *  1. Accept EVERY canonical input field — never reject a field the
+ *     canonical INPUT_SCHEMA accepts.
+ *  2. Reject truly unknown top-level entry keys (`.strict()`).
+ *  3. Provide light, fast checks (string length on body, enum on
+ *     audience/etc.) so obvious garbage fails before the handler runs.
+ *
+ * Anything missing from this map is still accepted (as `unknown`) — the
+ * canonical Ajv validator will reject malformed payloads with the precise
+ * JSON-Schema error.
+ */
+function buildEntryShape(): z.ZodRawShape {
+  const refinements: Partial<Record<string, z.ZodTypeAny>> = {
     id: z.string().min(1),
-    title: z.string().min(1).optional(),
+    title: z.string().min(1),
     body: zInstructionBody(),
-    rationale: z.string().optional(),
-    priority: z.number().int().min(1).max(100).optional(),
-    audience: z.string().optional(),
-    requirement: z.string().optional(),
-    categories: z.array(z.string()).max(50).optional(),
-    deprecatedBy: z.string().optional(),
-    riskScore: z.number().optional(),
-    version: z.string().optional(),
-    owner: z.string().optional(),
-    status: z.enum(['approved', 'draft', 'review', 'deprecated']).optional(),
-    priorityTier: z.enum(['P1', 'P2', 'P3', 'P4']).optional(),
-    classification: z.enum(['public', 'internal', 'restricted']).optional(),
-    lastReviewedAt: z.string().optional(),
-    nextReviewDue: z.string().optional(),
-    semanticSummary: z.string().optional(),
-    changeLog: z.array(z.object({}).passthrough()).optional(),
-    contentType: z.enum(['instruction', 'template', 'workflow', 'reference', 'example', 'agent', 'chat-session']).optional(),
-    extensions: z.record(z.string(), zExtensionValue).optional()
-  }).strict();
+    rationale: z.string(),
+    priority: z.number().int().min(1).max(100),
+    audience: z.string(),
+    requirement: z.string(),
+    categories: z.array(z.string()).max(50),
+    deprecatedBy: z.string(),
+    riskScore: z.number(),
+    version: z.string(),
+    owner: z.string(),
+    status: z.enum(['approved', 'draft', 'review', 'deprecated']),
+    priorityTier: z.enum(['P1', 'P2', 'P3', 'P4']),
+    classification: z.enum(['public', 'internal', 'restricted']),
+    lastReviewedAt: z.string(),
+    nextReviewDue: z.string(),
+    semanticSummary: z.string(),
+    changeLog: z.array(z.object({}).passthrough()),
+    contentType: z.enum(CONTENT_TYPES),
+    extensions: z.record(z.string(), zExtensionValue),
+  };
+  const shape: z.ZodRawShape = {};
+  for (const key of INPUT_KEYS) {
+    // Server-managed keys must never appear in the input shape.
+    if (SERVER_MANAGED_KEYS.has(key)) continue;
+    const refined = refinements[key] ?? z.unknown();
+    shape[key] = REQUIRED_INPUT_KEYS.has(key) ? refined : refined.optional();
+  }
+  return shape;
+}
+
+function buildZIndexEntry() {
+  return z.object(buildEntryShape()).strict();
 }
 
 function buildZAdd() {
+  // index_add allows the handler to default required fields (e.g. priority,
+  // audience), so the entry contract here mirrors the canonical surface but
+  // does NOT enforce REQUIRED_INPUT_KEYS at the Zod layer. The handler /
+  // canonical Ajv `validateInput` apply the per-tool required[] minimum.
+  const entry = z.object(
+    Object.fromEntries(
+      Object.entries(buildEntryShape()).map(([k, v]) => {
+        const t = v as z.ZodTypeAny;
+        return [k, t.isOptional() ? t : t.optional()];
+      }),
+    ) as z.ZodRawShape,
+  ).strict();
   return z.object({
-    entry: buildZIndexEntry(),
+    entry,
     overwrite: z.boolean().optional(),
     lax: z.boolean().optional()
   }).strict();
 }
 
 function buildZImport() {
+  const entryItem = z.object(buildEntryShape()).strict();
   return z.object({
     entries: z.union([
-      z.array(z.object({
-        id: z.string(),
-        title: z.string(),
-        body: zInstructionBody(),
-        rationale: z.string().optional(),
-        priority: z.number(),
-        audience: z.string(),
-        requirement: z.string(),
-        categories: z.array(z.string()).optional(),
-        extensions: z.record(z.string(), zExtensionValue).optional(),
-        mode: z.string().optional()
-      }).passthrough()).min(1),
+      z.array(entryItem).min(1),
       z.string()
     ]).optional(),
     source: z.string().optional(),
@@ -175,7 +217,7 @@ const zSearch = z.object({
   limit: z.number().int().min(1).max(100).default(50).optional(),
   includeCategories: z.boolean().default(false).optional(),
   caseSensitive: z.boolean().default(false).optional(),
-  contentType: z.enum(['instruction', 'template', 'workflow', 'reference', 'example', 'agent']).optional()
+  contentType: z.enum(CONTENT_TYPES).optional()
 }).strict();
 
 // ── Diagnostics ──────────────────────────────────────────────────────────────
@@ -192,6 +234,22 @@ const zFeedbackSubmit = z.object({
   context: z.object({}).passthrough().optional(),
   metadata: z.object({}).passthrough().optional(),
   tags: z.array(z.string()).max(10).optional()
+}).strict();
+
+const zFeedbackManage = z.object({
+  action: z.enum(['submit', 'list', 'get', 'update', 'delete', 'stats']),
+  id: z.string().min(1).optional(),
+  type: z.enum(['issue', 'status', 'security', 'feature-request', 'bug-report', 'performance', 'usability', 'other']).optional(),
+  severity: z.enum(['low','medium','high','critical']).optional(),
+  status: z.enum(['new', 'acknowledged', 'in-progress', 'resolved', 'closed']).optional(),
+  title: z.string().min(1).max(200).optional(),
+  description: z.string().min(1).max(10000).optional(),
+  context: z.object({}).passthrough().optional(),
+  metadata: z.object({}).passthrough().optional(),
+  tags: z.array(z.string()).max(10).optional(),
+  limit: z.number().int().min(1).max(200).optional(),
+  offset: z.number().int().min(0).optional(),
+  since: z.string().optional()
 }).strict();
 
 // ── Usage ────────────────────────────────────────────────────────────────────
@@ -306,6 +364,7 @@ const zodMap: Record<string, z.ZodTypeAny> = {
 
   // Admin tools
   'feedback_submit': zFeedbackSubmit,
+  'feedback_manage': zFeedbackManage,
   'meta_tools': zEmpty,
   'meta_activation_guide': zEmpty,
   'meta_check_activation': zMetaCheckActivation,

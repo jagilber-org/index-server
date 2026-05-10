@@ -9,6 +9,7 @@ import { SCHEMA_VERSION } from '../../versioning/schemaVersion';
 import { ClassificationService } from '../classificationService';
 import { resolveOwner } from '../ownershipService';
 import { logAudit } from '../auditLog';
+import { logError } from '../logger';
 import { getToolRegistry } from '../toolRegistry';
 import { getRuntimeConfig } from '../../config/runtimeConfig';
 import { hashBody } from '../canonical';
@@ -231,6 +232,12 @@ registerHandler('index_add', guard('index_add', async (p: AddParams) => {
       }
     }
   }
+  // Caller-required minimum for index_add. Other canonical-required fields
+  // (categories, contentType, etc.) are defaulted by normalization further
+  // down (categories → 'uncategorized'; classifier fills contentType /
+  // classification / status). Do not derive this from REQUIRED_INPUT_KEYS —
+  // canonical required[] reflects the on-disk record, not the smallest
+  // payload a caller may submit.
   const requiredFieldErrors = [
     !e.id ? 'id: missing required field' : undefined,
     e.title === undefined ? 'title: missing required field' : undefined,
@@ -501,6 +508,17 @@ registerHandler('index_add', guard('index_add', async (p: AddParams) => {
       return { id: e.id, success: true, skipped: true, created: false, overwritten: false, hash: st0.hash, repaired: repaired ? true : undefined };
     }
     // Catch-all: never expose raw Node error text (ENOENT, null-byte path errors, stack frames) to MCP clients.
+    const writeError = err instanceof Error ? err : new Error(String(err));
+    logError('[add] instruction write failed', {
+      id: e.id,
+      error: writeError.message,
+      stack: writeError.stack,
+    });
+    logAudit('add_write_failed', e.id, {
+      error: writeError.message,
+      errorName: writeError.name,
+      overwrite: Boolean(overwrite),
+    });
     return fail('write_failed', {
       id: e.id,
       message: 'Instruction write failed due to an internal error. The error details are not exposed to clients.',

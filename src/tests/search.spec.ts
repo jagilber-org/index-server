@@ -172,7 +172,7 @@ const mockInstructions: InstructionEntry[] = [
   {
     id: 'test-010',
     title: 'Governance Workflow Security Guide',
-    body: 'Governance workflow security guidance for repositories and maintainers.',
+    body: 'Governance workflow security copilot guidance for repositories and maintainers.',
     priority: 5,
     audience: 'all',
     requirement: 'recommended',
@@ -186,7 +186,7 @@ const mockInstructions: InstructionEntry[] = [
   {
     id: 'test-011',
     title: 'Copilot Security Workflow Playbook',
-    body: 'Copilot workflow security setup for repositories and maintainers.',
+    body: 'Copilot governance workflow security setup for repositories and maintainers.',
     priority: 5,
     audience: 'all',
     requirement: 'recommended',
@@ -564,10 +564,10 @@ describe('Instructions Search Tool', () => {
 
   describe('Auto-Tokenization Fallback', () => {
     it('should auto-tokenize multi-word keyword when initial search returns no results', async () => {
-      // "JavaScript hooks" as a single contiguous substring doesn't appear in any title/body,
-      // but tokenized into ["JavaScript", "hooks"] both match test-003 (body has "hooks", categories have "javascript")
+      // "React hooks" as a single contiguous substring doesn't appear in any title/body,
+      // but tokenized into ["React", "hooks"] both match test-003 (title has "React", body has "hooks")
       const result = await handleInstructionsSearch({
-        keywords: ['JavaScript hooks']
+        keywords: ['React hooks']
       });
 
       expect(result.results.length).toBeGreaterThan(0);

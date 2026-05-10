@@ -63,7 +63,7 @@ describe('governance recursion guard', () => {
     expect(typeof r.leakage.leakageRatio).toBe('number');
     expect(r.leakage.leakageRatio).toBeLessThan(0.01);
     // Assert no bootstrapper/lifecycle ids accidentally present
-    const forbiddenIds = ['000-bootstrapper','001-lifecycle-bootstrap'];
+    const forbiddenIds = ['000-bootstrapper','001-lifecycle-bootstrap','002-content-model'];
     const forbiddenPresent = (r.missing||[]).filter((id:string)=> forbiddenIds.includes(id)).length === 0 && forbiddenIds.every(fid => !(r.extra||[]).includes(fid));
     // Stronger guard: query index listing via dispatcher diff (list indirect) to ensure absence
     send(proc,{ jsonrpc:'2.0', id:4, method:'tools/call', params:{ name:'index_dispatch', arguments:{ action:'list' } } });

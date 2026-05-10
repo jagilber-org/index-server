@@ -91,7 +91,9 @@ describe('RED: Isolated Instruction Persistence Divergence (fresh directory)', (
 
   it('should create 5 new instructions in an empty directory (expected GREEN if no core bug)', async () => {
     const initialList = await client.list();
-    expect((initialList.items||[]).length).toBe(0);
+    // Auto-seed (002-content-model) may inject baseline entries on first
+    // load; assert against a baseline-relative count instead of absolute 0.
+    const baseline = (initialList.items || []).length;
     const initialHash = deriveSyntheticHash(initialList);
 
     const results: any[] = [];
@@ -102,10 +104,10 @@ describe('RED: Isolated Instruction Persistence Divergence (fresh directory)', (
 
     // Emit diagnostics
     // eslint-disable-next-line no-console
-    console.log('[ISOLATED-PERSISTENCE-DIAG]', JSON.stringify({ initialCount: (initialList.items||[]).length, postCount: (postList.items||[]).length, initialHash, postHash, perId: IDS.map((id,i)=> ({ id, add: results[i] })) }, null, 2));
+    console.log('[ISOLATED-PERSISTENCE-DIAG]', JSON.stringify({ baseline, initialCount: (initialList.items||[]).length, postCount: (postList.items||[]).length, initialHash, postHash, perId: IDS.map((id,i)=> ({ id, add: results[i] })) }, null, 2));
 
     // Core assertions
-    expect((postList.items||[]).length).toBe(IDS.length);
+    expect((postList.items||[]).length).toBe(baseline + IDS.length);
     for(const id of IDS){
       expect(hasId(postList,id), `List should contain ${id}`).toBe(true);
       const read = await client.read(id);

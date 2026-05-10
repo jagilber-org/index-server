@@ -722,7 +722,7 @@ The `index_add` pathway now enforces additional server-side governance:
 * Metadata-Only Overwrite Hydration: When `overwrite: true` and the caller intentionally omits `entry.body` (or `title`), the server hydrates the persisted values prior to validation so that minor metadata adjustments (e.g., tags) do not require resending full content. Omit ONLY when you intend no body/title change.
 * Overwritten Flag Accuracy: `overwritten: true` only when an existing persisted instruction was actually replaced (metadata-only hydrations without a semantic version change still set `overwritten: true` because the on-disk record is rewritten after governance normalization).
 * ChangeLog Repair: A malformed or missing ChangeLog entry for the ID is silently synthesized/normalized to keep governance hashes stable.
-* Legacy Content Type Alias: write inputs may still send `contentType: "chat-session"` for compatibility; JSON Schema/Zod request validation accepts it, then the write path normalizes it to canonical `workflow` before persisted schema v5 validation. New clients should send `workflow`.
+* Content Type Taxonomy: write inputs must use one of the schema v6 canonical values: `agent`, `skill`, `instruction`, `prompt`, `workflow`, `knowledge`, `template`, or `integration`.
 
 Developer Tips:
 
@@ -1145,14 +1145,16 @@ All mutation operations now return enhanced error information:
 
 ## Tool Inventory (Authoritative Reference)
 
-> **44 registered tools** — This table is generated from the live tool registry and is the authoritative tool name reference. Use `meta_tools` to get the runtime version of this list.
+> **45 registered tools** — This table is generated from the live tool registry and is the authoritative tool name reference. Use `meta_tools` to get the runtime version of this list.
 >
 > Classification is the registry visibility/gating contract, not a guarantee
 > that a tool has no persistence side effects. `stable` means non-privileged and
 > normally visible for its tier; `mutation` means a privileged write operation
 > controlled by mutation gates. `feedback_submit` is intentionally `stable` and
 > `core` so agents can always report issues, even though it appends to feedback
-> storage and writes an audit entry.
+> storage and writes an audit entry. `feedback_manage` is the single MCP
+> dispatcher for feedback management (`submit`, `list`, `get`, `update`,
+> `delete`, `stats`) and is both `stable` and `mutation`.
 
 | Tool Name | Classification | Tier | Description |
 |-----------|---------------|------|-------------|
@@ -1164,6 +1166,7 @@ All mutation operations now return enhanced error information:
 | `diagnostics_memoryPressure` | stable | admin | Allocate & release transient memory to induce GC / memory pressure. |
 | `diagnostics_microtaskFlood` | stable | admin | Flood the microtask queue with many Promise resolutions to probe event loop starvation. |
 | `feature_status` | stable | admin | Report active index feature flags and counters. |
+| `feedback_manage` | stable, mutation | core | Manage feedback entries through a single action dispatcher. |
 | `feedback_submit` | stable | core | Submit feedback entry (issue, status report, security alert, feature request). |
 | `gates_evaluate` | stable | extended | Evaluate configured gating criteria over current Index. |
 | `graph_export` | stable | extended | Export instruction relationship graph (schema v1 minimal or v2 enriched). |
