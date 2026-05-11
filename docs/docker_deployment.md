@@ -76,7 +76,7 @@ The compose file also supports `INDEX_SERVER_PORT_BIND_HOST` and defaults it to 
 | `INDEX_SERVER_FEEDBACK_DIR` | container feedback directory | Feedback storage |
 | `INDEX_SERVER_SEMANTIC_ENABLED` | `0` | `1` to enable semantic/embedding search (requires ~90MB model download on first use) |
 | `INDEX_SERVER_STORAGE_BACKEND` | `json` | `sqlite` for SQLite storage, `json` (default) for JSON files |
-| `INDEX_SERVER_SQLITE_VEC_ENABLED` | `0` | `1` to enable sqlite-vec vector embedding storage (requires Node.js ≥ 22.13.0). Falls back to JSON if native binary unavailable. |
+| `INDEX_SERVER_SQLITE_VEC_ENABLED` | `on (sqlite backend)` | Auto-enabled when `INDEX_SERVER_STORAGE_BACKEND=sqlite`; set `0` to opt out. Requires Node.js ≥ 22.13.0. Falls back to JSON if native binary unavailable. |
 | `INDEX_SERVER_RATE_LIMIT` | `0` | Dashboard HTTP API and usage-tracking rate limit, in requests per minute. `0` (default) disables rate limiting; positive integer N enforces N req/min (fixed 60s window). Bulk import/export/backup/restore routes are unconditionally exempt. |
 
 ## Volumes

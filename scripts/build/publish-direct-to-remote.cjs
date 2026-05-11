@@ -86,7 +86,7 @@ function loadExcludeList() {
 // Root-level dotfiles/dirs to EXCLUDE from publish (private/dev-only).
 // Everything else (including .eslintrc.json, .dockerignore, .nvmrc, etc.) passes through.
 const PRIVATE_DOTFILES = new Set([
-  '.certs', '.copilot', '.env', '.private', '.specify', '.squad',
+  '.certs', '.copilot', '.devsandbox', '.env', '.private', '.specify', '.squad',
   '.squad-templates', '.vscode', '.publish-exclude',
 ]);
 
@@ -135,7 +135,7 @@ function verifyNoLeakedArtifacts(dir) {
     'snapshots', 'tmp', 'test-results', 'coverage',
     'seed',
     'instructions', 'devinstructions', 'NVIDIA Corporation',
-    '.private', '.env', '.certs', '.squad', '.squad-templates',
+    '.private', '.env', '.certs', '.devsandbox', '.squad', '.squad-templates',
     'templates', 'data', 'node_modules'
   ];
   const found = [];

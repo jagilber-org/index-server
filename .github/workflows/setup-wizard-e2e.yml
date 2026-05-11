@@ -44,7 +44,9 @@ jobs:
   # normalization) on a single target × profile to keep cost minimal.
   windows-smoke:
     runs-on: windows-latest
-    timeout-minutes: 10
+    # Windows runners need ~7m for `npm ci && npm run build && npm test`; 10m grazes the
+    # limit and intermittently times out. Bump to 15m to match deploy-verify headroom.
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v6
 

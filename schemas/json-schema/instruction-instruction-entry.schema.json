@@ -198,12 +198,14 @@
     "ContentType": {
       "type": "string",
       "enum": [
+        "agent",
+        "skill",
         "instruction",
-        "template",
+        "prompt",
         "workflow",
-        "reference",
-        "example",
-        "agent"
+        "knowledge",
+        "template",
+        "integration"
       ]
     }
   }

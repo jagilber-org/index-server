@@ -31,7 +31,9 @@ import {
   createAdminFeedbackRoutes,
 } from './routes/index.js';
 import { ensureLoadedMiddleware } from './middleware/ensureLoadedMiddleware.js';
-import { logError } from '../../services/logger.js';
+import { logError, logWarn } from '../../services/logger.js';
+import { createEmbeddingStore } from '../../services/storage/factory.js';
+import type { IEmbeddingStore } from '../../services/storage/types.js';
 
 export interface ApiRoutesOptions {
   enableCors?: boolean;
@@ -198,7 +200,18 @@ export function createApiRoutes(options: ApiRoutesOptions = {}): Router {
   router.use(createSyntheticRoutes(metricsCollector));
   router.use(createInstancesRoutes());
   router.use(createToolsRoutes());
-  router.use(createEmbeddingsRoutes());
+  let embeddingStore: IEmbeddingStore | undefined;
+  {
+    const storageConfig = getRuntimeConfig().storage;
+    if ((storageConfig?.backend ?? 'json') === 'sqlite' && storageConfig?.sqliteVecEnabled !== false) {
+      try {
+        embeddingStore = createEmbeddingStore('sqlite');
+      } catch (err) {
+        logWarn(`[api] sqlite-vec embedding store unavailable, using JSON fallback: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+  }
+  router.use(createEmbeddingsRoutes(undefined, embeddingStore));
   router.use(createUsageRoutes());
   router.use(createScriptsRoutes());
   router.use(createMessagingRoutes());

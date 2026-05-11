@@ -174,9 +174,13 @@ Implications:
 - Returned flags: `overwritten:true` when existing record modified even if body unchanged.
 - Clients should still supply an explicit higher version for metadata-only semantic changes; omission defers bump logic to body change rules.
 
-### Instruction Schema v5 Content-Type Migration
+### Instruction Schema v6 Content-Type Taxonomy
 
-Instruction schema v5 renames the legacy persisted/API content type `chat-session` to `workflow`. The loader and write compatibility layer accept `chat-session` as a legacy alias and normalize it to `workflow` before schema validation, preserving workflow/runbook semantics for existing records. New clients should send `workflow`; `chat-session` remains compatibility input only and is not emitted in persisted v5 records.
+Instruction schema v6 defines the canonical `contentType` enum as `agent`,
+`skill`, `instruction`, `prompt`, `workflow`, `knowledge`, `template`, and
+`integration`. Runtime input validation, search filters, and tool schemas use
+the same enum. Records with values outside the canonical taxonomy fail
+validation and are handled by the existing rejection/quarantine paths.
 
 ### ChangeLog Repair & Normalization
 

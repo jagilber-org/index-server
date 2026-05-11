@@ -5,7 +5,7 @@
  *   - feedback_list, feedback_get, feedback_update, feedback_stats, feedback_health,
  *     AND feedback_dispatch are ALL REMOVED from the MCP registry entirely
  *     (not in INPUT_SCHEMAS, STABLE, MUTATION, or returned by getToolRegistry at any tier).
- *   - feedback_submit is the sole surviving feedback tool.
+ *   - feedback_submit and feedback_manage are the surviving feedback tools.
  *
  * Currently: all six targeted tools remain in STABLE/MUTATION and appear in the
  * registry. All "absence" tests below will FAIL until Trinity removes them.
@@ -20,8 +20,8 @@ import '../../services/toolHandlers';
 
 /**
  * Tools that must be REMOVED from MCP entirely.
- * feedback_dispatch is now included — it is no longer the "unified endpoint";
- * feedback_submit is the only remaining feedback tool.
+ * feedback_dispatch remains removed; feedback_manage is the only management
+ * dispatcher.
  */
 const REMOVED_TOOLS = [
   'feedback_list',
@@ -91,9 +91,9 @@ describe('RED: feedback_submit-only MCP surface (002 Phase 2b revised)', () => {
     }
   });
 
-  // ── Submit-only surface: feedback_submit MUST remain as sole feedback tool ──
+  // ── Feedback surface: feedback_submit alias + feedback_manage dispatcher ──
 
-  it('feedback_submit is present in MCP registry (sole feedback tool retained)', () => {
+  it('feedback_submit is present in MCP registry (standalone alias retained)', () => {
     const coreRegistry = getToolRegistry({ tier: 'core' });
     const tool = coreRegistry.find(t => t.name === 'feedback_submit');
     expect(tool, 'feedback_submit must remain in the MCP registry').toBeDefined();
@@ -102,9 +102,18 @@ describe('RED: feedback_submit-only MCP surface (002 Phase 2b revised)', () => {
     expect(MUTATION.has('feedback_submit')).toBe(false);
   });
 
-  // ── Combined: ONLY feedback_submit should be a standalone feedback tool ──
+  it('feedback_manage is present in MCP registry as the management dispatcher', () => {
+    const coreRegistry = getToolRegistry({ tier: 'core' });
+    const tool = coreRegistry.find(t => t.name === 'feedback_manage');
+    expect(tool, 'feedback_manage must be exposed as the feedback management dispatcher').toBeDefined();
+    expect(tool?.tier).toBe('core');
+    expect(STABLE.has('feedback_manage')).toBe(true);
+    expect(MUTATION.has('feedback_manage')).toBe(true);
+  });
 
-  it('only feedback_submit is a standalone feedback tool in core registry', () => {
+  // ── Combined: ONLY feedback_submit + feedback_manage should be feedback tools ──
+
+  it('only feedback_submit and feedback_manage are feedback tools in core registry', () => {
     const coreRegistry = getToolRegistry({ tier: 'core' });
     const standaloneFeedback = coreRegistry
       .filter(t => t.name.startsWith('feedback_'))
@@ -113,7 +122,7 @@ describe('RED: feedback_submit-only MCP surface (002 Phase 2b revised)', () => {
 
     expect(
       standaloneFeedback,
-      `Expected only [feedback_submit] but found: [${standaloneFeedback.join(', ')}]`
-    ).toEqual(['feedback_submit']);
+      `Expected only [feedback_manage, feedback_submit] but found: [${standaloneFeedback.join(', ')}]`
+    ).toEqual(['feedback_manage', 'feedback_submit']);
   });
 });

@@ -8,12 +8,12 @@ import { getRuntimeConfig } from '../config/runtimeConfig';
  * Bootstrap / confirmation gating logic.
  * States:
  *  - reference mode (INDEX_SERVER_REFERENCE_MODE=1): index is read-only, all mutation blocked permanently
- *  - new workspace: only bootstrap seed instructions present (000-bootstrapper / 001-lifecycle-bootstrap) → require confirmation
+ *  - new workspace: only bootstrap seed instructions present (000-bootstrapper / 001-lifecycle-bootstrap / 002-content-model / 003-content-types) → require confirmation
  *  - existing workspace: any non-bootstrap instruction present OR confirmation file exists -> mutation allowed (unless explicitly forced read-only)
  *  - confirmed: confirmation file created after successful finalize → persists across restarts
  */
 
-const BOOTSTRAP_IDS = new Set(['000-bootstrapper','001-lifecycle-bootstrap']);
+const BOOTSTRAP_IDS = new Set(['000-bootstrapper','001-lifecycle-bootstrap','002-content-model','003-content-types']);
 const CONFIRM_FILE = 'bootstrap.confirmed.json';
 const PENDING_FILE = 'bootstrap.pending.json';
 

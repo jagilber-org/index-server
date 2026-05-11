@@ -354,15 +354,16 @@ Registry Version: 2026-03-29
     "contentType": {
       "type": "string",
       "enum": [
-        "instruction",
-        "template",
-        "workflow",
-        "reference",
-        "example",
         "agent",
-        "chat-session"
+        "skill",
+        "instruction",
+        "prompt",
+        "workflow",
+        "knowledge",
+        "template",
+        "integration"
       ],
-      "description": "Filter by content type for list, search, or query actions, or specify the entry content type for add action. Legacy \"chat-session\" write inputs are migrated to \"workflow\"."
+      "description": "Filter by content type for list, search, or query actions, or specify the entry content type for add action."
     },
     "text": {
       "type": "string",
@@ -664,12 +665,14 @@ Registry Version: 2026-03-29
     "contentType": {
       "type": "string",
       "enum": [
+        "agent",
+        "skill",
         "instruction",
-        "template",
+        "prompt",
         "workflow",
-        "reference",
-        "example",
-        "agent"
+        "knowledge",
+        "template",
+        "integration"
       ],
       "description": "Filter results by content type (optional)"
     }

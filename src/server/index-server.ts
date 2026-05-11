@@ -167,9 +167,15 @@ if(!process.listeners('uncaughtException').some(l => (l as unknown as { name?:st
   // are orphaned and should exit. The check uses process.kill(pid, 0) which on
   // Windows calls OpenProcess() -- it throws ESRCH if the process doesn't exist.
   // Skip when ppid is 0 or 1 (init / no parent) or when running interactively.
+  //
+  // Opt-out: INDEX_SERVER_DISABLE_PPID_WATCHDOG=1 disables the watchdog entirely.
+  // Required for dev sandbox launchers that intentionally spawn through a
+  // transient shell (e.g. `cmd /c start /B node ...`), where the recorded PPID
+  // is the cmd shell that exits immediately after spawning the node child.
   try {
+    const watchdogDisabled = getBooleanEnv('INDEX_SERVER_DISABLE_PPID_WATCHDOG');
     const ppid = process.ppid;
-    if (ppid && ppid > 1) {
+    if (!watchdogDisabled && ppid && ppid > 1) {
       const PPID_CHECK_INTERVAL_MS = 30_000; // 30 seconds
       const ppidTimer = setInterval(() => {
         try {

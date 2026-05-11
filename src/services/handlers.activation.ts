@@ -110,10 +110,11 @@ registerHandler('meta_activation_guide', (): ActivationGuide => {
       function: 'activate_feedback_and_health_monitoring_tools()',
       description: 'Feedback submission and system health monitoring',
       tools: [
+        'feedback_manage',
         'feedback_submit',
         'health_check'
       ],
-      toolCount: 2
+      toolCount: 3
     }
   };
   if (diagnosticsEnabled) {
@@ -224,6 +225,7 @@ registerHandler('meta_check_activation', (params: { toolName?: string }): Activa
     'bootstrap_request': { category: 'bootstrap', function: 'activate_bootstrap_management_tools' },
     'bootstrap_confirmFinalize': { category: 'bootstrap', function: 'activate_bootstrap_management_tools' },
     'bootstrap_status': { category: 'bootstrap', function: 'activate_bootstrap_management_tools' },
+    'feedback_manage': { category: 'health', function: 'activate_feedback_and_health_monitoring_tools' },
     'feedback_submit': { category: 'health', function: 'activate_feedback_and_health_monitoring_tools' },
     'health_check': { category: 'health', function: 'activate_feedback_and_health_monitoring_tools' }
   };

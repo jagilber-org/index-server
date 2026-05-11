@@ -14,6 +14,13 @@ import { registerHandler } from '../server/registry';
 import * as fs from 'fs';
 import * as path from 'path';
 import { getRuntimeConfig } from '../config/runtimeConfig';
+import {
+  REQUIRED_INPUT_KEYS,
+  INPUT_KEYS,
+  SERVER_MANAGED_KEYS,
+} from '../schemas/instructionSchema';
+import { CONTENT_TYPES } from '../models/instruction';
+import { SCHEMA_VERSION as INSTRUCTION_RECORD_SCHEMA_VERSION } from '../versioning/schemaVersion';
 
 const SCHEMA_VERSION = '1.0.0';
 
@@ -22,7 +29,20 @@ interface InstructionSchemaResponse {
   version: string;
   summary: string;
   schema: unknown;
+  /**
+   * Strictly input-only example: every property here is an INPUT_KEY (no
+   * server-managed fields). Safe to copy/paste as the body of an
+   * `index_add` / `index_import` call.
+   */
   minimalExample: unknown;
+  /**
+   * Full on-disk record example, including server-managed fields
+   * (schemaVersion, sourceHash, createdAt, updatedAt, etc.). Useful when
+   * documenting export shape or restore payloads. Callers MUST NOT submit
+   * server-managed fields on `index_add` / `index_import` — those keys are
+   * rejected by the canonical INPUT_SCHEMA (additionalProperties:false).
+   */
+  recordExample: unknown;
   requiredFields: string[];
   optionalFieldsCommon: string[];
   promotionWorkflow: {
@@ -34,6 +54,8 @@ interface InstructionSchemaResponse {
     field: string;
     rule: string;
     constraint: string;
+    /** 'input' = caller-supplied; 'server-managed' = owned by the server. */
+    fieldClass: 'input' | 'server-managed';
   }[];
   nextSteps: string[];
 }
@@ -47,7 +69,14 @@ function loadInstructionSchema(): unknown {
 }
 
 /**
- * Build a minimal valid instruction entry template
+ * Build a minimal valid instruction entry template.
+ *
+ * INPUT-ONLY: every property below must be a member of INPUT_KEYS (the
+ * canonical input surface). Server-managed fields like `schemaVersion`,
+ * `sourceHash`, `createdAt`, `updatedAt` are NEVER part of this example
+ * because the canonical INPUT_SCHEMA rejects them
+ * (additionalProperties:false). For the full on-disk record shape see
+ * `buildRecordExample()`.
  */
 function buildMinimalExample(): unknown {
   return {
@@ -59,8 +88,46 @@ function buildMinimalExample(): unknown {
     requirement: "recommended",
     categories: ["example", "documentation"],
     primaryCategory: "example",
+    contentType: "instruction"
+  };
+}
+
+/**
+ * Build a record-shape example showing the FULL on-disk shape, including
+ * server-managed fields. Documentation-only — do NOT submit this payload
+ * to `index_add` / `index_import`; the canonical INPUT_SCHEMA strips
+ * server-managed keys.
+ */
+function buildRecordExample(): unknown {
+  const now = new Date().toISOString();
+  return {
+    // ── caller-supplied (INPUT_KEYS) ────────────────────────────────
+    id: "example-instruction-id",
+    title: "Example Instruction Title",
+    body: "Full record example with all governance metadata.",
+    priority: 50,
+    audience: "all",
+    requirement: "recommended",
+    categories: ["example", "documentation"],
+    primaryCategory: "example",
     contentType: "instruction",
-    schemaVersion: "5"
+    semanticSummary: "Example instruction demonstrating full record shape.",
+    version: "1.0.0",
+    status: "approved",
+    owner: "platform-team",
+    priorityTier: "P2",
+    classification: "internal",
+    reviewIntervalDays: 90,
+    lastReviewedAt: now,
+    nextReviewDue: now,
+    // ── server-managed (SERVER_MANAGED_KEYS) ────────────────────────
+    schemaVersion: INSTRUCTION_RECORD_SCHEMA_VERSION,
+    sourceHash: "a".repeat(64),
+    createdAt: now,
+    updatedAt: now,
+    usageCount: 0,
+    firstSeenTs: now,
+    lastUsedAt: now
   };
 }
 
@@ -79,7 +146,7 @@ function _buildComprehensiveExample(): unknown {
     categories: ["example", "documentation", "governance"],
     primaryCategory: "governance",
     contentType: "instruction",
-    schemaVersion: "5",
+    schemaVersion: INSTRUCTION_RECORD_SCHEMA_VERSION,
     version: "1.0.0",
     status: "approved",
     owner: "platform-team",
@@ -148,11 +215,20 @@ function definePromotionWorkflow() {
 }
 
 /**
- * Define key validation rules
+ * Define key validation rules.
+ *
+ * Each rule is annotated with `fieldClass` derived from the canonical
+ * SERVER_MANAGED_KEYS set. Callers can filter to `fieldClass === 'input'`
+ * to see only properties they may submit on `index_add` / `index_import`.
  */
-function defineValidationRules() {
+function defineValidationRules(): {
+  field: string;
+  rule: string;
+  constraint: string;
+  fieldClass: 'input' | 'server-managed';
+}[] {
   const bodyWarnLength = getRuntimeConfig().index.bodyWarnLength.toLocaleString('en-US');
-  return [
+  const raw: { field: string; rule: string; constraint: string }[] = [
     { field: 'id', rule: 'Pattern', constraint: '^[a-z0-9](?:[a-z0-9-_]{0,118}[a-z0-9])?$ (120 chars max, lowercase, no leading/trailing hyphen/underscore)' },
     { field: 'id', rule: 'Uniqueness', constraint: 'Must be unique across the index' },
     { field: 'title', rule: 'Length', constraint: '1-200 characters, non-empty' },
@@ -162,8 +238,8 @@ function defineValidationRules() {
     { field: 'requirement', rule: 'Enum', constraint: 'One of: mandatory, critical, recommended, optional, deprecated' },
     { field: 'categories', rule: 'Array', constraint: '0-25 items, each 1-49 chars, lowercase, pattern: ^[a-z0-9][a-z0-9-_]{0,48}$' },
     { field: 'primaryCategory', rule: 'Reference', constraint: 'Must be a member of categories array if present' },
-    { field: 'contentType', rule: 'Enum', constraint: 'One of: instruction (default), template, workflow, reference, example, agent' },
-    { field: 'schemaVersion', rule: 'Enum', constraint: 'Currently "5"' },
+    { field: 'contentType', rule: 'Enum', constraint: `One of: ${CONTENT_TYPES.join(', ')}` },
+    { field: 'schemaVersion', rule: 'Enum', constraint: `Currently "${INSTRUCTION_RECORD_SCHEMA_VERSION}"` },
     { field: 'sourceHash', rule: 'Pattern', constraint: 'SHA256 hex string (64 chars) when present' },
     { field: 'version', rule: 'Pattern', constraint: 'Semantic version: ^\\d+\\.\\d+\\.\\d+$ (e.g., "1.0.0")' },
     { field: 'status', rule: 'Enum', constraint: 'One of: draft, review, approved, deprecated' },
@@ -171,10 +247,23 @@ function defineValidationRules() {
     { field: 'classification', rule: 'Enum', constraint: 'One of: public, internal, restricted' },
     { field: 'reviewIntervalDays', rule: 'Range', constraint: '1-365 days' }
   ];
+  return raw.map((r) => ({
+    ...r,
+    fieldClass: SERVER_MANAGED_KEYS.has(r.field) ? 'server-managed' : 'input',
+  }));
 }
 
 registerHandler('index_schema', () => {
   const schema = loadInstructionSchema();
+
+  // Derive field lists from the canonical source of truth so this self-doc
+  // tool cannot drift from the validation surface. The "common optional"
+  // surface is every input-accepted property that isn't required and isn't
+  // server-managed.
+  const requiredFields = [...REQUIRED_INPUT_KEYS];
+  const optionalFieldsCommon = [...INPUT_KEYS]
+    .filter((k) => !REQUIRED_INPUT_KEYS.has(k) && !SERVER_MANAGED_KEYS.has(k))
+    .sort();
 
   const response: InstructionSchemaResponse = {
     generatedAt: new Date().toISOString(),
@@ -182,30 +271,9 @@ registerHandler('index_schema', () => {
     summary: 'Instruction schema template with validation rules, examples, and promotion workflow guidance.',
     schema,
     minimalExample: buildMinimalExample(),
-    requiredFields: [
-      'id',
-      'title',
-      'body',
-      'priority',
-      'audience',
-      'requirement',
-      'categories'
-    ],
-    optionalFieldsCommon: [
-      'rationale',
-      'primaryCategory',
-      'contentType',
-      'schemaVersion',
-      'version',
-      'status',
-      'owner',
-      'priorityTier',
-      'classification',
-      'semanticSummary',
-      'reviewIntervalDays',
-      'lastReviewedAt',
-      'nextReviewDue'
-    ],
+    recordExample: buildRecordExample(),
+    requiredFields,
+    optionalFieldsCommon,
     promotionWorkflow: definePromotionWorkflow(),
     validationRules: defineValidationRules(),
     nextSteps: [

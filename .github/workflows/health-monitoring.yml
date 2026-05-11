@@ -6,7 +6,10 @@ permissions:
 
 on:
   schedule:
-    - cron: '0 */12 * * *' # Every 12 hours (reduced from 6)
+    # Reduced from every 12 h to weekly (Monday 08:00 UTC) to conserve
+    # Actions minutes on the private jagilber-dev repo.
+    # See fix/ci-dedup-security-scans PR for cost analysis.
+    - cron: '0 8 * * 1'
   workflow_dispatch: {}
 
 jobs:

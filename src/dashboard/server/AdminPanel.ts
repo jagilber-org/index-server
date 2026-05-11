@@ -20,7 +20,7 @@ import { AdminPanelState } from './AdminPanelState';
 import type { AdminSession, AdminSessionHistoryEntry } from './AdminPanelState';
 import { createZipBackupWithManifest, extractZipBackup, readZipManifest, listZipInstructionFiles, isZipBackup } from '../../services/backupZip';
 import { logAudit } from '../../services/auditLog';
-import { logInfo, logError, log } from '../../services/logger';
+import { logInfo, logError, logWarn, log } from '../../services/logger';
 
 // Stackless WARN: the log-hygiene gate (scripts/crawl-logs.mjs --strict)
 // treats WARN-with-stack as a budget violation (max-stack-warn=5). logWarn()
@@ -358,13 +358,45 @@ export class AdminPanel {
       // Therefore: re-ingest into SQLite when applicable, then invalidate the
       // in-memory cache so the next read reflects the restored set.
       const backend = getRuntimeConfig().storage?.backend ?? 'json';
-      let sqliteIngest: { migrated: number; errors: number } | undefined;
+      let sqliteIngest: { migrated: number; errors: number; cleanedJson?: number } | undefined;
       if (backend === 'sqlite') {
         try {
           const dbPath = getRuntimeConfig().storage?.sqlitePath
             ?? path.join(process.cwd(), 'data', 'index.db');
           const mr = migrateJsonToSqlite(instructionsDir, dbPath);
           sqliteIngest = { migrated: mr.migrated, errors: mr.errors.length };
+          // RCA 2026-05-08: in sqlite mode the .db is the source of truth, so
+          // the per-instruction JSON files extracted from the zip are dead
+          // weight after a clean ingest. Leaving them on disk caused the
+          // ensureLoaded() auto-migration latch to detect jsonFiles >
+          // result.entries forever and bloated `instructions/` to 700+ files.
+          // Only clean up when ingest had zero errors — preserve files for
+          // operator triage when something failed.
+          if (mr.errors.length === 0) {
+            let cleaned = 0;
+            try {
+              for (const f of fs.readdirSync(instructionsDir)) {
+                // Keep loader-generated metadata (_manifest.json, _skipped.json)
+                // and anything not a .json file.
+                if (!f.toLowerCase().endsWith('.json')) continue;
+                if (f.startsWith('_')) continue;
+                try { fs.unlinkSync(path.join(instructionsDir, f)); cleaned++; }
+                catch (unlinkErr) {
+                  logWarn('[admin] post-restore sqlite cleanup unlink failed', {
+                    backupId: safeId, file: f,
+                    error: unlinkErr instanceof Error ? unlinkErr.message : String(unlinkErr),
+                  });
+                }
+              }
+              sqliteIngest.cleanedJson = cleaned;
+              logInfo('[admin] post-restore sqlite cleanup', { backupId: safeId, cleanedJson: cleaned });
+            } catch (cleanupErr) {
+              logWarn('[admin] post-restore sqlite cleanup scan failed', {
+                backupId: safeId,
+                error: cleanupErr instanceof Error ? cleanupErr.message : String(cleanupErr),
+              });
+            }
+          }
           logInfo('[admin] post-restore sqlite re-ingest', { backupId: safeId, ...sqliteIngest });
         } catch (err) {
           logError('[admin] post-restore sqlite re-ingest failed', {

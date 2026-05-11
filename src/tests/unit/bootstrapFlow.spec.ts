@@ -10,13 +10,14 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import path from 'path';
 import fs from 'fs';
-import os from 'os';
 
 // We need a temp directory for each test to isolate file system state
 let tempDir: string;
 
 beforeEach(() => {
-  tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bootstrap-flow-'));
+  const base = path.join(process.cwd(), 'tmp', 'test-runs');
+  fs.mkdirSync(base, { recursive: true });
+  tempDir = fs.mkdtempSync(path.join(base, 'bootstrap-flow-'));
   vi.resetModules();
 });
 
@@ -151,6 +152,8 @@ describe('bootstrap flow — gating state transitions', () => {
       IndexList: [
         { id: '000-bootstrapper' },
         { id: '001-lifecycle-bootstrap' },
+        { id: '002-content-model' },
+        { id: '003-content-types' },
       ],
     });
     expect(mod.shouldRequireConfirmation()).toBe(true);
@@ -173,6 +176,8 @@ describe('bootstrap flow — gating state transitions', () => {
       IndexList: [
         { id: '000-bootstrapper' },
         { id: '001-lifecycle-bootstrap' },
+        { id: '002-content-model' },
+        { id: '003-content-types' },
       ],
     });
     expect(mod.shouldRequireConfirmation()).toBe(true);

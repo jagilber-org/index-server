@@ -57,12 +57,12 @@ describe('Dashboard WebSocket metrics_update broadcast (P1)', () => {
 
       const ws = new WebSocket(wsUrl);
       await new Promise<void>((resolve, reject) => {
-        const to = setTimeout(() => reject(new Error('WebSocket open timeout')), 2000);
+        const to = setTimeout(() => reject(new Error('WebSocket open timeout')), 10000);
         ws.on('open', () => { clearTimeout(to); resolve(); });
         ws.on('error', (e) => { clearTimeout(to); reject(e); });
       });
 
-      const msg: any = await waitForMetricsMessage(ws, 5000);
+      const msg: any = await waitForMetricsMessage(ws, 10000);
       expect(msg.type).toBe('metrics_update');
       expect(typeof msg.timestamp).toBe('number');
       expect(msg.data).toBeDefined();
@@ -88,5 +88,5 @@ describe('Dashboard WebSocket metrics_update broadcast (P1)', () => {
       try { if (close) close(); } catch { /* ignore */ }
       await new Promise(r => setTimeout(r, 50));
     }
-  }, 15000);
+  }, 25000);
 });

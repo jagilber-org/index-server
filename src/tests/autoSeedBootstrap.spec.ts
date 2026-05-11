@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import fs from 'fs';
-import os from 'os';
 import path from 'path';
 import Ajv from 'ajv';
 import addFormats from 'ajv-formats';
@@ -10,7 +9,9 @@ import { reloadRuntimeConfig } from '../config/runtimeConfig';
 import schema from '../../schemas/instruction.schema.json';
 
 function makeTempDir(): string {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-auto-seed-'));
+  const base = path.join(process.cwd(), 'tmp', 'test-runs');
+  fs.mkdirSync(base, { recursive: true });
+  const dir = fs.mkdtempSync(path.join(base, 'mcp-auto-seed-'));
   return dir;
 }
 

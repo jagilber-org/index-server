@@ -15,6 +15,13 @@ describe('validationService zod metrics integration', () => {
     expect(metrics.zodSuccess).toBeGreaterThanOrEqual(1);
   });
 
+  it('counts zod success for feedback_manage (has zod)', () => {
+    const res = validateParams('feedback_manage', { action: 'stats' });
+    expect(res.ok).toBe(true);
+    const metrics = getValidationMetrics();
+    expect(metrics.zodSuccess).toBeGreaterThanOrEqual(1);
+  });
+
   it('produces mapped errors (zod path) on invalid enum', () => {
     const res = validateParams('feedback_submit', { type: 'not-real', severity: 'low', title: 't', description: 'd' });
     expect(res.ok).toBe(false);
@@ -36,19 +43,19 @@ describe('validationService zod metrics integration', () => {
     expect(metrics.zodSuccess).toBeGreaterThanOrEqual(1);
   });
 
-  it('accepts legacy chat-session contentType on index_add through zod compatibility schema', () => {
+  it('rejects removed chat-session contentType on index_add through zod schema', () => {
     const res = validateParams('index_add', {
       entry: {
         id: 'legacy-chat-session-zod',
         title: 'Legacy chat session',
-        body: 'Legacy write compatibility should reach the handler for normalization.',
+        body: 'Legacy content type should be rejected.',
         contentType: 'chat-session',
       },
       lax: true,
       overwrite: true,
     });
-    expect(res.ok).toBe(true);
+    expect(res.ok).toBe(false);
     const metrics = getValidationMetrics();
-    expect(metrics.zodSuccess).toBeGreaterThanOrEqual(1);
+    expect(metrics.zodFailure).toBeGreaterThanOrEqual(1);
   });
 });
