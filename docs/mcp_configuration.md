@@ -337,7 +337,7 @@ Use this profile when production must remain explicitly read-only. Governed prod
 | `INDEX_SERVER_MEMOIZE` | Boolean | `false` | Enable memoized Index caching | Production optimization |
 | `INDEX_SERVER_BODY_WARN_LENGTH` | Number | `50000` | Warn/truncate threshold for instruction body length | Content limits |
 | `INDEX_SERVER_SEMANTIC_ENABLED` | Boolean | `false` | Enable semantic search with embeddings | Feature toggle |
-| `INDEX_SERVER_SQLITE_VEC_ENABLED` | Boolean | `false` | Enable sqlite-vec vector embedding storage (requires SQLite backend, Node.js ≥ 22.13.0) | Feature toggle |
+| `INDEX_SERVER_SQLITE_VEC_ENABLED` | Boolean | `true` when `backend=sqlite`, `false` otherwise | Enable sqlite-vec vector embedding storage (requires SQLite backend, Node.js ≥ 22.13.0). Auto-enabled for sqlite backend; set `0` to opt out. Falls back to JSON if native extension fails. | Feature toggle |
 | `INDEX_SERVER_SQLITE_VEC_PATH` | String | `""` | Custom path to sqlite-vec native binary (auto-detected if empty) | Deployment |
 | `GOV_HASH_TRAILING_NEWLINE` | Boolean | `false` | Hash compatibility mode | Legacy Compatibility |
 

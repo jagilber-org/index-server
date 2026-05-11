@@ -4,6 +4,8 @@ import crypto from 'crypto';
 import { getInstructionsDir } from './indexContext';
 import { logInfo } from './logger';
 import { getRuntimeConfig } from '../config/runtimeConfig';
+import { buildContentModelSeed } from './seedBootstrap.contentModel';
+import { buildContentTypesSeed } from './seedBootstrap.contentTypes';
 
 /**
  * Automatic bootstrap seeding (Option B: create only if missing).
@@ -183,7 +185,7 @@ For full configuration options: see \`docs/mcp_configuration.md\` and \`docs/con
       categories: ['bootstrap','mcp-activation','quick-start','documentation'],
       owner: 'system',
       version: '3.0.0',
-      schemaVersion: '5',
+      schemaVersion: '6',
       semanticSummary: 'Index Server quick start: search-first workflow, knowledge contribution, copilot instructions setup, and MCP client configuration for AI agents'
     }
   },
@@ -202,11 +204,18 @@ For full configuration options: see \`docs/mcp_configuration.md\` and \`docs/con
       categories: ['bootstrap','lifecycle'],
       owner: 'system',
       version: '1.0.0',
-      schemaVersion: '5',
+      schemaVersion: '6',
       semanticSummary: 'Lifecycle and promotion guardrails after bootstrap confirmation',
       reviewIntervalDays: 120
     }
-  }
+  },
+  // 002-content-model is generated from schemas/instruction.schema.json at
+  // module load. Single source of truth: any change to the schema's required
+  // fields, contentType enum, or referenced field descriptions automatically
+  // flows into the seed body. Drift is enforced by
+  // src/tests/contentModelSeed.spec.ts.
+  buildContentModelSeed(),
+  buildContentTypesSeed()
 ];
 
 function computeCanonicalHash(): string {
@@ -233,6 +242,12 @@ export function autoSeedBootstrap(): SeedSummary {
   for(const seed of CANONICAL_SEEDS){
     const target = path.join(dir, seed.file);
     const exists = fs.existsSync(target);
+    // Canonical body hash (matches the sourceHash baked at write time).
+    // Used both to bake into freshly written seeds and to detect drift
+    // against existing on-disk seeds whose generated body has changed
+    // (e.g. 002-content-model after an instruction.schema.json edit).
+    const canonicalBody = typeof seed.json.body === 'string' ? seed.json.body : '';
+    const canonicalSourceHash = crypto.createHash('sha256').update(canonicalBody, 'utf8').digest('hex');
     if(exists){
       // Detect schema-invalid stale seeds from earlier versions and rewrite
       // them. Pre-v1.28.10 wrote `requirement: 'required'` and
@@ -241,6 +256,13 @@ export function autoSeedBootstrap(): SeedSummary {
       // persist forever because we previously never overwrote existing files.
       // We deliberately scope the upgrade to enum violations (not arbitrary
       // user edits) so hand-curated valid seeds are preserved. RCA 2026-05-07.
+      //
+      // Additionally: detect canonical-body drift (sourceHash mismatch)
+      // for canonical seeds. The 002-content-model seed is generated from
+      // instruction.schema.json on every server start; without this check
+      // an existing on-disk seed would silently go stale after a schema
+      // edit, violating the documented single-source-of-truth contract.
+      // RCA 2026-05-08 (PR #324 quality review).
       let stale = false;
       let staleReason = '';
       try {
@@ -251,6 +273,20 @@ export function autoSeedBootstrap(): SeedSummary {
           stale = true; staleReason = `invalid requirement="${existing.requirement}"`;
         } else if(typeof existing.priorityTier === 'string' && !validPriorityTier.includes(existing.priorityTier)){
           stale = true; staleReason = `invalid priorityTier="${existing.priorityTier}"`;
+        } else if(typeof existing.sourceHash === 'string' && existing.sourceHash !== canonicalSourceHash){
+          // sourceHash on disk no longer matches the in-code canonical body.
+          // Refresh so canonical seeds track the current source-of-truth.
+          stale = true;
+          staleReason = `canonical body drift: on-disk sourceHash=${existing.sourceHash.slice(0,12)}… expected=${canonicalSourceHash.slice(0,12)}…`;
+        } else if(typeof existing.sourceHash !== 'string'){
+          // Pre-sourceHash legacy install: an older Index Server version
+          // wrote canonical seeds without baking sourceHash. Without this
+          // branch a stale legacy body would skip refresh forever, since
+          // the hash-mismatch check above never trips. Treat absence as
+          // drift so legacy installs converge on the current canonical
+          // body. RCA 2026-05-08 (PR #324 reliability advisory).
+          stale = true;
+          staleReason = 'missing sourceHash (legacy pre-sourceHash install)';
         }
       } catch (e) {
         stale = true; staleReason = `unparseable_json: ${(e instanceof Error)? e.message : String(e)}`;
@@ -273,8 +309,7 @@ export function autoSeedBootstrap(): SeedSummary {
       // Bake-in sourceHash so integrity_verify reports zero drift on a fresh install.
       // Schema requires sha256(body) for the body field; without this seeds appear
       // as drift forever (expected hash empty, actual populated).
-      const bodyStr = typeof seed.json.body === 'string' ? seed.json.body : '';
-      const sourceHash = crypto.createHash('sha256').update(bodyStr, 'utf8').digest('hex');
+      const sourceHash = canonicalSourceHash;
       const stamped = { createdAt: nowIso, updatedAt: nowIso, firstSeenTs: nowIso, sourceHash, ...seed.json };
       fs.writeFileSync(tmp, JSON.stringify(stamped, null, 2), { encoding: 'utf8' });
       fs.renameSync(tmp, target);

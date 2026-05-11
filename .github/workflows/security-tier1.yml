@@ -1,9 +1,18 @@
 name: "Security — Tier 1 (PR)"
 
-# Tier 1: Fast security checks on every PR and push to main
+# Tier 1: Unique security checks on every PR and push to main.
 # Target: < 3 minutes. No external tools, no containers.
-# Checks: npm audit, PII scan, secret detection, dependency review,
-#          security header regression tests.
+#
+# DEDUPLICATION NOTE (see gh-issue linked in fix/ci-dedup-security-scans PR):
+# - PII/secret scan (scan:security) removed — identical to precommit.yml step
+# - TypeScript strict check removed — identical to precommit.yml step
+# - Secret scanning (ggshield, gitleaks, semgrep, codeql) removed as standalone
+#   workflows — all run locally via pre-commit/pre-push hooks, and precommit.yml
+#   re-runs them via `pre-commit run --from-ref BASE --to-ref HEAD`
+#
+# Unique checks kept here:
+# - npm audit (prod dependency vulnerability check — no local equivalent)
+# - Security header regression tests (runtime server response validation)
 
 on:
   push:
@@ -32,6 +41,7 @@ jobs:
         run: npm ci
 
       # --- npm audit (fail on high/critical) ---
+      # No local equivalent — catches newly published CVEs in prod deps.
       - name: npm audit (high/critical)
         run: |
           npm audit --audit-level=high --omit=dev 2>&1 || {
@@ -40,20 +50,13 @@ jobs:
             # Production dependencies with high/critical will fail above
           }
 
-      # --- PII & Secret scan ---
-      - name: Security scan (PII + secrets)
-        run: npm run scan:security
-
       # --- Build (needed for header tests) ---
       - name: Build
         run: npm run build
 
       # --- Security header regression tests ---
+      # Unique: validates live server HTTP response headers — not run locally.
       - name: Security header regression tests
         run: npx vitest run src/tests/securityHeaders.spec.ts --reporter=verbose
         env:
           SKIP_PRETEST_BUILD: '1'
-
-      # --- TypeScript strict mode ---
-      - name: TypeScript strict check
-        run: npm run typecheck

@@ -10,7 +10,7 @@
  *
  * Does NOT run tests, typecheck, or lint (those belong in CI).
  */
-import { execFileSync, execSync } from 'node:child_process';
+import { execSync, spawnSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -389,11 +389,15 @@ if (process.env.SKIP_PRE_COMMIT_FRAMEWORK !== '1') {
       info(`Running fast framework hooks on ${stagedFiles.length} staged file(s)...`);
       let hadFailure = false;
       for (const hookId of FAST_LOCAL_HOOKS) {
-        try {
-          execFileSync(preCommitCommand, ['run', hookId, '--files', ...stagedFiles], { stdio: 'inherit' });
-        } catch (err) {
+        const result = spawnSync(preCommitCommand, ['run', hookId, '--files', ...stagedFiles], {
+          stdio: ['inherit', 'pipe', 'pipe'],
+          env: process.env,
+        });
+        if (result.stdout?.length) process.stdout.write(result.stdout);
+        if (result.stderr?.length) process.stderr.write(result.stderr);
+        if (result.error || result.status !== 0) {
           hadFailure = true;
-          console.error(`[FAIL] pre-commit framework hook "${hookId}" failed with status ${err?.status ?? 'unknown'}`);
+          console.error(`[FAIL] pre-commit framework hook "${hookId}" failed with status ${result.status ?? result.error?.code ?? 'unknown'}`);
           // Continue running other hooks so the developer sees ALL fixes at once.
         }
       }

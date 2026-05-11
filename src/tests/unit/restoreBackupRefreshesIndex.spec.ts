@@ -199,4 +199,51 @@ describe('AdminPanel.restoreBackup refreshes the live index', () => {
       expect(ids, `restored id ${id} missing from live index`).toContain(id);
     }
   });
+
+  it('SQLite backend: cleans up extracted per-instruction JSON files after successful ingest', () => {
+    // RCA 2026-05-08: dashboard restore in sqlite mode left ~700 .json files
+    // permanently in instructions/ after a successful ingest. They are dead
+    // weight (sqlite is the source of truth) and tripped ensureLoaded()'s
+    // auto-migration latch on every reload tick. The post-ingest cleanup
+    // step deletes per-instruction JSON files but preserves loader-generated
+    // metadata (`_manifest.json`, `_skipped.json`).
+    env = makeTempEnv('sqlite-cleanup');
+    applyEnv(env, 'sqlite');
+
+    // Build a 3-entry backup zip and restore it.
+    const { backupId } = buildBackupZip(env, ['c1', 'c2', 'c3']);
+    const panel = new AdminPanel();
+    const result = panel.restoreBackup(backupId);
+    expect(result.success).toBe(true);
+    expect(result.restored).toBe(3);
+
+    // Per-instruction JSON files MUST be cleaned up; loader metadata may remain.
+    const remaining = fs.readdirSync(env.instructionsDir)
+      .filter(f => f.toLowerCase().endsWith('.json') && !f.startsWith('_'));
+    expect(remaining, `expected zero per-instruction JSON files, found: ${remaining.join(', ')}`).toEqual([]);
+
+    // Sanity: the live index still surfaces the restored entries from sqlite.
+    const after = getIndexState();
+    const ids = Array.from(after.byId.keys());
+    for (const id of ['c1', 'c2', 'c3']) {
+      expect(ids, `restored id ${id} missing from live index`).toContain(id);
+    }
+  });
+
+  it('JSON backend: extracted per-instruction JSON files are preserved (no sqlite cleanup)', () => {
+    // Inverse guard: the cleanup is sqlite-specific. JSON backend depends on
+    // those files for the live index — they must NOT be deleted.
+    env = makeTempEnv('json-no-cleanup');
+    applyEnv(env, 'json');
+
+    const { backupId } = buildBackupZip(env, ['j1', 'j2']);
+    const panel = new AdminPanel();
+    const result = panel.restoreBackup(backupId);
+    expect(result.success).toBe(true);
+    expect(result.restored).toBe(2);
+
+    const remaining = fs.readdirSync(env.instructionsDir)
+      .filter(f => f.toLowerCase().endsWith('.json') && !f.startsWith('_'));
+    expect(remaining.sort()).toEqual(['j1.json', 'j2.json']);
+  });
 });

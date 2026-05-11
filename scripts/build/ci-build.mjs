@@ -10,7 +10,7 @@ import path from 'path';
 
 const isCI = process.env.CI === 'true' || process.env.GITHUB_ACTIONS === 'true';
 const verbose = process.env.BUILD_VERBOSE === '1' || process.argv.includes('--verbose');
-const NPX_BIN = process.platform === 'win32' ? 'npx.cmd' : 'npx';
+const NODE_BIN = process.execPath;
 
 function log(message, level = 'info') {
   const timestamp = new Date().toISOString();
@@ -18,18 +18,18 @@ function log(message, level = 'info') {
   console.log(`${prefix}[${timestamp}] ${message}`);
 }
 
-function execNpx(args, options = {}) {
-  if (verbose) log(`Executing: ${NPX_BIN} ${args.join(' ')}`, 'debug');
+function execNode(args, options = {}) {
+  if (verbose) log(`Executing: ${NODE_BIN} ${args.join(' ')}`, 'debug');
 
   try {
-    const result = execFileSync(NPX_BIN, args, {
+    const result = execFileSync(NODE_BIN, args, {
       stdio: verbose ? 'inherit' : 'pipe',
       encoding: 'utf8',
       ...options
     });
     return result;
   } catch (error) {
-    log(`Command failed: ${NPX_BIN} ${args.join(' ')}`, 'error');
+    log(`Command failed: ${NODE_BIN} ${args.join(' ')}`, 'error');
     log(`Error: ${error.message}`, 'error');
     if (error.stdout) log(`Stdout: ${error.stdout}`, 'error');
     if (error.stderr) log(`Stderr: ${error.stderr}`, 'error');
@@ -40,8 +40,8 @@ function execNpx(args, options = {}) {
 function checkNodeVersion() {
   const version = process.version;
   const major = parseInt(version.slice(1).split('.')[0]);
-  if (major < 20) {
-    log(`Warning: Node.js ${version} detected. This project requires Node.js 20+`, 'warning');
+  if (major < 22) {
+    throw new Error(`Node.js ${version} detected. This project requires Node.js 22+`);
   } else {
     log(`Using Node.js ${version}`, 'info');
   }
@@ -113,7 +113,10 @@ function main() {
     }
 
     log('Running TypeScript compilation', 'info');
-    execNpx(['tsc', '-p', 'tsconfig.json']);
+    execNode(['node_modules/typescript/bin/tsc', '-p', 'tsconfig.json']);
+
+    log('Copying dashboard assets', 'info');
+    execNode(['scripts/build/copy-dashboard-assets.mjs']);
 
     createDistSentinel();
     verifyBuildArtifacts();
@@ -122,16 +125,21 @@ function main() {
     log(`Build completed successfully in ${duration}s`, 'info');
 
     if (isCI) {
-      // Output for GitHub Actions
-      console.log('::set-output name=build-time::' + duration);
-      console.log('::set-output name=build-status::success');
+      const githubOutput = process.env.GITHUB_OUTPUT;
+      if (githubOutput) {
+        fs.appendFileSync(githubOutput, `build-time=${duration}\n`);
+        fs.appendFileSync(githubOutput, 'build-status=success\n');
+      }
     }
 
   } catch (error) {
     log(`Build failed: ${error.message}`, 'error');
 
     if (isCI) {
-      console.log('::set-output name=build-status::failure');
+      const githubOutput = process.env.GITHUB_OUTPUT;
+      if (githubOutput) {
+        fs.appendFileSync(githubOutput, 'build-status=failure\n');
+      }
       console.log(`::error::Build failed: ${error.message}`);
     }
 

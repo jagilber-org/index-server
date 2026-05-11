@@ -15,7 +15,15 @@ This guide covers:
 
 ### Overview
 
-Index automatically seeds a **P0 bootstrap instruction** (`000-bootstrapper.json`) that provides comprehensive onboarding guidance for AI agents. This instruction is the foundation of the **knowledge flywheel** that enables agents to discover, learn, create, and share institutional knowledge.
+Index automatically seeds **canonical bootstrap-tier instructions** that provide comprehensive onboarding guidance for AI agents. These instructions are the foundation of the **knowledge flywheel** that enables agents to discover, learn, create, and share institutional knowledge.
+
+The seeded set is:
+
+| ID | Tier | Purpose |
+|---|---|---|
+| `000-bootstrapper` | P0 | Activation, essential tools, contribution workflow |
+| `001-lifecycle-bootstrap` | P0 | Lifecycle handshake / index materialization |
+| `002-content-model` | P1 | Required-field set, `contentType` decision matrix, pointer to `index_schema` (derived from `schemas/instruction.schema.json` at module load — single source of truth) |
 
 ### What is the P0 Bootstrap Instruction?
 
@@ -763,6 +771,7 @@ Rationale: a single execution pathway (tools/call) eliminates duplicate validati
 | Flag | Default | Scope | Description |
 |------|---------|-------|-------------|
 | `INDEX_SERVER_DISABLE_EARLY_STDIN_BUFFER` | off | runtime | Disable early stdin buffering. |
+| `INDEX_SERVER_DISABLE_PPID_WATCHDOG` | off | runtime | Disable parent-process watchdog. Required for dev sandbox launchers that spawn through a transient shell. |
 | `INDEX_SERVER_FATAL_EXIT_DELAY_MS` | (none) | runtime | Delay before process exit on fatal error (ms). |
 | `INDEX_SERVER_IDLE_KEEPALIVE_MS` | 30000 | runtime | Keepalive echo interval for idle transports (ms). |
 | `INDEX_SERVER_MAX_CONNECTIONS` | (none) | runtime | Maximum concurrent connections. |
@@ -823,7 +832,7 @@ Rationale: a single execution pathway (tools/call) eliminates duplicate validati
 | `INDEX_SERVER_SQLITE_PATH` | `data/index.db` | runtime | Path to SQLite database file (relative to CWD or absolute). |
 | `INDEX_SERVER_SQLITE_WAL` | on | runtime | Enable WAL (Write-Ahead Logging) mode for concurrent read performance. |
 | `INDEX_SERVER_SQLITE_MIGRATE_ON_START` | on | runtime | Auto-migrate JSON instructions into SQLite on startup when backend is `sqlite`. |
-| `INDEX_SERVER_SQLITE_VEC_ENABLED` | off | runtime | Enable sqlite-vec extension for vector embedding storage. When enabled, embeddings are stored in a `vec0` virtual table with native KNN search. Requires Node.js ≥ 22.13.0 and `sqlite-vec` npm package. Falls back to JSON if initialization fails. |
+| `INDEX_SERVER_SQLITE_VEC_ENABLED` | on (sqlite backend) | runtime | Enable sqlite-vec extension for vector embedding storage. **Auto-enabled when `INDEX_SERVER_STORAGE_BACKEND=sqlite`**; set `0` to opt out. When enabled, embeddings are stored in a `vec0` virtual table with native KNN search. Requires Node.js ≥ 22.13.0 and `sqlite-vec` npm package. Falls back to JSON if initialization fails. |
 | `INDEX_SERVER_SQLITE_VEC_PATH` | (empty) | runtime | Custom path to the sqlite-vec native binary. When empty (default), the path is auto-resolved from the `sqlite-vec` npm package via `getLoadablePath()`. Only set this if the auto-detection fails or you need a non-standard binary location. |
 
 **Backend selection example:**
@@ -1004,7 +1013,7 @@ Environment Flags:
 Design Rationale:
 
 * Central helper `attemptManifestUpdate()` now performs an immediate synchronous manifest write (Phase F simplification). Previous debounce logic was removed to guarantee determinism and eliminate timing races. (A future high‑churn mode could reintroduce batching behind an env flag if needed.)
-* Separation of concerns: instruction files validated by `instruction.schema.json` (schemaVersion `5`), manifest snapshot validated by its own schema (`manifest.schema.json`). No need to bump instruction `schemaVersion` when altering internal manifest representation.
+* Separation of concerns: instruction files validated by `instruction.schema.json` (schemaVersion `6`), manifest snapshot validated by its own schema (`manifest.schema.json`). No need to bump instruction `schemaVersion` when altering internal manifest representation.
 * Additive only – no change in existing mutation semantics or instruction schema.
 
 ### Handshake Reliability (1.1.1)

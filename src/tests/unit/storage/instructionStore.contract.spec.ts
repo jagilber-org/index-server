@@ -382,7 +382,7 @@ for (const backend of backends) {
           body: 'Full field preservation',
           priority: 25,
           categories: ['cat-a', 'cat-b'],
-          contentType: 'reference',
+          contentType: 'knowledge',
         });
         store.write(entry);
         const loaded = store.get('round-trip-1');
@@ -391,7 +391,7 @@ for (const backend of backends) {
         expect(loaded!.body).toBe('Full field preservation');
         expect(loaded!.priority).toBe(25);
         expect(loaded!.categories).toEqual(['cat-a', 'cat-b']);
-        expect(loaded!.contentType).toBe('reference');
+        expect(loaded!.contentType).toBe('knowledge');
       });
     });
   });

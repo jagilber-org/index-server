@@ -10,6 +10,7 @@ Organized by purpose. Each subdirectory has a clear role; naming conventions mak
 | `ci/` | CI-specific runners and validation | — |
 | `client/` | Client CLI tools and wizards | — |
 | `deploy/` | Deployment and production ops | `deploy-*`, `smoke-*`, `prod-*` |
+| `dev/` | Dev-server orchestrator + probes (see below) | — |
 | `diagnostics/` | Adhoc probes, health checks, inspection | `adhoc-*` for one-off probes |
 | `dist/` | Distributable scripts (shipped to users) | — |
 | `governance/` | Guards, validators, lint, coverage | `guard-*`, `check-*`, `validate-*` |
@@ -18,6 +19,25 @@ Organized by purpose. Each subdirectory has a clear role; naming conventions mak
 | `migration/` | One-time data migrations (keep for history) | — |
 | `perf/` | Performance baselines, trends, benchmarks | `perf-*`, `benchmark-*`, `stress-*` |
 | `testing/` | Test runners, helpers, fixtures | `test-*`, `run-*`, `seed-*` |
+
+Root-level PowerShell files under `scripts/` are compatibility wrappers for
+template-managed paths. Prefer the categorized subdirectory implementation for
+new logic.
+
+## Dev-server layout
+
+`dev/` contains the profile-sandboxed dev orchestrator and its probes, organized
+by role:
+
+| Subdirectory | Role | Scripts |
+|---|---|---|
+| `dev/` | Orchestrator | `dev-server.ps1` |
+| `dev/transport/` | Shared harness | `mcp-stdio.mjs` |
+| `dev/diagnostic/` | Read-only probes | `info-probe.mjs`, `shape-probe.mjs` |
+| `dev/integrity/` | Mutation + verify probes | `crud-probe.mjs`, `disk-server-consistency.mjs`, `io-matrix.mjs` |
+| `dev/util/` | CLI utilities | `io-helper.mjs` |
+
+> See `scripts/dev/README.md` for the full dev-server runbook.
 
 ## Naming Conventions
 

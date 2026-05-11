@@ -6,6 +6,12 @@
 # (No exclusion rules — .squad/ is tracked by default.)
 
 # ===================================================================
+# DEV-SERVER SANDBOX — NEVER COMMIT (per-profile scratch dirs)
+# ===================================================================
+.devsandbox/*
+!.devsandbox/.gitignore
+
+# ===================================================================
 # ROOT-LEVEL TEST/BUILD OUTPUT FILES — NEVER COMMIT
 # ===================================================================
 build-output*.txt

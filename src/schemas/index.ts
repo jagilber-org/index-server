@@ -1,64 +1,30 @@
 // JSON Schemas for tool response contracts. These are used in tests to lock interfaces.
 // Increment version in docs/tools.md when changing any stable schema.
+//
+// SOURCE OF TRUTH: instruction record/input schemas are derived from
+// schemas/instruction.schema.json via src/schemas/instructionSchema.ts.
+// This module re-exports them under their historic names so existing
+// consumers keep working without restating the schema. Do NOT inline a
+// copy here again — every duplicate causes the kind of drift that
+// broke import round-trips.
+import { RECORD_SCHEMA } from './instructionSchema';
+export {
+  RECORD_SCHEMA,
+  INPUT_SCHEMA,
+  splitEntry,
+  RECORD_PROPERTY_KEYS,
+  INPUT_KEYS,
+  SERVER_MANAGED_KEYS,
+  REQUIRED_RECORD_KEYS,
+  REQUIRED_INPUT_KEYS,
+  validateRecord,
+  validateInput,
+  buildToolInputEntrySchema,
+  INSTRUCTION_INPUT_SCHEMA_REF,
+  INSTRUCTION_RECORD_SCHEMA_REF,
+} from './instructionSchema';
 
-export const instructionEntry = {
-  type: 'object',
-  additionalProperties: false,
-  $defs: {
-    extensionValue: {
-      anyOf: [
-        { type: 'string' },
-        { type: 'number' },
-        { type: 'boolean' },
-        { type: 'array', items: { $ref: '#/$defs/extensionValue' } },
-        { type: 'object', additionalProperties: { $ref: '#/$defs/extensionValue' } }
-      ]
-    }
-  },
-  required: [
-    'id','title','body','priority','audience','requirement','categories','sourceHash','schemaVersion','createdAt','updatedAt',
-    'version','status','owner','priorityTier','classification','lastReviewedAt','nextReviewDue','changeLog','semanticSummary','contentType'
-  ],
-  properties: {
-    id: { type: 'string', minLength: 1 },
-    title: { type: 'string' },
-    body: { type: 'string' },
-    rationale: { type: 'string' },
-    priority: { type: 'number' },
-    audience: { enum: ['individual','group','all'] },
-    requirement: { enum: ['mandatory','critical','recommended','optional','deprecated'] },
-    categories: { type: 'array', items: { type: 'string' } },
-    primaryCategory: { type: 'string' },
-    sourceHash: { type: 'string' },
-    schemaVersion: { type: 'string' },
-    deprecatedBy: { type: 'string' },
-    createdAt: { type: 'string' },
-    updatedAt: { type: 'string' },
-  usageCount: { type: 'number' },
-  firstSeenTs: { type: 'string' },
-    lastUsedAt: { type: 'string' },
-    riskScore: { type: 'number' }
-  ,reviewIntervalDays: { type: 'number' }
-  ,workspaceId: { type: 'string' }
-  ,userId: { type: 'string' }
-  ,teamIds: { type: 'array', items: { type: 'string' } }
-  ,contentType: { enum: ['instruction','template','workflow','reference','example','agent'] }
-  ,version: { type: 'string' }
-  ,status: { enum: ['draft','review','approved','deprecated'] }
-  ,owner: { type: 'string' }
-  ,priorityTier: { enum: ['P1','P2','P3','P4'] }
-  ,classification: { enum: ['public','internal','restricted'] }
-  ,lastReviewedAt: { type: 'string' }
-  ,nextReviewDue: { type: 'string' }
-  ,changeLog: { type: 'array', items: { type: 'object', required: ['version','changedAt','summary'], additionalProperties: false, properties: { version: { type: 'string' }, changedAt: { type: 'string' }, summary: { type: 'string' } } } }
-  ,supersedes: { type: 'string' }
-  ,archivedAt: { type: 'string' }
-  ,semanticSummary: { type: 'string' }
-  ,createdByAgent: { type: 'string' }
-  ,sourceWorkspace: { type: 'string' }
-  ,extensions: { type: 'object', additionalProperties: { $ref: '#/$defs/extensionValue' } }
-  }
-} as const;
+export const instructionEntry = RECORD_SCHEMA;
 
 // (listLike schema removed after dispatcher consolidation of read-only instruction methods)
 
@@ -89,9 +55,26 @@ export const schemas: Record<string, unknown> = {
   'index_import': {
     anyOf: [
       { type: 'object', required: ['error'], properties: { error: { type: 'string' } }, additionalProperties: true },
-      { type: 'object', required: ['hash','imported','skipped','overwritten','errors','total'], additionalProperties: false, properties: {
-        hash: { type: 'string' }, imported: { type: 'number' }, skipped: { type: 'number' }, overwritten: { type: 'number' }, total: { type: 'number' }, errors: { type: 'array', items: { type: 'object', required: ['id','error'], properties: { id: { type: 'string' }, error: { type: 'string' } }, additionalProperties: false } }
-      } }
+      { type: 'object',
+        required: ['hash','imported','skipped','overwritten','errors','total','verified','verifiedCount','verificationErrorCount','stripped'],
+        additionalProperties: false,
+        properties: {
+          hash: { type: 'string' },
+          imported: { type: 'number' },
+          skipped: { type: 'number' },
+          overwritten: { type: 'number' },
+          total: { type: 'number' },
+          errors: { type: 'array', items: { type: 'object', required: ['id','error'], properties: { id: { type: 'string' }, error: { type: 'string' } }, additionalProperties: false } },
+          verified: { type: 'boolean', description: 'True when every written entry was readable in the post-write reload (verifiedCount === written count, verificationErrorCount === 0).' },
+          verifiedCount: { type: 'number', description: 'Number of newly written/overwritten entries successfully read back after reload.' },
+          verificationErrorCount: { type: 'number', description: 'Number of newly written entries missing from the index after the post-write reload.' },
+          stripped: {
+            type: 'object',
+            description: 'Per-key counts of server-managed fields (e.g. createdAt, updatedAt, sourceHash, schemaVersion) partitioned out of caller payloads via splitEntry. Empty object when no server-managed fields were supplied.',
+            additionalProperties: { type: 'number' },
+          },
+        }
+      }
     ]
   },
   'index_repair': { type: 'object', required: ['repaired','updated'], additionalProperties: false, properties: { repaired: { type: 'number' }, updated: { type: 'array', items: { type: 'string' } } } },

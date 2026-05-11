@@ -1,74 +1,27 @@
-import Ajv, { ErrorObject } from 'ajv';
-import addFormats from 'ajv-formats';
-import draft7MetaSchema from 'ajv/dist/refs/json-schema-draft-07.json';
-import { InstructionEntry } from '../models/instruction';
-import { instructionEntry } from '../schemas';
+import { ErrorObject } from 'ajv';
+import { CONTENT_TYPES, InstructionEntry } from '../models/instruction';
+import {
+  validateRecord as validateInstructionSchema,
+  REQUIRED_RECORD_KEYS,
+  INPUT_KEYS as ALLOWED_INPUT_KEYS,
+  INSTRUCTION_INPUT_SCHEMA_REF,
+} from '../schemas/instructionSchema';
 import { ClassificationService } from './classificationService';
 
-const INPUT_SCHEMA_REF = 'index_add#input';
-const REQUIRED_RECORD_KEYS = new Set([
-  'id',
-  'title',
-  'body',
-  'priority',
-  'audience',
-  'requirement',
-  'categories',
-  'sourceHash',
-  'schemaVersion',
-  'createdAt',
-  'updatedAt',
-  'version',
-  'status',
-  'owner',
-  'priorityTier',
-  'classification',
-  'lastReviewedAt',
-  'nextReviewDue',
-  'changeLog',
-  'semanticSummary',
-]);
-const ALLOWED_INPUT_KEYS = new Set([
-  'id',
-  'title',
-  'body',
-  'rationale',
-  'priority',
-  'audience',
-  'requirement',
-  'categories',
-  'primaryCategory',
-  'deprecatedBy',
-  'riskScore',
-  'reviewIntervalDays',
-  'version',
-  'owner',
-  'status',
-  'priorityTier',
-  'classification',
-  'lastReviewedAt',
-  'nextReviewDue',
-  'changeLog',
-  'semanticSummary',
-  'contentType',
-  'extensions',
-  'supersedes',
-  'createdByAgent',
-  'sourceWorkspace',
-  'mode',
-  'lax',
-]);
-
-const ajv = new Ajv({ allErrors: true, strict: false });
-addFormats(ajv);
-try {
-  if (!ajv.getSchema('https://json-schema.org/draft-07/schema')) {
-    ajv.addMetaSchema(draft7MetaSchema, 'https://json-schema.org/draft-07/schema');
-  }
-} catch {
-  // Non-fatal; loader uses the same best-effort registration pattern.
-}
-const validateInstructionSchema = ajv.compile(JSON.parse(JSON.stringify(instructionEntry)) as object);
+const INPUT_SCHEMA_REF = INSTRUCTION_INPUT_SCHEMA_REF;
+// REQUIRED_RECORD_KEYS, ALLOWED_INPUT_KEYS, and the compiled
+// validateInstructionSchema are imported from src/schemas/instructionSchema.ts,
+// which derives them from schemas/instruction.schema.json. Do not restate the
+// schema here — the prior hand-maintained copies drifted (they required 21
+// fields while the canonical schema required 8) and broke export→import
+// round-trips.
+//
+// CONTROL_KEYS are transport-layer flags that callers historically inlined
+// into the entry object as a convenience (instead of into the RPC params
+// bag). They are not data fields and are deliberately not part of the
+// canonical schema. The surface validator tolerates them but does not
+// forward them to record validation.
+const CONTROL_KEYS = new Set(['mode', 'lax']);
 
 export interface InstructionValidationResult {
   record: InstructionEntry;
@@ -207,10 +160,6 @@ function applyWriteCompatibility(entry: InstructionEntry): InstructionEntry {
     else if (legacyRequirementMap[upper]) next.requirement = legacyRequirementMap[upper];
   }
 
-  if ((next.contentType as string | undefined) === 'chat-session') {
-    next.contentType = 'workflow';
-  }
-
   if (typeof next.priority !== 'number' || next.priority < 1 || next.priority > 100) next.priority = 50;
   return next;
 }
@@ -258,8 +207,7 @@ const VALID_STATUS = ['approved', 'draft', 'review', 'deprecated'] as const;
 const COERCIBLE_STATUS = ['active'] as const;
 const VALID_PRIORITY_TIER = ['P1', 'P2', 'P3', 'P4'] as const;
 const VALID_CLASSIFICATION = ['public', 'internal', 'restricted'] as const;
-const VALID_CONTENT_TYPE = ['instruction', 'template', 'workflow', 'reference', 'example', 'agent'] as const;
-const COERCIBLE_CONTENT_TYPE = ['chat-session'] as const;
+const VALID_CONTENT_TYPE = CONTENT_TYPES;
 const VALID_AUDIENCE = ['individual', 'group', 'all'] as const;
 const COERCIBLE_AUDIENCE = ['system', 'developers', 'developer', 'team', 'teams', 'users', 'dev', 'devs', 'testers', 'administrators', 'admins', 'agents', 'powershell script authors'] as const;
 const VALID_REQUIREMENT = ['mandatory', 'critical', 'recommended', 'optional', 'deprecated'] as const;
@@ -276,7 +224,7 @@ export function validateInstructionInputEnumMembership(entry: Record<string, unk
   if (typeof entry.classification === 'string' && !(VALID_CLASSIFICATION as readonly string[]).includes(entry.classification)) {
     errs.push(`/classification: must be one of ${VALID_CLASSIFICATION.join(', ')}`);
   }
-  if (typeof entry.contentType === 'string' && !(VALID_CONTENT_TYPE as readonly string[]).includes(entry.contentType) && !(COERCIBLE_CONTENT_TYPE as readonly string[]).includes(entry.contentType)) {
+  if (typeof entry.contentType === 'string' && !(VALID_CONTENT_TYPE as readonly string[]).includes(entry.contentType)) {
     errs.push(`/contentType: must be one of ${VALID_CONTENT_TYPE.join(', ')}`);
   }
   if (typeof entry.audience === 'string' && !(VALID_AUDIENCE as readonly string[]).includes(entry.audience) && !(COERCIBLE_AUDIENCE as readonly string[]).includes(entry.audience.toLowerCase() as typeof COERCIBLE_AUDIENCE[number])) {
@@ -303,9 +251,14 @@ function validateTypedInputShape(entry: Record<string, unknown>): string[] {
     for (const [index, category] of entry.categories.entries()) {
       if (typeof category !== 'string') {
         errs.push(`/categories/${index}: must be a string, received ${typeof category}`);
-      } else if (!/^[a-z0-9][a-z0-9-_]{0,48}$/.test(category.toLowerCase())) {
+      } else if (!/^[a-z0-9][a-z0-9-_]{0,48}$/.test(category)) {
         errs.push(`/categories/${index}: must match /^[a-z0-9][a-z0-9-_]{0,48}$/`);
       }
+    }
+  }
+  if (typeof entry.primaryCategory === 'string' && Array.isArray(entry.categories) && entry.categories.length > 0) {
+    if (!(entry.categories as unknown[]).includes(entry.primaryCategory)) {
+      errs.push(`/primaryCategory: must be a member of categories[]`);
     }
   }
   if (entry.audience !== undefined && typeof entry.audience !== 'string') {
@@ -333,6 +286,7 @@ export function validateInstructionInputSurface(entry: Record<string, unknown>):
   const validationErrors: string[] = [];
   validationErrors.push(...validateInstructionIdSurface(entry.id));
   for (const key of Object.keys(entry)) {
+    if (CONTROL_KEYS.has(key)) continue; // transport flags; tolerated, not forwarded
     if (!ALLOWED_INPUT_KEYS.has(key)) {
       validationErrors.push(`/: unexpected property "${key}"`);
       continue;
@@ -362,7 +316,7 @@ export function validateInstructionRecord(entry: InstructionEntry): InstructionV
   if (record.classification !== undefined && !['public', 'internal', 'restricted'].includes(record.classification)) {
     validationErrors.push(`/classification: invalid value "${String(record.classification)}"`);
   }
-  if (record.contentType !== undefined && !['instruction', 'template', 'workflow', 'reference', 'example', 'agent'].includes(record.contentType)) {
+  if (record.contentType !== undefined && !(CONTENT_TYPES as readonly string[]).includes(record.contentType)) {
     validationErrors.push(`/contentType: invalid value "${String(record.contentType)}"`);
   }
 

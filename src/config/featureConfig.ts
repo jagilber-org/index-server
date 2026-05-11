@@ -181,7 +181,12 @@ export function parseStorageConfig(): StorageConfig {
     sqlitePath: toAbsolute(process.env.INDEX_SERVER_SQLITE_PATH, path.join(CWD, DIR.DATA_SQLITE)),
     sqliteWal: parseBooleanEnv(process.env.INDEX_SERVER_SQLITE_WAL, true),
     sqliteMigrateOnStart: parseBooleanEnv(process.env.INDEX_SERVER_SQLITE_MIGRATE_ON_START, true),
-    sqliteVecEnabled: parseBooleanEnv(process.env.INDEX_SERVER_SQLITE_VEC_ENABLED, false),
+    sqliteVecEnabled: parseBooleanEnv(
+      process.env.INDEX_SERVER_SQLITE_VEC_ENABLED,
+      // Default to enabled when the storage backend is already sqlite;
+      // factory.ts falls back to JSON automatically if the native extension fails.
+      backend === 'sqlite',
+    ),
     sqliteVecPath: process.env.INDEX_SERVER_SQLITE_VEC_PATH || '',
   };
 }

@@ -132,26 +132,30 @@
     },
     "contentType": {
       "enum": [
+        "agent",
+        "skill",
         "instruction",
-        "template",
+        "prompt",
         "workflow",
-        "reference",
-        "example",
-        "agent"
+        "knowledge",
+        "template",
+        "integration"
       ],
       "default": "instruction",
-      "description": "Content type classification: instruction (actionable guidance), template (scaffolds/error templates), workflow (multi-step processes or runbooks), reference (docs/guides), example (code samples), agent (AI agent definitions/personas). The legacy value chat-session is accepted only by migration/write compatibility and is normalized to workflow before persistence; new records should use workflow."
+      "description": "Content type classification: agent (AI agent definitions and personas), skill (packaged agent capabilities or callable skills), instruction (actionable guidance and operating rules), prompt (prompt templates or prompt engineering assets), workflow (multi-step processes or runbooks), knowledge (reference material, examples, concepts, and documentation), template (reusable scaffolds or structured content templates), integration (external system, MCP, API, or tool integration guidance)."
     },
     "schemaVersion": {
       "type": "string",
       "enum": [
-        "5"
+        "6"
       ],
+      "x-fieldClass": "server-managed",
       "description": "Internal schema version for migration"
     },
     "sourceHash": {
       "type": "string",
       "pattern": "^[a-f0-9]{64}$",
+      "x-fieldClass": "server-managed",
       "description": "SHA256 hash of body for drift detection"
     },
     "deprecatedBy": {
@@ -161,26 +165,31 @@
     "createdAt": {
       "type": "string",
       "format": "date-time",
+      "x-fieldClass": "server-managed",
       "description": "Creation timestamp (ISO 8601)"
     },
     "updatedAt": {
       "type": "string",
       "format": "date-time",
+      "x-fieldClass": "server-managed",
       "description": "Last mutation timestamp (ISO 8601)"
     },
     "usageCount": {
       "type": "integer",
       "minimum": 0,
+      "x-fieldClass": "server-managed",
       "description": "Number of tracked usage events"
     },
     "firstSeenTs": {
       "type": "string",
       "format": "date-time",
+      "x-fieldClass": "server-managed",
       "description": "Timestamp when usage was first observed (ISO 8601)"
     },
     "lastUsedAt": {
       "type": "string",
       "format": "date-time",
+      "x-fieldClass": "server-managed",
       "description": "Last usage timestamp (ISO 8601)"
     },
     "riskScore": {
@@ -270,6 +279,7 @@
     "archivedAt": {
       "type": "string",
       "format": "date-time",
+      "x-fieldClass": "server-managed",
       "description": "Timestamp when archived (ISO 8601)"
     },
     "semanticSummary": {

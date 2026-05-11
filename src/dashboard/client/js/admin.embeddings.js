@@ -400,12 +400,19 @@
       return;
     }
     var state = status.state || 'unknown';
+    // Suppress the informational banner once the model is cached and embeddings
+    // are ready — at that point there is nothing actionable to communicate, and
+    // the meta line (model/device/embeddings count) is already visible in the
+    // STATISTICS panel below.
+    if (state === 'ready') {
+      banner.classList.add('hidden');
+      return;
+    }
     var titleText = '', icon = '';
     if (state === 'disabled') { icon = '🚫'; titleText = 'Semantic embeddings are disabled'; }
     else if (state === 'missing') { icon = '⛔'; titleText = 'Model not available — compute will fail'; }
     else if (state === 'will-download') { icon = '⬇️'; titleText = 'Model will download on first compute'; }
     else if (state === 'no-embeddings') { icon = '⚠️'; titleText = 'No embeddings computed yet'; }
-    else if (state === 'ready') { icon = '✅'; titleText = 'Embeddings ready'; }
     else { icon = 'ℹ️'; titleText = 'Embeddings status'; }
     banner.classList.add('state-' + state);
     var parts = [];
@@ -527,6 +534,17 @@
             + ' · model=' + result.model + ' · ' + result.elapsedMs + 'ms. Loading visualization…';
           statusEl.textContent = summary;
         }
+      }
+      // Follow-up: if the model was just downloaded (pre-state was will-download)
+      // and downloads are still allowed, suggest enabling local-only mode to
+      // prevent further network access. The flag requires a restart to take
+      // effect, so we just surface the recommendation.
+      if (pre && pre.state === 'will-download' && pre.localOnly === false && !result.cacheHit) {
+        setTimeout(function () {
+          window.alert(
+            'Model is now cached locally.\n\nRecommended: set INDEX_SERVER_SEMANTIC_LOCAL_ONLY=1 and restart the server to disable further remote model downloads (offline mode).'
+          );
+        }, 50);
       }
       window.loadEmbeddingsStatus();
       await window.loadEmbeddings();

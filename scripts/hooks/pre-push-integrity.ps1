@@ -19,6 +19,15 @@ if ($env:SKIP_INTEGRITY_PREPUSH -eq '1') {
     exit 0
 }
 
+# Skip in CI: dedicated CI workflows already run the full integrity probes.
+# Running here would also pollute the working tree (npm run build regenerates
+# tracked schemas/), which causes pre-commit to fail the hook with
+# "files were modified by this hook".
+if ($env:CI -eq 'true' -or $env:GITHUB_ACTIONS -eq 'true') {
+    Write-Host '[pre-push:integrity] Skipped in CI (covered by dedicated CI workflows).' -ForegroundColor Yellow
+    exit 0
+}
+
 # Skip for doc-only pushes
 $changedFiles = git diff --name-only HEAD "@{u}" 2>$null
 if ($changedFiles) {

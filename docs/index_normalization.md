@@ -61,14 +61,12 @@ Fallback: If unmapped and not pattern-matched → value left as-is (validated ag
 
 ### Content Type Vocabulary
 
-Current valid values: `instruction`, `template`, `workflow`, `reference`,
-`example`, `agent`.
+Current valid values: `agent`, `skill`, `instruction`, `prompt`, `workflow`,
+`knowledge`, `template`, `integration`.
 
-`workflow` is the current value for multi-step procedures, runbooks, and guided
-agent flows. Historical generated schemas used `chat-session`; that value is
-accepted only as a legacy compatibility alias. Schema v5 normalizes
-`chat-session` to `workflow` on load/write before strict schema validation, and
-new persisted records should use `workflow`.
+Submitted and persisted records must use one of those values. Values outside the
+canonical taxonomy fail schema/input validation and are reported through the
+existing rejection/quarantine paths.
 
 ### Category & Primary Category Sanitization
 

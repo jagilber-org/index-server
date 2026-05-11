@@ -11,7 +11,7 @@ import { getLocalHandler } from '../../../server/registry.js';
 import { ensureLoadedAsync, invalidate, touchIndexVersion, writeEntryAsync, removeEntry, getInstructionsDir, isDuplicateInstructionWriteError } from '../../../services/indexContext.js';
 import { dashboardAdminAuth } from './adminAuth.js';
 import { handleInstructionsSearch } from '../../../services/handlers.search.js';
-import { InstructionEntry } from '../../../models/instruction.js';
+import { CONTENT_TYPES, InstructionEntry } from '../../../models/instruction.js';
 import { SCHEMA_VERSION } from '../../../versioning/schemaVersion.js';
 import { getRuntimeConfig } from '../../../config/runtimeConfig.js';
 import type { IndexLocals } from '../middleware/ensureLoadedMiddleware.js';
@@ -129,17 +129,9 @@ function dashboardRequirement(value: unknown): InstructionEntry['requirement'] {
 }
 
 function dashboardContentType(value: unknown): InstructionEntry['contentType'] {
-  switch (value) {
-    case 'template':
-    case 'workflow':
-    case 'reference':
-    case 'example':
-    case 'agent':
-    case 'instruction':
-      return value;
-    default:
-      return 'instruction';
-  }
+  return typeof value === 'string' && (CONTENT_TYPES as readonly string[]).includes(value)
+    ? value as InstructionEntry['contentType']
+    : 'instruction';
 }
 
 export function createInstructionsRoutes(): Router {
