@@ -7,45 +7,45 @@ name: Release
 on:
   push:
     tags:
-      - 'v*'
+      - "v*"
   workflow_dispatch:
     inputs:
       dry_run:
-        description: 'Dry run — build and test without publishing'
+        description: "Dry run — build and test without publishing"
         required: false
-        default: 'true'
+        default: "true"
         type: choice
         options:
-          - 'true'
-          - 'false'
+          - "true"
+          - "false"
       release_channel:
-        description: 'Promotion channel: gh-only=GitHub Release tarball only; next=npmjs @next dist-tag; latest=npmjs @latest; auto=infer from version (-rc/-beta/-alpha => next, clean semver => latest)'
+        description: "Promotion channel: gh-only=GitHub Release tarball only; next=npmjs @next dist-tag; latest=npmjs @latest; auto=infer from version (-rc/-beta/-alpha => next, clean semver => latest)"
         required: false
-        default: 'gh-only'
+        default: "gh-only"
         type: choice
         options:
-          - 'gh-only'
-          - 'next'
-          - 'latest'
-          - 'auto'
+          - "gh-only"
+          - "next"
+          - "latest"
+          - "auto"
       publish_npmjs:
-        description: '[Override] Publish to public npmjs.org. Normally derived from release_channel; set to true/false to force.'
+        description: "[Override] Publish to public npmjs.org. Normally derived from release_channel; set to true/false to force."
         required: false
-        default: 'auto'
+        default: "auto"
         type: choice
         options:
-          - 'auto'
-          - 'true'
-          - 'false'
+          - "auto"
+          - "true"
+          - "false"
       publish_ghpackages:
-        description: 'Publish to GitHub Packages npm registry'
+        description: "Publish to GitHub Packages npm registry"
         required: false
-        default: 'auto'
+        default: "auto"
         type: choice
         options:
-          - 'auto'
-          - 'true'
-          - 'false'
+          - "auto"
+          - "true"
+          - "false"
 
 permissions:
   contents: write
@@ -56,15 +56,33 @@ permissions:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository_owner }}/index-server-image
-  NODE_VERSION: '22'
+  NODE_VERSION: "22"
 
 jobs:
+  release-scope:
+    name: Release Scope
+    runs-on: ubuntu-latest
+    outputs:
+      should_run: ${{ steps.scope.outputs.should_run }}
+    steps:
+      - name: Resolve release scope
+        id: scope
+        run: |
+          if [ "${{ github.event_name }}" = "push" ] && [ "${{ github.repository_owner }}" != "jagilber-org" ]; then
+            echo "Private development repository tag push detected; release jobs run only on the public mirror."
+            echo "should_run=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "should_run=true" >> "$GITHUB_OUTPUT"
+          fi
+
   # ──────────────────────────────────────────────────────────────────
   # Stage 1: Validate — type check, lint, build, unit smoke test
   # ──────────────────────────────────────────────────────────────────
   validate:
     name: Validate
     runs-on: ubuntu-latest
+    needs: release-scope
+    if: needs.release-scope.outputs.should_run == 'true'
     steps:
       - uses: actions/checkout@v6
 
@@ -72,7 +90,7 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
+          cache: "npm"
 
       - name: Install dependencies
         run: npm ci
@@ -125,8 +143,8 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-          registry-url: 'https://registry.npmjs.org'
+          cache: "npm"
+          registry-url: "https://registry.npmjs.org"
 
       - run: npm ci
       - run: npm run build
@@ -138,7 +156,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: npm-package
-          path: '*.tgz'
+          path: "*.tgz"
 
   # ──────────────────────────────────────────────────────────────────
   # Stage 2b: Build Docker image
@@ -191,10 +209,10 @@ jobs:
           TRIVY_USERNAME: ${{ github.actor }}
           TRIVY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
         with:
-          image-ref: '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }}'
-          format: 'table'
-          severity: 'CRITICAL,HIGH'
-          exit-code: '0'
+          image-ref: "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }}"
+          format: "table"
+          severity: "CRITICAL,HIGH"
+          exit-code: "0"
 
   # ──────────────────────────────────────────────────────────────────
   # Stage 3: Publish — npm, GitHub Release
@@ -246,8 +264,8 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-          registry-url: 'https://registry.npmjs.org'
+          cache: "npm"
+          registry-url: "https://registry.npmjs.org"
 
       - name: Download npm package
         uses: actions/download-artifact@v8
@@ -327,8 +345,8 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
-          registry-url: 'https://registry.npmjs.org'
-          scope: '@jagilber-org'
+          registry-url: "https://registry.npmjs.org"
+          scope: "@jagilber-org"
 
       - name: Check npmjs version status
         id: npmjs_status
@@ -364,8 +382,8 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
-          registry-url: 'https://npm.pkg.github.com'
-          scope: '@jagilber-org'
+          registry-url: "https://npm.pkg.github.com"
+          scope: "@jagilber-org"
 
       - name: Check GitHub Packages version status
         id: gpr_status

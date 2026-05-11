@@ -32,21 +32,21 @@ repos:
   # Pre-push guard: blocks pushes to public repos (PB-6)
   - repo: local
     hooks:
-      - id: repo-local-security-gates
-        name: Run repo-local security gates
-        entry: pwsh -NoProfile -File scripts/hooks/pre-commit.ps1
+      - id: check-dotenv-leaks
+        name: Check dotenv, PII, and env-value leaks
+        entry: pwsh -NoProfile -File hooks/check-dotenv-leaks.ps1
         language: system
         pass_filenames: false
         stages: [pre-commit]
-      - id: gitleaks
-        name: Run gitleaks on commit
-        entry: gitleaks dir --config .gitleaks.toml . --redact --no-banner
+      - id: gitleaks-pre-push
+        name: Run gitleaks before push
+        entry: pwsh -NoProfile -File hooks/run-gitleaks-pre-push.ps1
         language: golang
         additional_dependencies:
           - github.com/zricethezav/gitleaks/v8@v8.30.1
         pass_filenames: false
         always_run: true
-        stages: [pre-commit]
+        stages: [pre-push]
       - id: semgrep-pre-push
         name: Run Semgrep before push
         entry: pwsh -NoProfile -File scripts/hooks/run-semgrep-pre-push.ps1
@@ -59,7 +59,7 @@ repos:
         require_serial: true
       - id: codeql-pre-push
         name: Run CodeQL security-extended (parity with GHAS workflow) — template-repo#77
-        entry: pwsh -NoProfile -File scripts/hooks/run-codeql-pre-push.ps1
+        entry: pwsh -NoProfile -File hooks/codeql-pre-push.ps1
         language: system
         pass_filenames: false
         always_run: true
@@ -161,6 +161,6 @@ fail_fast: false
 minimum_pre_commit_version: '3.6.0'
 
 # NOTE: Curated repo-specific PII and env leak detection lives in
-# scripts/pre-commit.ps1, with ggshield and detect-secrets layered on top for
-# standard secret scanning coverage and pre-push replay using gitleaks and
-# semgrep.
+# scripts/hooks/pre-commit.ps1 and is exposed through hooks/check-dotenv-leaks.ps1,
+# with ggshield and detect-secrets layered on top for standard secret scanning
+# coverage and pre-push replay using gitleaks and semgrep.

@@ -6,6 +6,7 @@
 import { Router, Request, Response } from 'express';
 import fs from 'fs';
 import path from 'path';
+import { spawn } from 'child_process';
 import v8 from 'v8';
 import { MetricsCollector } from '../MetricsCollector.js';
 import { getRuntimeConfig } from '../../../config/runtimeConfig.js';
@@ -68,6 +69,7 @@ export function createStatusRoutes(metricsCollector: MetricsCollector): Router {
       const snapshot = metricsCollector.getCurrentSnapshot();
       const git = getGitCommit();
       const buildTime = getBuildTime();
+      const cfg = getRuntimeConfig();
 
       // Prevent stale caching of build/version metadata in browsers / proxies
       res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
@@ -81,6 +83,12 @@ export function createStatusRoutes(metricsCollector: MetricsCollector): Router {
         buildTime: buildTime || undefined,
         uptime: snapshot.server.uptime,
         startTime: snapshot.server.startTime,
+        paths: {
+          instructionsDir: cfg.index.baseDir,
+          storageBackend: cfg.storage.backend,
+          sqlitePath: cfg.storage.backend === 'sqlite' ? cfg.storage.sqlitePath : undefined,
+          backupsDir: cfg.dashboard.admin.backupsDir,
+        },
         timestamp: Date.now(),
       });
     } catch (error) {
@@ -149,6 +157,67 @@ export function createStatusRoutes(metricsCollector: MetricsCollector): Router {
         error: 'Health check failed',
         timestamp: Date.now(),
       });
+    }
+  });
+
+  /**
+   * POST /api/system/reveal-path - Open one of the configured paths in the OS
+   * file manager. Accepts only a fixed allowlist key (instructions | sqlite |
+   * backups) — the server resolves the actual path from runtime config so the
+   * client cannot supply an arbitrary filesystem path.
+   *
+   * Loopback-only by virtue of the dashboard binding to 127.0.0.1.
+   */
+  router.post('/system/reveal-path', (req: Request, res: Response) => {
+    try {
+      const key = String((req.body && (req.body as Record<string, unknown>).key) || '');
+      const cfg = getRuntimeConfig();
+      let target: string | undefined;
+      switch (key) {
+        case 'instructions': target = cfg.index.baseDir; break;
+        case 'sqlite':       target = cfg.storage.backend === 'sqlite' ? cfg.storage.sqlitePath : undefined; break;
+        case 'backups':      target = cfg.dashboard.admin.backupsDir; break;
+        default:
+          return res.status(400).json({ success: false, error: `unknown key: ${key}` });
+      }
+      if (!target) {
+        return res.status(404).json({ success: false, error: `path not configured for key: ${key}` });
+      }
+      // For files (e.g. sqlite db) reveal the parent directory instead of trying
+      // to open the file itself in the file manager.
+      let toOpen = target;
+      try {
+        if (fs.existsSync(target) && fs.statSync(target).isFile()) {
+          toOpen = path.dirname(target);
+        } else if (!fs.existsSync(target)) {
+          // Fall back to the parent if the leaf does not exist yet.
+          toOpen = path.dirname(target);
+        }
+      } catch { /* ignore stat errors, attempt original */ }
+
+      // Platform-appropriate "open folder" command. All args are server-derived
+      // from runtime config; no user input ever reaches the spawned argv.
+      let cmd: string;
+      let args: string[];
+      if (process.platform === 'win32') {
+        cmd = 'explorer.exe';
+        args = [toOpen];
+      } else if (process.platform === 'darwin') {
+        cmd = 'open';
+        args = [toOpen];
+      } else {
+        cmd = 'xdg-open';
+        args = [toOpen];
+      }
+      // nosemgrep: javascript.lang.security.audit.detect-child-process.detect-child-process -- args resolved from server-side runtimeConfig allowlist; no user input
+      const child = spawn(cmd, args, { detached: true, stdio: 'ignore' });
+      child.on('error', () => { /* ignore — best-effort */ });
+      child.unref();
+
+      res.json({ success: true, key, path: toOpen, timestamp: Date.now() });
+    } catch (error) {
+      logError('[API] reveal-path error:', error);
+      res.status(500).json({ success: false, error: 'Failed to reveal path' });
     }
   });
 

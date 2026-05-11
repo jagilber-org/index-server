@@ -1651,7 +1651,7 @@
                 categories: ['general'],
                 primaryCategory: 'general',
                 reviewIntervalDays: 180,
-                schemaVersion: '5',
+                schemaVersion: '6',
                 description: 'Describe purpose and scope.',
                 createdAt: now,
                 updatedAt: now
@@ -1761,6 +1761,45 @@
                         el.appendChild(buildBadge);
                     }
                     el.append(` • Built ${bt}`);
+                    if(j.paths){
+                        const p = j.paths;
+                        const addPath = (label, value, key) => {
+                            if(!value) return;
+                            const wrap = document.createElement('span');
+                            wrap.className = 'build-path';
+                            wrap.style.marginLeft = '0.75em';
+                            wrap.append(`${label}: `);
+                            const code = document.createElement('code');
+                            code.textContent = String(value);
+                            code.title = `Click to open ${value}`;
+                            code.style.cursor = 'pointer';
+                            code.style.textDecoration = 'underline dotted';
+                            code.addEventListener('click', async (ev) => {
+                                ev.preventDefault();
+                                code.style.opacity = '0.5';
+                                try {
+                                    const r = await fetch('/api/system/reveal-path', {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({ key })
+                                    });
+                                    if (!r.ok) {
+                                        const j2 = await r.json().catch(() => ({}));
+                                        showError(`Open folder failed: ${j2.error || r.statusText}`);
+                                    }
+                                } catch (e) {
+                                    showError(`Open folder failed: ${e && e.message ? e.message : e}`);
+                                } finally {
+                                    code.style.opacity = '1';
+                                }
+                            });
+                            wrap.appendChild(code);
+                            el.appendChild(wrap);
+                        };
+                        addPath('Instructions', p.instructionsDir, 'instructions');
+                        if(p.storageBackend === 'sqlite') addPath('SQLite', p.sqlitePath, 'sqlite');
+                        addPath('Backups', p.backupsDir, 'backups');
+                    }
                 }
             } catch { const el = document.getElementById('buildMeta'); if(el) el.textContent='Build metadata unavailable'; }
         })();

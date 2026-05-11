@@ -36,7 +36,7 @@ param(
 $ErrorActionPreference = 'Stop'
 
 # Load repo-root .env so CODEQL_* keys flow into $env:* (existing $env wins).
-$loadEnv = Join-Path $PSScriptRoot 'Load-RepoEnv.ps1'
+$loadEnv = Join-Path (Split-Path -Parent $PSScriptRoot) 'Load-RepoEnv.ps1'
 if (Test-Path -LiteralPath $loadEnv) { . $loadEnv | Out-Null }
 
 # Resolve config: explicit param > env var > sensible default.
@@ -162,11 +162,17 @@ if ($rebuild) {
 }
 
 # 3. Analyze
+# Use a per-run log path to avoid file-lock conflicts when a previous push
+# was interrupted and left a CodeQL process with analyze.log still open.
 $sw2 = [System.Diagnostics.Stopwatch]::StartNew()
+$analyzeRunLog = Join-Path $LogDir ("analyze-{0}.log" -f [datetime]::UtcNow.ToString('yyyyMMddHHmmss'))
 & codeql database analyze $DbPath $Suite --format=sarif-latest --output=$OutputPath "--threads=$Threads" "--ram=$Ram" --quiet 2>&1 |
-    Out-File (Join-Path $LogDir 'analyze.log') -Encoding utf8
-if ($LASTEXITCODE -ne 0) {
-    [Console]::Error.WriteLine("[codeql-pre-push] analyze FAILED -- see $LogDir\analyze.log")
+    Out-File $analyzeRunLog -Encoding utf8
+$analyzeExitCode = $LASTEXITCODE
+# Best-effort: update canonical analyze.log to the latest run (may be locked by a concurrent run)
+try { Copy-Item $analyzeRunLog (Join-Path $LogDir 'analyze.log') -Force -ErrorAction Stop } catch {}
+if ($analyzeExitCode -ne 0) {
+    [Console]::Error.WriteLine("[codeql-pre-push] analyze FAILED -- see $analyzeRunLog")
     exit 1
 }
 Write-Host "[codeql-pre-push] analyzed in $([math]::Round($sw2.Elapsed.TotalSeconds,1))s"

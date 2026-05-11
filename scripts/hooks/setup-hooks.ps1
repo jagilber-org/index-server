@@ -43,10 +43,10 @@ if ($templateVersion) {
   Write-Host ("Template version: {0}" -f $templateVersion) -ForegroundColor DarkGray
 }
 
-Write-Host 'pre-commit will manage the gitleaks pre-commit and Semgrep/ggshield pre-push hook environments automatically.' -ForegroundColor DarkGray
+Write-Host 'pre-commit will manage the gitleaks, Semgrep, and ggshield pre-push hook environments automatically.' -ForegroundColor DarkGray
 
-Write-Host 'Installing pre-commit and pre-push hooks...' -ForegroundColor Cyan
-pre-commit install --install-hooks --hook-type pre-commit --hook-type pre-push
+Write-Host 'Installing pre-commit, commit-msg, and pre-push hooks...' -ForegroundColor Cyan
+pre-commit install --install-hooks --hook-type pre-commit --hook-type commit-msg --hook-type pre-push
 if ($LASTEXITCODE -ne 0) {
   exit $LASTEXITCODE
 }

@@ -3,10 +3,11 @@
  * Provides per-tool metadata including description, input & output JSON Schemas.
  * This enables host agents to introspect capabilities & perform client-side validation.
  */
-import { schemas as outputSchemas } from '../schemas';
+import { schemas as outputSchemas, buildToolInputEntrySchema } from '../schemas';
 import { flagEnabled } from './featureFlags';
 import { dangerousDiagnosticsEnabled } from '../utils/envUtils';
 import { getRuntimeConfig } from '../config/runtimeConfig';
+import { CONTENT_TYPES } from '../models/instruction';
 
 export type ToolTier = 'core' | 'extended' | 'admin';
 
@@ -26,18 +27,6 @@ export interface ToolRegistryEntry {
 
 // Input schema helpers (keep intentionally permissive if params optional)
 const stringReq = (name: string) => ({ type: 'object', additionalProperties: false, required: [name], properties: { [name]: { type: 'string' } } });
-const extensionsInputSchema = {
-  type: 'object',
-  additionalProperties: {
-    anyOf: [
-      { type: 'string' },
-      { type: 'number' },
-      { type: 'boolean' },
-      { type: 'array', items: {} },
-      { type: 'object', additionalProperties: true },
-    ],
-  },
-} as const;
 
 const DANGEROUS_DIAGNOSTIC_TOOLS = new Set([
   'diagnostics_block',
@@ -58,13 +47,20 @@ function withDynamicInstructionBodyLimits(name: string, inputSchema: object): ob
   const schema = JSON.parse(JSON.stringify(inputSchema)) as Record<string, unknown>;
 
   if (name === 'index_add') {
-    const entryProps = (((schema.properties as Record<string, unknown>)?.entry as Record<string, unknown>)?.properties as Record<string, unknown>) ?? {};
+    const entry = ((schema.properties as Record<string, unknown>)?.entry as Record<string, unknown>) ?? {};
+    const entryProps = (entry.properties as Record<string, unknown>) ?? {};
     entryProps.body = buildInstructionBodyInputSchema('Instruction body.');
+    // Sub-schema $id must be unique across compile cycles so Ajv (a) does
+    // not reject duplicate-id registration and (b) can still resolve the
+    // embedded "#/definitions/..." $refs scoped to this schema.
+    entry.$id = `tool-input/index_add/entry/${++subSchemaCounter}`;
   } else if (name === 'index_import') {
     const entries = ((schema.properties as Record<string, unknown>)?.entries as Record<string, unknown>)?.oneOf as Array<Record<string, unknown>> | undefined;
     const arrayVariant = Array.isArray(entries) ? entries.find((candidate) => candidate.type === 'array') : undefined;
-    const itemProps = ((arrayVariant?.items as Record<string, unknown>)?.properties as Record<string, unknown>) ?? {};
+    const items = (arrayVariant?.items as Record<string, unknown>) ?? {};
+    const itemProps = (items.properties as Record<string, unknown>) ?? {};
     itemProps.body = buildInstructionBodyInputSchema('Instruction body.');
+    items.$id = `tool-input/index_import/entry/${++subSchemaCounter}`;
   } else if (name === 'index_dispatch') {
     const props = (schema.properties as Record<string, unknown>) ?? {};
     const entryProps = ((props.entry as Record<string, unknown>)?.properties as Record<string, unknown>) ?? {};
@@ -74,6 +70,8 @@ function withDynamicInstructionBodyLimits(name: string, inputSchema: object): ob
 
   return schema;
 }
+
+let subSchemaCounter = 0;
 
 // Explicit param schemas derived from handlers in toolHandlers.ts
 const INPUT_SCHEMAS: Record<string, object> = {
@@ -110,7 +108,7 @@ const INPUT_SCHEMAS: Record<string, object> = {
     keywords: { type: 'array', items: { type: 'string' }, description: 'Explicit keyword array for search action when the caller wants direct token control.' },
     ids: { type: 'array', items: { type: 'string' }, description: 'Array of instruction IDs for remove or export actions.' },
     category: { type: 'string', description: 'Filter by category for list action.' },
-    contentType: { type: 'string', enum: ['instruction', 'template', 'workflow', 'reference', 'example', 'agent', 'chat-session'], description: 'Filter by content type for list, search, or query actions, or specify the entry content type for add action. Legacy "chat-session" write inputs are migrated to "workflow".' },
+    contentType: { type: 'string', enum: [...CONTENT_TYPES], description: 'Filter by content type for list, search, or query actions, or specify the entry content type for add action.' },
     text: { type: 'string', description: 'Full-text search within query action.' },
     includeCategories: { type: 'boolean', description: 'Search categories in addition to id/title/semanticSummary/body for search action.' },
     caseSensitive: { type: 'boolean', description: 'Enable case-sensitive matching for search action.' },
@@ -161,20 +159,27 @@ const INPUT_SCHEMAS: Record<string, object> = {
   // NOTE: instructions_query & instructions_categories removed as standalone tools.
   // They are now exclusively accessed via index_dispatch with actions 'query' and 'categories'.
   // legacy read-only instruction method schemas removed in favor of dispatcher
+  //
+  // index_import / index_add tool input schemas are DERIVED from the canonical
+  // instruction schema via buildToolInputEntrySchema(). The two surfaces only
+  // differ in their caller-required minimum (index_add accepts {id, body};
+  // index_import requires {id, title, body, priority, audience, requirement}).
+  // Both reject server-managed properties (additionalProperties:false +
+  // server-managed keys stripped) and share property definitions, enums and
+  // patterns with on-disk validation. Hand-maintaining these schemas was the
+  // original drift source — see src/schemas/instructionSchema.ts.
   'index_import': { type: 'object', additionalProperties: false, properties: {
     entries: { oneOf: [
-      { type: 'array', minItems: 1, items: { type: 'object', required: ['id','title','body','priority','audience','requirement'], additionalProperties: false, properties: {
-        id: { type: 'string' }, title: { type: 'string' }, body: { type: 'string' }, rationale: { type: 'string' }, priority: { type: 'number' }, audience: { type: 'string' }, requirement: { type: 'string' }, categories: { type: 'array', items: { type: 'string' } }, version: { type: 'string' }, owner: { type: 'string' }, status: { type: 'string', enum: ['approved','draft','review','deprecated'] }, priorityTier: { type: 'string', enum: ['P1','P2','P3','P4'] }, classification: { type: 'string', enum: ['public','internal','restricted'] }, lastReviewedAt: { type: 'string' }, nextReviewDue: { type: 'string' }, semanticSummary: { type: 'string' }, changeLog: { type: 'array', items: { type: 'object', additionalProperties: true } }, contentType: { type: 'string', enum: ['instruction', 'template', 'workflow', 'reference', 'example', 'agent', 'chat-session'] }, extensions: extensionsInputSchema, mode: { type: 'string' }
-      } } },
+      { type: 'array', minItems: 1, items: buildToolInputEntrySchema({
+        required: ['id','title','body','priority','audience','requirement'],
+      }) },
       { type: 'string', description: 'Stringified JSON array of instruction entries, or a file path to a JSON array of instruction entries' }
     ] },
     source: { type: 'string', description: 'Directory path containing .json instruction files to import' },
     mode: { enum: ['skip','overwrite'] }
   } },
   'index_add': { type: 'object', additionalProperties: false, required: ['entry'], properties: {
-    entry: { type: 'object', required: ['id','body'], additionalProperties: false, properties: {
-        id: { type: 'string', minLength: 1, maxLength: 120, pattern: '^[a-z0-9](?:[a-z0-9-_]{0,118}[a-z0-9])?$' }, title: { type: 'string' }, body: { type: 'string' }, rationale: { type: 'string' }, priority: { type: 'number', minimum: 1, maximum: 100 }, audience: { type: 'string', enum: ['individual', 'group', 'all'] }, requirement: { type: 'string', enum: ['mandatory', 'critical', 'recommended', 'optional', 'deprecated'] }, categories: { type: 'array', items: { type: 'string', pattern: '^[a-z0-9][a-z0-9-_]{0,48}$' } }, deprecatedBy: { type: 'string' }, riskScore: { type: 'number' }, version: { type: 'string' }, owner: { type: 'string' }, status: { type: 'string', enum: ['approved','draft','review','deprecated'] }, priorityTier: { type: 'string', enum: ['P1','P2','P3','P4'] }, classification: { type: 'string', enum: ['public','internal','restricted'] }, lastReviewedAt: { type: 'string' }, nextReviewDue: { type: 'string' }, semanticSummary: { type: 'string' }, changeLog: { type: 'array', items: { type: 'object', additionalProperties: true } }, contentType: { type: 'string', enum: ['instruction', 'template', 'workflow', 'reference', 'example', 'agent', 'chat-session'] }, extensions: extensionsInputSchema
-      } },
+    entry: buildToolInputEntrySchema({ required: ['id','body'] }),
     overwrite: { type: 'boolean' },
     lax: { type: 'boolean' }
   } },
@@ -224,6 +229,28 @@ const INPUT_SCHEMAS: Record<string, object> = {
     metadata: { type: 'object', additionalProperties: true },
     tags: { type: 'array', maxItems: 10, items: { type: 'string' } }
   } },
+  'feedback_manage': { type: 'object', additionalProperties: false, required: ['action'], properties: {
+    action: { type: 'string', enum: ['submit', 'list', 'get', 'update', 'delete', 'stats'], description: 'Feedback management action to perform.' },
+    id: { type: 'string', description: 'Feedback entry id for get, update, and delete actions.' },
+    type: { type: 'string', enum: ['issue', 'status', 'security', 'feature-request', 'bug-report', 'performance', 'usability', 'other'] },
+    severity: { type: 'string', enum: ['low', 'medium', 'high', 'critical'] },
+    status: { type: 'string', enum: ['new', 'acknowledged', 'in-progress', 'resolved', 'closed'] },
+    title: { type: 'string', maxLength: 200 },
+    description: { type: 'string', maxLength: 10000 },
+    context: { type: 'object', additionalProperties: true, properties: {
+      clientInfo: { type: 'object', properties: { name: { type: 'string' }, version: { type: 'string' } } },
+      serverVersion: { type: 'string' },
+      environment: { type: 'object', additionalProperties: true },
+      sessionId: { type: 'string' },
+      toolName: { type: 'string' },
+      requestId: { type: 'string' }
+    } },
+    metadata: { type: 'object', additionalProperties: true },
+    tags: { type: 'array', maxItems: 10, items: { type: 'string' } },
+    limit: { type: 'number', minimum: 1, maximum: 200, description: 'Maximum entries to return for list action.' },
+    offset: { type: 'number', minimum: 0, description: 'Pagination offset for list action.' },
+    since: { type: 'string', description: 'ISO date filter for list and stats actions.' }
+  } },
   // instructions search tool - PRIMARY discovery mechanism
   'index_search': { type: 'object', additionalProperties: false, required: ['keywords'], properties: {
     keywords: {
@@ -237,7 +264,7 @@ const INPUT_SCHEMAS: Record<string, object> = {
     limit: { type: 'number', minimum: 1, maximum: 100, default: 50, description: 'Maximum number of instruction IDs to return' },
     includeCategories: { type: 'boolean', default: false, description: 'Include categories in search scope' },
     caseSensitive: { type: 'boolean', default: false, description: 'Perform case-sensitive matching' },
-    contentType: { type: 'string', enum: ['instruction', 'template', 'workflow', 'reference', 'example', 'agent'], description: 'Filter results by content type (optional)' }
+    contentType: { type: 'string', enum: [...CONTENT_TYPES], description: 'Filter results by content type (optional)' }
   } },
   // promote_from_repo tool
   'promote_from_repo': { type: 'object', additionalProperties: false, required: ['repoPath'], properties: {
@@ -341,16 +368,17 @@ const INPUT_SCHEMAS: Record<string, object> = {
 
 // Stable & mutation classification lists (mirrors usage in toolHandlers; exported to remove duplication there).
 export const STABLE = new Set(['health_check','feedback_submit','graph_export','index_dispatch','index_search','index_governanceHash','prompt_review','integrity_verify','usage_track','usage_hotset','metrics_snapshot','gates_evaluate','meta_tools','help_overview','index_schema','manifest_status','index_diagnostics','meta_activation_guide','meta_check_activation','bootstrap','bootstrap_status','feature_status','index_health','index_inspect','index_debug','integrity_manifest','messaging_read','messaging_list_channels','messaging_stats','messaging_get','messaging_thread','trace_dump']);
-export const MUTATION = new Set(['index_add','index_import','index_repair','index_reload','index_remove','index_groom','index_enrich','index_governanceUpdate','index_normalize','usage_flush','manifest_refresh','manifest_repair','promote_from_repo','bootstrap_request','bootstrap_confirmFinalize','messaging_send','messaging_ack','messaging_update','messaging_purge','messaging_reply','diagnostics_block','diagnostics_microtaskFlood','diagnostics_memoryPressure']);
+export const MUTATION = new Set(['feedback_manage','index_add','index_import','index_repair','index_reload','index_remove','index_groom','index_enrich','index_governanceUpdate','index_normalize','usage_flush','manifest_refresh','manifest_repair','promote_from_repo','bootstrap_request','bootstrap_confirmFinalize','messaging_send','messaging_ack','messaging_update','messaging_purge','messaging_reply','diagnostics_block','diagnostics_microtaskFlood','diagnostics_memoryPressure']);
 
 // Tool tier classification (002-tool-consolidation spec)
 // core: always visible, essential daily use
 // extended: opt-in via INDEX_SERVER_FLAG_TOOLS_EXTENDED=1 or flags.json tools_extended:true
 // admin: opt-in via INDEX_SERVER_FLAG_TOOLS_ADMIN=1, rarely needed ops/debug tools
 const TOOL_TIERS: Record<string, ToolTier> = {
-  // Core (7 after feedback_dispatch removal; feedback_submit remains always visible for agent reporting)
+  // Core (feedback_submit remains always visible for agent reporting; feedback_manage is the management dispatcher)
   'health_check': 'core',
   'feedback_submit': 'core',
+  'feedback_manage': 'extended',
   'index_dispatch': 'core',
   'index_search': 'core',
   'prompt_review': 'core',
@@ -482,6 +510,7 @@ function describeTool(name: string): string {
     case 'meta_tools': return 'Enumerate available tools & their metadata.';
   // feedback system descriptions
   case 'feedback_submit': return 'Submit feedback entry (issue, status report, security alert, feature request, etc.).';
+  case 'feedback_manage': return 'Manage feedback entries through a single action dispatcher. Actions: submit, list, get, update, delete, stats.';
   case 'bootstrap': return 'Unified bootstrap dispatcher. Actions: request, confirm, status.';
   case 'manifest_status': return 'Report index manifest presence and drift summary.';
   case 'manifest_refresh': return 'Rewrite manifest from current index state.';
