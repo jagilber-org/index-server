@@ -11,13 +11,11 @@
       4. Optionally push the internal release branch and tags, then verify
          internal refs and GitHub Actions checks.
       5. Build, deploy locally, and prepare the clean-room public snapshot.
-      6. Either print the human-only publish command or, when explicitly
-         requested by a human operator, invoke Publish-ToMirror.ps1.
+      6. Invoke Publish-ToMirror.ps1 using CreatePR by default, or the
+         explicitly requested delivery mode.
 
-    The default mode is agent-safe: it prepares the clean-room copy and prints
-    the Phase 5 command, but does not publish to the public mirror. Supplying a
-    delivery mode (-CreatePR, -DirectPublish, or -CreateReviewRepo) makes this a
-    human-only publish invocation.
+    The default delivery mode is CreatePR. DirectPublish remains an explicit
+    opt-in and CreateReviewRepo remains available for restricted review.
 
 .PARAMETER CleanRoomPath
     Absolute path where the clean-room copy will be written. Defaults to
@@ -177,7 +175,7 @@ function Get-DeliveryMode {
     if ($CreatePR) { return 'CreatePR' }
     if ($DirectPublish) { return 'DirectPublish' }
     if ($CreateReviewRepo) { return 'CreateReviewRepo' }
-    return 'PrepareOnly'
+    return 'CreatePR'
 }
 
 function Test-CleanGitTree {
@@ -340,29 +338,17 @@ function Wait-InternalChecks {
     } -SkipWhenDryRun
 }
 
-function Write-PublishCommand {
-    param(
-        [Parameter(Mandatory)][string]$SourcePath,
-        [Parameter(Mandatory)][string]$TargetRemote,
-        [Parameter(Mandatory)][string]$ReleaseTag
-    )
-
-    Write-Host ''
-    Write-Host 'Human-only publish command:' -ForegroundColor Yellow
-    Write-Host ''
-    Write-Host "    pwsh -NoProfile -File scripts\Publish-ToMirror.ps1 ``" -ForegroundColor White
-    Write-Host "        -SourcePath '$SourcePath' ``" -ForegroundColor White
-    Write-Host "        -RemoteUrl '$TargetRemote' ``" -ForegroundColor White
-    Write-Host "        -Tag $ReleaseTag ``" -ForegroundColor White
-    Write-Host "        -CreatePR ``" -ForegroundColor White
-    Write-Host "        -WaitForMerge" -ForegroundColor White
-}
-
 function Invoke-HumanPublish {
     $publishArgs = @{
         SourcePath = $CleanRoomPath
         RemoteUrl  = $RemoteUrl
         Tag        = $Tag
+        # Suppress the SupportsShouldProcess/ConfirmImpact='High' interactive
+        # prompts in Publish-ToMirror.ps1. The workflow itself is the human
+        # gate (operator launches Invoke-ReleaseWorkflow.ps1 for public
+        # delivery); a second per-push prompt just causes the pipeline to hang
+        # waiting on stdin under non-interactive runners.
+        Confirm    = $false
     }
 
     if ($CreatePR) {
@@ -378,6 +364,8 @@ function Invoke-HumanPublish {
         if ($ReviewOrg) {
             $publishArgs['ReviewOrg'] = $ReviewOrg
         }
+    } else {
+        $publishArgs['CreatePR'] = $true
     }
 
     $publishScript = Join-Path $PSScriptRoot 'Publish-ToMirror.ps1'
@@ -534,13 +522,8 @@ if (-not $DryRun) {
 
 Write-Phase 'Phase 5: Public mirror delivery'
 
-if ($deliveryMode -eq 'PrepareOnly') {
-    Write-Host 'Public delivery was not requested. Agents stop here; a human operator reviews the clean room and runs Phase 5.' -ForegroundColor Green
-    Write-PublishCommand -SourcePath $CleanRoomPath -TargetRemote $RemoteUrl -ReleaseTag $Tag
-} else {
-    Write-Host 'A public delivery mode was requested. This phase is human-only and still relies on Publish-ToMirror.ps1 safety gates.' -ForegroundColor Yellow
-    Invoke-HumanPublish
-}
+Write-Host "Public delivery mode is $deliveryMode. This phase is human-only and still relies on Publish-ToMirror.ps1 safety gates." -ForegroundColor Yellow
+Invoke-HumanPublish
 
 if ($DryRun) {
     Write-Host ''

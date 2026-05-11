@@ -1,6 +1,7 @@
 export type AudienceScope = 'individual' | 'group' | 'all';
 export type RequirementLevel = 'mandatory' | 'critical' | 'recommended' | 'optional' | 'deprecated';
-export type ContentType = 'instruction' | 'template' | 'workflow' | 'reference' | 'example' | 'agent';
+export const CONTENT_TYPES = ['agent', 'skill', 'instruction', 'prompt', 'workflow', 'knowledge', 'template', 'integration'] as const;
+export type ContentType = typeof CONTENT_TYPES[number];
 export interface InstructionEntry {
   id: string;
   title: string;

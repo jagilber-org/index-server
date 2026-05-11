@@ -236,7 +236,7 @@ trap {
 # Copy repo to temp using the same include/exclude semantics as publish-direct-to-remote.cjs:
 # strip only known private root dot-items and defer all other selection to .publish-exclude.
 $privateRootDotItems = @(
-    '.certs', '.codeql', '.copilot', '.env', '.private', '.specify', '.squad',
+    '.certs', '.codeql', '.copilot', '.devsandbox', '.env', '.private', '.specify', '.squad',
     '.squad-templates', '.vscode', '.publish-exclude'
 )
 New-Item -ItemType Directory -Path $tempDir -Force | Out-Null
@@ -252,7 +252,7 @@ $builtinForbidden = @(
     'feedback', 'governance', 'memory', 'metrics',
     'snapshots', 'tmp', 'test-results', 'coverage',
     'seed', 'instructions', 'devinstructions', 'NVIDIA Corporation',
-    '.private', '.env', '.certs', '.squad', '.squad-templates',
+    '.private', '.env', '.certs', '.devsandbox', '.squad', '.squad-templates',
     'templates', 'data', 'node_modules', 'scripts/.env',
     'scripts/.env.generated', 'scripts/.vscode'
 )

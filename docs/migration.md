@@ -106,32 +106,29 @@ Rollback Safety:
 
 - Older builds (expecting v3) will reject entries containing `sourceWorkspace` or `createdByAgent` due to `additionalProperties: false`. Rollback requires stripping these fields or reverting schema.json.
 
-### 2.3 Content type vocabulary change (`chat-session` -> `workflow`)
+### 2.3 Content type taxonomy update
 
-Applies when moving from builds or generated schema archives that used
-`contentType: "chat-session"` to current builds whose instruction schema accepts
-`workflow` instead.
+Schema v6 uses the canonical eight-value `contentType` taxonomy:
+`agent`, `skill`, `instruction`, `prompt`, `workflow`, `knowledge`, `template`,
+and `integration`.
 
-Current compatibility status:
+Current validation status:
 
 - `schemas/instruction.schema.json`, runtime input validation, search filters,
-  and tool schemas accept `instruction`, `template`, `workflow`, `reference`,
-  `example`, and `agent`.
-- `chat-session` is a legacy value visible in archived generated schemas and
-  older records only.
-- Schema v5 rewrites `chat-session` to `workflow` during loader migration and
-  write compatibility before strict schema validation.
-- New persisted records must use `workflow`; `chat-session` is compatibility
-  input only.
+  and tool schemas accept exactly the canonical eight values.
+- Values outside the canonical taxonomy fail validation and are handled by the
+  existing rejection/quarantine paths.
+- Checked-in static instruction JSON uses `knowledge` for reference material,
+  examples, concepts, and documentation while preserving free-form categories
+  such as `example` or `reference`.
 
 Operator migration:
 
 1. Back up `instructions/` before loading or bulk-editing production catalogs.
-2. Start a schema-v5 build with mutation enabled so legacy records can be
-   rewritten to `workflow`.
+2. Update records to one of the canonical eight values before startup or import.
 3. After migration, run `index_reload` and `integrity_verify`; then use
-   `index_dispatch` with `action: "query", contentType: "workflow"` to confirm
-   workflow records are discoverable.
+   `index_dispatch` with `action: "query", contentType: "knowledge"` to confirm
+   knowledge records are discoverable.
 
 ## 3. Verification Checklist (Automatable)
 

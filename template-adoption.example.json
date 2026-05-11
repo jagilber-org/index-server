@@ -1,6 +1,6 @@
 {
   "templateName": "layered-hook-security-template",
-  "templateVersion": "1.25.0",
+  "templateVersion": "1.31.0",
   "hookStandardInstruction": "repository-hook-security-standard",
   "hookStandardVersion": "1.4.0",
   "adoptedAt": "YYYY-MM-DDTHH:MM:SS.000Z",

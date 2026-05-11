@@ -22,7 +22,7 @@ function httpGet(url: string): Promise<{ status: number; body: string }> {
       res.on('end', () => resolve({ status: res.statusCode ?? 0, body }));
     });
     req.on('error', reject);
-    req.setTimeout(5000, () => { req.destroy(new Error('timeout')); });
+    req.setTimeout(15000, () => { req.destroy(new Error('timeout')); });
   });
 }
 

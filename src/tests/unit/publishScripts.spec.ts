@@ -17,9 +17,8 @@ const PUB_PATH = path.join(REPO_ROOT, 'scripts', 'build', 'Publish-ToPublicRepo.
 const CLEANROOM_PATH = path.join(REPO_ROOT, 'scripts', 'deploy', 'New-CleanRoomCopy.ps1');
 const DEPLOY_LOCAL_PATH = path.join(REPO_ROOT, 'scripts', 'deploy', 'deploy-local.ps1');
 const GITIGNORE_PATH = path.join(REPO_ROOT, '.gitignore');
-const GGSHIELD_WORKFLOW_PATH = path.join(REPO_ROOT, '.github', 'workflows', 'ggshield-secret-scans.yml');
-const GITLEAKS_WORKFLOW_PATH = path.join(REPO_ROOT, '.github', 'workflows', 'gitleaks-secret-scans.yml');
-const SEMGREP_WORKFLOW_PATH = path.join(REPO_ROOT, '.github', 'workflows', 'semgrep.yml');
+const PRECOMMIT_WORKFLOW_PATH = path.join(REPO_ROOT, '.github', 'workflows', 'precommit.yml');
+const SECURITY_TIER1_WORKFLOW_PATH = path.join(REPO_ROOT, '.github', 'workflows', 'security-tier1.yml');
 const HAS_PUBLISH_EXCLUDE = fs.existsSync(path.join(REPO_ROOT, '.publish-exclude'));
 const HAS_PS1_SCRIPT = fs.existsSync(PS1_PATH);
 const _HAS_PUB_SCRIPT = fs.existsSync(PUB_PATH);
@@ -92,6 +91,8 @@ function setupStagingDir() {
   // Non-essential dotfiles that should be stripped
   fs.mkdirSync(path.join(fakeRoot, '.specify'), { recursive: true });
   fs.writeFileSync(path.join(fakeRoot, '.specify', 'data.json'), '{}');
+  fs.mkdirSync(path.join(fakeRoot, '.devsandbox', 'json'), { recursive: true });
+  fs.writeFileSync(path.join(fakeRoot, '.devsandbox', 'json', 'local.json'), '{}');
   fs.mkdirSync(path.join(fakeRoot, '.vscode'), { recursive: true });
   fs.writeFileSync(path.join(fakeRoot, '.vscode', 'settings.json'), '{}');
   fs.writeFileSync(path.join(fakeRoot, '.env'), 'SECRET=abc');
@@ -142,7 +143,7 @@ describe('publish script hardening', () => {
 
     it('both lists include critical internal artifact names', () => {
       const critical = [
-        '.specify', '.private', '.env', '.certs',
+        '.specify', '.private', '.env', '.certs', '.devsandbox',
         '.squad', '.squad-templates',
         'instructions', 'devinstructions', 'logs',
         'backups', 'governance', 'memory', 'feedback',
@@ -187,10 +188,11 @@ describe('publish script hardening', () => {
       expect(fs.existsSync(path.join(outputDir, '.npmrc'))).toBe(true);
     });
 
-    it('strips private root dotfiles (.env, .vscode, .specify)', () => {
+    it('strips private root dotfiles (.env, .vscode, .specify, .devsandbox)', () => {
       expect(fs.existsSync(path.join(outputDir, '.env'))).toBe(false);
       expect(fs.existsSync(path.join(outputDir, '.vscode'))).toBe(false);
       expect(fs.existsSync(path.join(outputDir, '.specify'))).toBe(false);
+      expect(fs.existsSync(path.join(outputDir, '.devsandbox'))).toBe(false);
     });
 
     it('preserves non-private root dotfiles (.eslintrc.json)', () => {
@@ -270,6 +272,11 @@ describe('publish script hardening', () => {
       expect(builtinForbidden).toContain('.specify');
     });
 
+    it('.devsandbox is in both clean-room blocklists', () => {
+      expect(dotfileBlocklist).toContain('.devsandbox');
+      expect(builtinForbidden).toContain('.devsandbox');
+    });
+
     it('.env is in both blocklists', () => {
       expect(dotfileBlocklist).toContain('.env');
       expect(builtinForbidden).toContain('.env');
@@ -320,6 +327,21 @@ describe('publish script hardening', () => {
       expect(src).toContain('Orphan-init flow for DirectPublish and CreateReviewRepo');
     });
 
+    it('Publish-ToMirror.ps1 defaults missing delivery mode to CreatePR', () => {
+      const src = fs.readFileSync(path.join(REPO_ROOT, 'scripts', 'build', 'Publish-ToMirror.ps1'), 'utf8');
+      expect(src).toContain("No delivery mode specified; defaulting to CreatePR.");
+      expect(src).toContain('$CreatePR = $true');
+      expect(src).not.toContain("Specify -DirectPublish, -CreateReviewRepo, or -CreatePR to choose a delivery mode.");
+    });
+
+    it('Invoke-ReleaseWorkflow.ps1 treats missing delivery mode as CreatePR while preserving explicit modes', () => {
+      const src = fs.readFileSync(RELEASE_WORKFLOW_PATH, 'utf8');
+      expect(src).toContain("return 'CreatePR'");
+      expect(src).toContain("$publishArgs['CreatePR'] = $true");
+      expect(src).toContain("$publishArgs['DirectPublish'] = $true");
+      expect(src).toContain("$publishArgs['CreateReviewRepo'] = $true");
+    });
+
     it('New-CleanRoomCopy.ps1 keeps ambient env leak detection active for public artifacts', () => {
       const src = fs.readFileSync(CLEANROOM_PATH, 'utf8');
       expect(src).not.toContain('INDEX_SERVER_PRECOMMIT_SKIP_AMBIENT_ENV');
@@ -366,18 +388,24 @@ describe('publish script hardening', () => {
       expect(src).not.toContain("npm install --production");
     });
 
-    it('SARIF upload actions are pinned and do not require processing wait permissions', () => {
-      for (const workflowPath of [GITLEAKS_WORKFLOW_PATH, SEMGREP_WORKFLOW_PATH]) {
-        const src = fs.readFileSync(workflowPath, 'utf8');
-        expect(src).toContain('github/codeql-action/upload-sarif@ed410739ba306e4ebe5e123421a6bd694e494a2b'); // pii-allowlist: pinned action SHA
-        expect(src).toContain('wait-for-processing: false');
-      }
+    it('precommit workflow replays local pre-push security policy instead of standalone scan workflows', () => {
+      const src = fs.readFileSync(PRECOMMIT_WORKFLOW_PATH, 'utf8');
+      expect(src).toContain('pre-commit run --from-ref "$BASE_SHA" --to-ref "$HEAD_SHA" --hook-stage pre-push');
+      expect(src).toContain('pre-commit run --all-files --hook-stage pre-push');
+      expect(src).toContain('pip install pre-commit detect-secrets ggshield');
     });
 
-    it('GGShield PR quota degradation is explicitly advisory while strict scans use defaults', () => {
-      const src = fs.readFileSync(GGSHIELD_WORKFLOW_PATH, 'utf8');
+    it('GGShield push report generation remains advisory while pre-push replay stays strict', () => {
+      const src = fs.readFileSync(PRECOMMIT_WORKFLOW_PATH, 'utf8');
       expect(src).toContain('GGSHIELD_QUOTA_MODE: advisory');
-      expect(src).not.toContain('GGSHIELD_SKIP_ON_QUOTA');
+      expect(src).toContain('bash scripts/ci/ggshield-with-retry.sh');
+      expect(src).toContain('pre-commit run --all-files --hook-stage pre-push');
+    });
+
+    it('security tier 1 documents standalone scanner deduplication into precommit workflow', () => {
+      const src = fs.readFileSync(SECURITY_TIER1_WORKFLOW_PATH, 'utf8');
+      expect(src).toContain('Secret scanning (ggshield, gitleaks, semgrep, codeql) removed as standalone');
+      expect(src).toContain('precommit.yml');
     });
 
     it('neither blocklist is empty', () => {
@@ -391,7 +419,7 @@ describe('publish script hardening', () => {
 // Duplicated here to test the algorithm without module-level side effects
 
 const PRIVATE_DOTFILES = new Set([
-  '.certs', '.copilot', '.env', '.private', '.specify', '.squad',
+  '.certs', '.copilot', '.devsandbox', '.env', '.private', '.specify', '.squad',
   '.squad-templates', '.vscode', '.publish-exclude',
 ]);
 

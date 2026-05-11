@@ -49,7 +49,7 @@ describe('index_add persistence & governance coverage', () => {
     for(let i=0;i<ids.length;i++){
       const id = ids[i];
       const addId = 100+i;
-      send(server,{ jsonrpc:'2.0', id:addId, method:'tools/call', params:{ name:'index_dispatch', arguments:{ action:'add', entry:{ id, title:id, body:`Body ${i}`, priority:50+i, audience:'all', requirement:'optional', categories:['temp','Test'], owner:`owner-${i}`, priorityTier:'P1', version:'9.9.9', classification:'internal', semanticSummary:`Custom summary ${i}` }, lax:true, overwrite:true } } });
+      send(server,{ jsonrpc:'2.0', id:addId, method:'tools/call', params:{ name:'index_dispatch', arguments:{ action:'add', entry:{ id, title:id, body:`Body ${i}`, priority:50+i, audience:'all', requirement:'optional', categories:['temp','test'], owner:`owner-${i}`, priorityTier:'P1', version:'9.9.9', classification:'internal', semanticSummary:`Custom summary ${i}` }, lax:true, overwrite:true } } });
       const env = await getResponse(out, addId, 6000);
       expect(xorResultError(env)).toBe(true);
       expect(env.error, `unexpected error for add ${id}: ${JSON.stringify(env.error)}`).toBeFalsy();

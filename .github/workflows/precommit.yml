@@ -32,6 +32,9 @@ jobs:
         # the pre-push policy replay below.
         run: npm ci --no-audit --no-fund
 
+      - name: TypeScript strict mode check
+        run: npm run typecheck
+
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6 # pii-allowlist: pinned action SHA
         with:
           python-version: '3.12'
@@ -57,7 +60,7 @@ jobs:
             # protection rule on main covers the policy this hook enforces.
             SKIP=no-commit-to-branch pre-commit run --all-files
           fi
-        continue-on-error: ${{ secrets.GITGUARDIAN_API_KEY == '' }}
+
 
       - name: Run pre-push security policy replay
         env:

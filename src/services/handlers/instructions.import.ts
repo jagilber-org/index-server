@@ -10,6 +10,7 @@ import { ClassificationService } from '../classificationService';
 import { resolveOwner } from '../ownershipService';
 import { validateInstructionInputSurface, validateInstructionRecord } from '../instructionRecordValidation';
 import { isInstructionValidationError } from '../instructionRecordValidation';
+import { splitEntry } from '../../schemas/instructionSchema';
 
 import { logAudit } from '../auditLog';
 import { logInfo, logError, log } from '../logger';
@@ -102,10 +103,36 @@ registerHandler('index_import', guard('index_import', async (p: { entries?: Impo
   const dir = getInstructionsDir(); if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   const instructionsCfg = getRuntimeConfig().instructions;
   let imported = 0, skipped = 0, overwritten = 0; const errors: { id: string; error: string }[] = []; const classifier = new ClassificationService();
+  // Aggregate counts of server-managed fields we silently dropped from caller-supplied
+  // entries. Reported back so callers can see the implicit normalisation. The split is
+  // driven by SERVER_MANAGED_KEYS (annotated x-fieldClass on the canonical schema), so
+  // export→import is naturally round-trippable: server-owned timestamps/hashes are
+  // partitioned out of the input contract before validation.
+  const stripped: Record<string, number> = {};
   const skippedIds = new Set<string>();
   const formatImportValidationError = (validationErrors: string[]) => `invalid_instruction: ${validationErrors.join('; ')}`;
-  for (const e of entries) {
-    const id = (e as Partial<ImportEntry>)?.id || 'unknown';
+  for (const rawEntry of entries) {
+    const id = (rawEntry as Partial<ImportEntry>)?.id || 'unknown';
+    // Partition server-managed fields out of the input. Preserves usageCount /
+    // firstSeenTs / lastUsedAt for restore scenarios; discards the rest (server
+    // recomputes sourceHash, schemaVersion, createdAt, updatedAt on write).
+    const partition = splitEntry(rawEntry as unknown as Record<string, unknown>);
+    const carryForward: Partial<InstructionEntry> = {};
+    for (const key of Object.keys(partition.serverManaged)) {
+      stripped[key] = (stripped[key] || 0) + 1;
+      // Carry-forward fields that represent observed usage history rather than
+      // server-derived integrity. The server will re-derive sourceHash,
+      // schemaVersion, createdAt, updatedAt regardless of input.
+      if (key === 'usageCount' || key === 'firstSeenTs' || key === 'lastUsedAt' || key === 'archivedAt') {
+        (carryForward as Record<string, unknown>)[key] = (partition.serverManaged as Record<string, unknown>)[key];
+      }
+    }
+    const e = { ...partition.input, ...partition.unknown } as unknown as ImportEntry;
+    // Caller-required minimum for index_import. Other canonical-required
+    // fields (categories → 'uncategorized'; classifier-filled contentType)
+    // are defaulted by normalization further down. Do not derive this from
+    // REQUIRED_INPUT_KEYS — canonical required[] reflects the on-disk
+    // record, not the smallest payload a caller may submit.
     const requiredFieldErrors = [
       !e?.id ? 'id: missing required field' : undefined,
       e?.title === undefined ? 'title: missing required field' : undefined,
@@ -152,7 +179,14 @@ registerHandler('index_import', guard('index_import', async (p: { entries?: Impo
     if (e.priorityTier === 'P1' && (!categories.length || !e.owner)) { errors.push({ id: e.id, error: 'P1 requires category & owner' }); warnStruct('[import] entry rejected', { id: e.id, reason: 'p1-requires-category-and-owner' }); continue; }
     if ((e.requirement === 'mandatory' || e.requirement === 'critical') && !e.owner) { errors.push({ id: e.id, error: 'mandatory/critical require owner' }); warnStruct('[import] entry rejected', { id: e.id, reason: 'mandatory-critical-require-owner', requirement: e.requirement }); continue; }
     if (fileExists && mode === 'skip') { skipped++; skippedIds.add(e.id); continue; }
-    const base: InstructionEntry = existing ? { ...existing, title: e.title, body: bodyTrimmed, rationale: e.rationale, priority: e.priority, audience: e.audience, requirement: e.requirement, categories, primaryCategory: effectivePrimary, updatedAt: now } as InstructionEntry : { id: e.id, title: e.title, body: bodyTrimmed, rationale: e.rationale, priority: e.priority, audience: e.audience, requirement: e.requirement, categories, primaryCategory: effectivePrimary, sourceHash: newBodyHash, schemaVersion: SCHEMA_VERSION, deprecatedBy: e.deprecatedBy, createdAt: now, updatedAt: now, riskScore: e.riskScore, createdByAgent: instructionsCfg.agentId, sourceWorkspace: instructionsCfg.workspaceId, extensions: e.extensions } as InstructionEntry;
+    // For overwrites we still apply carryForward AFTER spreading `existing` so a
+    // caller-supplied usageCount / firstSeenTs / lastUsedAt / archivedAt (e.g. a
+    // restored export) wins over what's currently in the store. For new entries
+    // the same spread provides defaults from the export. carryForward is empty
+    // when the caller did not supply any of those keys.
+    const base: InstructionEntry = existing
+      ? { ...existing, title: e.title, body: bodyTrimmed, rationale: e.rationale, priority: e.priority, audience: e.audience, requirement: e.requirement, categories, primaryCategory: effectivePrimary, updatedAt: now, ...carryForward } as InstructionEntry
+      : { id: e.id, title: e.title, body: bodyTrimmed, rationale: e.rationale, priority: e.priority, audience: e.audience, requirement: e.requirement, categories, primaryCategory: effectivePrimary, sourceHash: newBodyHash, schemaVersion: SCHEMA_VERSION, deprecatedBy: e.deprecatedBy, createdAt: now, updatedAt: now, riskScore: e.riskScore, createdByAgent: instructionsCfg.agentId, sourceWorkspace: instructionsCfg.workspaceId, extensions: e.extensions, ...carryForward } as InstructionEntry;
     applyGovernanceKeys(base, e, IMPORT_GOVERNANCE_KEYS);
     if (!base.sourceWorkspace) base.sourceWorkspace = instructionsCfg.workspaceId;
     base.sourceHash = newBodyHash;
@@ -172,9 +206,10 @@ registerHandler('index_import', guard('index_import', async (p: { entries?: Impo
         logError('[import] entry write rejected', { id: e.id, reason: 'validation-failed-at-write', error: errMsg });
         continue;
       }
-      const writeMsg = (err as Error).message || 'unknown';
-      errors.push({ id: e.id, error: `write-failed: ${writeMsg}` });
-      logError('[import] entry write failed', { id: e.id, error: writeMsg, stack: (err as Error).stack });
+      const writeError = err instanceof Error ? err : new Error(String(err));
+      errors.push({ id: e.id, error: 'write_failed: Instruction write failed due to an internal error. The error details are not exposed to clients.' });
+      logError('[import] entry write failed', { id: e.id, error: writeError.message, stack: writeError.stack });
+      logAudit('import_write_failed', e.id, { error: writeError.message, errorName: writeError.name, mode });
       continue;
     }
     if (fileExists && mode === 'overwrite') overwritten++; else if (!fileExists) imported++;
@@ -196,7 +231,7 @@ registerHandler('index_import', guard('index_import', async (p: { entries?: Impo
     logError('[import] verification failed', { missingAfterReload: verificationErrors.length, ids: verificationErrors.map(v => v.id) });
   }
   const verifiedCount = writtenIds.length - verificationErrors.length;
-  const summary = { hash: st.hash, imported, skipped, overwritten, total: entries.length, errors, verified: verificationErrors.length === 0, verifiedCount, verificationErrorCount: verificationErrors.length };
+  const summary = { hash: st.hash, imported, skipped, overwritten, total: entries.length, errors, verified: verificationErrors.length === 0, verifiedCount, verificationErrorCount: verificationErrors.length, stripped };
   logAudit('import', entries.map(e => e.id), { imported, skipped, overwritten, errors: errors.length, verified: verificationErrors.length === 0 });
   if (errors.length) {
     warnStruct('[import] complete with errors', { imported, skipped, overwritten, total: entries.length, errorCount: errors.length, verifiedCount, verificationErrorCount: verificationErrors.length, errorIds: errors.map(e => e.id) });

@@ -373,7 +373,7 @@ describe('instruction CRUD: schema contract after write', () => {
       status: 'draft',
       priorityTier: 'P3',
       classification: 'public',
-      contentType: 'reference',
+      contentType: 'knowledge',
       version: '2.0.0',
       riskScore: 7,
       supersedes: 'old-id',

@@ -49,7 +49,7 @@ describe('instructions dispatcher (P1)', () => {
   const dispatch = (action: string, params: Record<string, any>) => (list as any)({ action, ...params });
 
     // Use dispatcher add path (maps to handlers/add internally).
-  const addResp: any = await dispatch('add', { entry: { id, body: 'Hello body', title: id, audience: 'all', requirement: 'optional', priority: 10, categories: ['test','P1'] }, lax: true });
+  const addResp: any = await dispatch('add', { entry: { id, body: 'Hello body', title: id, audience: 'all', requirement: 'optional', priority: 10, categories: ['test','p1'] }, lax: true });
   expect(addResp).toMatchObject({ id, created: true, overwritten: false });
 
   // List with expectId should surface new id first (legacy repairedVisibility flags removed in Phase E cleanup)

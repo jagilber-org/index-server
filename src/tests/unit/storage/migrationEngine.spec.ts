@@ -92,7 +92,7 @@ describe('Migration Engine', () => {
         body: 'Full field test body',
         priority: 10,
         categories: ['security', 'governance'],
-        contentType: 'reference',
+        contentType: 'knowledge',
         audience: 'all',
         requirement: 'mandatory',
         version: '3.1.0',
@@ -112,7 +112,7 @@ describe('Migration Engine', () => {
       expect(loaded!.body).toBe('Full field test body');
       expect(loaded!.priority).toBe(10);
       expect(loaded!.categories).toEqual(['security', 'governance']);
-      expect(loaded!.contentType).toBe('reference');
+      expect(loaded!.contentType).toBe('knowledge');
       expect(loaded!.version).toBe('3.1.0');
       expect(loaded!.owner).toBe('security-team');
       sqliteStore.close();

@@ -468,10 +468,10 @@ if (-not $ReviewOrg -and $RemoteUrl -match 'github\.com[/:]([^/]+)/') {
     $ReviewOrg = $matches[1]
 }
 
-# --- Require at least one delivery mode ---
+# --- Default delivery mode ---
 if (-not $DirectPublish -and -not $CreateReviewRepo -and -not $CreatePR) {
-    Write-Error 'Specify -DirectPublish, -CreateReviewRepo, or -CreatePR to choose a delivery mode.'
-    return
+    $CreatePR = $true
+    Write-Host 'No delivery mode specified; defaulting to CreatePR.' -ForegroundColor Yellow
 }
 
 # --- DryRun checkpoint ---

@@ -52,10 +52,14 @@ describe('Enum validation — input surface (create/update)', () => {
     expect(errs[0]).toContain('/contentType');
   });
 
-  it('accepts legacy contentType "chat-session" for compatibility coercion', () => {
-    const entry = { ...validEntry(), contentType: 'chat-session' };
-    const errs = validateInstructionInputEnumMembership(entry);
-    expect(errs).toHaveLength(0);
+  it('rejects removed contentType values without compatibility coercion', () => {
+    for (const contentType of ['reference', 'example', 'chat-session']) {
+      const entry = { ...validEntry(), contentType };
+      const errs = validateInstructionInputEnumMembership(entry);
+      expect(errs).toEqual([
+        '/contentType: must be one of agent, skill, instruction, prompt, workflow, knowledge, template, integration',
+      ]);
+    }
   });
 
   it('rejects invalid status value', () => {
@@ -118,20 +122,20 @@ describe('Enum validation — migration path (migrateInstructionRecord)', () => 
     expect(result.notes).toEqual(expect.arrayContaining([expect.stringContaining('corrected invalid requirement')]));
   });
 
-  it('corrects invalid contentType during migration', () => {
+  it('does not correct invalid contentType during migration', () => {
     const rec: Record<string, unknown> = { ...validEntry(), contentType: 'blog-post', schemaVersion: '3' };
     const result = migrateInstructionRecord(rec);
     expect(result.changed).toBe(true);
-    expect(rec.contentType).toBe('instruction');
+    expect(rec.contentType).toBe('blog-post');
   });
 
-  it('migrates legacy contentType "chat-session" to "workflow"', () => {
+  it('does not migrate removed contentType "chat-session" to "workflow"', () => {
     const rec: Record<string, unknown> = { ...validEntry(), contentType: 'chat-session', schemaVersion: '4' };
     const result = migrateInstructionRecord(rec);
     expect(result.changed).toBe(true);
-    expect(rec.contentType).toBe('workflow');
-    expect(rec.schemaVersion).toBe('5');
-    expect(result.notes).toEqual(expect.arrayContaining([expect.stringContaining('chat-session')]));
+    expect(rec.contentType).toBe('chat-session');
+    expect(rec.schemaVersion).toBe('6');
+    expect(result.notes ?? []).not.toEqual(expect.arrayContaining([expect.stringContaining('chat-session')]));
   });
 
   it('corrects invalid status during migration', () => {
@@ -190,7 +194,7 @@ describe('Enum validation — migration path (migrateInstructionRecord)', () => 
 
   it('does not mark as changed when all enums are already valid', () => {
     // Already at current schema with valid enums — no change expected
-    const rec: Record<string, unknown> = { ...validEntry(), schemaVersion: '5' };
+    const rec: Record<string, unknown> = { ...validEntry(), schemaVersion: '6' };
     const result = migrateInstructionRecord(rec);
     expect(result.changed).toBe(false);
   });

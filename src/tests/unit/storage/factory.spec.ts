@@ -1,7 +1,7 @@
 /**
  * Unit tests for storage factory — Issue 4 (Node version check) + embedding store factory.
  */
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
@@ -83,5 +83,73 @@ describe('createEmbeddingStore', () => {
     expect(store).toBeDefined();
     expect(store.load).toBeTypeOf('function');
     store.close();
+  });
+
+  it('returns JsonEmbeddingStore immediately when sqliteVecEnabled is explicitly false', async () => {
+    // Re-mock with sqliteVecEnabled: false to exercise the early-exit path in factory.ts
+    vi.resetModules();
+    vi.doMock('../../../config/runtimeConfig', () => ({
+      getRuntimeConfig: () => ({
+        logging: { level: 'warn', verbose: false, json: false, sync: false, diagnostics: false, protocol: false, sentinelRequested: false },
+        storage: { backend: 'sqlite', sqlitePath: path.join(tmpDir, 'test.db'), sqliteVecEnabled: false },
+        semantic: { embeddingPath: path.join(tmpDir, 'embeddings.json') },
+        index: { baseDir: tmpDir },
+      }),
+    }));
+    const { createEmbeddingStore: createStoreDisabled } = await import('../../../services/storage/factory.js');
+    const store = createStoreDisabled('sqlite', path.join(tmpDir, 'embeddings.json'));
+    expect(store).toBeDefined();
+    // When sqliteVecEnabled=false the factory skips sqlite-vec entirely and goes straight to JSON
+    expect(store.load).toBeTypeOf('function');
+    expect(store.load()).toBeNull(); // JsonEmbeddingStore returns null for missing file
+    store.close();
+  });
+});
+
+describe('parseStorageConfig sqliteVecEnabled auto-derive', () => {
+  const saved: Record<string, string | undefined> = {};
+
+  beforeEach(() => {
+    saved['INDEX_SERVER_STORAGE_BACKEND'] = process.env.INDEX_SERVER_STORAGE_BACKEND;
+    saved['INDEX_SERVER_SQLITE_VEC_ENABLED'] = process.env.INDEX_SERVER_SQLITE_VEC_ENABLED;
+  });
+
+  afterEach(() => {
+    // Restore original env values
+    for (const [k, v] of Object.entries(saved)) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+    vi.resetModules();
+  });
+
+  it('auto-enables sqliteVecEnabled when backend is sqlite and flag is unset', async () => {
+    process.env.INDEX_SERVER_STORAGE_BACKEND = 'sqlite';
+    delete process.env.INDEX_SERVER_SQLITE_VEC_ENABLED;
+    vi.resetModules();
+    const { parseStorageConfig } = await import('../../../config/featureConfig.js');
+    const cfg = parseStorageConfig();
+    expect(cfg.sqliteVecEnabled).toBe(true);
+    expect(cfg.backend).toBe('sqlite');
+  });
+
+  it('leaves sqliteVecEnabled false when backend is json and flag is unset', async () => {
+    process.env.INDEX_SERVER_STORAGE_BACKEND = 'json';
+    delete process.env.INDEX_SERVER_SQLITE_VEC_ENABLED;
+    vi.resetModules();
+    const { parseStorageConfig } = await import('../../../config/featureConfig.js');
+    const cfg = parseStorageConfig();
+    expect(cfg.sqliteVecEnabled).toBe(false);
+    expect(cfg.backend).toBe('json');
+  });
+
+  it('respects explicit INDEX_SERVER_SQLITE_VEC_ENABLED=0 to opt out even for sqlite backend', async () => {
+    process.env.INDEX_SERVER_STORAGE_BACKEND = 'sqlite';
+    process.env.INDEX_SERVER_SQLITE_VEC_ENABLED = '0';
+    vi.resetModules();
+    const { parseStorageConfig } = await import('../../../config/featureConfig.js');
+    const cfg = parseStorageConfig();
+    expect(cfg.sqliteVecEnabled).toBe(false);
+    expect(cfg.backend).toBe('sqlite');
   });
 });

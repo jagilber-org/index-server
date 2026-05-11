@@ -9,9 +9,9 @@ function Write-Section($title) {
   Write-Host "`n=== $title ===" -ForegroundColor Cyan
 }
 
-# Ensure we're at repo root (script lives in scripts/)
+# Ensure we're at repo root (script lives in scripts/build/)
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-Set-Location (Join-Path $scriptDir '..')
+Set-Location (Split-Path -Parent (Split-Path -Parent $scriptDir))
 
 Write-Section "Type Check"
 
@@ -132,7 +132,7 @@ try {
     Write-Section "Unit Tests"
   # Enforce no skipped tests before executing suite
   Write-Host "Running skip guard (guard:skips)" -ForegroundColor DarkCyan
-  node scripts/check-no-skips.mjs
+  npm run guard:skips | Write-Host
   # Avoid triggering a second concurrent build via package.json pretest hook.
   # We compile explicitly above; set flag so new pretest script is a no-op.
   $env:SKIP_PRETEST_BUILD = '1'

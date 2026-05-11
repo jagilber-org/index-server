@@ -18,11 +18,21 @@ describe('validationService (unit)', () => {
     expect(ok).toEqual({ ok: true });
   });
 
+  it('accepts valid feedback_manage params', () => {
+    const ok = validateParams('feedback_manage', { action: 'list', limit: 25, offset: 0 });
+    expect(ok).toEqual({ ok: true });
+  });
+
   it('rejects invalid enum in feedback_submit', () => {
     const res = validateParams('feedback_submit', { type: 'wrong', severity: 'low', title: 't', description: 'd' });
     expect(res.ok).toBe(false);
   // Ajv with strict:false may sometimes collapse enum mismatch into generic error list; just assert structure
   if(res.ok === false){ expect(Array.isArray(res.errors)).toBe(true); }
+  });
+
+  it('rejects invalid action in feedback_manage', () => {
+    const res = validateParams('feedback_manage', { action: 'health' });
+    expect(res.ok).toBe(false);
   });
 
   it('treats unknown tool as ok (no schema)', () => {

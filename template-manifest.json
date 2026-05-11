@@ -1,87 +1,380 @@
 {
-  "templateVersion": "1.25.0",
+  "templateVersion": "1.31.0",
   "schemaVersion": 2,
   "templateName": "layered-hook-security-template",
   "hookStandardInstruction": "repository-hook-security-standard",
   "hookStandardVersion": "1.4.0",
   "canonicalTemplateInstruction": "canonical-starter-template-repo",
-  "updatedAt": "2026-04-26T00:00:00.000Z",
+  "updatedAt": "2026-05-10T00:00:00.000Z",
   "managedFiles": {
-    ".template-adoption.example.json": { "strategy": "AdoptionMarker" },
-    ".pre-commit-config.yaml": { "strategy": "ExactMatch" },
-    ".gitleaks.toml": { "strategy": "MergeReview" },
-    ".ggshield.yml": { "strategy": "MergeReview" },
-    ".pii-allowlist": { "strategy": "MergeReview" },
-    ".pii-file-allowlist": { "strategy": "MergeReview" },
-    ".secrets.baseline": { "strategy": "ExactMatch" },
-    ".semgrep.yml": { "strategy": "MergeReview" },
-    ".instructions/README.md": { "strategy": "ExactMatch" },
-    ".instructions/shared/repository-security-hooks.md": { "strategy": "ExactMatch" },
-    ".instructions/shared/template-adoption-workflow.md": { "strategy": "ExactMatch" },
-    ".instructions/shared/index-server-bootstrap.md": { "strategy": "ExactMatch" },
-    ".instructions/shared/squad-index-server-complement.md": { "strategy": "ExactMatch" },
-    ".instructions/shared/git-workflow.md": { "strategy": "ExactMatch" },
-    ".instructions/shared/observability-logging.md": { "strategy": "ExactMatch" },
-    ".instructions/shared/codeql-configuration-patterns.md": { "strategy": "ExactMatch" },
-    ".instructions/shared/language-ecosystem-patterns.md": { "strategy": "ExactMatch" },
-    ".instructions/shared/adopter-hook-patterns.md": { "strategy": "ExactMatch" },
-    ".instructions/shared/public-mirror-guard.md": { "strategy": "ExactMatch" },
-    ".instructions/shared/mirrored-release-workflow.md": { "strategy": "ExactMatch" },
-    ".instructions/shared/iac-patterns.md": { "strategy": "ExactMatch" },
-    "hooks/block-dotenv.ps1": { "strategy": "ExactMatch" },
-    "hooks/check-pii.ps1": { "strategy": "ExactMatch" },
-    "hooks/check-env-leaks.ps1": { "strategy": "ExactMatch" },
-    "hooks/pre-push-public-guard.ps1": { "strategy": "ExactMatch" },
-    "hooks/run-semgrep-pre-push.ps1": { "strategy": "ExactMatch" },
-    "hooks/check-prompt-injection.ps1": { "strategy": "ExactMatch" },
-    "hooks/check-hallucinations.ps1": { "strategy": "ExactMatch" },
-    "hooks/eslint-pre-push.ps1": { "strategy": "ExactMatch" },
-    "hooks/validate-agent-trailers.ps1": { "strategy": "ExactMatch" },
-    ".prompt-injection-allowlist": { "strategy": "MergeReview" },
-    ".hallucination-allowlist": { "strategy": "MergeReview" },
-    ".squad/templates/agent-charter.json": { "strategy": "TemplateSourceOnly" },
-    ".squad/templates/decision-record.json": { "strategy": "TemplateSourceOnly" },
-    ".instructions/shared/agent-attestation.md": { "strategy": "ExactMatch" },
-    "scripts/append-agent-provenance.ps1": { "strategy": "ExactMatch" },
-    "scripts/validate-template-metadata.ps1": { "strategy": "ExactMatch" },
-    "scripts/test-hook-regressions.ps1": { "strategy": "ExactMatch" },
-    "scripts/Publish-ToPublicRepo.ps1": { "strategy": "MergeReview", "deprecated": true, "removed": true },
-    "scripts/Invoke-ReleaseWorkflow.ps1": { "strategy": "MergeReview" },
-    "scripts/New-CleanRoomCopy.ps1": { "strategy": "MergeReview" },
-    "scripts/Publish-ToMirror.ps1": { "strategy": "MergeReview" },
-    "scripts/publish-direct-to-remote.cjs": { "strategy": "MergeReview" },
-    ".publish-config.json": { "strategy": "MergeReview" },
-    "scripts/Compare-TemplateSpec.ps1": { "strategy": "ExactMatch" },
-    "scripts/hooks/setup-hooks.ps1": { "strategy": "MergeReview" },
-    "scripts/migrate-manifest-schema.ps1": { "strategy": "ExactMatch" },
-    "scripts/build/sync-constitution.ps1": { "strategy": "MergeReview" },
-    ".github/workflows/precommit.yml": { "strategy": "MergeReview" },
-    ".github/workflows/ggshield-secret-scans.yml": { "strategy": "MergeReview" },
-    ".github/workflows/gitleaks-secret-scans.yml": { "strategy": "MergeReview" },
-    ".github/workflows/semgrep.yml": { "strategy": "MergeReview" },
-    ".github/workflows/auto-tag.yml": { "strategy": "MergeReview", "templateSourceOnly": true },
-    ".github/workflows/promotion-freshness.yml": { "strategy": "MergeReview", "templateSourceOnly": true },
-    ".github/workflows/release.yml": { "strategy": "MergeReview", "templateSourceOnly": true },
-    ".github/ISSUE_TEMPLATE/bug_report.yml": { "strategy": "MergeReview" },
-    ".github/ISSUE_TEMPLATE/feature_request.yml": { "strategy": "MergeReview" },
-    ".github/ISSUE_TEMPLATE/template_change.yml": { "strategy": "MergeReview" },
-    ".github/ISSUE_TEMPLATE/config.yml": { "strategy": "ExactMatch" },
-    ".github/pull_request_template.md": { "strategy": "MergeReview" },
-    ".github/dependabot.yml": { "strategy": "MergeReview" },
-    ".github/CODEOWNERS": { "strategy": "RepoSpecific" },
-    ".gitignore": { "strategy": "MergeReview" },
-    ".github/copilot-instructions.md": { "strategy": "MergeReview" },
-    "constitution.json": { "strategy": "MergeReview" },
-    "constitution.md": { "strategy": "MergeReview" },
-    ".specify/config/promotion-map.json": { "strategy": "MergeReview" },
-    "SECURITY.md": { "strategy": "RepoSpecific" },
-    "CONTRIBUTING.md": { "strategy": "RepoSpecific" },
-    "CODE_OF_CONDUCT.md": { "strategy": "RepoSpecific" },
-    "CHANGELOG.md": { "strategy": "RepoSpecific" },
-    "LICENSE": { "strategy": "RepoSpecific" },
-    "README.md": { "strategy": "RepoSpecific" },
-    ".instructions/local/project-context.md": { "strategy": "RepoSpecific" },
-    ".specify/README.md": { "strategy": "RepoSpecific" }
+    ".template-adoption.example.json": {
+      "strategy": "AdoptionMarker"
+    },
+    ".pre-commit-config.yaml": {
+      "strategy": "ExactMatch"
+    },
+    ".gitleaks.toml": {
+      "strategy": "MergeReview"
+    },
+    ".ggshield.yml": {
+      "strategy": "MergeReview"
+    },
+    ".pii-allowlist": {
+      "strategy": "MergeReview"
+    },
+    ".pii-file-allowlist": {
+      "strategy": "MergeReview"
+    },
+    ".secrets.baseline": {
+      "strategy": "ExactMatch"
+    },
+    ".semgrep.yml": {
+      "strategy": "MergeReview"
+    },
+    ".instructions/README.md": {
+      "strategy": "ExactMatch"
+    },
+    ".instructions/shared/repository-security-hooks.md": {
+      "strategy": "ExactMatch"
+    },
+    ".instructions/shared/template-adoption-workflow.md": {
+      "strategy": "ExactMatch"
+    },
+    ".instructions/shared/index-server-bootstrap.md": {
+      "strategy": "ExactMatch"
+    },
+    ".instructions/shared/squad-index-server-complement.md": {
+      "strategy": "ExactMatch"
+    },
+    ".instructions/shared/git-workflow.md": {
+      "strategy": "ExactMatch"
+    },
+    ".instructions/shared/observability-logging.md": {
+      "strategy": "ExactMatch"
+    },
+    ".instructions/shared/codeql-configuration-patterns.md": {
+      "strategy": "ExactMatch"
+    },
+    ".instructions/shared/language-ecosystem-patterns.md": {
+      "strategy": "ExactMatch"
+    },
+    ".instructions/shared/adopter-hook-patterns.md": {
+      "strategy": "ExactMatch"
+    },
+    ".instructions/shared/public-mirror-guard.md": {
+      "strategy": "ExactMatch"
+    },
+    ".instructions/shared/mirrored-release-workflow.md": {
+      "strategy": "ExactMatch"
+    },
+    ".instructions/shared/iac-patterns.md": {
+      "strategy": "ExactMatch"
+    },
+    "hooks/block-dotenv.ps1": {
+      "strategy": "ExactMatch"
+    },
+    "hooks/check-pii.ps1": {
+      "strategy": "ExactMatch"
+    },
+    "hooks/check-env-leaks.ps1": {
+      "strategy": "ExactMatch"
+    },
+    "hooks/pre-push-public-guard.ps1": {
+      "strategy": "ExactMatch"
+    },
+    "hooks/run-semgrep-pre-push.ps1": {
+      "strategy": "ExactMatch"
+    },
+    "hooks/check-prompt-injection.ps1": {
+      "strategy": "ExactMatch"
+    },
+    "hooks/check-hallucinations.ps1": {
+      "strategy": "ExactMatch"
+    },
+    "hooks/eslint-pre-push.ps1": {
+      "strategy": "ExactMatch"
+    },
+    "hooks/validate-agent-trailers.ps1": {
+      "strategy": "ExactMatch"
+    },
+    ".prompt-injection-allowlist": {
+      "strategy": "MergeReview"
+    },
+    ".hallucination-allowlist": {
+      "strategy": "MergeReview"
+    },
+    ".squad/templates/agent-charter.json": {
+      "strategy": "TemplateSourceOnly"
+    },
+    ".squad/templates/decision-record.json": {
+      "strategy": "TemplateSourceOnly"
+    },
+    ".instructions/shared/agent-attestation.md": {
+      "strategy": "ExactMatch"
+    },
+    "scripts/append-agent-provenance.ps1": {
+      "strategy": "ExactMatch"
+    },
+    "scripts/validate-template-metadata.ps1": {
+      "strategy": "ExactMatch"
+    },
+    "scripts/test-hook-regressions.ps1": {
+      "strategy": "ExactMatch"
+    },
+    "scripts/Publish-ToPublicRepo.ps1": {
+      "strategy": "MergeReview",
+      "deprecated": true,
+      "removed": true
+    },
+    "scripts/Invoke-ReleaseWorkflow.ps1": {
+      "strategy": "MergeReview"
+    },
+    "scripts/New-CleanRoomCopy.ps1": {
+      "strategy": "MergeReview"
+    },
+    "scripts/Publish-ToMirror.ps1": {
+      "strategy": "MergeReview"
+    },
+    "scripts/publish-direct-to-remote.cjs": {
+      "strategy": "MergeReview"
+    },
+    ".publish-config.json": {
+      "strategy": "MergeReview"
+    },
+    "scripts/Compare-TemplateSpec.ps1": {
+      "strategy": "ExactMatch"
+    },
+    "scripts/hooks/setup-hooks.ps1": {
+      "strategy": "MergeReview"
+    },
+    "scripts/migrate-manifest-schema.ps1": {
+      "strategy": "ExactMatch"
+    },
+    "scripts/build/sync-constitution.ps1": {
+      "strategy": "MergeReview"
+    },
+    ".github/workflows/precommit.yml": {
+      "strategy": "MergeReview"
+    },
+    ".github/workflows/ggshield-secret-scans.yml": {
+      "strategy": "MergeReview"
+    },
+    ".github/workflows/gitleaks-secret-scans.yml": {
+      "strategy": "MergeReview"
+    },
+    ".github/workflows/semgrep.yml": {
+      "strategy": "MergeReview"
+    },
+    ".github/workflows/auto-tag.yml": {
+      "strategy": "MergeReview",
+      "templateSourceOnly": true
+    },
+    ".github/workflows/promotion-freshness.yml": {
+      "strategy": "MergeReview",
+      "templateSourceOnly": true
+    },
+    ".github/workflows/release.yml": {
+      "strategy": "MergeReview",
+      "templateSourceOnly": true
+    },
+    ".github/ISSUE_TEMPLATE/bug_report.yml": {
+      "strategy": "MergeReview"
+    },
+    ".github/ISSUE_TEMPLATE/feature_request.yml": {
+      "strategy": "MergeReview"
+    },
+    ".github/ISSUE_TEMPLATE/template_change.yml": {
+      "strategy": "MergeReview"
+    },
+    ".github/ISSUE_TEMPLATE/config.yml": {
+      "strategy": "ExactMatch"
+    },
+    ".github/pull_request_template.md": {
+      "strategy": "MergeReview"
+    },
+    ".github/dependabot.yml": {
+      "strategy": "MergeReview"
+    },
+    ".github/CODEOWNERS": {
+      "strategy": "RepoSpecific"
+    },
+    ".gitignore": {
+      "strategy": "MergeReview"
+    },
+    ".devsandbox/.gitignore": {
+      "strategy": "RepoSpecific"
+    },
+    "codecov.yml": {
+      "strategy": "RepoSpecific"
+    },
+    "Dockerfile": {
+      "strategy": "MergeReview"
+    },
+    "docker-compose.yml": {
+      "strategy": "MergeReview"
+    },
+    ".github/copilot-instructions.md": {
+      "strategy": "MergeReview"
+    },
+    "constitution.json": {
+      "strategy": "MergeReview"
+    },
+    "constitution.md": {
+      "strategy": "MergeReview"
+    },
+    ".specify/config/promotion-map.json": {
+      "strategy": "MergeReview"
+    },
+    "SECURITY.md": {
+      "strategy": "RepoSpecific"
+    },
+    "CONTRIBUTING.md": {
+      "strategy": "RepoSpecific"
+    },
+    "CODE_OF_CONDUCT.md": {
+      "strategy": "RepoSpecific"
+    },
+    "CHANGELOG.md": {
+      "strategy": "RepoSpecific"
+    },
+    "LICENSE": {
+      "strategy": "RepoSpecific"
+    },
+    "README.md": {
+      "strategy": "RepoSpecific"
+    },
+    ".instructions/local/project-context.md": {
+      "strategy": "RepoSpecific"
+    },
+    ".specify/README.md": {
+      "strategy": "RepoSpecific"
+    },
+    ".github/branch-protection-policy.json": {
+      "description": "Declarative branch protection baseline ΓÇö adopters may customize thresholds",
+      "strategy": "MergeReview"
+    },
+    "hooks/check-dotenv-leaks.ps1": {
+      "description": "Canonical dotenv-leak detection hook implementation",
+      "strategy": "ExactMatch"
+    },
+    ".env-leak-allowlist": {
+      "description": "Env-value leak scanner allowlist for documented false positives",
+      "strategy": "MergeReview"
+    },
+    ".env.example": {
+      "description": "Template for repo-local environment configuration",
+      "strategy": "MergeReview"
+    },
+    "hooks/run-gitleaks-pre-push.ps1": {
+      "description": "Pre-push hook wrapper for commit-range gitleaks secret scanning",
+      "strategy": "ExactMatch"
+    },
+    "scripts/Load-RepoEnv.ps1": {
+      "description": "Load repo-root .env file into process environment variables",
+      "strategy": "ExactMatch"
+    },
+    "scripts/pre-commit.mjs": {
+      "description": "Node.js PII scanner with comment-style allowlist marker parity",
+      "strategy": "ExactMatch"
+    },
+    "scripts/crawl-logs.mjs": {
+      "description": "NDJSON log crawler with repeat-spam and stack-warn budget detection",
+      "strategy": "ExactMatch"
+    },
+    "scripts/validate-no-test-artifacts.mjs": {
+      "description": "Stray test artifact size guard",
+      "strategy": "ExactMatch"
+    },
+    ".crawl-logs-allowlist.example": {
+      "description": "Annotated log-hygiene allowlist template",
+      "strategy": "ExactMatch"
+    },
+    ".github/workflows/log-hygiene.yml": {
+      "description": "Reusable log-hygiene CI workflow",
+      "strategy": "MergeReview"
+    },
+    ".publish-exclude.example": {
+      "description": "Public mirror clean-room exclude template with nested generated env/config artifacts",
+      "strategy": "MergeReview"
+    },
+    ".public-mirror-allowlist.example": {
+      "description": "Regex allowlist template for intentional public mirror internal-reference wording findings",
+      "strategy": "MergeReview"
+    },
+    "scripts/Verify-BranchProtection.ps1": {
+      "description": "Branch protection drift-detection script ΓÇö should stay aligned with the policy manifest",
+      "strategy": "ExactMatch"
+    },
+    "scripts/setup-hooks.ps1": {
+      "strategy": "MergeReview"
+    },
+    "scripts/sync-constitution.ps1": {
+      "strategy": "MergeReview"
+    },
+    ".github/workflows/actionlint.yml": {
+      "description": "CI backstop for the canonical actionlint pre-push hook on GitHub Actions workflow YAML changes",
+      "strategy": "MergeReview"
+    },
+    "hooks/codeql-pre-push.ps1": {
+      "description": "Pre-push hook for local CodeQL security analysis with GHAS parity",
+      "strategy": "ExactMatch"
+    },
+    ".instructions/shared/agent-coauthorship.md": {
+      "description": "AI co-authorship disclosure guidelines",
+      "strategy": "ExactMatch"
+    },
+    ".github/workflows/codeql.yml": {
+      "description": "CodeQL CI workflow aligned with GitHub security-extended defaults",
+      "strategy": "MergeReview"
+    },
+    ".instructions/shared/codeql-suppression-patterns.md": {
+      "description": "Guidance for CodeQL finding suppression and query suite selection",
+      "strategy": "ExactMatch"
+    },
+    ".instructions/shared/commit-signing.md": {
+      "description": "Guidance for commit signing setup (SSH/GPG) and enforcement",
+      "strategy": "ExactMatch"
+    },
+    ".github/workflows/verify-commits.yml": {
+      "description": "Advisory CI check reporting unsigned commits in PRs",
+      "strategy": "MergeReview"
+    },
+    "scripts/pr-preflight.ps1": {
+      "description": "Agent PR-preflight checklist enforcement script",
+      "strategy": "ExactMatch"
+    },
+    ".instructions/shared/agent-preflight.md": {
+      "description": "Agent preflight checklist guidance",
+      "strategy": "ExactMatch"
+    },
+    ".instructions/shared/vitest-partial-mocking.md": {
+      "description": "Vitest partial mocking patterns documentation",
+      "strategy": "ExactMatch"
+    },
+    "scripts/bump-version.mjs": {
+      "description": "Atomic version sync across all version-bearing JSON files",
+      "strategy": "ExactMatch"
+    },
+    "scripts/release-preflight.ps1": {
+      "description": "Release gate validation: version parity, clean tree, tests, lint, pre-commit",
+      "strategy": "ExactMatch"
+    },
+    "scripts/validate-constitution-ci.ps1": {
+      "description": "CI-mode constitution validation for workflow use",
+      "strategy": "ExactMatch"
+    },
+    "scripts/validate-dependencies.ps1": {
+      "description": "Dependency validation and audit reporting script",
+      "strategy": "ExactMatch"
+    },
+    "scripts/ConvertTo-Slug.ps1": {
+      "description": "String-to-URL-slug conversion utility for template tooling",
+      "strategy": "ExactMatch"
+    },
+    "scripts/ggshield-with-retry.sh": {
+      "description": "Shell wrapper for ggshield with transient-failure retry logic",
+      "strategy": "ExactMatch"
+    }
   },
   "notes": [
     "Use this manifest to track intentional template changes.",
@@ -114,6 +407,17 @@
     "Template version 1.22.0 adds language-ecosystem-patterns.md covering 7 ecosystems (Node.js, Python, Go, .NET/C#, Java, Rust, PowerShell) with per-language dependency graph files, Dependabot keys, audit commands, CodeQL keys, and Semgrep rulesets. Adds constitution rule IP-5 (optional profile for dependency graph visibility, Dependabot, and SAST tuning).",
     "Template version 1.23.0 splits Publish-ToPublicRepo.ps1 into New-CleanRoomCopy.ps1 (safe agent-invokable content preparation with SHA-256 manifest) and Publish-ToMirror.ps1 (human-supervised delivery with content-hash verification, sanctioned-remote enforcement via .publish-config.json, and ConfirmImpact=High). Pre-push guard now reads .publish-config.json and fails closed for sanctioned remotes when gh CLI is missing. PUBLISH_OVERRIDE env var deprecated. Original script preserved as thin deprecated wrapper.",
     "Template version 1.24.0 adds constitution-driven CI validation (PR #40), prompt-injection scanning hook with NFKC normalization and multi-pattern detection (PR #41, SH-10), hallucination quality gates for fabricated dependencies and phantom imports (PR #42), agent attestation framework with trust levels, provenance trailers, and commit-msg validation (PR #43, AG-1..AG-4), and expanded env-leak scanner coverage for identity vars, vault URLs, and tool paths (PR #45). Deleted deprecated Publish-ToPublicRepo.ps1.",
-    "Template version 1.25.0 adds a mandatory ESLint pre-push gate (hooks/eslint-pre-push.ps1) wired through .pre-commit-config.yaml so JS/TS adopters' local pushes mirror CI npm run lint. JS/TS-aware (no-op without an ESLint config and lint script). Honors only an explicit TEMPLATE_SKIP_LINT=1 emergency override that is intentionally separate from existing slow-suite skip flags. Severity is delegated to the adopter's lint script (use eslint --max-warnings=0 to fail on warnings). Breaking change for adopters whose CI lint passes but local lint fails. Closes template-repo issue #48."
+    "Template version 1.25.0 adds a mandatory ESLint pre-push gate (hooks/eslint-pre-push.ps1) wired through .pre-commit-config.yaml so JS/TS adopters' local pushes mirror CI npm run lint. JS/TS-aware (no-op without an ESLint config and lint script). Honors only an explicit TEMPLATE_SKIP_LINT=1 emergency override that is intentionally separate from existing slow-suite skip flags. Severity is delegated to the adopter's lint script (use eslint --max-warnings=0 to fail on warnings). Breaking change for adopters whose CI lint passes but local lint fails. Closes template-repo issue #48.",
+    "Template version 1.26.0 adds CodeQL local scan artifact exclusion (.codeql/) to .gitignore and codeql-configuration-patterns.md shared instruction for SAST tuning across supported ecosystems (JavaScript/TypeScript, Python, Go, C#, Java, Ruby, C/C++).",
+    "Template version 1.27.0 refines PII scanner to skip vendor and generated directories by default, adds .pii-file-allowlist glob-based skip patterns, and extends env-leak scanner with lockfile exclusion for package-lock.json and yarn.lock.",
+    "Template version 1.28.0 adds squad agent charter and decision record templates (.squad/templates/) as TemplateSourceOnly surfaces, expands managed file inventory to cover all template-distributed surfaces, and standardizes adoption metadata validation for localDeviations shape.",
+    "Template version 1.29.0 adds inter-agent messaging system guidance and content-type taxonomy alignment (eight content types: instruction, template, workflow, reference, example, agent, chat-session). Extends tool registry patterns for messaging_* tool family.",
+    "Template version 1.30.0 adds SQLite storage backend patterns and sqlite-vec vector embedding support guidance. Updates Docker configuration for glibc-vs-musl awareness (node:22-slim for sqlite-vec). Adds dev-server script taxonomy with semantic subdirectory organization (build/, ci/, dev/, diagnostics/, governance/, testing/, perf/, migration/).",
+    "Template version 1.31.0 aligns repo config surfaces (README, package.json, docker-compose.yml, Dockerfile, codecov.yml) with current runtime reality. Updates tool inventory count from 40+ to 50+. Adds clobber-detection awareness for parallel workstream coordination. Standardizes .gitignore patterns for CodeQL, dev-sandbox, and test-generated artifacts.",
+    "Template version 1.27.0 adds mandatory actionlint validation for GitHub Actions workflow files through a pre-push hook and a path-scoped CI backstop. Closes #137.",
+    "Template version 1.28.0 hardens clean-room public mirror preparation: publish manifests use public-safe fields only, canonical PII scanning fails closed when unavailable or failing, and nested generated script-local env/config artifacts are ignored, excluded, and forbidden from clean-room output. Closes #145, #146, and #147.",
+    "Template version 1.29.0 adds fail-closed public mirror internal-reference hygiene scanning with narrow inline and regex allowlists for intentional public references. Closes #148.",
+    "Template version 1.30.0 adds declarative branch protection policy manifest (.github/branch-protection-policy.json) and drift-detection script (scripts/Verify-BranchProtection.ps1). Adopters configure settings manually; the verification script compares actual GitHub settings against the declared minimum baseline via gh API. Closes #138.",
+    "Template version 1.31.0 aligns gitleaks hook with the documented stage contract: renames hook ID from gitleaks to gitleaks-pre-push, moves from pre-commit to pre-push stage, and adds commit-range scanning via hooks/run-gitleaks-pre-push.ps1 wrapper. Adds adopter migration documentation. Closes #143."
   ]
 }

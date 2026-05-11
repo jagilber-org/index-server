@@ -50,7 +50,10 @@ describe('instructions: create atomic visibility contract', () => {
     const body = 'Body created at ' + new Date().toISOString();
     const title = 'Atomic Create Test';
     const before = await client.list();
-    expect(before.count).toBe(0);
+    // The server may auto-seed canonical instructions on first start
+    // (e.g. content-model). Treat the pre-create count as the baseline
+    // and assert deltas instead of absolute counts.
+    const baseline = before.count;
 
     const resp = await client.create({ id, title, body });
     expect(resp?.id).toBe(id);
@@ -76,7 +79,7 @@ describe('instructions: create atomic visibility contract', () => {
     expect(readTitle).toBe(disk.raw.title);
 
     const after = await client.list();
-    expect(after.count).toBe(1);
+    expect(after.count).toBe(baseline + 1);
     expect(after.items.some((i:any)=> i.id === id)).toBe(true);
   }, 30000);
 
