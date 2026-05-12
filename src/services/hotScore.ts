@@ -13,6 +13,7 @@
  */
 
 import { logDebug, logInfo } from './logger.js';
+import type { TrendDirection } from '../lib/trendDirection.js';
 
 /**
  * Configuration parameters for hot score calculation
@@ -76,7 +77,7 @@ export interface HotScoreResult {
     uniqueHours: number;
     firstUsage?: number;
     lastUsage?: number;
-    usageTrend: 'increasing' | 'decreasing' | 'stable';
+    usageTrend: TrendDirection;
   };
 }
 
@@ -266,7 +267,7 @@ export class HotScoreService {
       .filter(p => p.timestamp >= previousQuarterStart && p.timestamp < previousQuarterEnd)
       .reduce((sum, point) => sum + point.count, 0);
 
-    let usageTrend: 'increasing' | 'decreasing' | 'stable' = 'stable';
+    let usageTrend: TrendDirection = 'stable';
     if (lastQuarterUsage > previousQuarterUsage * 1.1) {
       usageTrend = 'increasing';
     } else if (lastQuarterUsage < previousQuarterUsage * 0.9) {

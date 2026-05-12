@@ -14,6 +14,7 @@ import { PersistedWebSocketConnection } from '../../models/SessionPersistence';
 import { getRuntimeConfig } from '../../config/runtimeConfig.js';
 import { logInfo, logError, logWarn } from '../../services/logger.js';
 import { isLoopbackHost, constantTimeKeyMatch } from './routes/adminAuth.js';
+import type { SeverityLevel } from '../types/severity.js';
 
 export interface DashboardMessage {
   type: string;
@@ -59,7 +60,7 @@ export interface ErrorMessage extends DashboardMessage {
   data: {
     message: string;
     stack?: string;
-    severity: 'low' | 'medium' | 'high' | 'critical';
+    severity: SeverityLevel;
   };
 }
 

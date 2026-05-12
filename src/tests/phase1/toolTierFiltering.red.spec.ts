@@ -5,6 +5,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { getToolRegistry } from '../../services/toolRegistry';
+import { TOOL_TIERS } from '../../services/protocolEnums';
 
 // Expected core tools (always visible, essential daily use)
 // feedback_dispatch was removed in Phase 2b (002-tool-consolidation); feedback_submit remains always visible for agents.
@@ -42,7 +43,7 @@ describe('RED: Tool tier filtering (002-tool-consolidation Phase 1)', () => {
     const registry = getToolRegistry();
     const first = registry[0];
     expect(first).toHaveProperty('tier');
-    expect(['core', 'extended', 'admin']).toContain((first as any).tier);
+    expect([...TOOL_TIERS]).toContain((first as any).tier);
   });
 
   it('getToolRegistry({ tier: "core" }) returns only core tools', () => {
@@ -85,7 +86,7 @@ describe('RED: Tool tier filtering (002-tool-consolidation Phase 1)', () => {
     const allTools = getToolRegistry({ tier: 'admin' });
     for (const tool of allTools) {
       expect(tool.tier, `${tool.name} missing tier`).toBeDefined();
-      expect(['core', 'extended', 'admin']).toContain(tool.tier);
+      expect([...TOOL_TIERS]).toContain(tool.tier);
     }
   });
 });

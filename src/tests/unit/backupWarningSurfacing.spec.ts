@@ -13,19 +13,21 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import fs from 'fs';
 import path from 'path';
-import { getAdminPanel } from '../../dashboard/server/AdminPanel.js';
-import type { AdminPanel } from '../../dashboard/server/AdminPanel.js';
+import os from 'os';
+import { reloadRuntimeConfig } from '../../config/runtimeConfig.js';
+import { AdminPanel } from '../../dashboard/server/AdminPanel.js';
+
+const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'backup-warning-test-'));
+const backupRoot = path.join(tmpDir, 'backups');
 
 describe('Backup API warning/error surfacing (issue #121)', () => {
   let panel: AdminPanel;
-  let backupRoot: string;
   const createdDirs: string[] = [];
 
   beforeAll(() => {
-    panel = getAdminPanel();
-    // The panel uses runtimeConfig's backupsDir or cwd()/backups
-    // We create test backup dirs in the real backupRoot and clean up after
-    backupRoot = path.join(process.cwd(), 'backups');
+    process.env.INDEX_SERVER_BACKUPS_DIR = backupRoot;
+    reloadRuntimeConfig();
+    panel = new AdminPanel();
     fs.mkdirSync(backupRoot, { recursive: true });
   });
 
@@ -34,6 +36,9 @@ describe('Backup API warning/error surfacing (issue #121)', () => {
     for (const dir of createdDirs) {
       try { fs.rmSync(dir, { recursive: true, force: true }); } catch { /* ok */ }
     }
+    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* ok */ }
+    delete process.env.INDEX_SERVER_BACKUPS_DIR;
+    reloadRuntimeConfig();
   });
 
   describe('pruneBackups return shape', () => {

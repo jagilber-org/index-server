@@ -8,6 +8,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 import { execSync } from 'child_process';
+import { sanitizedPublishEnv } from '../helpers/publishEnv';
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
 const CJS_PATH = path.join(REPO_ROOT, 'scripts', 'build', 'publish-direct-to-remote.cjs');
@@ -23,6 +24,13 @@ const HAS_PUBLISH_EXCLUDE = fs.existsSync(path.join(REPO_ROOT, '.publish-exclude
 const HAS_PS1_SCRIPT = fs.existsSync(PS1_PATH);
 const _HAS_PUB_SCRIPT = fs.existsSync(PUB_PATH);
 const HAS_CLEANROOM_SCRIPT = fs.existsSync(CLEANROOM_PATH);
+const EXEC_OPTS = {
+  cwd: REPO_ROOT,
+  encoding: 'utf8' as const,
+  stdio: 'pipe' as const,
+  maxBuffer: 50 * 1024 * 1024,
+  env: sanitizedPublishEnv(),
+};
 
 // ── Helpers to extract forbidden lists from both scripts ──────────────────
 
@@ -230,7 +238,7 @@ describe('publish script hardening', () => {
     beforeAll(() => {
       verifyOutput = execSync(
         `node "${CJS_PATH}" --verify-only --quiet`,
-        { cwd: REPO_ROOT, encoding: 'utf8', stdio: 'pipe', maxBuffer: 50 * 1024 * 1024 }
+        EXEC_OPTS
       );
     }, 120_000);
 

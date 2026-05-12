@@ -10,6 +10,7 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import { execSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
+import { sanitizedPublishEnv } from '../helpers/publishEnv';
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
 const DIST_DIR = path.join(REPO_ROOT, 'dist');
@@ -21,6 +22,7 @@ const EXEC_OPTS = {
   encoding: 'utf8' as const,
   stdio: 'pipe' as const,
   maxBuffer: 50 * 1024 * 1024,
+  env: sanitizedPublishEnv(),
 };
 
 describe('publish pipeline — build + verify-only', () => {

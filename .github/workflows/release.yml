@@ -107,6 +107,7 @@ jobs:
       - name: Unit test gate
         run: |
           mkdir -p test-results
+          set -o pipefail
           npm run test:unit 2>&1 | tee test-results/test-output.log
 
       - name: Crawl test logs (hygiene gate)

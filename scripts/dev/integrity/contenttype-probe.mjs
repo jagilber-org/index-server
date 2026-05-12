@@ -27,10 +27,19 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { startMcp, parseToolPayload } from '../transport/mcp-stdio.mjs';
 
-// ── canonical taxonomy (must match src/models/instruction.ts) ────────────────
-const CONTENT_TYPES = ['agent', 'skill', 'instruction', 'prompt', 'workflow', 'knowledge', 'template', 'integration'];
+// ── canonical taxonomy: read directly from the JSON schema (single source of truth).
+// Do NOT inline the literal array here — that re-introduces the drift bug.
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const SCHEMA_PATH = path.resolve(__dirname, '..', '..', '..', 'schemas', 'instruction.schema.json');
+const _schema = JSON.parse(fs.readFileSync(SCHEMA_PATH, 'utf8'));
+const CONTENT_TYPES = _schema?.properties?.contentType?.enum;
+if (!Array.isArray(CONTENT_TYPES) || CONTENT_TYPES.length === 0) {
+  console.error(`contenttype-probe: failed to read contentType enum from ${SCHEMA_PATH}`);
+  process.exit(2);
+}
 
 // A removed value that must be rejected at write time.
 const REMOVED_TYPE = 'reference';

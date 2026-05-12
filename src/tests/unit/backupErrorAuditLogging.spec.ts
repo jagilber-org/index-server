@@ -14,21 +14,23 @@ import os from 'os';
 
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'backup-audit-test-'));
 const auditFile = path.join(tmpDir, 'audit.log.jsonl');
+const backupRoot = path.join(tmpDir, 'backups');
 process.env.INDEX_SERVER_AUDIT_LOG = auditFile;
+process.env.INDEX_SERVER_BACKUPS_DIR = backupRoot;
 
 describe('AdminPanel backup error audit logging (issue #121)', () => {
   let panel: import('../../dashboard/server/AdminPanel.js').AdminPanel;
   let auditMod: typeof import('../../services/auditLog.js');
-  let backupRoot: string;
   const createdEntries: string[] = [];
 
   beforeAll(async () => {
+    fs.mkdirSync(backupRoot, { recursive: true });
+    const runtimeConfig = await import('../../config/runtimeConfig.js');
+    runtimeConfig.reloadRuntimeConfig();
     auditMod = await import('../../services/auditLog.js');
     auditMod.resetAuditLogCache();
     const adminMod = await import('../../dashboard/server/AdminPanel.js');
-    panel = adminMod.getAdminPanel();
-    backupRoot = path.join(process.cwd(), 'backups');
-    fs.mkdirSync(backupRoot, { recursive: true });
+    panel = new adminMod.AdminPanel();
   });
 
   beforeEach(() => {
@@ -40,6 +42,9 @@ describe('AdminPanel backup error audit logging (issue #121)', () => {
     for (const entry of createdEntries) {
       try { fs.rmSync(entry, { recursive: true, force: true }); } catch { /* ok */ }
     }
+    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* ok */ }
+    delete process.env.INDEX_SERVER_AUDIT_LOG;
+    delete process.env.INDEX_SERVER_BACKUPS_DIR;
   });
 
   function readAuditActions(): { action: string; meta?: Record<string, unknown>; ids?: string[] }[] {

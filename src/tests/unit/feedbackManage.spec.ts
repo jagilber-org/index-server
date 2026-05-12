@@ -176,6 +176,9 @@ describe('feedback_manage', () => {
       loadFeedbackStorage: vi.fn(() => { throw new Error(rawMessage); }),
       saveFeedbackStorage: vi.fn(),
       generateFeedbackId: () => 'mock-feedback-id',
+      FEEDBACK_TYPES: ['issue','status','security','feature-request','bug-report','performance','usability','other'] as const,
+      FEEDBACK_SEVERITIES: ['low','medium','high','critical'] as const,
+      FEEDBACK_STATUSES: ['new','acknowledged','in-progress','resolved','closed'] as const,
     }));
     const { manage } = await loadHandlers(path.join(tmpDir, 'feedback'));
 
@@ -207,6 +210,9 @@ describe('feedback_manage', () => {
       loadFeedbackStorage: vi.fn(() => ({ entries: [], lastUpdated: '2026-01-01T00:00:00.000Z', version: '1.0.0' })),
       saveFeedbackStorage: vi.fn(() => { throw new Error(rawMessage); }),
       generateFeedbackId: () => 'mock-feedback-id',
+      FEEDBACK_TYPES: ['issue','status','security','feature-request','bug-report','performance','usability','other'] as const,
+      FEEDBACK_SEVERITIES: ['low','medium','high','critical'] as const,
+      FEEDBACK_STATUSES: ['new','acknowledged','in-progress','resolved','closed'] as const,
     }));
     const { submit } = await loadHandlers(path.join(tmpDir, 'feedback'));
 

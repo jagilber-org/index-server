@@ -4,6 +4,7 @@ import path from 'path';
 import { getRuntimeConfig } from '../config/runtimeConfig';
 import { isMcpLogBridgeActive, sendMcpLog } from './mcpLogBridge';
 import { recordEvent } from './eventBuffer';
+import { LOG_LEVEL_PRIORITY, type LogLevelUpper } from '../lib/logLevels';
 
 // ── NDJSON Log Schema ───────────────────────────────────────────
 // Compliant with typescript-schema-viewer log analysis format.
@@ -25,16 +26,10 @@ import { recordEvent } from './eventBuffer';
 //   {"ts":"2026-04-03T18:52:12.000Z","level":"ERROR","msg":"[rpc] readSession failed","detail":"Error: ...\n    at readSession (server/rpc.ts:42:9)","pid":12345}
 //   {"ts":"2026-04-03T18:52:12.001Z","level":"TRACE","msg":"→ IndexContext.ensureLoaded","detail":"{\"source\":\"handler\"}","pid":12345}
 
-export type LogLevel = 'TRACE' | 'DEBUG' | 'INFO' | 'WARN' | 'ERROR';
+export type LogLevel = LogLevelUpper;
 
 /** Numeric priority for log level filtering (lower = more verbose). */
-const LEVEL_PRIORITY: Record<string, number> = {
-  TRACE: 0,
-  DEBUG: 1,
-  INFO: 2,
-  WARN: 3,
-  ERROR: 4,
-};
+const LEVEL_PRIORITY: Record<string, number> = LOG_LEVEL_PRIORITY;
 
 export interface LogRecord {
   ts: string;            // ISO 8601 timestamp

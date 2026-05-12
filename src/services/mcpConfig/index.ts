@@ -2,12 +2,12 @@ import fs from 'fs';
 import path from 'path';
 import { createBackup, restoreBackup } from './backup';
 import { buildServerEntry, getServerMap, parseConfigText, readConfigFile, removeConfigText, renderConfig, resolveServerLaunch, upsertConfigText, type McpServerEntry, type ServerBuildConfig } from './formats';
-import { buildEnvCatalog, resolveDataPaths } from './flagCatalog';
+import { buildEnvCatalog, resolveDataPaths, type McpProfile } from './flagCatalog';
 import { resolveConfigTargets, type McpClientTarget, type McpConfigFormat, type McpScope, type McpTargetInfo } from './paths';
 import { assertValidConfigObject, validateConfigObject, type ValidationResult } from './validate';
 import { atomicWriteText } from './backup';
 
-export type { McpClientTarget, McpConfigFormat, McpScope, McpTargetInfo, McpServerEntry, ServerBuildConfig, ValidationResult };
+export type { McpClientTarget, McpConfigFormat, McpScope, McpTargetInfo, McpServerEntry, ServerBuildConfig, ValidationResult, McpProfile };
 export { buildEnvCatalog, resolveConfigTargets, resolveDataPaths, resolveServerLaunch };
 
 export interface McpOperationOptions {
@@ -16,7 +16,7 @@ export interface McpOperationOptions {
   scope?: McpScope;
   root?: string;
   name?: string;
-  profile?: 'default' | 'enhanced' | 'experimental';
+  profile?: McpProfile;
   port?: number;
   host?: string;
   tls?: boolean;

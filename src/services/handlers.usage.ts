@@ -1,8 +1,9 @@
 import { registerHandler } from '../server/registry';
 import { ensureLoaded, incrementUsage, loadUsageSnapshot } from './indexContext';
+import { USAGE_ACTIONS, USAGE_SIGNALS } from './protocolEnums';
 
-const VALID_ACTIONS = new Set(['retrieved', 'applied', 'cited']);
-const VALID_SIGNALS = new Set(['helpful', 'not-relevant', 'outdated', 'applied']);
+const VALID_ACTIONS = new Set<string>(USAGE_ACTIONS);
+const VALID_SIGNALS = new Set<string>(USAGE_SIGNALS);
 
 function invalidParam(message: string): Error & { code: number } {
   return Object.assign(new Error(message), { code: -32602 });

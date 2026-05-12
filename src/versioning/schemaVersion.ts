@@ -4,12 +4,12 @@
 // and transform + persist them once.
 export const SCHEMA_VERSION = '6';
 
-import { RequirementLevel } from '../models/instruction';
+import { RequirementLevel, AUDIENCES, REQUIREMENTS, STATUSES, PRIORITY_TIERS, CLASSIFICATIONS, PriorityTier } from '../models/instruction';
 
 export interface MigrationResult { changed: boolean; notes?: string[] }
 
 // Helper function for review interval computation (matches ClassificationService logic)
-function computeReviewIntervalDays(tier: 'P1'|'P2'|'P3'|'P4', requirement: RequirementLevel): number {
+function computeReviewIntervalDays(tier: PriorityTier, requirement: RequirementLevel): number {
   // Shorter intervals for higher criticality
   if(tier === 'P1' || requirement === 'mandatory' || requirement === 'critical') return 30;
   if(tier === 'P2') return 60;
@@ -26,7 +26,7 @@ export function migrateInstructionRecord(rec: Record<string, unknown>): Migratio
 
   // v1 → v2 migration: Add reviewIntervalDays if missing
   if (prevVersion === '1' && !rec.reviewIntervalDays) {
-    const tier = (rec.priorityTier as 'P1'|'P2'|'P3'|'P4') || 'P4';
+    const tier = (rec.priorityTier as PriorityTier) || 'P4';
     const requirement = (rec.requirement as RequirementLevel) || 'optional';
     rec.reviewIntervalDays = computeReviewIntervalDays(tier, requirement);
     changed = true;
@@ -107,11 +107,11 @@ export function migrateInstructionRecord(rec: Record<string, unknown>): Migratio
     DEPRECATED: 'deprecated', REQUIRED: 'mandatory',
   };
   const enumDefaults: Record<string, { valid: readonly string[]; fallback: string; legacy?: Record<string, string> }> = {
-    audience: { valid: ['individual', 'group', 'all'], fallback: 'all', legacy: legacyAudienceMap },
-    requirement: { valid: ['mandatory', 'critical', 'recommended', 'optional', 'deprecated'], fallback: 'optional', legacy: legacyRequirementMap },
-    status: { valid: ['draft', 'review', 'approved', 'deprecated'], fallback: 'draft', legacy: legacyStatusMap },
-    priorityTier: { valid: ['P1', 'P2', 'P3', 'P4'], fallback: 'P3' },
-    classification: { valid: ['public', 'internal', 'restricted'], fallback: 'internal' },
+    audience: { valid: AUDIENCES, fallback: 'all', legacy: legacyAudienceMap },
+    requirement: { valid: REQUIREMENTS, fallback: 'optional', legacy: legacyRequirementMap },
+    status: { valid: STATUSES, fallback: 'draft', legacy: legacyStatusMap },
+    priorityTier: { valid: PRIORITY_TIERS, fallback: 'P3' },
+    classification: { valid: CLASSIFICATIONS, fallback: 'internal' },
   };
   for (const [field, { valid, fallback, legacy }] of Object.entries(enumDefaults)) {
     if (typeof rec[field] === 'string' && !(valid as readonly string[]).includes(rec[field] as string)) {

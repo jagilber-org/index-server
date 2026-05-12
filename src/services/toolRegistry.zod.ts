@@ -6,7 +6,9 @@ import {
   REQUIRED_INPUT_KEYS,
   SERVER_MANAGED_KEYS,
 } from '../schemas/instructionSchema';
-import { CONTENT_TYPES } from '../models/instruction';
+import { CONTENT_TYPES, AUDIENCES, REQUIREMENTS, STATUSES, PRIORITY_TIERS, CLASSIFICATIONS } from '../models/instruction';
+import { FEEDBACK_TYPES, FEEDBACK_SEVERITIES, FEEDBACK_STATUSES } from './feedbackStorage';
+import { USAGE_ACTIONS, USAGE_SIGNALS, SEARCH_MODES } from './protocolEnums';
 
 /**
  * Complete Zod schema registry for all MCP index tools.
@@ -38,6 +40,8 @@ const zDispatch = z.object({
   id: z.string().optional(),
   q: z.string().optional(),
   keywords: z.array(z.string()).optional(),
+  searchString: z.string().optional(),
+  fields: z.record(z.string(), z.unknown()).optional(),
   ids: z.array(z.string()).optional(),
   category: z.string().optional(),
   contentType: z.enum(CONTENT_TYPES).optional(),
@@ -55,13 +59,13 @@ const zDispatch = z.object({
   body: z.string().optional(),
   rationale: z.string().optional(),
   priority: z.number().optional(),
-  audience: z.string().optional(),
-  requirement: z.string().optional(),
+  audience: z.enum(AUDIENCES).optional(),
+  requirement: z.enum(REQUIREMENTS).optional(),
   categories: z.array(z.string()).optional(),
   deprecatedBy: z.string().optional(),
   riskScore: z.number().optional(),
-  priorityTier: z.enum(['P1', 'P2', 'P3', 'P4']).optional(),
-  classification: z.enum(['public', 'internal', 'restricted']).optional(),
+  priorityTier: z.enum(PRIORITY_TIERS).optional(),
+  classification: z.enum(CLASSIFICATIONS).optional(),
   semanticSummary: z.string().optional(),
   changeLog: z.array(z.object({}).passthrough()).optional(),
   overwrite: z.boolean().optional(),
@@ -70,7 +74,7 @@ const zDispatch = z.object({
   source: z.string().optional(),
   mode: z.unknown().optional(),
   owner: z.string().optional(),
-  status: z.enum(['approved', 'draft', 'review', 'deprecated']).optional(),
+  status: z.enum(STATUSES).optional(),
   bump: z.enum(['patch','minor','major','none']).optional(),
   lastReviewedAt: z.string().optional(),
   nextReviewDue: z.string().optional(),
@@ -113,16 +117,16 @@ function buildEntryShape(): z.ZodRawShape {
     body: zInstructionBody(),
     rationale: z.string(),
     priority: z.number().int().min(1).max(100),
-    audience: z.string(),
-    requirement: z.string(),
+    audience: z.enum(AUDIENCES),
+    requirement: z.enum(REQUIREMENTS),
     categories: z.array(z.string()).max(50),
     deprecatedBy: z.string(),
     riskScore: z.number(),
     version: z.string(),
     owner: z.string(),
-    status: z.enum(['approved', 'draft', 'review', 'deprecated']),
-    priorityTier: z.enum(['P1', 'P2', 'P3', 'P4']),
-    classification: z.enum(['public', 'internal', 'restricted']),
+    status: z.enum(STATUSES),
+    priorityTier: z.enum(PRIORITY_TIERS),
+    classification: z.enum(CLASSIFICATIONS),
     lastReviewedAt: z.string(),
     nextReviewDue: z.string(),
     semanticSummary: z.string(),
@@ -161,7 +165,17 @@ function buildZAdd() {
 }
 
 function buildZImport() {
-  const entryItem = z.object(buildEntryShape()).strict();
+  const entryShape = Object.fromEntries(
+    Array.from(INPUT_KEYS)
+      .filter((key) => !SERVER_MANAGED_KEYS.has(key))
+      .map((key) => [key, z.unknown().optional()]),
+  ) as z.ZodRawShape;
+  const entryItem = z.object({
+    ...entryShape,
+    id: z.string().min(1),
+    title: z.string().min(1),
+    body: z.string().min(1),
+  }).strict();
   return z.object({
     entries: z.union([
       z.array(entryItem).min(1),
@@ -207,14 +221,27 @@ const zGovernanceUpdate = z.object({
 }).strict();
 
 // ── Search ───────────────────────────────────────────────────────────────────
+const zSearchFields = z.record(z.string(), z.unknown()).refine((fields) => Object.keys(fields).length > 0, {
+  message: 'fields must contain at least one predicate',
+});
+
 const zSearch = z.object({
-  keywords: z.array(z.string().min(1).max(100)).min(1).max(10),
-  mode: z.enum(['keyword', 'regex', 'semantic']).optional(),
+  keywords: z.array(z.string().min(1).max(100)).min(1).max(10).optional(),
+  searchString: z.string().min(1).max(500).optional(),
+  mode: z.enum(SEARCH_MODES).optional(),
   limit: z.number().int().min(1).max(100).default(50).optional(),
   includeCategories: z.boolean().default(false).optional(),
   caseSensitive: z.boolean().default(false).optional(),
-  contentType: z.enum(CONTENT_TYPES).optional()
-}).strict();
+  contentType: z.enum(CONTENT_TYPES).optional(),
+  fields: zSearchFields.optional()
+}).strict().superRefine((value, ctx) => {
+  if (!value.keywords && !value.searchString && !value.fields) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Provide keywords, searchString, or fields' });
+  }
+  if (value.keywords && value.searchString) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'keywords and searchString are mutually exclusive' });
+  }
+});
 
 // ── Diagnostics ──────────────────────────────────────────────────────────────
 const zDiagnostics = z.object({
@@ -223,8 +250,8 @@ const zDiagnostics = z.object({
 
 // ── Feedback ─────────────────────────────────────────────────────────────────
 const zFeedbackSubmit = z.object({
-  type: z.enum(['issue', 'status', 'security', 'feature-request', 'bug-report', 'performance', 'usability', 'other']),
-  severity: z.enum(['low','medium','high','critical']),
+  type: z.enum(FEEDBACK_TYPES),
+  severity: z.enum(FEEDBACK_SEVERITIES),
   title: z.string().min(1).max(200),
   description: z.string().min(1).max(10000),
   context: z.object({}).passthrough().optional(),
@@ -235,9 +262,9 @@ const zFeedbackSubmit = z.object({
 const zFeedbackManage = z.object({
   action: z.enum(['submit', 'list', 'get', 'update', 'delete', 'stats']),
   id: z.string().min(1).optional(),
-  type: z.enum(['issue', 'status', 'security', 'feature-request', 'bug-report', 'performance', 'usability', 'other']).optional(),
-  severity: z.enum(['low','medium','high','critical']).optional(),
-  status: z.enum(['new', 'acknowledged', 'in-progress', 'resolved', 'closed']).optional(),
+  type: z.enum(FEEDBACK_TYPES).optional(),
+  severity: z.enum(FEEDBACK_SEVERITIES).optional(),
+  status: z.enum(FEEDBACK_STATUSES).optional(),
   title: z.string().min(1).max(200).optional(),
   description: z.string().min(1).max(10000).optional(),
   context: z.object({}).passthrough().optional(),
@@ -251,8 +278,8 @@ const zFeedbackManage = z.object({
 // ── Usage ────────────────────────────────────────────────────────────────────
 const zUsageTrack = z.object({
   id: z.string().min(1),
-  action: z.enum(['retrieved', 'applied', 'cited']).optional(),
-  signal: z.enum(['helpful', 'not-relevant', 'outdated', 'applied']).optional(),
+  action: z.enum(USAGE_ACTIONS).optional(),
+  signal: z.enum(USAGE_SIGNALS).optional(),
   comment: z.string().max(256).optional()
 }).strict();
 

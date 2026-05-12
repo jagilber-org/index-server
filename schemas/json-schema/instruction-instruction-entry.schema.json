@@ -81,33 +81,16 @@
           "type": "string"
         },
         "status": {
-          "type": "string",
-          "enum": [
-            "draft",
-            "review",
-            "approved",
-            "deprecated"
-          ]
+          "$ref": "#/definitions/GovernanceStatus"
         },
         "owner": {
           "type": "string"
         },
         "priorityTier": {
-          "type": "string",
-          "enum": [
-            "P1",
-            "P2",
-            "P3",
-            "P4"
-          ]
+          "$ref": "#/definitions/PriorityTier"
         },
         "classification": {
-          "type": "string",
-          "enum": [
-            "public",
-            "internal",
-            "restricted"
-          ]
+          "$ref": "#/definitions/Classification"
         },
         "lastReviewedAt": {
           "type": "string"
@@ -206,6 +189,32 @@
         "knowledge",
         "template",
         "integration"
+      ]
+    },
+    "GovernanceStatus": {
+      "type": "string",
+      "enum": [
+        "draft",
+        "review",
+        "approved",
+        "deprecated"
+      ]
+    },
+    "PriorityTier": {
+      "type": "string",
+      "enum": [
+        "P1",
+        "P2",
+        "P3",
+        "P4"
+      ]
+    },
+    "Classification": {
+      "type": "string",
+      "enum": [
+        "public",
+        "internal",
+        "restricted"
       ]
     }
   }

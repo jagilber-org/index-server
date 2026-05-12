@@ -13,6 +13,7 @@ import fs from 'fs';
 import path from 'path';
 import { getBooleanEnv, parseBooleanEnv, isFalsy, isFalsyExtended, isTruthy, isDebugOrVerbose, TRUTHY_OR_DEFAULT } from '../utils/envUtils';
 import { CWD, LogLevel, toAbsolute, numberFromEnv, optionalIntFromEnv, clamp, parseJSONMaybe } from './configUtils';
+import { LOG_LEVELS_LOWER } from '../lib/logLevels';
 import { DIR } from './dirConstants';
 import { DEFAULT_LIMITS, DEFAULT_GOVERNANCE, DEFAULT_TIMEOUTS_MS } from './defaultValues';
 import { parseServerConfig, parseLoggingConfig, parseMetricsConfig, parseAtomicFsConfig, parsePreflightConfig, parseTracingConfig } from './serverConfig';
@@ -233,8 +234,7 @@ function parseInitFeatures(): Set<string> {
 
 function parseLogLevel(traceSet: Set<string>): LogLevel {
   const raw = process.env.INDEX_SERVER_LOG_LEVEL?.toLowerCase();
-  const valid: LogLevel[] = ['error','warn','info','debug','trace'];
-  if(raw && (valid as string[]).includes(raw)) return raw as LogLevel;
+  if(raw && (LOG_LEVELS_LOWER as readonly string[]).includes(raw)) return raw as LogLevel;
   if(traceSet.has('verbose')) return 'trace';
   if(isDebugOrVerbose()) return 'debug';
   return 'info';
@@ -405,9 +405,13 @@ function parseMutationConfig(mutationEnabled: boolean): MutationConfig {
   };
 }
 
-/** Valid profile names supported by the wizard and runtime. */
-export const VALID_PROFILES = ['default', 'enhanced', 'experimental'] as const;
-export type ProfileName = typeof VALID_PROFILES[number];
+/** Valid profile names supported by the wizard and runtime.
+ *  Re-exported from `services/mcpConfig/flagCatalog` SOT so wizard/runtime/mcpConfig
+ *  CRUD all share one canonical tuple. */
+export { MCP_PROFILES as VALID_PROFILES } from '../services/mcpConfig/flagCatalog';
+export type { McpProfile as ProfileName } from '../services/mcpConfig/flagCatalog';
+import { MCP_PROFILES } from '../services/mcpConfig/flagCatalog';
+import type { McpProfile as ProfileName } from '../services/mcpConfig/flagCatalog';
 
 /**
  * Apply profile-aware environment defaults.
@@ -452,7 +456,7 @@ function applyProfileDefaults(profile: ProfileName): void {
  */
 export function loadRuntimeConfig(): RuntimeConfig {
   const rawProfile = (process.env.INDEX_SERVER_PROFILE || 'default').toLowerCase();
-  const profile = (VALID_PROFILES as readonly string[]).includes(rawProfile) ? rawProfile as ProfileName : 'default';
+  const profile = (MCP_PROFILES as readonly string[]).includes(rawProfile) ? rawProfile as ProfileName : 'default';
   applyProfileDefaults(profile);
   const testMode = process.env.INDEX_SERVER_TEST_MODE;
   const rawTiming = parseTiming();

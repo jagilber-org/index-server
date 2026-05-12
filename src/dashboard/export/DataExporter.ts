@@ -33,6 +33,7 @@ import { exportJSON } from './exporters/jsonExporter.js';
 import { exportCSV, exportExcel } from './exporters/csvExporter.js';
 import { exportXML, exportPDF } from './exporters/xmlExporter.js';
 import { logError } from '../../services/logger.js';
+import { FEEDBACK_TYPES, FEEDBACK_SEVERITIES, FEEDBACK_STATUSES } from '../../services/feedbackStorage.js';
 
 export class DataExporter {
   private exportConfigs: Map<string, ExportConfig> = new Map();
@@ -660,10 +661,10 @@ export class DataExporter {
     return Array.from({ length: 30 }, (_, i) => ({
       id: `feedback_${i}`,
       timestamp: Date.now() - (i * 86400000),
-      type: ['bug-report', 'feature-request', 'issue'][i % 3],
-      severity: ['low', 'medium', 'high'][i % 3],
+      type: FEEDBACK_TYPES[i % FEEDBACK_TYPES.length],
+      severity: FEEDBACK_SEVERITIES[i % FEEDBACK_SEVERITIES.length],
       title: `Sample feedback item ${i}`,
-      status: ['new', 'acknowledged', 'in-progress', 'resolved'][i % 4]
+      status: FEEDBACK_STATUSES[i % FEEDBACK_STATUSES.length]
     }));
   }
 

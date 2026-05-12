@@ -1,4 +1,4 @@
-import { InstructionEntry, RequirementLevel } from '../models/instruction';
+import { InstructionEntry, RequirementLevel, PriorityTier } from '../models/instruction';
 import { SCHEMA_VERSION } from '../versioning/schemaVersion';
 import crypto from 'crypto';
 
@@ -118,7 +118,7 @@ export class ClassificationService {
    */
   computeHash(content: string): string { return crypto.createHash('sha256').update(content,'utf8').digest('hex'); }
 
-  private computePriorityTier(priority: number, requirement: RequirementLevel): 'P1'|'P2'|'P3'|'P4' {
+  private computePriorityTier(priority: number, requirement: RequirementLevel): PriorityTier {
     // Lower numeric is higher importance
     if(priority <= 20 || requirement === 'mandatory' || requirement === 'critical') return 'P1';
     if(priority <= 40) return 'P2';
@@ -126,7 +126,7 @@ export class ClassificationService {
     return 'P4';
   }
 
-  private reviewIntervalDays(tier: 'P1'|'P2'|'P3'|'P4', requirement: RequirementLevel): number {
+  private reviewIntervalDays(tier: PriorityTier, requirement: RequirementLevel): number {
     // Shorter intervals for higher criticality
     if(tier === 'P1' || requirement === 'mandatory' || requirement === 'critical') return 30;
     if(tier === 'P2') return 60;
@@ -141,7 +141,7 @@ export class ClassificationService {
    * @param requirement - Requirement level for the instruction
    * @returns Number of days until the next review should occur
    */
-  computeReviewIntervalDays(tier: 'P1'|'P2'|'P3'|'P4', requirement: RequirementLevel): number {
+  computeReviewIntervalDays(tier: PriorityTier, requirement: RequirementLevel): number {
     return this.reviewIntervalDays(tier, requirement);
   }
 

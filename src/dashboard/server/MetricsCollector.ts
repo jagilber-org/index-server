@@ -15,6 +15,10 @@ import { BufferRing, OverflowStrategy, BufferRingStats } from '../../utils/Buffe
 import { getRuntimeConfig } from '../../config/runtimeConfig';
 import { logInfo, logError, logWarn } from '../../services/logger.js';
 
+/** Persistence operation taxonomy for metrics buffer writes. */
+const PERSISTENCE_OPERATIONS = ['append', 'snapshot', 'truncate'] as const;
+type PersistenceOperation = (typeof PERSISTENCE_OPERATIONS)[number];
+
 // Re-export all shared types so existing importers keep working unchanged.
 export type {
   ToolMetrics,
@@ -272,7 +276,7 @@ export class MetricsCollector {
   }
 
   private recordPersistenceFailure(
-    operation: 'append' | 'snapshot' | 'truncate',
+    operation: PersistenceOperation,
     error: unknown,
   ): void {
     this.persistenceHealth.degraded = true;
@@ -298,7 +302,7 @@ export class MetricsCollector {
     }
   }
 
-  private recordPersistenceRecovery(operation: 'append' | 'snapshot' | 'truncate'): void {
+  private recordPersistenceRecovery(operation: PersistenceOperation): void {
     if (!this.persistenceHealth.degraded) return;
     this.persistenceHealth.degraded = false;
     this.persistenceHealth.lastError = undefined;

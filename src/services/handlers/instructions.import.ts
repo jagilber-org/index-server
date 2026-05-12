@@ -1,7 +1,9 @@
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
+
 import { InstructionEntry } from '../../models/instruction';
+
 import { registerHandler } from '../../server/registry';
 import { ensureLoadedAsync, getInstructionsDir, invalidate, touchIndexVersion, writeEntryAsync } from '../indexContext';
 import { incrementCounter } from '../features';
@@ -11,9 +13,13 @@ import { resolveOwner } from '../ownershipService';
 import { validateInstructionInputSurface, validateInstructionRecord } from '../instructionRecordValidation';
 import { isInstructionValidationError } from '../instructionRecordValidation';
 import { splitEntry } from '../../schemas/instructionSchema';
-
 import { logAudit } from '../auditLog';
 import { logInfo, logError, log } from '../logger';
+import { getRuntimeConfig } from '../../config/runtimeConfig';
+import { attemptManifestUpdate } from '../manifestManager';
+import { migrateLegacyInstructionEntry, SchemaMigrationResult } from '../schemaMigrationService';
+
+import { guard, ImportEntry, normalizeInputCategories, IMPORT_GOVERNANCE_KEYS, applyGovernanceKeys } from './instructions.shared';
 
 // Structured WARN without auto-attached call stack: the log-hygiene gate
 // (scripts/crawl-logs.mjs) treats WARN-with-stack as a budget violation
@@ -21,9 +27,6 @@ import { logInfo, logError, log } from '../logger';
 // so per-entry import rejections stay structured but stackless.
 const warnStruct = (msg: string, detail?: unknown) =>
   log('WARN', msg, { detail: detail === undefined ? undefined : typeof detail === 'string' ? detail : JSON.stringify(detail) });
-import { getRuntimeConfig } from '../../config/runtimeConfig';
-import { attemptManifestUpdate } from '../manifestManager';
-import { guard, ImportEntry, normalizeInputCategories, IMPORT_GOVERNANCE_KEYS, applyGovernanceKeys } from './instructions.shared';
 
 /** Validate that a resolved path falls within allowed base directories (cwd or configured data dir). */
 function isPathAllowed(resolved: string): boolean {
@@ -110,13 +113,25 @@ registerHandler('index_import', guard('index_import', async (p: { entries?: Impo
   // partitioned out of the input contract before validation.
   const stripped: Record<string, number> = {};
   const skippedIds = new Set<string>();
+  const writtenIds: string[] = [];
+  const migrationDetails: Array<Pick<SchemaMigrationResult, 'originalId' | 'id' | 'schemaVersion' | 'changes'>> = [];
   const formatImportValidationError = (validationErrors: string[]) => `invalid_instruction: ${validationErrors.join('; ')}`;
   for (const rawEntry of entries) {
-    const id = (rawEntry as Partial<ImportEntry>)?.id || 'unknown';
+    const migration = migrateLegacyInstructionEntry(rawEntry as unknown as Record<string, unknown>, { source: 'index_import' });
+    if (migration.changed) {
+      migrationDetails.push({
+        originalId: migration.originalId,
+        id: migration.id,
+        schemaVersion: migration.schemaVersion,
+        changes: migration.changes,
+      });
+    }
+    const migratedEntry = migration.entry;
+    const id = (migratedEntry as Partial<ImportEntry>)?.id || migration.originalId || 'unknown';
     // Partition server-managed fields out of the input. Preserves usageCount /
     // firstSeenTs / lastUsedAt for restore scenarios; discards the rest (server
     // recomputes sourceHash, schemaVersion, createdAt, updatedAt on write).
-    const partition = splitEntry(rawEntry as unknown as Record<string, unknown>);
+    const partition = splitEntry(migratedEntry);
     const carryForward: Partial<InstructionEntry> = {};
     for (const key of Object.keys(partition.serverManaged)) {
       stripped[key] = (stripped[key] || 0) + 1;
@@ -199,7 +214,7 @@ registerHandler('index_import', guard('index_import', async (p: { entries?: Impo
       warnStruct('[import] entry rejected', { id: e.id, reason: 'record-validation-failed', error: errMsg });
       continue;
     }
-     try { await writeEntryAsync(record); } catch (err) {
+      try { await writeEntryAsync(record); } catch (err) {
       if (isInstructionValidationError(err)) {
         const errMsg = formatImportValidationError(err.validationErrors);
         errors.push({ id: e.id, error: errMsg });
@@ -212,14 +227,12 @@ registerHandler('index_import', guard('index_import', async (p: { entries?: Impo
       logAudit('import_write_failed', e.id, { error: writeError.message, errorName: writeError.name, mode });
       continue;
     }
+    writtenIds.push(record.id);
     if (fileExists && mode === 'overwrite') overwritten++; else if (!fileExists) imported++;
   }
   touchIndexVersion(); invalidate(); const st = await ensureLoadedAsync();
   // Read-back verification: confirm each written entry is visible in the reloaded index
   const verificationErrors: { id: string; error: string }[] = [];
-  const writtenIds = entries
-    .filter(e => e.id && !errors.some(err => err.id === e.id) && !skippedIds.has(e.id))
-    .map(e => e.id);
   for (const id of writtenIds) {
     if (!st.byId.has(id)) {
       verificationErrors.push({ id, error: 'not-in-index-after-reload' });
@@ -231,8 +244,8 @@ registerHandler('index_import', guard('index_import', async (p: { entries?: Impo
     logError('[import] verification failed', { missingAfterReload: verificationErrors.length, ids: verificationErrors.map(v => v.id) });
   }
   const verifiedCount = writtenIds.length - verificationErrors.length;
-  const summary = { hash: st.hash, imported, skipped, overwritten, total: entries.length, errors, verified: verificationErrors.length === 0, verifiedCount, verificationErrorCount: verificationErrors.length, stripped };
-  logAudit('import', entries.map(e => e.id), { imported, skipped, overwritten, errors: errors.length, verified: verificationErrors.length === 0 });
+  const summary = { hash: st.hash, imported, skipped, overwritten, total: entries.length, errors, verified: verificationErrors.length === 0, verifiedCount, verificationErrorCount: verificationErrors.length, stripped, migrationCount: migrationDetails.length, migrationDetails };
+  logAudit('import', entries.map(e => e.id), { imported, skipped, overwritten, errors: errors.length, verified: verificationErrors.length === 0, migrationCount: migrationDetails.length });
   if (errors.length) {
     warnStruct('[import] complete with errors', { imported, skipped, overwritten, total: entries.length, errorCount: errors.length, verifiedCount, verificationErrorCount: verificationErrors.length, errorIds: errors.map(e => e.id) });
   } else {

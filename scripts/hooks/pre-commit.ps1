@@ -169,6 +169,7 @@ $valueAllowlist = @(
   'main','master','eastus','westus','eastus2','westus2','centralus','public','private','default',
   # Public owner slug that appears in repository metadata and schema URLs.
   'jagilber',
+  'jagilber-org',
   '00000000-0000-0000-0000-000000000000'
 )
 $processEnvValueAllowlist = @($valueAllowlist + @(

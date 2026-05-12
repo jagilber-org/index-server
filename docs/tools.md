@@ -251,9 +251,9 @@ interface DispatchRequest {
 }
 ```
 
-#### `search` - Text Search
+#### `search` - Text and Structural Search
 
-**Purpose**: Full-text search across instruction titles and bodies  
+**Purpose**: Search instructions by keywords, phrase input, and/or structural predicates
 **Mutation**: No  
 **Performance**: O(n) with optimization for common patterns
 
@@ -261,19 +261,36 @@ interface DispatchRequest {
 // Request
 {
   "action": "search",
-  "q": string,           // Search query
+  "q"?: string,                 // Backward-compatible dispatcher phrase alias
+  "keywords"?: string[],        // Explicit keyword tokens; mutually exclusive with searchString
+  "searchString"?: string,      // Ergonomic phrase input; mutually exclusive with keywords
+  "fields"?: SearchFields,      // Structural predicates; may be used without text input
   "limit"?: number,
-  "highlight"?: boolean,  // Return highlighted snippets
-  "mode"?: "keyword" | "regex" | "semantic"  // Default: "keyword"
+  "includeCategories"?: boolean,
+  "caseSensitive"?: boolean,
+  "mode"?: "keyword" | "regex" | "semantic"  // Default follows semantic runtime config
 }
 
 // Response
 {
-  "hash": string,
-  "count": number,
-  "items": InstructionEntry[],
-  "query": string,
-  "highlights"?: SearchHighlight[]
+  "results": [
+    {
+      "instructionId": string,
+      "relevanceScore": number,
+      "matchedFields": string[]
+    }
+  ],
+  "totalMatches": number,
+  "query": {
+    "keywords": string[],
+    "searchString"?: string,
+    "fields"?: SearchFields,
+    "mode": "keyword" | "regex" | "semantic",
+    "limit": number,
+    "includeCategories": boolean,
+    "caseSensitive": boolean
+  },
+  "executionTimeMs": number
 }
 ```
 
@@ -283,6 +300,68 @@ interface DispatchRequest {
 - **semantic**: Embedding-based similarity search using cosine distance. Requires `INDEX_SERVER_SEMANTIC_ENABLED=1`. Falls back to keyword mode gracefully on model failure. Configure model via `INDEX_SERVER_SEMANTIC_MODEL` (default: `Xenova/all-MiniLM-L6-v2`).
   - `INDEX_SERVER_SEMANTIC_DEVICE`: Set to `cuda` (NVIDIA GPU) or `dml` (DirectML/Windows GPU) for hardware acceleration. Default: `cpu`. GPU backends require `onnxruntime-node-gpu` package.
   - `INDEX_SERVER_SEMANTIC_LOCAL_ONLY`: Set to `1` to block remote model downloads. Model must already be cached locally.
+
+**Phrase input (`searchString`)**:
+
+`searchString` is a convenience parameter for callers that have one phrase instead
+of pre-tokenized `keywords`. It is mutually exclusive with `keywords`, capped at
+500 characters, trimmed before search, and echoed in the response query object.
+
+```json
+{
+  "action": "search",
+  "searchString": "graph export content type",
+  "mode": "keyword"
+}
+```
+
+**Structural predicates (`fields`)**:
+
+`fields` filters candidates before text scoring. It can also be used by itself for
+structural-only queries; those results are deterministically ordered by priority,
+newest `updatedAt`, then `id`.
+
+Supported predicate forms:
+
+| Predicate kind | Examples | Semantics |
+|----------------|----------|-----------|
+| Scalar exact | `{ "owner": "docs-team" }`, `{ "status": "approved" }` | Exact match on canonical instruction fields |
+| OneOrMany scalar/enum | `{ "contentType": ["integration", "knowledge"] }` | Arrays mean OR for scalar and enum fields |
+| Array membership | `{ "categories": "security" }` | Canonical array fields match when any expected value is present |
+| Array operators | `{ "categoriesAny": ["security", "docs"] }`, `{ "categoriesAll": ["security", "hooks"] }`, `{ "categoriesNone": ["deprecated"] }` | Any/all/none membership checks; also available for `teamIdsAny`, `teamIdsAll`, `teamIdsNone` |
+| ID prefix | `{ "idPrefix": "search-" }` | Fast prefix match against instruction IDs |
+| Safe ID regex | `{ "idRegex": "^search-[0-9]+$" }` | Regex match against IDs after the same safety validation used by regex search |
+| Numeric ranges | `{ "priorityMin": 1, "priorityMax": 20 }`, `{ "riskScoreMax": 5 }` | Inclusive range checks for numeric metadata |
+| Date ranges | `{ "updatedAfter": "2026-01-01T00:00:00Z" }`, `{ "nextReviewDueBefore": "2026-06-01T00:00:00Z" }` | Inclusive ISO date range checks |
+
+Validation is strict: unknown field names are rejected, empty arrays are rejected,
+enum values must come from the canonical instruction schema, inverted ranges are
+invalid, and `fields` must contain at least one predicate.
+
+```json
+{
+  "action": "search",
+  "fields": {
+    "contentType": ["integration", "knowledge"],
+    "categoriesAll": ["search", "docs"],
+    "updatedAfter": "2026-01-01T00:00:00Z"
+  },
+  "limit": 10
+}
+```
+
+```json
+{
+  "action": "search",
+  "searchString": "release readiness",
+  "fields": {
+    "idPrefix": "search-",
+    "categoriesAny": ["docs", "release"],
+    "updatedAfter": "2026-01-01T00:00:00Z",
+    "updatedBefore": "2026-06-01T00:00:00Z"
+  }
+}
+```
 
 #### `query` - Advanced Filtering
 
@@ -455,8 +534,8 @@ const GraphExportParams = z.object({
 {
   "meta": {"graphSchemaVersion":2,"nodeCount":3,"edgeCount":4},
   "nodes": [
-    {"id":"instr.alpha","nodeType":"instruction","categories":["ai"],"primaryCategory":"ai","priority":10,"owner":"team-x","status":"approved","createdAt":"2025-09-01T12:00:00Z"},
-    {"id":"instr.beta","nodeType":"instruction","categories":["ai","code"],"primaryCategory":"ai"},
+    {"id":"instr.alpha","nodeType":"instruction","categories":["ai"],"primaryCategory":"ai","priority":10,"owner":"team-x","status":"approved","contentType":"integration","createdAt":"2025-09-01T12:00:00Z"},
+    {"id":"instr.beta","nodeType":"instruction","categories":["ai","code"],"primaryCategory":"ai","contentType":"instruction"},
     {"id":"category:ai","nodeType":"category"}
   ],
   "edges": [
@@ -580,6 +659,7 @@ The dashboard provides:
 **Evolution & Compatibility:**
 
 * Schema v1 behavior unchanged when `enrich` absent/false.
+* Schema v2 enriched instruction nodes include `contentType` from instruction metadata; category nodes and schema v1 nodes omit it.
 * Additional edge type `belongs` only appears when `enrich:true` & `includeCategoryNodes:true` or when filtered explicitly.
 * Future planned additions: weighted edges from real usage metrics (`includeUsage` will switch placeholder to actual counts).
 * Enriched & formatted responses intentionally excluded from current cache to prevent stale metadata propagation while schema evolves.

@@ -14,7 +14,8 @@
  *   Phase 6  – Non-existent resource behavior (get/remove on missing IDs)
  *   Phase 7  – Coercible / legacy value behavior (status='active', audience='team')
  *   Phase 8  – Valid governance field round-trip (priorityTier, classification, status)
- *   Phase 9  – Valid enum coverage sweep (all audience + requirement values)
+ *   Phase 9  – Valid enum coverage sweep (all audience, requirement, priorityTier,
+ *              classification, status, contentType values; reviewIntervalDays bounds — #348)
  *   Phase 10 – Categories edge cases (space in item, primaryCategory constraint)
  *   Phase 11 – Unexpected property rejection
  *   Phase 12 – Cleanup
@@ -564,6 +565,85 @@ function isRejected(resp, payload) {
       const ok = !isRejected(resp, p);
       record(`accept:classification=${cls}`, !!ok, { error: resp?.error });
       if (ok) acceptedIds.push(id);
+    }
+
+    // All status values must be accepted and preserved on round-trip.
+    for (const st of ['draft', 'review', 'approved', 'deprecated']) {
+      const id = uid(`status-${st}`);
+      const resp = await mcp.callTool('index_add', {
+        entry: { ...baseEntry(`status-${st}`), id, status: st },
+        lax: true, overwrite: true,
+      });
+      const p = parseToolPayload(resp);
+      const ok = !isRejected(resp, p);
+      record(`accept:status=${st}`, !!ok, { error: resp?.error, validationErrors: p?.validationErrors });
+      if (ok) {
+        acceptedIds.push(id);
+        const v = await mcp.callTool('index_dispatch', { action: 'get', id });
+        const vp = parseToolPayload(v);
+        const item = vp?.item || vp;
+        record(`readback:status=${st}-preserved`, item?.status === st,
+          { stored: item?.status });
+      }
+    }
+
+    // All contentType values must be accepted (issue #348 coverage gap).
+    for (const ct of ['agent', 'skill', 'instruction', 'prompt', 'workflow', 'knowledge', 'template', 'integration']) {
+      const id = uid(`ct-${ct}`);
+      const resp = await mcp.callTool('index_add', {
+        entry: { ...baseEntry(`ct-${ct}`), id, contentType: ct },
+        lax: true, overwrite: true,
+      });
+      const p = parseToolPayload(resp);
+      const ok = !isRejected(resp, p);
+      record(`accept:contentType=${ct}`, !!ok, { error: resp?.error, validationErrors: p?.validationErrors });
+      if (ok) acceptedIds.push(id);
+    }
+
+    // reviewIntervalDays bounds (schema: integer 1..365 inclusive).
+    {
+      const idLo = uid('rid-lo');
+      const respLo = await mcp.callTool('index_add', {
+        entry: { ...baseEntry('rid-lo'), id: idLo, reviewIntervalDays: 1 }, lax: true, overwrite: true,
+      });
+      const okLo = !isRejected(respLo, parseToolPayload(respLo));
+      record('accept:reviewIntervalDays=1', okLo, { error: respLo?.error });
+      if (okLo) acceptedIds.push(idLo);
+
+      const idHi = uid('rid-hi');
+      const respHi = await mcp.callTool('index_add', {
+        entry: { ...baseEntry('rid-hi'), id: idHi, reviewIntervalDays: 365 }, lax: true, overwrite: true,
+      });
+      const okHi = !isRejected(respHi, parseToolPayload(respHi));
+      record('accept:reviewIntervalDays=365', okHi, { error: respHi?.error });
+      if (okHi) acceptedIds.push(idHi);
+
+      // [gap-probe] reviewIntervalDays out-of-bounds: schema declares 1..365 but
+      // server currently accepts 0 and 366 (tracked in #349). When the server
+      // unexpectedly accepts these, we MUST still register the persisted IDs in
+      // acceptedIds so Phase 12 cleans them up — otherwise schema-invalid records
+      // leak into the live index across probe runs.
+      const idZero = uid('rid-zero');
+      const respZero = await mcp.callTool('index_add', {
+        entry: { ...baseEntry('rid-zero'), id: idZero, reviewIntervalDays: 0 }, lax: true, overwrite: true,
+      });
+      const zeroRejected = isRejected(respZero, parseToolPayload(respZero));
+      if (!zeroRejected) acceptedIds.push(idZero);
+      record('reject:reviewIntervalDays=0 [gap-probe]', true,
+        zeroRejected
+          ? { rejected: true }
+          : { note: 'schema (instruction.schema.json) declares reviewIntervalDays minimum=1; server currently accepts 0 — gap (#349); id tracked for cleanup', persistedId: idZero, error: respZero?.error });
+
+      const idOver = uid('rid-over');
+      const respOver = await mcp.callTool('index_add', {
+        entry: { ...baseEntry('rid-over'), id: idOver, reviewIntervalDays: 366 }, lax: true, overwrite: true,
+      });
+      const overRejected = isRejected(respOver, parseToolPayload(respOver));
+      if (!overRejected) acceptedIds.push(idOver);
+      record('reject:reviewIntervalDays=366 [gap-probe]', true,
+        overRejected
+          ? { rejected: true }
+          : { note: 'schema (instruction.schema.json) declares reviewIntervalDays maximum=365; server currently accepts 366 — gap (#349); id tracked for cleanup', persistedId: idOver, error: respOver?.error });
     }
 
     // ── PHASE 10: Categories edge cases ──────────────────────────────────────

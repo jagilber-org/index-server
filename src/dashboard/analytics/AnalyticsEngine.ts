@@ -8,6 +8,16 @@
  * - Usage pattern recognition and anomaly detection
  */
 
+import type { SeverityLevel } from '../types/severity.js';
+import type {
+  AnomalyType,
+  RecommendationType,
+  AlertCategory,
+  AlertSeverity,
+  EffortLevel,
+} from '../types/analyticsEnums.js';
+import type { ExtendedTrendDirection } from '../../lib/trendDirection.js';
+
 export interface TimeSeriesData {
   timestamp: number;
   value: number;
@@ -15,7 +25,7 @@ export interface TimeSeriesData {
 }
 
 export interface TrendAnalysis {
-  trend: 'increasing' | 'decreasing' | 'stable' | 'volatile';
+  trend: ExtendedTrendDirection;
   confidence: number; // 0-1
   slope: number;
   correlation: number;
@@ -67,8 +77,8 @@ export interface AnomalyDetection {
   anomalies: Array<{
     timestamp: number;
     value: number;
-    severity: 'low' | 'medium' | 'high' | 'critical';
-    type: 'spike' | 'drop' | 'outlier' | 'pattern_break';
+    severity: SeverityLevel;
+    type: AnomalyType;
     description: string;
     confidence: number;
   }>;
@@ -87,19 +97,19 @@ export interface PredictiveInsights {
   nextWeekForecast: TimeSeriesData[];
 
   recommendations: Array<{
-    type: 'optimization' | 'scaling' | 'maintenance' | 'business';
-    priority: 'low' | 'medium' | 'high' | 'critical';
+    type: RecommendationType;
+    priority: SeverityLevel;
     title: string;
     description: string;
     impact: string;
-    effort: 'low' | 'medium' | 'high';
+    effort: EffortLevel;
     expectedRoi?: number;
   }>;
 
   alerts: Array<{
     id: string;
-    type: 'performance' | 'capacity' | 'security' | 'business';
-    severity: 'info' | 'warning' | 'error' | 'critical';
+    type: AlertCategory;
+    severity: AlertSeverity;
     message: string;
     timestamp: number;
     actionRequired: boolean;
@@ -280,7 +290,7 @@ export class AnalyticsEngine {
     return { slope, correlation };
   }
 
-  private determineTrend(slope: number, data: TimeSeriesData[]): 'increasing' | 'decreasing' | 'stable' | 'volatile' {
+  private determineTrend(slope: number, data: TimeSeriesData[]): ExtendedTrendDirection {
     const values = data.map(point => point.value);
     const volatility = this.calculateVolatility(values);
 
@@ -366,8 +376,8 @@ export class AnalyticsEngine {
   private findAnomalies(data: TimeSeriesData[]): Array<{
     timestamp: number;
     value: number;
-    severity: 'low' | 'medium' | 'high' | 'critical';
-    type: 'spike' | 'drop' | 'outlier' | 'pattern_break';
+    severity: SeverityLevel;
+    type: AnomalyType;
     description: string;
     confidence: number;
   }> {
@@ -384,8 +394,8 @@ export class AnalyticsEngine {
       const zScore = stdDev === 0 ? 0 : Math.abs(point.value - mean) / stdDev;
 
       if (zScore > 2.5) {
-        const severity: 'low' | 'medium' | 'high' | 'critical' = zScore > 4 ? 'critical' : zScore > 3.5 ? 'high' : zScore > 3 ? 'medium' : 'low';
-        const type: 'spike' | 'drop' | 'outlier' | 'pattern_break' = point.value > mean ? 'spike' : 'drop';
+        const severity: SeverityLevel = zScore > 4 ? 'critical' : zScore > 3.5 ? 'high' : zScore > 3 ? 'medium' : 'low';
+        const type: AnomalyType = point.value > mean ? 'spike' : 'drop';
 
         anomalies.push({
           timestamp: point.timestamp,
@@ -439,12 +449,12 @@ export class AnalyticsEngine {
   }
 
   private generateRecommendations(): Array<{
-    type: 'optimization' | 'scaling' | 'maintenance' | 'business';
-    priority: 'low' | 'medium' | 'high' | 'critical';
+    type: RecommendationType;
+    priority: SeverityLevel;
     title: string;
     description: string;
     impact: string;
-    effort: 'low' | 'medium' | 'high';
+    effort: EffortLevel;
     expectedRoi?: number;
   }> {
     const recommendations = [];
@@ -479,8 +489,8 @@ export class AnalyticsEngine {
 
   private generateAlerts(): Array<{
     id: string;
-    type: 'performance' | 'capacity' | 'security' | 'business';
-    severity: 'info' | 'warning' | 'error' | 'critical';
+    type: AlertCategory;
+    severity: AlertSeverity;
     message: string;
     timestamp: number;
     actionRequired: boolean;

@@ -19,6 +19,7 @@ export {
   REQUIRED_INPUT_KEYS,
   validateRecord,
   validateInput,
+  buildToolImportEntrySchema,
   buildToolInputEntrySchema,
   INSTRUCTION_INPUT_SCHEMA_REF,
   INSTRUCTION_RECORD_SCHEMA_REF,
@@ -56,7 +57,7 @@ export const schemas: Record<string, unknown> = {
     anyOf: [
       { type: 'object', required: ['error'], properties: { error: { type: 'string' } }, additionalProperties: true },
       { type: 'object',
-        required: ['hash','imported','skipped','overwritten','errors','total','verified','verifiedCount','verificationErrorCount','stripped'],
+        required: ['hash','imported','skipped','overwritten','errors','total','verified','verifiedCount','verificationErrorCount','stripped','migrationCount','migrationDetails'],
         additionalProperties: false,
         properties: {
           hash: { type: 'string' },
@@ -73,11 +74,32 @@ export const schemas: Record<string, unknown> = {
             description: 'Per-key counts of server-managed fields (e.g. createdAt, updatedAt, sourceHash, schemaVersion) partitioned out of caller payloads via splitEntry. Empty object when no server-managed fields were supplied.',
             additionalProperties: { type: 'number' },
           },
+          migrationCount: { type: 'number', description: 'Number of import entries migrated before canonical validation.' },
+          migrationDetails: {
+            type: 'array',
+            items: {
+              type: 'object',
+              additionalProperties: true,
+              properties: {
+                originalId: { type: 'string' },
+                id: { type: 'string' },
+                schemaVersion: { type: 'string' },
+                changes: { type: 'array', items: { type: 'object', additionalProperties: true } },
+              },
+            },
+          },
         }
       }
     ]
   },
-  'index_repair': { type: 'object', required: ['repaired','updated'], additionalProperties: false, properties: { repaired: { type: 'number' }, updated: { type: 'array', items: { type: 'string' } } } },
+  'index_repair': { type: 'object', required: ['repaired','updated','migrationCount','migrationDetails'], additionalProperties: false, properties: {
+    repaired: { type: 'number' },
+    updated: { type: 'array', items: { type: 'string' } },
+    skippedRepaired: { type: 'array', items: { type: 'string' } },
+    errors: { type: 'array', items: { type: 'object', additionalProperties: true } },
+    migrationCount: { type: 'number' },
+    migrationDetails: { type: 'array', items: { type: 'object', additionalProperties: true } }
+  } },
   'prompt_review': {
     anyOf: [
       { type: 'object', required: ['truncated','message','max'], additionalProperties: false, properties: {
@@ -358,7 +380,7 @@ export const schemas: Record<string, unknown> = {
             relevanceScore: { type: 'number' },
             matchedFields: {
               type: 'array',
-              items: { enum: ['title', 'body', 'categories'] }
+              items: { type: 'string' }
             }
           }
         }
@@ -370,9 +392,13 @@ export const schemas: Record<string, unknown> = {
         required: ['keywords', 'limit', 'includeCategories', 'caseSensitive'],
         properties: {
           keywords: { type: 'array', items: { type: 'string' } },
+          mode: { type: 'string' },
           limit: { type: 'number' },
           includeCategories: { type: 'boolean' },
-          caseSensitive: { type: 'boolean' }
+          caseSensitive: { type: 'boolean' },
+          contentType: { type: 'string' },
+          searchString: { type: 'string' },
+          fields: { type: 'object', additionalProperties: true }
         }
       },
       executionTimeMs: { type: 'number' }

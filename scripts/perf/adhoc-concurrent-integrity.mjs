@@ -21,6 +21,28 @@
 
 import { parseArgs } from 'node:util';
 import { randomUUID } from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+// Canonical enum values — read from the JSON schema so this script never drifts
+// from the source of truth. Every contentType is cycled through the workload so
+// concurrent writes exercise the full taxonomy.
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const SCHEMA_PATH = path.resolve(__dirname, '..', '..', 'schemas', 'instruction.schema.json');
+const _schema = JSON.parse(fs.readFileSync(SCHEMA_PATH, 'utf8'));
+const CONTENT_TYPES = _schema?.properties?.contentType?.enum;
+const AUDIENCES = _schema?.properties?.audience?.enum;
+const REQUIREMENTS = _schema?.properties?.requirement?.enum;
+const STATUSES = _schema?.properties?.status?.enum;
+const PRIORITY_TIERS = _schema?.properties?.priorityTier?.enum;
+const CLASSIFICATIONS = _schema?.properties?.classification?.enum;
+for (const [name, arr] of Object.entries({ CONTENT_TYPES, AUDIENCES, REQUIREMENTS, STATUSES, PRIORITY_TIERS, CLASSIFICATIONS })) {
+  if (!Array.isArray(arr) || arr.length === 0) {
+    console.error(`adhoc-concurrent-integrity: failed to read ${name} enum from ${SCHEMA_PATH}`);
+    process.exit(2);
+  }
+}
 
 // ---------------------------------------------------------------------------
 // CLI args
@@ -77,14 +99,28 @@ async function callTool(client, name, toolArgs) {
 // ---------------------------------------------------------------------------
 function makeEntry(clientId, opIndex) {
   const id = `${PREFIX}${RUN_ID}-c${clientId}-op${opIndex}`;
+  // Cycle through every canonical enum so concurrent writes cover the full
+  // taxonomy. mandatory/critical and priorityTier=P1 require an `owner` per
+  // server validation rules, so set one unconditionally.
+  const contentType    = CONTENT_TYPES[opIndex % CONTENT_TYPES.length];
+  const audience       = AUDIENCES[opIndex % AUDIENCES.length];
+  const requirement    = REQUIREMENTS[opIndex % REQUIREMENTS.length];
+  const status         = STATUSES[opIndex % STATUSES.length];
+  const priorityTier   = PRIORITY_TIERS[opIndex % PRIORITY_TIERS.length];
+  const classification = CLASSIFICATIONS[opIndex % CLASSIFICATIONS.length];
   return {
     id,
     title: `Concurrent test ${clientId}/${opIndex}`,
-    body: `Integrity test entry created by client ${clientId}, operation ${opIndex}, run ${RUN_ID}`,
+    body: `Integrity test entry created by client ${clientId}, operation ${opIndex}, run ${RUN_ID}. contentType=${contentType}.`,
     priority: 50,
-    audience: 'agent',
-    requirement: 'MUST validate concurrent write integrity',
-    categories: ['test', 'concurrent'],
+    audience,
+    requirement,
+    categories: ['ci-test', 'concurrent', `ct-${contentType}`],
+    contentType,
+    status,
+    priorityTier,
+    classification,
+    owner: 'adhoc-concurrent-integrity',
   };
 }
 

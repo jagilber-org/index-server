@@ -19,15 +19,15 @@ import {
   saveFeedbackStorage,
   generateFeedbackId,
   FeedbackEntry,
+  FEEDBACK_TYPES,
+  FEEDBACK_SEVERITIES,
+  FEEDBACK_STATUSES,
 } from '../../../services/feedbackStorage.js';
 import { logAudit } from '../../../services/auditLog.js';
 
-const VALID_TYPES = new Set<string>([
-  'issue', 'status', 'security', 'feature-request',
-  'bug-report', 'performance', 'usability', 'other',
-]);
-const VALID_SEVERITIES = new Set<string>(['low', 'medium', 'high', 'critical']);
-const VALID_STATUSES = new Set<string>(['new', 'acknowledged', 'in-progress', 'resolved', 'closed']);
+const VALID_TYPES = new Set<string>(FEEDBACK_TYPES);
+const VALID_SEVERITIES = new Set<string>(FEEDBACK_SEVERITIES);
+const VALID_STATUSES = new Set<string>(FEEDBACK_STATUSES);
 const MAX_TITLE_LENGTH = 200;
 const MAX_DESCRIPTION_LENGTH = 10_000;
 const MAX_TAGS = 10;

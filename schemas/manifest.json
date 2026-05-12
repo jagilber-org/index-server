@@ -1,6 +1,6 @@
 {
-  "version": "1.28.19",
-  "generatedAt": "2026-05-11T01:10:01.490Z",
+  "version": "1.28.21",
+  "generatedAt": "2026-05-12T18:24:26.544Z",
   "trackedDir": "schemas",
   "distDir": "dist/schemas",
   "jsonSchemas": [
@@ -10,14 +10,29 @@
       "file": "json-schema/instruction-audience-scope.schema.json"
     },
     {
+      "type": "Classification",
+      "source": "src/models/instruction.ts",
+      "file": "json-schema/instruction-classification.schema.json"
+    },
+    {
       "type": "ContentType",
       "source": "src/models/instruction.ts",
       "file": "json-schema/instruction-content-type.schema.json"
     },
     {
+      "type": "GovernanceStatus",
+      "source": "src/models/instruction.ts",
+      "file": "json-schema/instruction-governance-status.schema.json"
+    },
+    {
       "type": "InstructionEntry",
       "source": "src/models/instruction.ts",
       "file": "json-schema/instruction-instruction-entry.schema.json"
+    },
+    {
+      "type": "PriorityTier",
+      "source": "src/models/instruction.ts",
+      "file": "json-schema/instruction-priority-tier.schema.json"
     },
     {
       "type": "RequirementLevel",
@@ -67,7 +82,7 @@
       "src",
       "scripts"
     ],
-    "fileCount": 266,
+    "fileCount": 277,
     "features": {
       "jsdoc": true,
       "lineNumbers": true,

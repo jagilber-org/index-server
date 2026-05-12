@@ -4,6 +4,7 @@
  */
 import path from 'path';
 import { getBooleanEnv, parseBooleanEnv } from '../utils/envUtils';
+import { INSTANCE_MODES, type InstanceMode } from '../lib/instanceTopology';
 import {
   CWD,
   LogLevel,
@@ -44,7 +45,7 @@ export interface ServerConfig {
   indexPolling: ServerindexPollingConfig;
   multicoreTrace: boolean;
   /** Multi-instance mode: standalone (default), leader, follower, auto [EXPERIMENTAL] */
-  instanceMode: 'standalone' | 'leader' | 'follower' | 'auto';
+  instanceMode: InstanceMode;
   /** HTTP port for leader's MCP transport (thin clients connect here) */
   leaderPort: number;
   /** Leader heartbeat interval (ms) */
@@ -119,9 +120,8 @@ export interface TracingConfig {
 export function parseServerConfig(): ServerConfig {
   const sharedSentinel = process.env.INDEX_SERVER_SHARED_SERVER_SENTINEL;
   const rawMode = (process.env.INDEX_SERVER_MODE || 'standalone').trim().toLowerCase();
-  const validModes = ['standalone', 'leader', 'follower', 'auto'] as const;
-  const instanceMode = validModes.includes(rawMode as typeof validModes[number])
-    ? (rawMode as typeof validModes[number])
+  const instanceMode: InstanceMode = (INSTANCE_MODES as readonly string[]).includes(rawMode)
+    ? (rawMode as InstanceMode)
     : 'standalone';
   return {
     disableEarlyStdinBuffer: getBooleanEnv('INDEX_SERVER_DISABLE_EARLY_STDIN_BUFFER'),

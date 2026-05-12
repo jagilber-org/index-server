@@ -13,11 +13,14 @@
  */
 import crypto from 'crypto';
 import { logInfo, logError } from '../../services/logger.js';
+import type { SeverityLevel } from '../types/severity.js';
+import type { TrendDirection } from '../../lib/trendDirection.js';
+import type { ExtendedHealthStatus } from '../types/healthStatus.js';
 
 interface SecurityThreat {
   id: string;
   type: 'authentication_failure' | 'rate_limit_exceeded' | 'suspicious_activity' | 'data_breach_attempt' | 'injection_attack';
-  severity: 'low' | 'medium' | 'high' | 'critical';
+  severity: SeverityLevel;
   source: string;
   timestamp: number;
   details: Record<string, unknown>;
@@ -35,11 +38,11 @@ interface PerformanceMetric {
     warning: number;
     critical: number;
   };
-  trend: 'increasing' | 'decreasing' | 'stable';
+  trend: TrendDirection;
 }
 
 interface SystemHealth {
-  overall: 'healthy' | 'warning' | 'critical' | 'down';
+  overall: ExtendedHealthStatus;
   services: Array<{
     name: string;
     status: 'up' | 'down' | 'degraded';
@@ -228,7 +231,7 @@ export class SecurityMonitor {
   /**
    * Calculate trend from values
    */
-  private calculateTrend(values: number[]): 'increasing' | 'decreasing' | 'stable' {
+  private calculateTrend(values: number[]): TrendDirection {
     if (values.length < 2) return 'stable';
 
     const first = values[0];
@@ -243,7 +246,7 @@ export class SecurityMonitor {
    * Check performance thresholds and create alerts
    */
   private checkPerformanceThresholds(metric: PerformanceMetric): void {
-    let severity: 'low' | 'medium' | 'high' | 'critical' | null = null;
+    let severity: SeverityLevel | null = null;
 
     if (metric.value >= metric.threshold.critical) {
       severity = 'critical';
