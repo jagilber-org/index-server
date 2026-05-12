@@ -6,6 +6,7 @@ import { logInfo } from './logger';
 import { getRuntimeConfig } from '../config/runtimeConfig';
 import { buildContentModelSeed } from './seedBootstrap.contentModel';
 import { buildContentTypesSeed } from './seedBootstrap.contentTypes';
+import { REQUIREMENTS, PRIORITY_TIERS } from '../models/instruction';
 
 /**
  * Automatic bootstrap seeding (Option B: create only if missing).
@@ -267,11 +268,11 @@ export function autoSeedBootstrap(): SeedSummary {
       let staleReason = '';
       try {
         const existing = JSON.parse(fs.readFileSync(target,'utf8')) as Record<string, unknown>;
-        const validRequirement = ['mandatory','critical','recommended','optional','deprecated'];
-        const validPriorityTier = ['P1','P2','P3','P4'];
-        if(typeof existing.requirement === 'string' && !validRequirement.includes(existing.requirement)){
+        const validRequirement = REQUIREMENTS;
+        const validPriorityTier = PRIORITY_TIERS;
+        if(typeof existing.requirement === 'string' && !(validRequirement as readonly string[]).includes(existing.requirement)){
           stale = true; staleReason = `invalid requirement="${existing.requirement}"`;
-        } else if(typeof existing.priorityTier === 'string' && !validPriorityTier.includes(existing.priorityTier)){
+        } else if(typeof existing.priorityTier === 'string' && !(validPriorityTier as readonly string[]).includes(existing.priorityTier)){
           stale = true; staleReason = `invalid priorityTier="${existing.priorityTier}"`;
         } else if(typeof existing.sourceHash === 'string' && existing.sourceHash !== canonicalSourceHash){
           // sourceHash on disk no longer matches the in-code canonical body.

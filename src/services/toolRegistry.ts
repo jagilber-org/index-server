@@ -3,13 +3,16 @@
  * Provides per-tool metadata including description, input & output JSON Schemas.
  * This enables host agents to introspect capabilities & perform client-side validation.
  */
-import { schemas as outputSchemas, buildToolInputEntrySchema } from '../schemas';
+import { schemas as outputSchemas, buildToolImportEntrySchema, buildToolInputEntrySchema } from '../schemas';
+import { buildInstructionSearchFieldsSchema } from '../schemas/instructionSchema';
 import { flagEnabled } from './featureFlags';
 import { dangerousDiagnosticsEnabled } from '../utils/envUtils';
 import { getRuntimeConfig } from '../config/runtimeConfig';
-import { CONTENT_TYPES } from '../models/instruction';
-
-export type ToolTier = 'core' | 'extended' | 'admin';
+import { CONTENT_TYPES, AUDIENCES, REQUIREMENTS, STATUSES, PRIORITY_TIERS, CLASSIFICATIONS } from '../models/instruction';
+import { FEEDBACK_TYPES, FEEDBACK_SEVERITIES, FEEDBACK_STATUSES } from './feedbackStorage';
+import { USAGE_ACTIONS, USAGE_SIGNALS, SEARCH_MODES } from './protocolEnums';
+export { TOOL_TIERS, ToolTier } from './protocolEnums';
+import type { ToolTier } from './protocolEnums';
 
 export interface ToolRegistryEntry {
   name: string;                 // Fully qualified method name (JSON-RPC method)
@@ -106,6 +109,8 @@ const INPUT_SCHEMAS: Record<string, object> = {
     id: { type: 'string', description: 'Instruction ID for get, getEnhanced, remove, inspect, governanceUpdate actions.' },
     q: { type: 'string', description: 'Single-string query for search action. The dispatcher searches the full q phrase first and, if needed, retries with split-word keywords.' },
     keywords: { type: 'array', items: { type: 'string' }, description: 'Explicit keyword array for search action when the caller wants direct token control.' },
+    searchString: { type: 'string', minLength: 1, maxLength: 500, description: 'Ergonomic phrase input for search action. Mutually exclusive with keywords.' },
+    fields: { ...buildInstructionSearchFieldsSchema(), description: 'Structural field predicates for search action. Unknown fields are rejected.' },
     ids: { type: 'array', items: { type: 'string' }, description: 'Array of instruction IDs for remove or export actions.' },
     category: { type: 'string', description: 'Filter by category for list action.' },
     contentType: { type: 'string', enum: [...CONTENT_TYPES], description: 'Filter by content type for list, search, or query actions, or specify the entry content type for add action.' },
@@ -121,14 +126,14 @@ const INPUT_SCHEMAS: Record<string, object> = {
     // Mutation params for add action (flat-param support: agents can pass these at top level instead of nested entry wrapper)
     entry: { type: 'object', description: 'Instruction entry object for add action. Alternatively, pass id/body/title as top-level params.', additionalProperties: true, properties: { id: { type: 'string' }, title: { type: 'string' }, body: { type: 'string' } } },
     priority: { type: 'number' },
-    audience: { type: 'string' },
-    requirement: { type: 'string' },
+    audience: { type: 'string', enum: [...AUDIENCES] },
+    requirement: { type: 'string', enum: [...REQUIREMENTS] },
     categories: { type: 'array', items: { type: 'string' } },
     deprecatedBy: { type: 'string' },
     riskScore: { type: 'number' },
     version: { type: 'string' },
-    priorityTier: { type: 'string', enum: ['P1', 'P2', 'P3', 'P4'] },
-    classification: { type: 'string', enum: ['public', 'internal', 'restricted'] },
+    priorityTier: { type: 'string', enum: [...PRIORITY_TIERS] },
+    classification: { type: 'string', enum: [...CLASSIFICATIONS] },
     overwrite: { type: 'boolean', description: 'Allow overwriting existing instruction (add action).' },
     lax: { type: 'boolean', description: 'Enable lax mode with default fills for missing optional fields (add action).' },
     // Import action params
@@ -137,7 +142,7 @@ const INPUT_SCHEMAS: Record<string, object> = {
     mode: { description: 'Import conflict resolution mode (import action) or groom mode object (groom action).' },
     // Governance update params
     owner: { type: 'string', description: 'Owner identifier for governanceUpdate action or add action.' },
-    status: { type: 'string', description: 'Governance status for governanceUpdate action or add action.', enum: ['approved','draft','review','deprecated'] },
+    status: { type: 'string', description: 'Governance status for governanceUpdate action or add action.', enum: [...STATUSES] },
     bump: { type: 'string', description: 'Version bump level for governanceUpdate action.', enum: ['patch','minor','major','none'] },
     lastReviewedAt: { type: 'string', description: 'Last review date (ISO 8601) for governanceUpdate action.' },
     nextReviewDue: { type: 'string', description: 'Next review due date (ISO 8601) for governanceUpdate action.' },
@@ -170,9 +175,7 @@ const INPUT_SCHEMAS: Record<string, object> = {
   // original drift source — see src/schemas/instructionSchema.ts.
   'index_import': { type: 'object', additionalProperties: false, properties: {
     entries: { oneOf: [
-      { type: 'array', minItems: 1, items: buildToolInputEntrySchema({
-        required: ['id','title','body','priority','audience','requirement'],
-      }) },
+      { type: 'array', minItems: 1, items: buildToolImportEntrySchema() },
       { type: 'string', description: 'Stringified JSON array of instruction entries, or a file path to a JSON array of instruction entries' }
     ] },
     source: { type: 'string', description: 'Directory path containing .json instruction files to import' },
@@ -193,7 +196,7 @@ const INPUT_SCHEMAS: Record<string, object> = {
   'integrity_verify': { type: 'object', additionalProperties: true },
   'feature_status': { type: 'object', additionalProperties: false, properties: {} },
   'index_health': { type: 'object', additionalProperties: true },
-  'usage_track': { type: 'object', additionalProperties: false, required: ['id'], properties: { id: { type: 'string' }, action: { type: 'string', enum: ['retrieved', 'applied', 'cited'], description: 'Usage action type (default: retrieved)' }, signal: { type: 'string', enum: ['helpful', 'not-relevant', 'outdated', 'applied'], description: 'Qualitative signal about instruction usefulness' }, comment: { type: 'string', maxLength: 256, description: 'Optional short comment about the instruction' } } },
+  'usage_track': { type: 'object', additionalProperties: false, required: ['id'], properties: { id: { type: 'string' }, action: { type: 'string', enum: [...USAGE_ACTIONS], description: 'Usage action type (default: retrieved)' }, signal: { type: 'string', enum: [...USAGE_SIGNALS], description: 'Qualitative signal about instruction usefulness' }, comment: { type: 'string', maxLength: 256, description: 'Optional short comment about the instruction' } } },
   'usage_hotset': { type: 'object', additionalProperties: false, properties: { limit: { type: 'number', minimum: 1, maximum: 100 } } },
   'usage_flush': { type: 'object', additionalProperties: false, properties: { id: { type: 'string', description: 'Instruction ID to reset usage for' }, before: { type: 'string', description: 'ISO date — reset usage for entries with lastUsedAt before this date' } } },
   'metrics_snapshot': { type: 'object', additionalProperties: true },
@@ -214,8 +217,8 @@ const INPUT_SCHEMAS: Record<string, object> = {
   'manifest_repair': { type: 'object', additionalProperties: true },
   // feedback system tools
   'feedback_submit': { type: 'object', additionalProperties: false, required: ['type', 'severity', 'title', 'description'], properties: {
-    type: { type: 'string', enum: ['issue', 'status', 'security', 'feature-request', 'bug-report', 'performance', 'usability', 'other'] },
-    severity: { type: 'string', enum: ['low', 'medium', 'high', 'critical'] },
+    type: { type: 'string', enum: [...FEEDBACK_TYPES] },
+    severity: { type: 'string', enum: [...FEEDBACK_SEVERITIES] },
     title: { type: 'string', maxLength: 200 },
     description: { type: 'string', maxLength: 10000 },
     context: { type: 'object', additionalProperties: true, properties: {
@@ -232,9 +235,9 @@ const INPUT_SCHEMAS: Record<string, object> = {
   'feedback_manage': { type: 'object', additionalProperties: false, required: ['action'], properties: {
     action: { type: 'string', enum: ['submit', 'list', 'get', 'update', 'delete', 'stats'], description: 'Feedback management action to perform.' },
     id: { type: 'string', description: 'Feedback entry id for get, update, and delete actions.' },
-    type: { type: 'string', enum: ['issue', 'status', 'security', 'feature-request', 'bug-report', 'performance', 'usability', 'other'] },
-    severity: { type: 'string', enum: ['low', 'medium', 'high', 'critical'] },
-    status: { type: 'string', enum: ['new', 'acknowledged', 'in-progress', 'resolved', 'closed'] },
+    type: { type: 'string', enum: [...FEEDBACK_TYPES] },
+    severity: { type: 'string', enum: [...FEEDBACK_SEVERITIES] },
+    status: { type: 'string', enum: [...FEEDBACK_STATUSES] },
     title: { type: 'string', maxLength: 200 },
     description: { type: 'string', maxLength: 10000 },
     context: { type: 'object', additionalProperties: true, properties: {
@@ -252,7 +255,11 @@ const INPUT_SCHEMAS: Record<string, object> = {
     since: { type: 'string', description: 'ISO date filter for list and stats actions.' }
   } },
   // instructions search tool - PRIMARY discovery mechanism
-  'index_search': { type: 'object', additionalProperties: false, required: ['keywords'], properties: {
+  'index_search': { type: 'object', additionalProperties: false, anyOf: [
+    { required: ['keywords'] },
+    { required: ['searchString'] },
+    { required: ['fields'] }
+  ], not: { required: ['keywords', 'searchString'] }, properties: {
     keywords: {
       type: 'array',
       items: { type: 'string', minLength: 1, maxLength: 100 },
@@ -260,11 +267,18 @@ const INPUT_SCHEMAS: Record<string, object> = {
       maxItems: 10,
       description: 'Search keywords to match against instruction titles, bodies, and categories'
     },
-    mode: { type: 'string', enum: ['keyword', 'regex', 'semantic'], description: 'Search mode: keyword (substring), regex (patterns like "deploy|release"), or semantic (embedding similarity). Default is semantic when INDEX_SERVER_SEMANTIC_ENABLED=1, otherwise keyword. Omit to use the server default.' },
+    searchString: {
+      type: 'string',
+      minLength: 1,
+      maxLength: 500,
+      description: 'Phrase input for search. Mutually exclusive with keywords.'
+    },
+    mode: { type: 'string', enum: [...SEARCH_MODES], description: 'Search mode: keyword (substring), regex (patterns like "deploy|release"), or semantic (embedding similarity). Default is semantic when INDEX_SERVER_SEMANTIC_ENABLED=1, otherwise keyword. Omit to use the server default.' },
     limit: { type: 'number', minimum: 1, maximum: 100, default: 50, description: 'Maximum number of instruction IDs to return' },
     includeCategories: { type: 'boolean', default: false, description: 'Include categories in search scope' },
     caseSensitive: { type: 'boolean', default: false, description: 'Perform case-sensitive matching' },
-    contentType: { type: 'string', enum: [...CONTENT_TYPES], description: 'Filter results by content type (optional)' }
+    contentType: { type: 'string', enum: [...CONTENT_TYPES], deprecated: true, description: 'Deprecated alias for fields.contentType. Filter results by content type (optional)' },
+    fields: { ...buildInstructionSearchFieldsSchema(), description: 'Structural predicates over canonical instruction fields. Scalar arrays use OR semantics; unknown fields are rejected.' }
   } },
   // promote_from_repo tool
   'promote_from_repo': { type: 'object', additionalProperties: false, required: ['repoPath'], properties: {
@@ -485,8 +499,8 @@ function describeTool(name: string): string {
   switch(name){
     case 'health_check': return 'Returns server health status & version.';
   case 'graph_export': return 'Export instruction relationship graph (schema v1 minimal or v2 enriched).';
-  case 'index_dispatch': return 'Unified dispatcher for instruction index operations. Required: "action". Key params by action: get/getEnhanced(id), search(q or keywords, includeCategories, caseSensitive, limit, mode), query(text,categoriesAny,limit,offset), list(category), diff(clientHash), export(ids,metaOnly), remove(id or ids). Use action="capabilities" to discover all supported actions.';
-  case 'index_search': return '🔍 PRIMARY: Search instructions by keywords — returns instruction IDs for targeted retrieval. Supports mode: "keyword" (substring match), "regex" (patterns like "deploy|release"), or "semantic" (embedding similarity). Default mode is semantic when INDEX_SERVER_SEMANTIC_ENABLED=1, otherwise keyword. Omit the mode parameter to let the server choose the best default. Use this FIRST to discover relevant instructions, then use index_dispatch get for details.';
+  case 'index_dispatch': return 'Unified dispatcher for instruction index operations. Required: "action". Key params by action: get/getEnhanced(id), search(q/searchString/keywords/fields, includeCategories, caseSensitive, limit, mode), query(text,categoriesAny,limit,offset), list(category), diff(clientHash), export(ids,metaOnly), remove(id or ids). Use action="capabilities" to discover all supported actions.';
+  case 'index_search': return '🔍 PRIMARY: Search instructions by keywords, searchString phrase input, and/or structural fields — returns instruction IDs for targeted retrieval. Supports mode: "keyword" (substring match), "regex" (patterns like "deploy|release"), or "semantic" (embedding similarity). Default mode is semantic when INDEX_SERVER_SEMANTIC_ENABLED=1, otherwise keyword. Omit the mode parameter to let the server choose the best default. Use this FIRST to discover relevant instructions, then use index_dispatch get for details.';
   case 'index_governanceHash': return 'Return governance projection & deterministic governance hash.';
   // query & categories now accessed via dispatcher actions.
   // legacy read-only instruction descriptions removed (handled via dispatcher)

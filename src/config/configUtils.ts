@@ -3,8 +3,9 @@
  * No imports from other local config files — safe to import anywhere.
  */
 import path from 'path';
+import type { LogLevelLower } from '../lib/logLevels';
 
-export type LogLevel = 'error' | 'warn' | 'info' | 'debug' | 'trace';
+export type LogLevel = LogLevelLower;
 
 export const CWD = process.cwd();
 

@@ -6,6 +6,30 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 
 ## [Unreleased]
 
+## [1.28.21] - 2026-05-12
+
+### Features
+
+- **`graph_export` enriched node `contentType`**: enriched schema v2 instruction
+  nodes now include the `contentType` field from instruction metadata. This lets
+  graph consumers distinguish instruction metadata types without a follow-up
+  fetch. Non-enriched schema v1 nodes still omit `contentType` by design.
+- **`index_search` phrase and structural query inputs**: `index_search` and
+  `index_dispatch action="search"` now support `searchString` for ergonomic
+  phrase input and `fields` for structural predicates on canonical instruction
+  fields plus virtual operators. Supported predicates include scalar exact
+  values, OneOrMany enum/scalar values, array membership, `idPrefix`, safe
+  `idRegex`, numeric ranges, date ranges, and structural-only queries.
+
+### Changed
+
+- **Quieter startup logs**: `[index:skip]` schema/classification rejections now
+  emit at WARN instead of ERROR (they are operational file-skip signals already
+  surfaced via the dashboard Monitoring tab + `indexEvents`, not server errors).
+  The `usageCount defaulted to 0` invariant-repair WARN is silenced — `0` is the
+  correct authoritative value for freshly seeded entries with no usage history;
+  the repair counter and trace log still record the event for health visibility.
+
 ## [1.28.19] - 2026-05-11
 
 ### Added

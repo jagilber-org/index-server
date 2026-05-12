@@ -12,10 +12,18 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 import { execSync } from 'child_process';
+import { sanitizedPublishEnv } from '../helpers/publishEnv';
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
 const CJS_PATH = path.join(REPO_ROOT, 'scripts', 'build', 'publish-direct-to-remote.cjs');
 const HAS_PUBLISH_EXCLUDE = fs.existsSync(path.join(REPO_ROOT, '.publish-exclude'));
+const EXEC_OPTS = {
+  cwd: REPO_ROOT,
+  encoding: 'utf8' as const,
+  stdio: 'pipe' as const,
+  maxBuffer: 50 * 1024 * 1024,
+  env: sanitizedPublishEnv(),
+};
 
 describe('publish --verify-only scenarios', () => {
 
@@ -26,7 +34,7 @@ describe('publish --verify-only scenarios', () => {
       // Run once and cache — staging 15K+ files is expensive
       output = execSync(
         `node "${CJS_PATH}" --verify-only --quiet`,
-        { cwd: REPO_ROOT, encoding: 'utf8', stdio: 'pipe', maxBuffer: 50 * 1024 * 1024 }
+        EXEC_OPTS
       );
     }, 120_000);
 
@@ -49,7 +57,7 @@ describe('publish --verify-only scenarios', () => {
     beforeAll(() => {
       output = execSync(
         `node "${CJS_PATH}" --verify-only --quiet`,
-        { cwd: REPO_ROOT, encoding: 'utf8', stdio: 'pipe', maxBuffer: 50 * 1024 * 1024 }
+        EXEC_OPTS
       );
     }, 120_000);
 
@@ -72,7 +80,7 @@ describe('publish --verify-only scenarios', () => {
     it('verify-only exits successfully (verifyNoLeakedArtifacts passed internally)', () => {
       const output = execSync(
         `node "${CJS_PATH}" --verify-only --quiet`,
-        { cwd: REPO_ROOT, encoding: 'utf8', stdio: 'pipe', maxBuffer: 50 * 1024 * 1024 }
+        EXEC_OPTS
       );
       expect(output).toContain('Verification passed');
     }, 120_000);
@@ -80,7 +88,7 @@ describe('publish --verify-only scenarios', () => {
     it('no git push or remote operations in output', () => {
       const output = execSync(
         `node "${CJS_PATH}" --verify-only --quiet`,
-        { cwd: REPO_ROOT, encoding: 'utf8', stdio: 'pipe', maxBuffer: 50 * 1024 * 1024 }
+        EXEC_OPTS
       );
       expect(output).not.toContain('git push');
       expect(output).not.toContain('Pushing to');

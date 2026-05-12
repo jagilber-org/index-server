@@ -17,6 +17,11 @@ Use the instruction relationship graph to: (1) find the most relevant instructio
 
 Never use Mermaid output for reasoning; it is visualization only.
 
+When `enrich:true`, instruction nodes include `contentType` from instruction
+metadata. The valid values come from the canonical content-type taxonomy in
+`schemas/instruction.schema.json`; category nodes and non-enriched schema v1
+nodes omit `contentType`.
+
 ## 3. Progressive Retrieval Strategy
 
 1. Governance hash check (if available) → reuse cached graph if unchanged.
@@ -29,7 +34,7 @@ Never use Mermaid output for reasoning; it is visualization only.
 
 - Category index: `category -> instructionIds`
 - Adjacency (instruction-only) from edges (ignore `category:` nodes for neighbor scoring)
-- Node feature map: `{ usageCount, updatedAt, priorityTier, categories[] }`
+- Node feature map: `{ usageCount, updatedAt, priorityTier, contentType, categories[] }`
 
 ## 5. Scoring Heuristic
 

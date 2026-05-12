@@ -6,6 +6,9 @@
  * No side effects — every function here is deterministic given its inputs.
  */
 
+import type { SeverityLevel } from '../types/severity.js';
+import type { HealthStatus } from '../types/healthStatus.js';
+
 // ── Exported Types ──────────────────────────────────────────────────────────
 
 export interface ToolMetrics {
@@ -126,7 +129,7 @@ export interface SystemHealth {
   networkLatency: number;
   uptime: number;
   lastHealthCheck: Date;
-  status: 'healthy' | 'warning' | 'critical';
+  status: HealthStatus;
 }
 
 export interface EnhancedPerformanceMetrics {
@@ -209,7 +212,7 @@ export interface Anomaly {
 export interface Alert {
   id: string;
   type: 'error_rate' | 'response_time' | 'memory' | 'cpu' | 'system' | 'network';
-  severity: 'low' | 'medium' | 'high' | 'critical';
+  severity: SeverityLevel;
   message: string;
   timestamp: Date;
   resolved: boolean;
@@ -321,7 +324,7 @@ export function getOverallHealthStatus(
   cpu: number,
   memory: number,
   errorRate: number,
-): 'healthy' | 'warning' | 'critical' {
+): HealthStatus {
   if (cpu > 90 || memory > 90 || errorRate > 10) return 'critical';
   if (cpu > 75 || memory > 75 || errorRate > 5)  return 'warning';
   return 'healthy';

@@ -6,28 +6,31 @@ import { migrateInstructionRecord, SCHEMA_VERSION } from '../versioning/schemaVe
 import { getToolRegistry } from '../services/toolRegistry';
 import { getZodEnhancedRegistry } from '../services/toolRegistry.zod';
 import { validateParams } from '../services/validationService';
+import { CONTENT_TYPES } from '../models/instruction';
 
-const CANONICAL_CONTENT_TYPES = [
-  'agent',
-  'skill',
-  'instruction',
-  'prompt',
-  'workflow',
-  'knowledge',
-  'template',
-  'integration',
-] as const;
+// CANONICAL_CONTENT_TYPES is read directly from the JSON schema (the single
+// source of truth). Do NOT replace this with a hand-typed literal array —
+// that re-introduces the drift this test exists to prevent.
+const CANONICAL_CONTENT_TYPES = (schema as { properties: { contentType: { enum: string[] } } })
+  .properties.contentType.enum;
 
 function schemaContentTypes(): string[] {
   return (schema as { properties: { contentType: { enum: string[] } } }).properties.contentType.enum;
 }
 
 describe('canonical content type taxonomy', () => {
-  it('instruction schema exposes exactly the eight canonical content types', () => {
-    expect(schemaContentTypes()).toEqual(CANONICAL_CONTENT_TYPES);
+  it('exposes the eight canonical content types and excludes removed values', () => {
+    expect(schemaContentTypes()).toHaveLength(8);
+    expect(schemaContentTypes()).toEqual(
+      expect.arrayContaining(['agent', 'skill', 'instruction', 'prompt', 'workflow', 'knowledge', 'template', 'integration']),
+    );
     expect(schemaContentTypes()).not.toContain('reference');
     expect(schemaContentTypes()).not.toContain('example');
     expect(schemaContentTypes()).not.toContain('chat-session');
+  });
+
+  it('src/models/instruction.ts CONTENT_TYPES matches the JSON schema enum', () => {
+    expect([...CONTENT_TYPES]).toEqual(schemaContentTypes());
   });
 
   it('schemaVersion is bumped to 6 in schema and migration constant', () => {

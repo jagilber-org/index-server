@@ -9,10 +9,11 @@ import { attemptManifestUpdate } from '../manifestManager';
 import { migrateInstructionRecord } from '../../versioning/schemaVersion';
 import { deriveCategory, slugifyCategory } from '../categoryRules';
 import { hashBody as canonicalHashBody } from '../canonical';
-import { InstructionEntry } from '../../models/instruction';
+import { InstructionEntry, PRIORITY_TIERS } from '../../models/instruction';
 import { guard, computeSourceHash, normalizeCategories } from './instructions.shared';
 import { validateForDisk, getSchemaPropertyNames } from '../loaderSchemaValidator';
 import { sanitizeErrorDetail } from '../instructionRecordValidation';
+import { migrateLegacyInstructionEntry, SchemaMigrationResult } from '../schemaMigrationService';
 
 registerHandler('index_enrich', guard('index_enrich', () => {
   const st = ensureLoaded();
@@ -73,11 +74,30 @@ registerHandler('index_enrich', guard('index_enrich', () => {
 }));
 
 registerHandler('index_repair', guard('index_repair', (_p: unknown) => {
-  const st = ensureLoaded(); const toFix: { entry: InstructionEntry; actual: string }[] = [];
-  for (const e of st.list) { const actual = computeSourceHash(e.body); if (actual !== e.sourceHash) toFix.push({ entry: e, actual }); }
+  const st = ensureLoaded(); const toFix: { entry: InstructionEntry; actual: string; originalId: string; migration?: SchemaMigrationResult }[] = [];
+  for (const e of st.list) {
+    const migration = migrateLegacyInstructionEntry(e as unknown as Record<string, unknown>, { source: 'index_repair' });
+    const migrated = migration.entry as unknown as InstructionEntry;
+    const actual = computeSourceHash(String(migrated.body || ''));
+    if (migration.changed || actual !== migrated.sourceHash) toFix.push({ entry: migrated, actual, originalId: e.id, migration: migration.changed ? migration : undefined });
+  }
   const repaired: string[] = []; const errors: { id: string; error: string }[] = [];
-  for (const { entry, actual } of toFix) {
-    try { const updated = { ...entry, sourceHash: actual, updatedAt: new Date().toISOString() }; writeEntry(updated as InstructionEntry); repaired.push(entry.id); } catch (err) {
+  const migrationDetails: Array<Pick<SchemaMigrationResult, 'originalId' | 'id' | 'schemaVersion' | 'changes'>> = [];
+  for (const { entry, actual, originalId, migration } of toFix) {
+    try {
+      const updated = { ...entry, sourceHash: actual, updatedAt: new Date().toISOString() };
+      writeEntry(updated as InstructionEntry);
+      if (entry.id !== originalId) removeEntry(originalId);
+      if (migration) {
+        migrationDetails.push({
+          originalId: migration.originalId,
+          id: migration.id,
+          schemaVersion: migration.schemaVersion,
+          changes: migration.changes,
+        });
+      }
+      repaired.push(entry.id);
+    } catch (err) {
       const detail = (err as Error).message || 'unknown';
       errors.push({ id: entry.id, error: detail });
       logAudit('repair_entry_error', entry.id, { error: detail });
@@ -106,35 +126,37 @@ registerHandler('index_repair', guard('index_repair', (_p: unknown) => {
         const raw = JSON.parse(fs.readFileSync(filePath, 'utf8')) as Record<string, unknown>;
         if (!raw.id || !raw.body) { skippedErrors.push({ id, error: 'missing required fields (id or body)' }); continue; }
 
-        // Strip properties not in the JSON schema
+        const keys = Object.keys(raw);
+        let stripped = false;
         if (schemaProps.size) {
-          const keys = Object.keys(raw);
-          let stripped = false;
           for (const key of keys) {
             if (!schemaProps.has(key)) { delete raw[key]; stripped = true; }
           }
-          if (stripped) {
-            raw.sourceHash = computeSourceHash(String(raw.body));
-            raw.updatedAt = new Date().toISOString();
-            // DI-4: mirror the loader's migration step before validating
-            // against the loader schema, matching writeEntry/writeEntryAsync.
-            // Without this, a stripped record carrying a legacy schemaVersion
-            // would fail validateForDisk even though the loader would have
-            // migrated it transparently on read.
-            migrateInstructionRecord(raw);
-            // Gate the write through the same loader-schema validator the
-            // primary writeEntry path uses (review #211 finding 3). If the
-            // stripped record still fails validation, skip the write rather
-            // than persisting a record that the next reload will silently
-            // discard.
-            const diskCheck = validateForDisk(raw);
-            if (!diskCheck.valid) {
-              skippedErrors.push({ id, error: sanitizeErrorDetail(`schema validation failed: ${(diskCheck.errors || []).join('; ')}`) || 'schema validation failed' });
-              continue;
-            }
-            fs.writeFileSync(filePath, JSON.stringify(raw, null, 2) + '\n', 'utf8');
-            skippedRepaired.push(id);
+        }
+        const migration = migrateLegacyInstructionEntry(raw, { source: 'index_repair' });
+        const migrated = migration.entry;
+        if (stripped || migration.changed) {
+          migrated.sourceHash = computeSourceHash(String(migrated.body));
+          migrated.updatedAt = new Date().toISOString();
+          migrateInstructionRecord(migrated);
+          const diskCheck = validateForDisk(migrated);
+          if (!diskCheck.valid) {
+            skippedErrors.push({ id, error: sanitizeErrorDetail(`schema validation failed: ${(diskCheck.errors || []).join('; ')}`) || 'schema validation failed' });
+            continue;
           }
+          writeEntry(migrated as unknown as InstructionEntry);
+          if (typeof migrated.id === 'string' && migrated.id !== id) {
+            try { removeEntry(id); } catch { /* old skipped file may already be absent in non-JSON stores */ }
+          }
+          if (migration.changed) {
+            migrationDetails.push({
+              originalId: migration.originalId,
+              id: migration.id,
+              schemaVersion: migration.schemaVersion,
+              changes: migration.changes,
+            });
+          }
+          skippedRepaired.push(typeof migrated.id === 'string' ? migrated.id : id);
         }
       } catch (err) {
         // Sanitize the raw error before returning to the client (review #211 finding 6).
@@ -147,10 +169,10 @@ registerHandler('index_repair', guard('index_repair', (_p: unknown) => {
 
   const allRepaired = [...repaired, ...skippedRepaired];
   if (allRepaired.length) { touchIndexVersion(); invalidate(); ensureLoaded(); }
-  const resp: { repaired: number; updated: string[]; skippedRepaired: string[]; errors: { id: string; error: string }[] } = {
-    repaired: allRepaired.length, updated: repaired, skippedRepaired, errors: [...errors, ...skippedErrors]
+  const resp: { repaired: number; updated: string[]; skippedRepaired: string[]; errors: { id: string; error: string }[]; migrationCount: number; migrationDetails: Array<Pick<SchemaMigrationResult, 'originalId' | 'id' | 'schemaVersion' | 'changes'>> } = {
+    repaired: allRepaired.length, updated: repaired, skippedRepaired, errors: [...errors, ...skippedErrors], migrationCount: migrationDetails.length, migrationDetails
   };
-  if (allRepaired.length) { logAudit('repair', allRepaired, { repaired: allRepaired.length, skippedRepaired: skippedRepaired.length, errors: errors.length + skippedErrors.length }); attemptManifestUpdate(); }
+  if (allRepaired.length) { logAudit('repair', allRepaired, { repaired: allRepaired.length, skippedRepaired: skippedRepaired.length, errors: errors.length + skippedErrors.length, migrationCount: migrationDetails.length }); attemptManifestUpdate(); }
   return resp;
 }));
 
@@ -224,7 +246,7 @@ registerHandler('index_normalize', guard('index_normalize', (p: { dryRun?: boole
       if (!rec.version || typeof rec.version !== 'string' || !SEMVER.test(rec.version)) { rec.version = '1.0.0'; modified = true; fixedVersion++; }
       if (rec.priorityTier) {
         const upper = String(rec.priorityTier).toUpperCase();
-        if (['P1', 'P2', 'P3', 'P4'].includes(upper) && upper !== rec.priorityTier) { rec.priorityTier = upper; modified = true; fixedTier++; }
+        if ((PRIORITY_TIERS as readonly string[]).includes(upper) && upper !== rec.priorityTier) { rec.priorityTier = upper; modified = true; fixedTier++; }
       }
       const nowIso = new Date().toISOString();
       if (!rec.createdAt) { rec.createdAt = nowIso; modified = true; addedTimestamps++; }
@@ -253,7 +275,7 @@ registerHandler('index_normalize', guard('index_normalize', (p: { dryRun?: boole
       if (!rec.version || typeof rec.version !== 'string' || !SEMVER.test(rec.version as string)) { rec.version = '1.0.0'; modified = true; fixedVersion++; }
       if (rec.priorityTier) {
         const upper = String(rec.priorityTier).toUpperCase();
-        if (['P1', 'P2', 'P3', 'P4'].includes(upper) && upper !== rec.priorityTier) { rec.priorityTier = upper; modified = true; fixedTier++; }
+        if ((PRIORITY_TIERS as readonly string[]).includes(upper) && upper !== rec.priorityTier) { rec.priorityTier = upper; modified = true; fixedTier++; }
       }
       const nowIso = new Date().toISOString();
       if (!rec.createdAt) { rec.createdAt = nowIso; modified = true; addedTimestamps++; }

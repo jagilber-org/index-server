@@ -6,6 +6,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { getToolRegistry, STABLE } from '../services/toolRegistry';
+import { TOOL_TIERS } from '../services/protocolEnums';
 import { listRegisteredMethods } from '../server/registry';
 
 // Import the consolidated handler registration shim used by the server entrypoint.
@@ -61,7 +62,7 @@ describe('Tool Registry Conformance', () => {
   });
 
   it('every tool has a tier (core, extended, or admin)', () => {
-    const validTiers = new Set(['core', 'extended', 'admin']);
+    const validTiers = new Set<string>(TOOL_TIERS);
     const invalid = registry
       .filter(t => !validTiers.has(t.tier))
       .map(t => `${t.name}:${t.tier}`);

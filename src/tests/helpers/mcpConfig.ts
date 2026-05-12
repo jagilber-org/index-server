@@ -5,7 +5,7 @@ import path from 'path';
 import { expect } from 'vitest';
 
 export type McpTarget = 'vscode' | 'vscode-global' | 'copilot-cli' | 'claude';
-export type McpProfile = 'default' | 'enhanced' | 'experimental';
+export type { McpProfile } from '../../services/mcpConfig/flagCatalog';
 
 export interface LaunchSpecOptions {
   format: McpTarget;

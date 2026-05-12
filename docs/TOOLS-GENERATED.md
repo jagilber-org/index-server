@@ -8,8 +8,8 @@ Registry Version: 2026-03-29
 | feedback_submit | yes |  | Submit feedback entry (issue, status report, security alert, feature request, etc.). |
 | health_check | yes |  | Returns server health status & version. |
 | help_overview | yes |  | Structured onboarding guidance for new agents (tool discovery, index lifecycle, promotion workflow). |
-| index_dispatch | yes |  | Unified dispatcher for instruction index operations. Required: "action". Key params by action: get/getEnhanced(id), search(q or keywords, includeCategories, caseSensitive, limit, mode), query(text,categoriesAny,limit,offset), list(category), diff(clientHash), export(ids,metaOnly), remove(id or ids). Use action="capabilities" to discover all supported actions. |
-| index_search | yes |  | 🔍 PRIMARY: Search instructions by keywords — returns instruction IDs for targeted retrieval. Supports mode: "keyword" (substring match), "regex" (patterns like "deploy\|release"), or "semantic" (embedding similarity). Default mode is semantic when INDEX_SERVER_SEMANTIC_ENABLED=1, otherwise keyword. Omit the mode parameter to let the server choose the best default. Use this FIRST to discover relevant instructions, then use index_dispatch get for details. |
+| index_dispatch | yes |  | Unified dispatcher for instruction index operations. Required: "action". Key params by action: get/getEnhanced(id), search(q/searchString/keywords/fields, includeCategories, caseSensitive, limit, mode), query(text,categoriesAny,limit,offset), list(category), diff(clientHash), export(ids,metaOnly), remove(id or ids). Use action="capabilities" to discover all supported actions. |
+| index_search | yes |  | 🔍 PRIMARY: Search instructions by keywords, searchString phrase input, and/or structural fields — returns instruction IDs for targeted retrieval. Supports mode: "keyword" (substring match), "regex" (patterns like "deploy\|release"), or "semantic" (embedding similarity). Default mode is semantic when INDEX_SERVER_SEMANTIC_ENABLED=1, otherwise keyword. Omit the mode parameter to let the server choose the best default. Use this FIRST to discover relevant instructions, then use index_dispatch get for details. |
 | prompt_review | yes |  | Static analysis of a prompt returning issues & summary. |
 
 ## Schemas
@@ -340,6 +340,890 @@ Registry Version: 2026-03-29
       },
       "description": "Explicit keyword array for search action when the caller wants direct token control."
     },
+    "searchString": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500,
+      "description": "Ergonomic phrase input for search action. Mutually exclusive with keywords."
+    },
+    "fields": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "id": {
+          "oneOf": [
+            {
+              "type": "string",
+              "pattern": "^[a-z0-9](?:[a-z0-9-_]{0,118}[a-z0-9])?$",
+              "maxLength": 120,
+              "description": "Stable identifier (file name without .json) lower-case, no leading/trailing hyphen/underscore"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "pattern": "^[a-z0-9](?:[a-z0-9-_]{0,118}[a-z0-9])?$",
+                "maxLength": 120,
+                "description": "Stable identifier (file name without .json) lower-case, no leading/trailing hyphen/underscore"
+              }
+            }
+          ]
+        },
+        "title": {
+          "oneOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "description": "Short display title"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200,
+                "description": "Short display title"
+              }
+            }
+          ]
+        },
+        "body": {
+          "oneOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000000,
+              "description": "Primary instruction content (markdown / plain text)"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1000000,
+                "description": "Primary instruction content (markdown / plain text)"
+              }
+            }
+          ]
+        },
+        "rationale": {
+          "oneOf": [
+            {
+              "type": "string",
+              "description": "Optional rationale / context for the instruction"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "description": "Optional rationale / context for the instruction"
+              }
+            }
+          ]
+        },
+        "priority": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "description": "Relative ordering: lower = higher importance"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 100,
+                "description": "Relative ordering: lower = higher importance"
+              }
+            }
+          ]
+        },
+        "audience": {
+          "oneOf": [
+            {
+              "enum": [
+                "individual",
+                "group",
+                "all"
+              ],
+              "description": "Intended audience scope"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "enum": [
+                  "individual",
+                  "group",
+                  "all"
+                ],
+                "description": "Intended audience scope"
+              }
+            }
+          ]
+        },
+        "requirement": {
+          "oneOf": [
+            {
+              "enum": [
+                "mandatory",
+                "critical",
+                "recommended",
+                "optional",
+                "deprecated"
+              ],
+              "description": "Lifecycle requirement status"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "enum": [
+                  "mandatory",
+                  "critical",
+                  "recommended",
+                  "optional",
+                  "deprecated"
+                ],
+                "description": "Lifecycle requirement status"
+              }
+            }
+          ]
+        },
+        "categories": {
+          "oneOf": [
+            {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9-_]{0,48}$"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-_]{0,48}$"
+              }
+            }
+          ]
+        },
+        "primaryCategory": {
+          "oneOf": [
+            {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9-_]{0,48}$",
+              "description": "Primary/default category (must be a member of categories when present)"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-_]{0,48}$",
+                "description": "Primary/default category (must be a member of categories when present)"
+              }
+            }
+          ]
+        },
+        "contentType": {
+          "oneOf": [
+            {
+              "enum": [
+                "agent",
+                "skill",
+                "instruction",
+                "prompt",
+                "workflow",
+                "knowledge",
+                "template",
+                "integration"
+              ],
+              "default": "instruction",
+              "description": "Content type classification: agent (AI agent definitions and personas), skill (packaged agent capabilities or callable skills), instruction (actionable guidance and operating rules), prompt (prompt templates or prompt engineering assets), workflow (multi-step processes or runbooks), knowledge (reference material, examples, concepts, and documentation), template (reusable scaffolds or structured content templates), integration (external system, MCP, API, or tool integration guidance)."
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "enum": [
+                  "agent",
+                  "skill",
+                  "instruction",
+                  "prompt",
+                  "workflow",
+                  "knowledge",
+                  "template",
+                  "integration"
+                ],
+                "default": "instruction",
+                "description": "Content type classification: agent (AI agent definitions and personas), skill (packaged agent capabilities or callable skills), instruction (actionable guidance and operating rules), prompt (prompt templates or prompt engineering assets), workflow (multi-step processes or runbooks), knowledge (reference material, examples, concepts, and documentation), template (reusable scaffolds or structured content templates), integration (external system, MCP, API, or tool integration guidance)."
+              }
+            }
+          ]
+        },
+        "schemaVersion": {
+          "oneOf": [
+            {
+              "type": "string",
+              "enum": [
+                "6"
+              ],
+              "x-fieldClass": "server-managed",
+              "description": "Internal schema version for migration"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "enum": [
+                  "6"
+                ],
+                "x-fieldClass": "server-managed",
+                "description": "Internal schema version for migration"
+              }
+            }
+          ]
+        },
+        "sourceHash": {
+          "oneOf": [
+            {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$",
+              "x-fieldClass": "server-managed",
+              "description": "SHA256 hash of body for drift detection"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$",
+                "x-fieldClass": "server-managed",
+                "description": "SHA256 hash of body for drift detection"
+              }
+            }
+          ]
+        },
+        "deprecatedBy": {
+          "oneOf": [
+            {
+              "type": "string",
+              "description": "ID of instruction that supersedes this one"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "description": "ID of instruction that supersedes this one"
+              }
+            }
+          ]
+        },
+        "createdAt": {
+          "oneOf": [
+            {
+              "type": "string",
+              "format": "date-time",
+              "x-fieldClass": "server-managed",
+              "description": "Creation timestamp (ISO 8601)"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "format": "date-time",
+                "x-fieldClass": "server-managed",
+                "description": "Creation timestamp (ISO 8601)"
+              }
+            }
+          ]
+        },
+        "updatedAt": {
+          "oneOf": [
+            {
+              "type": "string",
+              "format": "date-time",
+              "x-fieldClass": "server-managed",
+              "description": "Last mutation timestamp (ISO 8601)"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "format": "date-time",
+                "x-fieldClass": "server-managed",
+                "description": "Last mutation timestamp (ISO 8601)"
+              }
+            }
+          ]
+        },
+        "usageCount": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "x-fieldClass": "server-managed",
+              "description": "Number of tracked usage events"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "integer",
+                "minimum": 0,
+                "x-fieldClass": "server-managed",
+                "description": "Number of tracked usage events"
+              }
+            }
+          ]
+        },
+        "firstSeenTs": {
+          "oneOf": [
+            {
+              "type": "string",
+              "format": "date-time",
+              "x-fieldClass": "server-managed",
+              "description": "Timestamp when usage was first observed (ISO 8601)"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "format": "date-time",
+                "x-fieldClass": "server-managed",
+                "description": "Timestamp when usage was first observed (ISO 8601)"
+              }
+            }
+          ]
+        },
+        "lastUsedAt": {
+          "oneOf": [
+            {
+              "type": "string",
+              "format": "date-time",
+              "x-fieldClass": "server-managed",
+              "description": "Last usage timestamp (ISO 8601)"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "format": "date-time",
+                "x-fieldClass": "server-managed",
+                "description": "Last usage timestamp (ISO 8601)"
+              }
+            }
+          ]
+        },
+        "riskScore": {
+          "oneOf": [
+            {
+              "type": "number",
+              "description": "Optional numeric risk indicator (higher = riskier)"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "number",
+                "description": "Optional numeric risk indicator (higher = riskier)"
+              }
+            }
+          ]
+        },
+        "reviewIntervalDays": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 365,
+              "description": "Governance review interval in days"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 365,
+                "description": "Governance review interval in days"
+              }
+            }
+          ]
+        },
+        "workspaceId": {
+          "oneOf": [
+            {
+              "type": "string",
+              "description": "Scoped workspace identifier (if specific)"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "description": "Scoped workspace identifier (if specific)"
+              }
+            }
+          ]
+        },
+        "userId": {
+          "oneOf": [
+            {
+              "type": "string",
+              "description": "Scoped user identifier (if specific)"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "description": "Scoped user identifier (if specific)"
+              }
+            }
+          ]
+        },
+        "teamIds": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "version": {
+          "oneOf": [
+            {
+              "type": "string",
+              "pattern": "^\\d+\\.\\d+\\.\\d+$",
+              "description": "Semantic version of the instruction"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "pattern": "^\\d+\\.\\d+\\.\\d+$",
+                "description": "Semantic version of the instruction"
+              }
+            }
+          ]
+        },
+        "status": {
+          "oneOf": [
+            {
+              "enum": [
+                "draft",
+                "review",
+                "approved",
+                "deprecated"
+              ],
+              "description": "Governance workflow status"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "enum": [
+                  "draft",
+                  "review",
+                  "approved",
+                  "deprecated"
+                ],
+                "description": "Governance workflow status"
+              }
+            }
+          ]
+        },
+        "owner": {
+          "oneOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "description": "Assigned owning entity (team / user / group)"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Assigned owning entity (team / user / group)"
+              }
+            }
+          ]
+        },
+        "priorityTier": {
+          "oneOf": [
+            {
+              "enum": [
+                "P1",
+                "P2",
+                "P3",
+                "P4"
+              ],
+              "description": "Tier bucket derived from priority or governance policy"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "enum": [
+                  "P1",
+                  "P2",
+                  "P3",
+                  "P4"
+                ],
+                "description": "Tier bucket derived from priority or governance policy"
+              }
+            }
+          ]
+        },
+        "classification": {
+          "oneOf": [
+            {
+              "enum": [
+                "public",
+                "internal",
+                "restricted"
+              ],
+              "description": "Information classification level"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "enum": [
+                  "public",
+                  "internal",
+                  "restricted"
+                ],
+                "description": "Information classification level"
+              }
+            }
+          ]
+        },
+        "lastReviewedAt": {
+          "oneOf": [
+            {
+              "type": "string",
+              "format": "date-time",
+              "description": "Timestamp of last governance review"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "format": "date-time",
+                "description": "Timestamp of last governance review"
+              }
+            }
+          ]
+        },
+        "nextReviewDue": {
+          "oneOf": [
+            {
+              "type": "string",
+              "format": "date-time",
+              "description": "Scheduled next review timestamp"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "format": "date-time",
+                "description": "Scheduled next review timestamp"
+              }
+            }
+          ]
+        },
+        "changeLog": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": true
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "object",
+                "additionalProperties": true
+              }
+            }
+          ]
+        },
+        "supersedes": {
+          "oneOf": [
+            {
+              "type": "string",
+              "description": "ID of instruction this one replaces"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "description": "ID of instruction this one replaces"
+              }
+            }
+          ]
+        },
+        "archivedAt": {
+          "oneOf": [
+            {
+              "type": "string",
+              "format": "date-time",
+              "x-fieldClass": "server-managed",
+              "description": "Timestamp when archived (ISO 8601)"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "format": "date-time",
+                "x-fieldClass": "server-managed",
+                "description": "Timestamp when archived (ISO 8601)"
+              }
+            }
+          ]
+        },
+        "semanticSummary": {
+          "oneOf": [
+            {
+              "type": "string",
+              "maxLength": 600,
+              "description": "Cached short natural-language summary of body"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "maxLength": 600,
+                "description": "Cached short natural-language summary of body"
+              }
+            }
+          ]
+        },
+        "sourceWorkspace": {
+          "oneOf": [
+            {
+              "type": "string",
+              "maxLength": 200,
+              "description": "Logical workspace or repository identifier from which this instruction was promoted or created"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "maxLength": 200,
+                "description": "Logical workspace or repository identifier from which this instruction was promoted or created"
+              }
+            }
+          ]
+        },
+        "createdByAgent": {
+          "oneOf": [
+            {
+              "type": "string",
+              "maxLength": 200,
+              "description": "Identifier of the MCP agent or client that created or promoted this entry"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "maxLength": 200,
+                "description": "Identifier of the MCP agent or client that created or promoted this entry"
+              }
+            }
+          ]
+        },
+        "extensions": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "categoriesAny": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "categoriesAll": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "categoriesNone": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "teamIdsAny": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "teamIdsAll": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "teamIdsNone": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "idPrefix": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "idRegex": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "priorityMin": {
+          "type": "number"
+        },
+        "priorityMax": {
+          "type": "number"
+        },
+        "usageCountMin": {
+          "type": "number"
+        },
+        "usageCountMax": {
+          "type": "number"
+        },
+        "riskScoreMin": {
+          "type": "number"
+        },
+        "riskScoreMax": {
+          "type": "number"
+        },
+        "reviewIntervalDaysMin": {
+          "type": "number"
+        },
+        "reviewIntervalDaysMax": {
+          "type": "number"
+        },
+        "createdAfter": {
+          "type": "string",
+          "minLength": 1,
+          "format": "date-time"
+        },
+        "createdBefore": {
+          "type": "string",
+          "minLength": 1,
+          "format": "date-time"
+        },
+        "updatedAfter": {
+          "type": "string",
+          "minLength": 1,
+          "format": "date-time"
+        },
+        "updatedBefore": {
+          "type": "string",
+          "minLength": 1,
+          "format": "date-time"
+        },
+        "firstSeenAfter": {
+          "type": "string",
+          "minLength": 1,
+          "format": "date-time"
+        },
+        "firstSeenBefore": {
+          "type": "string",
+          "minLength": 1,
+          "format": "date-time"
+        },
+        "lastUsedAfter": {
+          "type": "string",
+          "minLength": 1,
+          "format": "date-time"
+        },
+        "lastUsedBefore": {
+          "type": "string",
+          "minLength": 1,
+          "format": "date-time"
+        },
+        "lastReviewedAfter": {
+          "type": "string",
+          "minLength": 1,
+          "format": "date-time"
+        },
+        "lastReviewedBefore": {
+          "type": "string",
+          "minLength": 1,
+          "format": "date-time"
+        },
+        "nextReviewDueAfter": {
+          "type": "string",
+          "minLength": 1,
+          "format": "date-time"
+        },
+        "nextReviewDueBefore": {
+          "type": "string",
+          "minLength": 1,
+          "format": "date-time"
+        },
+        "archivedAfter": {
+          "type": "string",
+          "minLength": 1,
+          "format": "date-time"
+        },
+        "archivedBefore": {
+          "type": "string",
+          "minLength": 1,
+          "format": "date-time"
+        }
+      },
+      "description": "Structural field predicates for search action. Unknown fields are rejected."
+    },
     "ids": {
       "type": "array",
       "items": {
@@ -429,10 +1313,22 @@ Registry Version: 2026-03-29
       "type": "number"
     },
     "audience": {
-      "type": "string"
+      "type": "string",
+      "enum": [
+        "individual",
+        "group",
+        "all"
+      ]
     },
     "requirement": {
-      "type": "string"
+      "type": "string",
+      "enum": [
+        "mandatory",
+        "critical",
+        "recommended",
+        "optional",
+        "deprecated"
+      ]
     },
     "categories": {
       "type": "array",
@@ -504,9 +1400,9 @@ Registry Version: 2026-03-29
       "type": "string",
       "description": "Governance status for governanceUpdate action or add action.",
       "enum": [
-        "approved",
         "draft",
         "review",
+        "approved",
         "deprecated"
       ]
     },
@@ -621,9 +1517,29 @@ Registry Version: 2026-03-29
 {
   "type": "object",
   "additionalProperties": false,
-  "required": [
-    "keywords"
+  "anyOf": [
+    {
+      "required": [
+        "keywords"
+      ]
+    },
+    {
+      "required": [
+        "searchString"
+      ]
+    },
+    {
+      "required": [
+        "fields"
+      ]
+    }
   ],
+  "not": {
+    "required": [
+      "keywords",
+      "searchString"
+    ]
+  },
   "properties": {
     "keywords": {
       "type": "array",
@@ -635,6 +1551,12 @@ Registry Version: 2026-03-29
       "minItems": 1,
       "maxItems": 10,
       "description": "Search keywords to match against instruction titles, bodies, and categories"
+    },
+    "searchString": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500,
+      "description": "Phrase input for search. Mutually exclusive with keywords."
     },
     "mode": {
       "type": "string",
@@ -674,7 +1596,886 @@ Registry Version: 2026-03-29
         "template",
         "integration"
       ],
-      "description": "Filter results by content type (optional)"
+      "deprecated": true,
+      "description": "Deprecated alias for fields.contentType. Filter results by content type (optional)"
+    },
+    "fields": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "id": {
+          "oneOf": [
+            {
+              "type": "string",
+              "pattern": "^[a-z0-9](?:[a-z0-9-_]{0,118}[a-z0-9])?$",
+              "maxLength": 120,
+              "description": "Stable identifier (file name without .json) lower-case, no leading/trailing hyphen/underscore"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "pattern": "^[a-z0-9](?:[a-z0-9-_]{0,118}[a-z0-9])?$",
+                "maxLength": 120,
+                "description": "Stable identifier (file name without .json) lower-case, no leading/trailing hyphen/underscore"
+              }
+            }
+          ]
+        },
+        "title": {
+          "oneOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "description": "Short display title"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200,
+                "description": "Short display title"
+              }
+            }
+          ]
+        },
+        "body": {
+          "oneOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000000,
+              "description": "Primary instruction content (markdown / plain text)"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1000000,
+                "description": "Primary instruction content (markdown / plain text)"
+              }
+            }
+          ]
+        },
+        "rationale": {
+          "oneOf": [
+            {
+              "type": "string",
+              "description": "Optional rationale / context for the instruction"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "description": "Optional rationale / context for the instruction"
+              }
+            }
+          ]
+        },
+        "priority": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "description": "Relative ordering: lower = higher importance"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 100,
+                "description": "Relative ordering: lower = higher importance"
+              }
+            }
+          ]
+        },
+        "audience": {
+          "oneOf": [
+            {
+              "enum": [
+                "individual",
+                "group",
+                "all"
+              ],
+              "description": "Intended audience scope"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "enum": [
+                  "individual",
+                  "group",
+                  "all"
+                ],
+                "description": "Intended audience scope"
+              }
+            }
+          ]
+        },
+        "requirement": {
+          "oneOf": [
+            {
+              "enum": [
+                "mandatory",
+                "critical",
+                "recommended",
+                "optional",
+                "deprecated"
+              ],
+              "description": "Lifecycle requirement status"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "enum": [
+                  "mandatory",
+                  "critical",
+                  "recommended",
+                  "optional",
+                  "deprecated"
+                ],
+                "description": "Lifecycle requirement status"
+              }
+            }
+          ]
+        },
+        "categories": {
+          "oneOf": [
+            {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9-_]{0,48}$"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-_]{0,48}$"
+              }
+            }
+          ]
+        },
+        "primaryCategory": {
+          "oneOf": [
+            {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9-_]{0,48}$",
+              "description": "Primary/default category (must be a member of categories when present)"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-_]{0,48}$",
+                "description": "Primary/default category (must be a member of categories when present)"
+              }
+            }
+          ]
+        },
+        "contentType": {
+          "oneOf": [
+            {
+              "enum": [
+                "agent",
+                "skill",
+                "instruction",
+                "prompt",
+                "workflow",
+                "knowledge",
+                "template",
+                "integration"
+              ],
+              "default": "instruction",
+              "description": "Content type classification: agent (AI agent definitions and personas), skill (packaged agent capabilities or callable skills), instruction (actionable guidance and operating rules), prompt (prompt templates or prompt engineering assets), workflow (multi-step processes or runbooks), knowledge (reference material, examples, concepts, and documentation), template (reusable scaffolds or structured content templates), integration (external system, MCP, API, or tool integration guidance)."
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "enum": [
+                  "agent",
+                  "skill",
+                  "instruction",
+                  "prompt",
+                  "workflow",
+                  "knowledge",
+                  "template",
+                  "integration"
+                ],
+                "default": "instruction",
+                "description": "Content type classification: agent (AI agent definitions and personas), skill (packaged agent capabilities or callable skills), instruction (actionable guidance and operating rules), prompt (prompt templates or prompt engineering assets), workflow (multi-step processes or runbooks), knowledge (reference material, examples, concepts, and documentation), template (reusable scaffolds or structured content templates), integration (external system, MCP, API, or tool integration guidance)."
+              }
+            }
+          ]
+        },
+        "schemaVersion": {
+          "oneOf": [
+            {
+              "type": "string",
+              "enum": [
+                "6"
+              ],
+              "x-fieldClass": "server-managed",
+              "description": "Internal schema version for migration"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "enum": [
+                  "6"
+                ],
+                "x-fieldClass": "server-managed",
+                "description": "Internal schema version for migration"
+              }
+            }
+          ]
+        },
+        "sourceHash": {
+          "oneOf": [
+            {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$",
+              "x-fieldClass": "server-managed",
+              "description": "SHA256 hash of body for drift detection"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$",
+                "x-fieldClass": "server-managed",
+                "description": "SHA256 hash of body for drift detection"
+              }
+            }
+          ]
+        },
+        "deprecatedBy": {
+          "oneOf": [
+            {
+              "type": "string",
+              "description": "ID of instruction that supersedes this one"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "description": "ID of instruction that supersedes this one"
+              }
+            }
+          ]
+        },
+        "createdAt": {
+          "oneOf": [
+            {
+              "type": "string",
+              "format": "date-time",
+              "x-fieldClass": "server-managed",
+              "description": "Creation timestamp (ISO 8601)"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "format": "date-time",
+                "x-fieldClass": "server-managed",
+                "description": "Creation timestamp (ISO 8601)"
+              }
+            }
+          ]
+        },
+        "updatedAt": {
+          "oneOf": [
+            {
+              "type": "string",
+              "format": "date-time",
+              "x-fieldClass": "server-managed",
+              "description": "Last mutation timestamp (ISO 8601)"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "format": "date-time",
+                "x-fieldClass": "server-managed",
+                "description": "Last mutation timestamp (ISO 8601)"
+              }
+            }
+          ]
+        },
+        "usageCount": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "x-fieldClass": "server-managed",
+              "description": "Number of tracked usage events"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "integer",
+                "minimum": 0,
+                "x-fieldClass": "server-managed",
+                "description": "Number of tracked usage events"
+              }
+            }
+          ]
+        },
+        "firstSeenTs": {
+          "oneOf": [
+            {
+              "type": "string",
+              "format": "date-time",
+              "x-fieldClass": "server-managed",
+              "description": "Timestamp when usage was first observed (ISO 8601)"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "format": "date-time",
+                "x-fieldClass": "server-managed",
+                "description": "Timestamp when usage was first observed (ISO 8601)"
+              }
+            }
+          ]
+        },
+        "lastUsedAt": {
+          "oneOf": [
+            {
+              "type": "string",
+              "format": "date-time",
+              "x-fieldClass": "server-managed",
+              "description": "Last usage timestamp (ISO 8601)"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "format": "date-time",
+                "x-fieldClass": "server-managed",
+                "description": "Last usage timestamp (ISO 8601)"
+              }
+            }
+          ]
+        },
+        "riskScore": {
+          "oneOf": [
+            {
+              "type": "number",
+              "description": "Optional numeric risk indicator (higher = riskier)"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "number",
+                "description": "Optional numeric risk indicator (higher = riskier)"
+              }
+            }
+          ]
+        },
+        "reviewIntervalDays": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 365,
+              "description": "Governance review interval in days"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 365,
+                "description": "Governance review interval in days"
+              }
+            }
+          ]
+        },
+        "workspaceId": {
+          "oneOf": [
+            {
+              "type": "string",
+              "description": "Scoped workspace identifier (if specific)"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "description": "Scoped workspace identifier (if specific)"
+              }
+            }
+          ]
+        },
+        "userId": {
+          "oneOf": [
+            {
+              "type": "string",
+              "description": "Scoped user identifier (if specific)"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "description": "Scoped user identifier (if specific)"
+              }
+            }
+          ]
+        },
+        "teamIds": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "version": {
+          "oneOf": [
+            {
+              "type": "string",
+              "pattern": "^\\d+\\.\\d+\\.\\d+$",
+              "description": "Semantic version of the instruction"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "pattern": "^\\d+\\.\\d+\\.\\d+$",
+                "description": "Semantic version of the instruction"
+              }
+            }
+          ]
+        },
+        "status": {
+          "oneOf": [
+            {
+              "enum": [
+                "draft",
+                "review",
+                "approved",
+                "deprecated"
+              ],
+              "description": "Governance workflow status"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "enum": [
+                  "draft",
+                  "review",
+                  "approved",
+                  "deprecated"
+                ],
+                "description": "Governance workflow status"
+              }
+            }
+          ]
+        },
+        "owner": {
+          "oneOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "description": "Assigned owning entity (team / user / group)"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Assigned owning entity (team / user / group)"
+              }
+            }
+          ]
+        },
+        "priorityTier": {
+          "oneOf": [
+            {
+              "enum": [
+                "P1",
+                "P2",
+                "P3",
+                "P4"
+              ],
+              "description": "Tier bucket derived from priority or governance policy"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "enum": [
+                  "P1",
+                  "P2",
+                  "P3",
+                  "P4"
+                ],
+                "description": "Tier bucket derived from priority or governance policy"
+              }
+            }
+          ]
+        },
+        "classification": {
+          "oneOf": [
+            {
+              "enum": [
+                "public",
+                "internal",
+                "restricted"
+              ],
+              "description": "Information classification level"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "enum": [
+                  "public",
+                  "internal",
+                  "restricted"
+                ],
+                "description": "Information classification level"
+              }
+            }
+          ]
+        },
+        "lastReviewedAt": {
+          "oneOf": [
+            {
+              "type": "string",
+              "format": "date-time",
+              "description": "Timestamp of last governance review"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "format": "date-time",
+                "description": "Timestamp of last governance review"
+              }
+            }
+          ]
+        },
+        "nextReviewDue": {
+          "oneOf": [
+            {
+              "type": "string",
+              "format": "date-time",
+              "description": "Scheduled next review timestamp"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "format": "date-time",
+                "description": "Scheduled next review timestamp"
+              }
+            }
+          ]
+        },
+        "changeLog": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": true
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "object",
+                "additionalProperties": true
+              }
+            }
+          ]
+        },
+        "supersedes": {
+          "oneOf": [
+            {
+              "type": "string",
+              "description": "ID of instruction this one replaces"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "description": "ID of instruction this one replaces"
+              }
+            }
+          ]
+        },
+        "archivedAt": {
+          "oneOf": [
+            {
+              "type": "string",
+              "format": "date-time",
+              "x-fieldClass": "server-managed",
+              "description": "Timestamp when archived (ISO 8601)"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "format": "date-time",
+                "x-fieldClass": "server-managed",
+                "description": "Timestamp when archived (ISO 8601)"
+              }
+            }
+          ]
+        },
+        "semanticSummary": {
+          "oneOf": [
+            {
+              "type": "string",
+              "maxLength": 600,
+              "description": "Cached short natural-language summary of body"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "maxLength": 600,
+                "description": "Cached short natural-language summary of body"
+              }
+            }
+          ]
+        },
+        "sourceWorkspace": {
+          "oneOf": [
+            {
+              "type": "string",
+              "maxLength": 200,
+              "description": "Logical workspace or repository identifier from which this instruction was promoted or created"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "maxLength": 200,
+                "description": "Logical workspace or repository identifier from which this instruction was promoted or created"
+              }
+            }
+          ]
+        },
+        "createdByAgent": {
+          "oneOf": [
+            {
+              "type": "string",
+              "maxLength": 200,
+              "description": "Identifier of the MCP agent or client that created or promoted this entry"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "maxLength": 200,
+                "description": "Identifier of the MCP agent or client that created or promoted this entry"
+              }
+            }
+          ]
+        },
+        "extensions": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "categoriesAny": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "categoriesAll": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "categoriesNone": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "teamIdsAny": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "teamIdsAll": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "teamIdsNone": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "idPrefix": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "idRegex": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "priorityMin": {
+          "type": "number"
+        },
+        "priorityMax": {
+          "type": "number"
+        },
+        "usageCountMin": {
+          "type": "number"
+        },
+        "usageCountMax": {
+          "type": "number"
+        },
+        "riskScoreMin": {
+          "type": "number"
+        },
+        "riskScoreMax": {
+          "type": "number"
+        },
+        "reviewIntervalDaysMin": {
+          "type": "number"
+        },
+        "reviewIntervalDaysMax": {
+          "type": "number"
+        },
+        "createdAfter": {
+          "type": "string",
+          "minLength": 1,
+          "format": "date-time"
+        },
+        "createdBefore": {
+          "type": "string",
+          "minLength": 1,
+          "format": "date-time"
+        },
+        "updatedAfter": {
+          "type": "string",
+          "minLength": 1,
+          "format": "date-time"
+        },
+        "updatedBefore": {
+          "type": "string",
+          "minLength": 1,
+          "format": "date-time"
+        },
+        "firstSeenAfter": {
+          "type": "string",
+          "minLength": 1,
+          "format": "date-time"
+        },
+        "firstSeenBefore": {
+          "type": "string",
+          "minLength": 1,
+          "format": "date-time"
+        },
+        "lastUsedAfter": {
+          "type": "string",
+          "minLength": 1,
+          "format": "date-time"
+        },
+        "lastUsedBefore": {
+          "type": "string",
+          "minLength": 1,
+          "format": "date-time"
+        },
+        "lastReviewedAfter": {
+          "type": "string",
+          "minLength": 1,
+          "format": "date-time"
+        },
+        "lastReviewedBefore": {
+          "type": "string",
+          "minLength": 1,
+          "format": "date-time"
+        },
+        "nextReviewDueAfter": {
+          "type": "string",
+          "minLength": 1,
+          "format": "date-time"
+        },
+        "nextReviewDueBefore": {
+          "type": "string",
+          "minLength": 1,
+          "format": "date-time"
+        },
+        "archivedAfter": {
+          "type": "string",
+          "minLength": 1,
+          "format": "date-time"
+        },
+        "archivedBefore": {
+          "type": "string",
+          "minLength": 1,
+          "format": "date-time"
+        }
+      },
+      "description": "Structural predicates over canonical instruction fields. Scalar arrays use OR semantics; unknown fields are rejected."
     }
   }
 }
@@ -711,11 +2512,7 @@ Registry Version: 2026-03-29
           "matchedFields": {
             "type": "array",
             "items": {
-              "enum": [
-                "title",
-                "body",
-                "categories"
-              ]
+              "type": "string"
             }
           }
         }
@@ -740,6 +2537,9 @@ Registry Version: 2026-03-29
             "type": "string"
           }
         },
+        "mode": {
+          "type": "string"
+        },
         "limit": {
           "type": "number"
         },
@@ -748,6 +2548,16 @@ Registry Version: 2026-03-29
         },
         "caseSensitive": {
           "type": "boolean"
+        },
+        "contentType": {
+          "type": "string"
+        },
+        "searchString": {
+          "type": "string"
+        },
+        "fields": {
+          "type": "object",
+          "additionalProperties": true
         }
       }
     },

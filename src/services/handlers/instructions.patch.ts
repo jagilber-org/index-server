@@ -1,4 +1,4 @@
-import { InstructionEntry } from '../../models/instruction';
+import { InstructionEntry, STATUSES } from '../../models/instruction';
 import { registerHandler } from '../../server/registry';
 import { computeGovernanceHash, ensureLoaded, invalidate, projectGovernance, touchIndexVersion, writeEntry } from '../indexContext';
 import { logAudit } from '../auditLog';
@@ -70,7 +70,7 @@ registerHandler('index_governanceUpdate', guard('index_governanceUpdate', (p: { 
   const bump = p.bump || 'none';
   if (p.owner && p.owner !== record.owner) { record.owner = p.owner; changed = true; }
   if (p.status) {
-    const allowed: InstructionEntry['status'][] = ['draft', 'review', 'approved', 'deprecated'];
+    const allowed: readonly InstructionEntry['status'][] = STATUSES;
     const desired = p.status === 'active' ? 'approved' : p.status;
     if (!allowed.includes(desired as InstructionEntry['status'])) {
       logAudit('governanceUpdate', id, { changed: false, error: 'invalid status', provided: p.status });

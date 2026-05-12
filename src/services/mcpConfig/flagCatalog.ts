@@ -1,6 +1,8 @@
 import path from 'path';
 
-export type McpProfile = 'default' | 'enhanced' | 'experimental';
+/** Canonical MCP profile names — single source of truth. */
+export const MCP_PROFILES = ['default', 'enhanced', 'experimental'] as const;
+export type McpProfile = (typeof MCP_PROFILES)[number];
 
 export interface McpDataPaths {
   instructions: string;

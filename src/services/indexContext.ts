@@ -177,10 +177,13 @@ function restoreUsageInvariant(e: InstructionEntry){
     return;
   }
   // Fall back to 0 – deterministic floor; next increment will advance.
+  // Repaired silently (no WARN): for freshly seeded entries with no usage history,
+  // 0 is the correct authoritative value, not a defect. Same pattern as the
+  // firstSeenTs → createdAt fallback above. The counter + repair log still
+  // record the event for health visibility.
   e.usageCount = 0;
   incrementCounter('usage:usageInvariantZeroRepair');
   trackInvariantRepair(e.id, 'usageCount', 'zero-default');
-  logWarn(`[invariant-repair] usageCount defaulted to 0 for ${e.id} — no repair source found`);
 }
 
 // Repair missing lastUsedAt for entries with usage.

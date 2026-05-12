@@ -183,3 +183,88 @@ export function buildToolInputEntrySchema(opts: { required: string[]; schemaId?:
   }
   return cloned;
 }
+
+/**
+ * Build the import entry transport schema.
+ *
+ * `index_import` is the backup-restore surface, so legacy records must be able
+ * to reach the handler-side schema migration layer before strict canonical
+ * validation runs. The property set still derives from INPUT_SCHEMA and still
+ * rejects unknown/server-managed fields, but selected legacy-migrated fields are
+ * widened to their transport type so old enum/id/priority drift can be repaired.
+ */
+export function buildToolImportEntrySchema(opts: { schemaId?: string } = {}): JsonSchema {
+  const cloned = buildToolInputEntrySchema({ required: ['id', 'title', 'body'], schemaId: opts.schemaId });
+  const props = cloned.properties ?? {};
+  props.id = { type: 'string', minLength: 1 };
+  props.priority = { type: 'number' };
+  props.audience = { type: 'string' };
+  props.requirement = { type: 'string' };
+  props.contentType = { type: 'string' };
+  return cloned;
+}
+
+function oneOrManySchema(schema: JsonSchema): JsonSchema {
+  return {
+    oneOf: [
+      deepClone(schema),
+      { type: 'array', minItems: 1, items: deepClone(schema) },
+    ],
+  };
+}
+
+function searchFieldPropertySchema(schema: JsonSchema): JsonSchema {
+  if (schema.type === 'array' && schema.items) {
+    const itemSchema = (schema.items as JsonSchema).$ref
+      ? { type: 'object', additionalProperties: true }
+      : schema.items as JsonSchema;
+    return oneOrManySchema(itemSchema);
+  }
+  if (schema.type === 'object') {
+    if (schema.additionalProperties && typeof schema.additionalProperties === 'object' && (schema.additionalProperties as JsonSchema).$ref) {
+      return { type: 'object', additionalProperties: true };
+    }
+    return deepClone(schema);
+  }
+  return oneOrManySchema(schema);
+}
+
+/**
+ * Build the schema for index_search.fields from the canonical record schema.
+ *
+ * Top-level instruction fields accept exact values, with arrays meaning OR for
+ * scalar values and contains-any for array fields. Virtual operators are added
+ * explicitly and unknown keys are rejected.
+ */
+export function buildInstructionSearchFieldsSchema(): JsonSchema {
+  const properties: Record<string, JsonSchema> = {};
+  for (const [name, schema] of Object.entries((RECORD_SCHEMA.properties ?? {}) as Record<string, JsonSchema>)) {
+    properties[name] = searchFieldPropertySchema(schema);
+  }
+  const stringArray: JsonSchema = { type: 'array', minItems: 1, items: { type: 'string', minLength: 1 } };
+  const dateString: JsonSchema = { type: 'string', minLength: 1, format: 'date-time' };
+  Object.assign(properties, {
+    categoriesAny: deepClone(stringArray),
+    categoriesAll: deepClone(stringArray),
+    categoriesNone: deepClone(stringArray),
+    teamIdsAny: deepClone(stringArray),
+    teamIdsAll: deepClone(stringArray),
+    teamIdsNone: deepClone(stringArray),
+    idPrefix: { type: 'string', minLength: 1, maxLength: 120 },
+    idRegex: { type: 'string', minLength: 1, maxLength: 200 },
+  });
+  for (const field of ['priority', 'usageCount', 'riskScore', 'reviewIntervalDays']) {
+    properties[`${field}Min`] = { type: 'number' };
+    properties[`${field}Max`] = { type: 'number' };
+  }
+  for (const field of ['created', 'updated', 'firstSeen', 'lastUsed', 'lastReviewed', 'nextReviewDue', 'archived']) {
+    properties[`${field}After`] = deepClone(dateString);
+    properties[`${field}Before`] = deepClone(dateString);
+  }
+  return {
+    type: 'object',
+    additionalProperties: false,
+    minProperties: 1,
+    properties,
+  };
+}

@@ -41,6 +41,7 @@ interface GraphNodeV2 extends GraphNodeV1 {
   requirement?: string;
   owner?: string;
   status?: string;
+  contentType?: string;
   createdAt?: string;
   updatedAt?: string;
   usageCount?: number; // present only when includeUsage requested
@@ -88,6 +89,7 @@ export function buildGraph(params: GraphExportParams, graphCfg: GraphConfigSnaps
       requirement: inst.requirement,
       owner: inst.owner,
       status: inst.status,
+      contentType: i.contentType || 'instruction',
       createdAt: inst.createdAt,
       updatedAt: inst.updatedAt,
     };

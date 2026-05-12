@@ -13,6 +13,8 @@ import path from 'path';
 import v8 from 'v8';
 import { getRuntimeConfig } from '../../config/runtimeConfig';
 import { getMetricsCollector, ToolMetrics } from './MetricsCollector';
+import type { TrendDirection } from '../../lib/trendDirection';
+import type { HealthStatus } from '../types/healthStatus';
 import { getIndexState, ensureLoaded, invalidate, touchIndexVersion } from '../../services/indexContext';
 import { AdminPanelConfig } from './AdminPanelConfig';
 import type { AdminConfig } from './AdminPanelConfig';
@@ -40,11 +42,11 @@ interface SystemMaintenance {
   nextScheduledMaintenance: Date | null;
   maintenanceMode: boolean;
   systemHealth: {
-    status: 'healthy' | 'warning' | 'critical';
+    status: HealthStatus;
     issues: string[];
     recommendations: string[];
-    cpuTrend?: 'stable' | 'increasing' | 'decreasing';
-    memoryTrend?: 'stable' | 'increasing' | 'decreasing';
+    cpuTrend?: TrendDirection;
+    memoryTrend?: TrendDirection;
     memoryGrowthRate?: number;
   };
 }
@@ -746,7 +748,7 @@ export class AdminPanel {
   /**
    * Analyze CPU trends for potential leaks
    */
-  private analyzeCpuTrends(): { trend: 'stable' | 'increasing' | 'decreasing'; avgUsage: number; peakUsage: number } {
+  private analyzeCpuTrends(): { trend: TrendDirection; avgUsage: number; peakUsage: number } {
     if (this.cpuHistory.length < 10) {
       return { trend: 'stable', avgUsage: 0, peakUsage: 0 };
     }
@@ -761,7 +763,7 @@ export class AdminPanel {
     const firstAvg = firstHalf.reduce((sum, entry) => sum + entry.percent, 0) / firstHalf.length;
     const secondAvg = secondHalf.reduce((sum, entry) => sum + entry.percent, 0) / secondHalf.length;
 
-    let trend: 'stable' | 'increasing' | 'decreasing' = 'stable';
+    let trend: TrendDirection = 'stable';
     const difference = secondAvg - firstAvg;
 
     if (Math.abs(difference) > 5) {
@@ -774,7 +776,7 @@ export class AdminPanel {
   /**
    * Analyze memory usage trends for leak detection
    */
-  private analyzeMemoryTrends(): { trend: 'stable' | 'increasing' | 'decreasing'; avgHeapUsed: number; peakHeapUsed: number; growthRate: number } {
+  private analyzeMemoryTrends(): { trend: TrendDirection; avgHeapUsed: number; peakHeapUsed: number; growthRate: number } {
     if (this.memoryHistory.length < 10) {
       return { trend: 'stable', avgHeapUsed: 0, peakHeapUsed: 0, growthRate: 0 };
     }
@@ -795,7 +797,7 @@ export class AdminPanel {
     const firstAvg = firstHalf.reduce((sum, entry) => sum + entry.heapUsed, 0) / firstHalf.length;
     const secondAvg = secondHalf.reduce((sum, entry) => sum + entry.heapUsed, 0) / secondHalf.length;
 
-    let trend: 'stable' | 'increasing' | 'decreasing' = 'stable';
+    let trend: TrendDirection = 'stable';
     const difference = secondAvg - firstAvg;
 
     // Consider memory leak if growth is > 10MB or growth rate > 1MB/min
@@ -1013,7 +1015,7 @@ export class AdminPanel {
     }
 
     // Determine overall health status
-    let status: 'healthy' | 'warning' | 'critical' = 'healthy';
+    let status: HealthStatus = 'healthy';
     if (issues.length > 0) {
       status = (memPercent > 90 || errorRate > 10 || cpuTrends.avgUsage > 90 || memoryTrends.growthRate > 10 * 1024 * 1024) ? 'critical' : 'warning';
     }

@@ -114,6 +114,79 @@ This strategy keeps RED artifacts present (preventing knowledge drift) while eli
 - `src/tests/integration/dashboardAuth.spec.ts` — 33 vitest integration tests covering Bearer token validation, localhost bypass, 401/403 responses across all protected mutation routes
 - `tests/playwright/dashboard-auth.spec.ts` — 10 Playwright E2E tests covering login modal flow, session persistence, logout, invalid key handling, keyboard shortcuts
 
+## Search Field/Enum Coverage Matrix (#348)
+
+Coverage of `index_search` `fields` filter operators across the instruction schema is split between
+fast in-process unit tests (authoritative) and live MCP probe steps (smoke/regression against the
+running server). The unit-test layer is the **source of truth** for value-matching semantics. Probe
+steps that cannot exercise an operator end-to-end — because the underlying field is server-managed,
+server-overwritten on write, or silently dropped on the live write path — are marked
+`[advisory:query-shape]` and assert only that the live handler still accepts the query shape (a
+schema/handler regression that rejects the operator will fail these steps; mis-matching values
+will not).
+
+| Schema field / operator                  | Unit test (`src/tests/search.spec.ts`) | Live probe (`scripts/dev/integrity/search-probe.mjs`) |
+| ---------------------------------------- | -------------------------------------- | ----------------------------------------------------- |
+| `audience` (enum scalar)                 | FL-35                                  | S8.1                                                  |
+| `audience` (array OR)                    | FL-36                                  | S8.1b                                                 |
+| `audience` (invalid-enum rejection)      | FL-39                                  | S8.11                                                 |
+| `requirement` (enum scalar)              | FL-37                                  | S8.2                                                  |
+| `requirement` (array OR)                 | FL-38                                  | S8.2b                                                 |
+| `contentType` (enum scalar)              | FL-40                                  | covered indirectly via S2.\*                          |
+| `status` (enum scalar)                   | FL-41                                  | S8.3                                                  |
+| `priorityTier` (enum OR set)             | FL-42                                  | S8.4                                                  |
+| `classification` (enum scalar)           | FL-43                                  | S8.12                                                 |
+| `teamIdsAny/All/None`                    | FL-44, FL-45, FL-46                    | S8.5–S8.7 `[advisory:query-shape]` (see Known Limitations) |
+| `usageCountMin/Max` (numeric range)      | FL-47                                  | S8.8 `[advisory:query-shape]` (server-managed)        |
+| `usageCount` (inverted-range rejection)  | FL-59                                  | -                                                     |
+| `riskScoreMin/Max` (numeric range)       | FL-48                                  | S8.9 `[advisory:query-shape]` (server-computed)       |
+| `reviewIntervalDaysMin/Max`              | FL-49                                  | (write-side bounds in validation-probe Phase 9)       |
+| `createdAfter/Before` (date)             | FL-50                                  | -                                                     |
+| `firstSeenAfter/Before` (date)           | FL-51                                  | -                                                     |
+| `lastUsedAfter/Before` (date)            | FL-52                                  | S8.10 `[advisory:query-shape]` (server-managed)       |
+| `lastUsed` (inverted-range rejection)    | FL-60                                  | -                                                     |
+| `lastReviewedAfter/Before` (date)        | FL-53                                  | -                                                     |
+| `nextReviewDueAfter/Before` (date)       | FL-54                                  | -                                                     |
+| `archivedAfter/Before` (date)            | FL-55                                  | -                                                     |
+| `workspaceId` (scalar)                   | FL-56                                  | -                                                     |
+| `version` (scalar)                       | FL-57                                  | -                                                     |
+| `supersedes` (scalar)                    | FL-58                                  | -                                                     |
+| `additionalProperties:false` guard       | (SoT drift guard, see below)           | -                                                     |
+| `minProperties:1` guard                  | (SoT drift guard, see below)           | -                                                     |
+
+A separate SoT drift guard at `src/tests/instructionSearchFieldsSchema.spec.ts` asserts that the
+schema advertised by `buildInstructionSearchFieldsSchema()` continues to expose the documented set
+of record-property keys, virtual operators, `additionalProperties:false`, and `minProperties:1`.
+The `additionalProperties:false` and `minProperties:1` constraints are enforced by that drift guard
+rather than by individual FL-* tests in `search.spec.ts`.
+
+### Probe Fixture Isolation
+
+Probe steps that assert seeded-ID membership against live `index_search` results
+(S8.1, S8.1b, S8.2, S8.2b, S8.3, S8.4, S8.12) combine their field predicate with
+`fields.idPrefix: \`sp-${RUN_TAG}-\``. `RUN_TAG` is unique per probe invocation,
+so the candidate set is restricted to the three fixtures seeded by the current
+run. Unrelated sandbox records cannot sort ahead of the fixtures or be excluded
+by `limit` slicing, keeping membership assertions deterministic regardless of
+sandbox population, ordering, or concurrent state.
+
+### Known Limitations (probe-only)
+
+- **`usageCount` / `lastUsedAt`** — server-managed; cannot be seeded via `index_add`
+  (rejected as unexpected properties). Value-matching for the corresponding filters is covered
+  by FL-47 / FL-52 (range) and FL-59 / FL-60 (inverted-range rejection). Probe steps S8.8 and
+  S8.10 assert query-shape acceptance only.
+- **`riskScore`** — author-supplied values are silently overwritten by
+  `ClassificationService.normalize()` via `computeRisk(priority, requirement)`. Probe step S8.9
+  asserts only that the query shape is accepted; FL-48 covers value matching against in-memory state.
+- **`teamIds`** — observed to drop from the persisted entry on the live write path even though
+  the input schema allows it. Probe steps S8.5–S8.7 assert query-shape acceptance only; FL-44..FL-46
+  cover value matching against in-memory state. Tracked as a follow-up issue.
+- **`reviewIntervalDays` bounds** — schema declares `min:1, max:365` but the live `index_add` path
+  currently accepts `0` and `366`. Validation-probe Phase 9 records this as a `[gap-probe]` advisory.
+  When the server unexpectedly accepts the out-of-bounds values, the probe registers the persisted
+  IDs for Phase 12 cleanup so no schema-invalid fixtures leak between runs. Tracked as a follow-up issue.
+
 ## Pending Enhancements
 
 - Add `loadErrors` tool and tests: assert no silent skips.  

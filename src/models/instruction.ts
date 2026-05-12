@@ -1,7 +1,86 @@
-export type AudienceScope = 'individual' | 'group' | 'all';
-export type RequirementLevel = 'mandatory' | 'critical' | 'recommended' | 'optional' | 'deprecated';
-export const CONTENT_TYPES = ['agent', 'skill', 'instruction', 'prompt', 'workflow', 'knowledge', 'template', 'integration'] as const;
+import canonicalSchema from '../../schemas/instruction.schema.json';
+
+// ─────────────────────────────────────────────────────────────────────
+// SINGLE SOURCE OF TRUTH FOR ALL INSTRUCTION-SCHEMA ENUMS
+// ─────────────────────────────────────────────────────────────────────
+// The JSON schema (schemas/instruction.schema.json) is canonical.
+// The TS literal tuples below exist ONLY so consumers get narrow
+// type inference. A single parity guard runs at module load and throws
+// if any tuple disagrees (in length, order, or values) with the JSON
+// schema enum at the corresponding property path. This means:
+//   • any stale build, stale dist/, or stale running server fails loud
+//     the moment the module is imported;
+//   • adding/removing a value in JSON without updating the TS tuple
+//     (or vice versa) breaks every test and every server start with a
+//     specific error message identifying the offending field.
+// Do NOT add a new schema enum without also adding its tuple + a row
+// to ENUM_GUARDS below.
+
+function readSchemaEnum(field: string): readonly string[] {
+  const e = (canonicalSchema as { properties?: Record<string, { enum?: unknown }> })
+    .properties?.[field]?.enum;
+  if (!Array.isArray(e) || e.some(v => typeof v !== 'string')) {
+    throw new Error(
+      `schemas/instruction.schema.json: properties.${field}.enum is missing or not a string[]`,
+    );
+  }
+  return e as string[];
+}
+
+export const CONTENT_TYPES = [
+  'agent', 'skill', 'instruction', 'prompt',
+  'workflow', 'knowledge', 'template', 'integration',
+] as const;
 export type ContentType = typeof CONTENT_TYPES[number];
+
+export const AUDIENCES = ['individual', 'group', 'all'] as const;
+export type AudienceScope = typeof AUDIENCES[number];
+
+export const REQUIREMENTS = [
+  'mandatory', 'critical', 'recommended', 'optional', 'deprecated',
+] as const;
+export type RequirementLevel = typeof REQUIREMENTS[number];
+
+export const STATUSES = ['draft', 'review', 'approved', 'deprecated'] as const;
+export type GovernanceStatus = typeof STATUSES[number];
+
+export const PRIORITY_TIERS = ['P1', 'P2', 'P3', 'P4'] as const;
+export type PriorityTier = typeof PRIORITY_TIERS[number];
+
+export const CLASSIFICATIONS = ['public', 'internal', 'restricted'] as const;
+export type Classification = typeof CLASSIFICATIONS[number];
+
+// Single parity guard for every schema enum. Adding a new schema enum
+// is a one-line change here — and that addition is also enforced by
+// the enumSourceOfTruth.spec.ts coverage test, which fails if any
+// schema enum field is missing from this table.
+const ENUM_GUARDS: ReadonlyArray<readonly [string, readonly string[]]> = [
+  ['contentType', CONTENT_TYPES],
+  ['audience', AUDIENCES],
+  ['requirement', REQUIREMENTS],
+  ['status', STATUSES],
+  ['priorityTier', PRIORITY_TIERS],
+  ['classification', CLASSIFICATIONS],
+];
+
+{
+  for (const [field, tuple] of ENUM_GUARDS) {
+    const schemaEnum = readSchemaEnum(field);
+    if (
+      schemaEnum.length !== tuple.length ||
+      !tuple.every((v, i) => schemaEnum[i] === v)
+    ) {
+      throw new Error(
+        `Schema enum drift on "${field}": src/models/instruction.ts and ` +
+        `schemas/instruction.schema.json disagree. ` +
+        `TS=[${tuple.join(', ')}] JSON=[${schemaEnum.join(', ')}]. ` +
+        'The JSON schema is canonical — update src/models/instruction.ts to match, ' +
+        'or rebuild dist/ if you are running a stale binary.',
+      );
+    }
+  }
+}
+
 export interface InstructionEntry {
   id: string;
   title: string;
@@ -30,10 +109,10 @@ export interface InstructionEntry {
   teamIds?: string[];   // one or more team identifiers
   // Governance & lifecycle (added in 0.7.0 schema)
   version?: string;           // semantic content version of this instruction
-  status?: 'draft' | 'review' | 'approved' | 'deprecated';
+  status?: GovernanceStatus;
   owner?: string;             // responsible owner (user or team slug)
-  priorityTier?: 'P1' | 'P2' | 'P3' | 'P4'; // derived from priority & requirement
-  classification?: 'public' | 'internal' | 'restricted';
+  priorityTier?: PriorityTier; // derived from priority & requirement
+  classification?: Classification;
   lastReviewedAt?: string;    // timestamp of last manual review
   nextReviewDue?: string;     // scheduled review date
   reviewIntervalDays?: number; // persisted review interval (schema v2)

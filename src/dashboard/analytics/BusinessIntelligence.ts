@@ -9,6 +9,7 @@
  */
 
 import { getAnalyticsEngine } from './AnalyticsEngine.js';
+import type { AlertSeverity } from '../types/analyticsEnums.js';
 
 export interface KPIWidget {
   id: string;
@@ -131,7 +132,7 @@ export interface AlertConfiguration {
   alerts: Array<{
     id: string;
     message: string;
-    severity: 'info' | 'warning' | 'error' | 'critical';
+    severity: AlertSeverity;
     timestamp: number;
     acknowledged: boolean;
     actionUrl?: string;

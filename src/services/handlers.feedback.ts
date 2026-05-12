@@ -12,23 +12,26 @@ import { logAudit } from './auditLog';
 import {
   FeedbackEntry,
   FeedbackStorage,
+  FeedbackType,
+  FeedbackSeverity,
+  FeedbackStatus,
+  FEEDBACK_TYPES,
+  FEEDBACK_SEVERITIES,
+  FEEDBACK_STATUSES,
   getMaxEntries,
   loadFeedbackStorage,
   saveFeedbackStorage,
   generateFeedbackId,
 } from './feedbackStorage';
 
-const VALID_TYPES = ['issue', 'status', 'security', 'feature-request', 'bug-report', 'performance', 'usability', 'other'] as const;
-const VALID_SEVERITIES = ['low', 'medium', 'high', 'critical'] as const;
-const VALID_STATUSES = ['new', 'acknowledged', 'in-progress', 'resolved', 'closed'] as const;
+const VALID_TYPES = FEEDBACK_TYPES;
+const VALID_SEVERITIES = FEEDBACK_SEVERITIES;
+const VALID_STATUSES = FEEDBACK_STATUSES;
 const MAX_TITLE_LENGTH = 200;
 const MAX_DESCRIPTION_LENGTH = 10_000;
 const MAX_TAGS = 10;
 const MAX_LIST_LIMIT = 200;
 
-type FeedbackType = FeedbackEntry['type'];
-type FeedbackSeverity = FeedbackEntry['severity'];
-type FeedbackStatus = FeedbackEntry['status'];
 type FeedbackAction = 'submit' | 'list' | 'get' | 'update' | 'delete' | 'stats';
 type FeedbackErrorCode = 'not_found' | 'missing_required' | 'invalid_param' | 'storage_error';
 

@@ -10,11 +10,39 @@ import fs from 'fs';
 import path from 'path';
 import { createHash, randomBytes } from 'crypto';
 
+/**
+ * Canonical feedback taxonomy.
+ * Single source of truth for the three feedback enums. All consumers
+ * (handlers.feedback.ts, toolRegistry.ts/.zod.ts, dashboard routes) MUST
+ * import these tuples — do not hand-copy the values.
+ */
+export const FEEDBACK_TYPES = [
+  'issue',
+  'status',
+  'security',
+  'feature-request',
+  'bug-report',
+  'performance',
+  'usability',
+  'other',
+] as const;
+export const FEEDBACK_SEVERITIES = ['low', 'medium', 'high', 'critical'] as const;
+export const FEEDBACK_STATUSES = [
+  'new',
+  'acknowledged',
+  'in-progress',
+  'resolved',
+  'closed',
+] as const;
+export type FeedbackType = (typeof FEEDBACK_TYPES)[number];
+export type FeedbackSeverity = (typeof FEEDBACK_SEVERITIES)[number];
+export type FeedbackStatus = (typeof FEEDBACK_STATUSES)[number];
+
 export interface FeedbackEntry {
   id: string;
   timestamp: string;
-  type: 'issue' | 'status' | 'security' | 'feature-request' | 'bug-report' | 'performance' | 'usability' | 'other';
-  severity: 'low' | 'medium' | 'high' | 'critical';
+  type: FeedbackType;
+  severity: FeedbackSeverity;
   title: string;
   description: string;
   context?: {
@@ -30,7 +58,7 @@ export interface FeedbackEntry {
   };
   metadata?: Record<string, unknown>;
   tags?: string[];
-  status: 'new' | 'acknowledged' | 'in-progress' | 'resolved' | 'closed';
+  status: FeedbackStatus;
 }
 
 export interface FeedbackStorage {

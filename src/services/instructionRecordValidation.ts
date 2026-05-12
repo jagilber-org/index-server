@@ -1,5 +1,5 @@
 import { ErrorObject } from 'ajv';
-import { CONTENT_TYPES, InstructionEntry } from '../models/instruction';
+import { CONTENT_TYPES, AUDIENCES, REQUIREMENTS, STATUSES, PRIORITY_TIERS, CLASSIFICATIONS, InstructionEntry } from '../models/instruction';
 import {
   validateRecord as validateInstructionSchema,
   REQUIRED_RECORD_KEYS,
@@ -203,14 +203,14 @@ export function validateInstructionIdSurface(id: unknown): string[] {
 // coerce them (e.g. status:"active" → "approved", audience:"agents" → "group").
 // However, values that ARE coercible by applyWriteCompatibility are accepted here to
 // avoid rejecting inputs that would otherwise succeed after coercion.
-const VALID_STATUS = ['approved', 'draft', 'review', 'deprecated'] as const;
+const VALID_STATUS = STATUSES;
 const COERCIBLE_STATUS = ['active'] as const;
-const VALID_PRIORITY_TIER = ['P1', 'P2', 'P3', 'P4'] as const;
-const VALID_CLASSIFICATION = ['public', 'internal', 'restricted'] as const;
+const VALID_PRIORITY_TIER = PRIORITY_TIERS;
+const VALID_CLASSIFICATION = CLASSIFICATIONS;
 const VALID_CONTENT_TYPE = CONTENT_TYPES;
-const VALID_AUDIENCE = ['individual', 'group', 'all'] as const;
+const VALID_AUDIENCE = AUDIENCES;
 const COERCIBLE_AUDIENCE = ['system', 'developers', 'developer', 'team', 'teams', 'users', 'dev', 'devs', 'testers', 'administrators', 'admins', 'agents', 'powershell script authors'] as const;
-const VALID_REQUIREMENT = ['mandatory', 'critical', 'recommended', 'optional', 'deprecated'] as const;
+const VALID_REQUIREMENT = REQUIREMENTS;
 const COERCIBLE_REQUIREMENT = ['MUST', 'SHOULD', 'MAY', 'CRITICAL', 'OPTIONAL', 'MANDATORY', 'DEPRECATED'] as const;
 
 export function validateInstructionInputEnumMembership(entry: Record<string, unknown>): string[] {
@@ -307,13 +307,13 @@ export function validateInstructionRecord(entry: InstructionEntry): InstructionV
   const record = applyWriteCompatibility(entry);
   const validationErrors: string[] = [];
 
-  if (record.status !== undefined && !['draft', 'review', 'approved', 'deprecated'].includes(record.status)) {
+  if (record.status !== undefined && !(STATUSES as readonly string[]).includes(record.status)) {
     validationErrors.push(`/status: invalid value "${String(record.status)}"`);
   }
-  if (record.priorityTier !== undefined && !['P1', 'P2', 'P3', 'P4'].includes(record.priorityTier)) {
+  if (record.priorityTier !== undefined && !(PRIORITY_TIERS as readonly string[]).includes(record.priorityTier)) {
     validationErrors.push(`/priorityTier: invalid value "${String(record.priorityTier)}"`);
   }
-  if (record.classification !== undefined && !['public', 'internal', 'restricted'].includes(record.classification)) {
+  if (record.classification !== undefined && !(CLASSIFICATIONS as readonly string[]).includes(record.classification)) {
     validationErrors.push(`/classification: invalid value "${String(record.classification)}"`);
   }
   if (record.contentType !== undefined && !(CONTENT_TYPES as readonly string[]).includes(record.contentType)) {

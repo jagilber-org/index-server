@@ -33,6 +33,7 @@
           "requirement": {"type": "string"},
           "owner": {"type": "string"},
           "status": {"type": "string"},
+          "contentType": {"$ref": "https://example.local/schemas/instruction.schema.json#/properties/contentType"},
           "createdAt": {"type": "string"},
           "updatedAt": {"type": "string"},
           "usageCount": {"type": "number"}

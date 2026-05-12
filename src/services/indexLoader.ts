@@ -1,4 +1,4 @@
-import { InstructionEntry } from '../models/instruction';
+import { InstructionEntry, AUDIENCES, REQUIREMENTS, PRIORITY_TIERS } from '../models/instruction';
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
@@ -14,7 +14,7 @@ import schema from '../../schemas/instruction.schema.json';
 import { emitTrace, traceEnabled } from './tracing';
 import { getRuntimeConfig } from '../config/runtimeConfig';
 import { splitOversizedEntry } from './autoSplit';
-import { logError } from './logger.js';
+import { logWarn } from './logger.js';
 
 export interface IndexLoadResult {
   entries: InstructionEntry[];
@@ -522,14 +522,14 @@ export class IndexLoader {
             if(typeof mi.audience !== 'string' || !mi.audience){
               mi.audience = 'all';
               salvage('audienceMissing');
-            } else if(!['individual','group','all'].includes(mi.audience)){
+            } else if(!(AUDIENCES as readonly string[]).includes(mi.audience)){
               mi.audience = 'all';
               salvage('audienceInvalid');
             }
             if(typeof mi.requirement !== 'string' || !mi.requirement){
               mi.requirement = 'recommended';
               salvage('requirementMissing');
-            } else if(!['mandatory','critical','recommended','optional','deprecated'].includes(mi.requirement)){
+            } else if(!(REQUIREMENTS as readonly string[]).includes(mi.requirement)){
               mi.requirement = 'recommended';
               salvage('requirementInvalid');
             }
@@ -537,7 +537,7 @@ export class IndexLoader {
               mi.priority = 50;
               salvage('priorityInvalid');
             }
-            if(typeof mi.priorityTier === 'string' && !['P1','P2','P3','P4'].includes(mi.priorityTier)){
+            if(typeof mi.priorityTier === 'string' && !(PRIORITY_TIERS as readonly string[]).includes(mi.priorityTier)){
               delete mi.priorityTier;
               salvage('priorityTierInvalid');
             }
@@ -601,8 +601,11 @@ export class IndexLoader {
           errors.push({ file: f, error: reason });
           bump('schema');
           if(trace) trace.push({ file:f, accepted:false, reason });
-          // Log schema rejections at info level for operational visibility
-          try { logError(`[index:skip] ${f}: ${reason}`); } catch { /* ignore */ }
+          // Log schema rejections at warn level for operational visibility.
+          // These are file-skips (operational signal), not server errors. They are
+          // also surfaced via the dashboard Monitoring tab + indexEvents emitter,
+          // so the log line is a secondary channel and should not raise to ERROR.
+          try { logWarn(`[index:skip] ${f}: ${reason}`); } catch { /* ignore */ }
           if(traceEnabled(1)){
             try { emitTrace('[trace:index:file-end]', { file: f, accepted: false, reason, scanned: scannedSoFar, acceptedSoFar }); } catch { /* ignore */ }
             try { emitTrace('[trace:index:file-progress]', { scanned: scannedSoFar, total: files.length, acceptedSoFar, rejectedSoFar: scannedSoFar - acceptedSoFar }); } catch { /* ignore */ }
@@ -616,7 +619,7 @@ export class IndexLoader {
           errors.push({ file: f, error: reason });
           bump('classification');
           if(trace) trace.push({ file:f, accepted:false, reason });
-          try { logError(`[index:skip] ${f}: classification: ${reason}`); } catch { /* ignore */ }
+          try { logWarn(`[index:skip] ${f}: classification: ${reason}`); } catch { /* ignore */ }
           if(traceEnabled(1)){
             try { emitTrace('[trace:index:file-end]', { file: f, accepted: false, reason, scanned: scannedSoFar, acceptedSoFar }); } catch { /* ignore */ }
             try { emitTrace('[trace:index:file-progress]', { scanned: scannedSoFar, total: files.length, acceptedSoFar, rejectedSoFar: scannedSoFar - acceptedSoFar }); } catch { /* ignore */ }

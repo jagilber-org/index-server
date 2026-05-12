@@ -70,7 +70,7 @@ jobs:
         run: |
           mkdir -p instructions
           if [ ! "$(ls instructions/*.json 2>/dev/null)" ]; then
-            echo '{"id":"ci-seed","title":"CI Seed","body":"Seed instruction for CI.","version":"1.0.0","status":"active","tags":["ci"]}' > instructions/ci-seed.json
+            echo '{"id":"ci-seed","title":"CI Seed","body":"Seed instruction for CI.","priority":50,"audience":"all","requirement":"optional","categories":["ci"],"contentType":"instruction","version":"1.0.0","status":"approved"}' > instructions/ci-seed.json
           fi
 
       - name: Validate no test artifacts in instructions
@@ -92,6 +92,7 @@ jobs:
       - name: Run tests
         run: |
           mkdir -p test-results
+          set -o pipefail
           npm test 2>&1 | tee test-results/test-output.log
         shell: bash
         env:

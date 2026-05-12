@@ -169,7 +169,7 @@ const VALUE_ALLOWLIST = new Set([
   'true', 'false', '0', '1', 'yes', 'no', 'null', 'undefined', '',
   'main', 'master', 'eastus', 'westus', 'eastus2', 'westus2', 'centralus',
   'public', 'private', 'default',
-  '00000000-0000-0000-0000-000000000000', 'jagilber',
+  '00000000-0000-0000-0000-000000000000', 'jagilber', 'jagilber-org',
 ]);
 const PROCESS_ENV_VALUE_ALLOWLIST = new Set([
   ...VALUE_ALLOWLIST,

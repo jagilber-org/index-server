@@ -47,6 +47,9 @@ EXPERIMENTAL: SQLite (storage )?backend
 # Import and RPC negative-path fixtures intentionally submit malformed payloads
 # to verify errors are surfaced consistently.
 \[import\] (entry rejected|rejected|complete with errors)
+# Import/repair migration emits one structured WARN per migrated legacy entry
+# to preserve an auditable restore trail; backup fixtures can migrate many rows.
+\[schema-migration\] entry migrated
 \[rpc\] tools/call error
 \[registry\] Tool error: (index_search|index_dispatch|usage_track)
 \[HttpTransport\] RPC handler error

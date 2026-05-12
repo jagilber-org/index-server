@@ -14,8 +14,9 @@
 import fs from 'fs';
 import path from 'path';
 import { EventEmitter } from 'events';
+import type { InstanceRole } from '../../lib/instanceTopology';
 
-export type InstanceRole = 'leader' | 'follower' | 'standalone' | 'candidate';
+export type { InstanceRole };
 
 export interface LeaderLockEntry {
   pid: number;

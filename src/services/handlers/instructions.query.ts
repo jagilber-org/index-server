@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
-import { InstructionEntry } from '../../models/instruction';
+import { InstructionEntry, PRIORITY_TIERS, REQUIREMENTS, PriorityTier } from '../../models/instruction';
+import { SearchMode } from '../protocolEnums';
 import { registerHandler } from '../../server/registry';
 import { computeGovernanceHash, ensureLoaded, getDebugIndexSnapshot, getInstructionsDir, getInvariantRepairSummary, invalidate } from '../indexContext';
 import { BOOTSTRAP_ALLOWLIST } from '../bootstrapGating';
@@ -73,15 +74,17 @@ export const instructionActions = {
     traceInstructionVisibility(p.id, 'getEnhanced-end', { repaired, finalFound: !!item });
     return item ? { hash: st.hash, item } : { notFound: true };
   },
-  search: async (p: { q?: string; keywords?: string[]; mode?: 'keyword' | 'regex' | 'semantic'; limit?: number; includeCategories?: boolean; caseSensitive?: boolean; contentType?: string }) => {
+  search: async (p: { q?: string; keywords?: string[]; searchString?: string; fields?: Record<string, unknown>; mode?: SearchMode; limit?: number; includeCategories?: boolean; caseSensitive?: boolean; contentType?: string }) => {
     const providedKeywords = Array.isArray(p.keywords)
       ? p.keywords.filter((keyword): keyword is string => typeof keyword === 'string' && keyword.trim().length > 0)
       : [];
     const keywords = providedKeywords.length > 0
       ? providedKeywords
-      : (typeof p.q === 'string' && p.q.trim().length > 0 ? [p.q] : []);
+      : [];
     const searchResult = await handleInstructionsSearch({
-      keywords,
+      ...(keywords.length > 0 ? { keywords } : {}),
+      searchString: p.searchString ?? (typeof p.q === 'string' && p.q.trim().length > 0 ? p.q : undefined),
+      fields: p.fields,
       mode: p.mode,
       limit: p.limit,
       includeCategories: p.includeCategories ?? true,
@@ -114,15 +117,15 @@ export const instructionActions = {
   export: (p: { ids?: string[]; metaOnly?: boolean }) => {
     const st = ensureLoaded(); let items = st.list; if (p?.ids?.length) { const want = new Set(p.ids); items = items.filter(i => want.has(i.id)); } if (p?.metaOnly) { items = items.map(i => ({ ...i, body: '' })); } return limitResponseSize({ hash: st.hash, count: items.length, items });
   },
-  query: (p: { categoriesAll?: string[]; categoriesAny?: string[]; excludeCategories?: string[]; contentType?: string; priorityMin?: number; priorityMax?: number; priorityTiers?: ('P1' | 'P2' | 'P3' | 'P4')[]; requirements?: InstructionEntry['requirement'][]; text?: string; limit?: number; offset?: number }) => {
+  query: (p: { categoriesAll?: string[]; categoriesAny?: string[]; excludeCategories?: string[]; contentType?: string; priorityMin?: number; priorityMax?: number; priorityTiers?: PriorityTier[]; requirements?: InstructionEntry['requirement'][]; text?: string; limit?: number; offset?: number }) => {
     const st = ensureLoaded();
     if (traceVisibility()) {
       try { emitTrace('[trace:query:start]', { pid: process.pid, dir: getInstructionsDir(), keys: Object.keys(p || {}), categoriesAny: p.categoriesAny, categoriesAll: p.categoriesAll, excludeCategories: p.excludeCategories }); } catch { /* ignore */ }
     }
     const norm = (arr?: string[]) => Array.from(new Set((arr || []).filter(x => typeof x === 'string' && x.trim()).map(x => x.toLowerCase())));
     const catsAll = norm(p.categoriesAll); const catsAny = norm(p.categoriesAny); const catsEx = norm(p.excludeCategories);
-    const tierSet = new Set((p.priorityTiers || []).filter(t => ['P1', 'P2', 'P3', 'P4'].includes(String(t))) as Array<'P1' | 'P2' | 'P3' | 'P4'>);
-    const reqSet = new Set((p.requirements || []).filter(r => ['mandatory', 'critical', 'recommended', 'optional', 'deprecated'].includes(String(r))) as InstructionEntry['requirement'][]);
+    const tierSet = new Set((p.priorityTiers || []).filter(t => (PRIORITY_TIERS as readonly string[]).includes(String(t))) as PriorityTier[]);
+    const reqSet = new Set((p.requirements || []).filter(r => (REQUIREMENTS as readonly string[]).includes(String(r))) as InstructionEntry['requirement'][]);
     const prMin = typeof p.priorityMin === 'number' ? p.priorityMin : undefined; const prMax = typeof p.priorityMax === 'number' ? p.priorityMax : undefined;
     const text = (p.text || '').toLowerCase().trim();
     let items = st.list;

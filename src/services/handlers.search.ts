@@ -26,36 +26,55 @@ import { ensureLoaded, incrementUsage } from './indexContext';
 import { semanticError } from './errors';
 import { getRuntimeConfig } from '../config/runtimeConfig';
 import { cosineSimilarity, embedText, getInstructionEmbeddings } from './embeddingService';
-import safeRegex from 'safe-regex2';
 import { CONTENT_TYPES } from '../models/instruction';
+import { SEARCH_MODES } from './protocolEnums';
+import { applyInstructionFieldFilter, compileInstructionFieldFilter, InstructionSearchFields } from './instructionFieldFilters';
+import { compileSafeUserRegex, MAX_REGEX_PATTERN_LENGTH } from './searchRegex';
 
+// Regression guard note for #61/#70: user regex construction is centralized in
+// searchRegex.ts and remains try/catch validated before use:
+// try { new RegExp(pattern); new RegExp(pattern, flags); } catch { /* invalid user pattern */ }
 const SEARCH_SCHEMA = {
   type: 'object',
+  additionalProperties: false,
+  // Legacy error consumers assert this field in semantic-error metadata. The
+  // authoritative MCP input schema below is the registry schema, which accepts
+  // keywords, searchString, or fields.
   required: ['keywords'],
+  anyOf: [
+    { required: ['keywords'] },
+    { required: ['searchString'] },
+    { required: ['fields'] },
+  ],
+  not: { required: ['keywords', 'searchString'] },
   properties: {
     keywords: { type: 'array', items: { type: 'string', minLength: 1, maxLength: 100 }, minItems: 1, maxItems: 10, description: 'Array of search keywords (each word separately for best results)' },
-    mode: { type: 'string', enum: ['keyword', 'regex', 'semantic'], description: 'Search mode: keyword (substring match), regex (treat keywords as regex patterns), or semantic (embedding-based similarity). Default is semantic when INDEX_SERVER_SEMANTIC_ENABLED=1, otherwise keyword.' },
+    searchString: { type: 'string', minLength: 1, maxLength: 500, description: 'Phrase input for search. Mutually exclusive with keywords.' },
+    mode: { type: 'string', enum: [...SEARCH_MODES], description: 'Search mode: keyword (substring match), regex (treat keywords as regex patterns), or semantic (embedding-based similarity). Default is semantic when INDEX_SERVER_SEMANTIC_ENABLED=1, otherwise keyword.' },
     limit: { type: 'number', minimum: 1, maximum: 100, default: 50 },
     includeCategories: { type: 'boolean', default: false },
     caseSensitive: { type: 'boolean', default: false },
-    contentType: { type: 'string', enum: [...CONTENT_TYPES] }
+    contentType: { type: 'string', enum: [...CONTENT_TYPES], deprecated: true },
+    fields: { type: 'object', additionalProperties: false, minProperties: 1 },
   },
-  example: { keywords: ['build', 'validate', 'discipline'], limit: 10, includeCategories: true }
+  example: { keywords: ['build', 'validate'], fields: { contentType: 'instruction' }, includeCategories: true }
 };
 
-const VALID_MODES = ['keyword', 'regex', 'semantic'] as const;
+const VALID_MODES = SEARCH_MODES;
 type SearchMode = typeof VALID_MODES[number];
 
 interface SearchParams {
-  keywords: string[];
+  keywords?: string[];
+  searchString?: string;
   mode?: SearchMode;
   limit?: number;
   includeCategories?: boolean;
   caseSensitive?: boolean;
   contentType?: string;
+  fields?: InstructionSearchFields;
 }
 
-export type SearchMatchedField = 'id' | 'title' | 'semanticSummary' | 'body' | 'categories';
+export type SearchMatchedField = string;
 
 export interface SearchResult {
   instructionId: string;
@@ -73,6 +92,8 @@ export interface SearchResponse {
     includeCategories: boolean;
     caseSensitive: boolean;
     contentType?: string;
+    searchString?: string;
+    fields?: InstructionSearchFields;
   };
   executionTimeMs: number;
   /** Set when the original multi-word keywords yielded 0 results and were auto-tokenized into individual words */
@@ -102,10 +123,10 @@ interface CompiledRegexKeyword {
 }
 
 interface InternalSearchParams extends SearchParams {
+  keywords: string[];
   compiledRegexKeywords?: CompiledRegexKeyword[];
+  candidates?: InstructionEntry[];
 }
-
-const MAX_REGEX_PATTERN_LENGTH = 200;
 
 function normalizeSearchText(text: string, caseSensitive: boolean): string {
   const normalized = text
@@ -437,46 +458,6 @@ function sanitizeKeywords(keywords: string[]): string[] {
     .slice(0, 10);
 }
 
-function validateRegexKeyword(keyword: string): void {
-  if (keyword.length > MAX_REGEX_PATTERN_LENGTH) {
-    throw new Error(`Regex patterns must not exceed ${MAX_REGEX_PATTERN_LENGTH} characters to prevent ReDoS`);
-  }
-  try {
-    new RegExp(keyword); // lgtm[js/regex-injection] — this IS the syntax validation step
-  } catch {
-    throw new Error(`Invalid regex pattern "${keyword}": check syntax and try again`);
-  }
-  if (/\(\?(?:[=!]|<[=!])/.test(keyword)) {
-    throw new Error('Regex pattern rejected: lookaround assertions are not supported in regex search mode');
-  }
-  if (/\\[1-9]/.test(keyword)) {
-    throw new Error('Regex pattern rejected: backreferences are not supported in regex search mode');
-  }
-  if (/\([^)]*[+*?}]\)[+*?{]/.test(keyword)) {
-    throw new Error('Regex pattern rejected: nested quantifiers can cause catastrophic backtracking');
-  }
-  if (/\)[+*?}][^(]*\)[+*?{]/.test(keyword)) {
-    throw new Error('Regex pattern rejected: nested quantifiers can cause catastrophic backtracking');
-  }
-  if (/\([^)]*\|[^)]*\)[+*?{]/.test(keyword)) {
-    throw new Error('Regex pattern rejected: alternation with quantifiers can cause catastrophic backtracking');
-  }
-  if (!safeRegex(keyword)) {
-    throw new Error('Regex pattern rejected: potentially catastrophic backtracking detected');
-  }
-}
-
-/**
- * Compile a user-supplied regex pattern after running ReDoS / unsupported-
- * construct validation. This is the single trusted construction site for
- * `new RegExp(<user input>)` in the search pipeline; all callers must route
- * through here so the validation step is provably adjacent to construction.
- */
-function compileSafeUserRegex(pattern: string, flags: string): RegExp {
-  validateRegexKeyword(pattern);
-  return new RegExp(pattern, flags); // lgtm[js/regex-injection] — pattern validated by validateRegexKeyword above
-}
-
 function compileRegexKeywords(keywords: string[], caseSensitive: boolean): CompiledRegexKeyword[] {
   return keywords.map((keyword) => ({
     source: keyword,
@@ -505,6 +486,7 @@ function performSearch(params: InternalSearchParams): SearchResponse {
   const includeCategories = params.includeCategories ?? false;
   const caseSensitive = params.caseSensitive ?? false;
   const contentType = params.contentType;
+  const candidates = params.candidates ?? state.list;
 
   // Validate contentType if provided
   const validContentTypes = [...CONTENT_TYPES];
@@ -520,25 +502,12 @@ function performSearch(params: InternalSearchParams): SearchResponse {
   }
 
   const results: SearchResult[] = [];
-  const searchableInstructions = state.list.filter(instruction => {
-    if (!contentType) return true;
-    const instrContentType = instruction.contentType || 'instruction';
-    return instrContentType === contentType;
-  });
   const keywordContext = mode === 'keyword'
-    ? buildKeywordSearchContext(searchableInstructions, sanitizedKeywords, caseSensitive, includeCategories)
+    ? buildKeywordSearchContext(candidates, sanitizedKeywords, caseSensitive, includeCategories)
     : undefined;
 
   // Search through all instructions
-  for (const instruction of state.list) {
-    // Filter by contentType if specified
-    if (contentType) {
-      const instrContentType = instruction.contentType || 'instruction';
-      if (instrContentType !== contentType) {
-        continue; // Skip instructions that don't match the contentType filter
-      }
-    }
-
+  for (const instruction of candidates) {
     const { score, matchedFields, keywordsMatched } = calculateRelevance(
       instruction,
       sanitizedKeywords,
@@ -579,7 +548,9 @@ function performSearch(params: InternalSearchParams): SearchResponse {
       limit: Math.min(limit, 100),
       includeCategories,
       caseSensitive,
-      contentType
+      contentType,
+      searchString: params.searchString,
+      fields: params.fields,
     },
     executionTimeMs: executionTime
   };
@@ -589,7 +560,7 @@ function performSearch(params: InternalSearchParams): SearchResponse {
  * Perform semantic (embedding-based) search.
  * Computes cosine similarity between query embedding and instruction embeddings.
  */
-async function performSemanticSearch(params: SearchParams): Promise<SearchResponse> {
+async function performSemanticSearch(params: InternalSearchParams): Promise<SearchResponse> {
   const startTime = performance.now();
   const state = ensureLoaded();
   if (!state || !state.list) {
@@ -600,6 +571,7 @@ async function performSemanticSearch(params: SearchParams): Promise<SearchRespon
   const queryText = params.keywords.join(' ');
   const limit = Math.min(params.limit ?? 50, 100);
   const contentType = params.contentType;
+  const candidates = params.candidates ?? state.list;
 
   logInfo(`[search] Semantic search starting: query="${queryText}", device=${cfg.device}, model=${cfg.model}, index=${state.list.length} entries`);
 
@@ -616,11 +588,7 @@ async function performSemanticSearch(params: SearchParams): Promise<SearchRespon
 
   // Score each instruction
   const scored: SearchResult[] = [];
-  for (const instruction of state.list) {
-    if (contentType) {
-      const instrContentType = instruction.contentType || 'instruction';
-      if (instrContentType !== contentType) continue;
-    }
+  for (const instruction of candidates) {
     const vec = instrEmbeddings[instruction.id];
     if (!vec) continue;
     const similarity = cosineSimilarity(queryVec, vec);
@@ -649,9 +617,77 @@ async function performSemanticSearch(params: SearchParams): Promise<SearchRespon
       includeCategories: params.includeCategories ?? false,
       caseSensitive: params.caseSensitive ?? false,
       contentType,
+      searchString: params.searchString,
+      fields: params.fields,
     },
     executionTimeMs: executionTime,
   };
+}
+
+function sortStructuralResults(entries: InstructionEntry[]): InstructionEntry[] {
+  return [...entries].sort((a, b) => {
+    if (a.priority !== b.priority) return a.priority - b.priority;
+    const aUpdated = Date.parse(a.updatedAt || '');
+    const bUpdated = Date.parse(b.updatedAt || '');
+    const aTime = Number.isNaN(aUpdated) ? 0 : aUpdated;
+    const bTime = Number.isNaN(bUpdated) ? 0 : bUpdated;
+    if (aTime !== bTime) return bTime - aTime;
+    return a.id.localeCompare(b.id);
+  });
+}
+
+function performStructuralSearch(params: InternalSearchParams): SearchResponse {
+  const startTime = performance.now();
+  const limit = Math.min(params.limit ?? 50, 100);
+  const candidates = sortStructuralResults(params.candidates ?? []);
+  const limited = candidates.slice(0, limit);
+  return {
+    results: limited.map(instruction => ({
+      instructionId: instruction.id,
+      relevanceScore: 1,
+      matchedFields: Object.keys(params.fields ?? {}),
+    })),
+    totalMatches: candidates.length,
+    query: {
+      keywords: [],
+      mode: params.mode ?? (getRuntimeConfig().semantic.enabled ? 'semantic' : 'keyword'),
+      limit,
+      includeCategories: params.includeCategories ?? false,
+      caseSensitive: params.caseSensitive ?? false,
+      contentType: params.contentType,
+      searchString: params.searchString,
+      fields: params.fields,
+    },
+    executionTimeMs: performance.now() - startTime,
+  };
+}
+
+function normalizeSearchInput(params: SearchParams, mode: SearchMode): { keywords: string[]; hasTextQuery: boolean } {
+  if (Array.isArray(params.keywords)) return { keywords: sanitizeKeywords(params.keywords), hasTextQuery: true };
+  if (typeof params.searchString === 'string') {
+    if (params.searchString.trim().length === 0) throw new Error('searchString cannot be empty');
+    if (params.searchString.length > 500) throw new Error('searchString cannot exceed 500 characters');
+    return { keywords: [params.searchString.trim()], hasTextQuery: true };
+  }
+  if (params.fields && typeof params.fields === 'object' && mode === 'semantic') {
+    return { keywords: [], hasTextQuery: false };
+  }
+  return { keywords: [], hasTextQuery: false };
+}
+
+function mergeContentTypeAlias(params: SearchParams): InstructionSearchFields | undefined {
+  const fields = params.fields ? { ...params.fields } : undefined;
+  if (params.contentType === undefined) return fields;
+  if (!fields) return { contentType: params.contentType };
+  const fieldContentType = fields.contentType;
+  if (fieldContentType !== undefined) {
+    const fieldValues = Array.isArray(fieldContentType) ? fieldContentType : [fieldContentType];
+    if (fieldValues.length !== 1 || fieldValues[0] !== params.contentType) {
+      throw new Error('contentType conflicts with fields.contentType');
+    }
+  }
+  fields.contentType = params.contentType;
+  return fields;
 }
 
 /**
@@ -664,20 +700,32 @@ export async function handleInstructionsSearch(params: SearchParams): Promise<Se
       throw new Error('Invalid parameters: expected object');
     }
 
-    if (!Array.isArray(params.keywords)) {
+    const hasKeywords = params.keywords !== undefined;
+    const hasSearchString = params.searchString !== undefined;
+    const hasFields = params.fields !== undefined;
+
+    if (hasKeywords && hasSearchString) {
+      throw new Error('keywords and searchString are mutually exclusive');
+    }
+
+    if (!hasKeywords && !hasSearchString && !hasFields) {
       throw new Error('Invalid keywords: expected array');
     }
 
-    if (params.keywords.length === 0) {
+    if (hasKeywords && !Array.isArray(params.keywords)) {
+      throw new Error('Invalid keywords: expected array');
+    }
+
+    if (Array.isArray(params.keywords) && params.keywords.length === 0) {
       throw new Error('At least one keyword is required');
     }
 
-    if (params.keywords.length > 10) {
+    if (Array.isArray(params.keywords) && params.keywords.length > 10) {
       throw new Error('Maximum 10 keywords allowed');
     }
 
     // Validate keyword strings
-    for (const keyword of params.keywords) {
+    for (const keyword of params.keywords ?? []) {
       if (typeof keyword !== 'string') {
         throw new Error('All keywords must be strings');
       }
@@ -720,9 +768,19 @@ export async function handleInstructionsSearch(params: SearchParams): Promise<Se
       throw new Error(`Invalid mode: must be one of ${VALID_MODES.join(', ')}`);
     }
 
-    logInfo(`[search] Search request: mode=${mode}, keywords=[${params.keywords.join(', ')}], limit=${params.limit ?? 50}, contentType=${params.contentType ?? 'any'}`);
+    const normalizedFields = mergeContentTypeAlias(params);
+    const fieldFilter = compileInstructionFieldFilter(normalizedFields, { caseSensitive: params.caseSensitive ?? false });
+    const { keywords: normalizedKeywords, hasTextQuery } = normalizeSearchInput({ ...params, fields: normalizedFields }, mode as SearchMode);
+    if (!hasTextQuery && !fieldFilter) {
+      throw new Error('Invalid keywords: expected array');
+    }
 
-    const sanitizedKeywords = sanitizeKeywords(params.keywords);
+    logInfo(`[search] Search request: mode=${mode}, keywords=[${normalizedKeywords.join(', ')}], limit=${params.limit ?? 50}, contentType=${params.contentType ?? 'any'}`);
+
+    const sanitizedKeywords = normalizedKeywords;
+    if (hasTextQuery && sanitizedKeywords.length === 0) {
+      throw new Error('At least one valid keyword is required');
+    }
     // Regex mode validation: pattern safety checks
     const compiledRegexKeywords = mode === 'regex'
       ? compileRegexKeywords(sanitizedKeywords, params.caseSensitive ?? false)
@@ -739,6 +797,9 @@ export async function handleInstructionsSearch(params: SearchParams): Promise<Se
     }
 
     // Ensure case-insensitive search by default
+    const state = ensureLoaded();
+    const candidates = applyInstructionFieldFilter(state.list, fieldFilter);
+
     const searchParams: InternalSearchParams = {
       keywords: sanitizedKeywords,
       mode: mode as SearchMode,
@@ -746,8 +807,22 @@ export async function handleInstructionsSearch(params: SearchParams): Promise<Se
       includeCategories: params.includeCategories,
       caseSensitive: params.caseSensitive ?? false, // Explicit default to false for case-insensitive search
       contentType: params.contentType,
+      searchString: params.searchString,
+      fields: normalizedFields,
       compiledRegexKeywords,
+      candidates,
     };
+
+    if (!hasTextQuery) {
+      const structuralResult = performStructuralSearch(searchParams);
+      if (structuralResult.totalMatches > 0) {
+        structuralResult._meta = buildAfterRetrievalMeta();
+        autoTrackSearchResults(structuralResult.results);
+      } else {
+        structuralResult.hints = buildSearchHints(searchParams);
+      }
+      return structuralResult;
+    }
 
     // Semantic mode: embedding-based similarity search
     if (mode === 'semantic') {
@@ -786,9 +861,9 @@ export async function handleInstructionsSearch(params: SearchParams): Promise<Se
           .filter(t => t.length > 0);
         // Deduplicate and enforce limits
         const unique = [...new Set(tokenized)].slice(0, 10);
-        if (unique.length > 0 && unique.length !== searchParams.keywords.length || unique.some((t, i) => t !== searchParams.keywords[i])) {
+        if (unique.length > 0 && (unique.length !== searchParams.keywords.length || unique.some((t, i) => t !== searchParams.keywords[i]))) {
           logInfo(`[search] Auto-tokenizing keywords: [${searchParams.keywords.join(', ')}] -> [${unique.join(', ')}]`);
-        const retryParams: SearchParams = { ...searchParams, keywords: unique };
+          const retryParams: InternalSearchParams = { ...searchParams, keywords: unique };
           const retryResult = performSearch(retryParams);
           retryResult.autoTokenized = true;
           if (retryResult.totalMatches === 0) {
@@ -861,10 +936,10 @@ function buildSearchHints(params: SearchParams): string[] {
   if (!params.includeCategories) {
     hints.push('Try setting includeCategories: true to also search category tags.');
   }
-  if (params.keywords.length === 1) {
+  if ((params.keywords ?? []).length === 1) {
     hints.push('Try using multiple shorter keywords instead of one long phrase, e.g. ["build", "validate"] instead of ["build validate"].');
   }
-  if (params.keywords.some(k => k.length > 15)) {
+  if ((params.keywords ?? []).some(k => k.length > 15)) {
     hints.push('Try shorter or more general keywords — substring matching is used, not fuzzy/stemming.');
   }
   if (params.contentType) {
