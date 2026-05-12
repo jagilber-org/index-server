@@ -21,10 +21,10 @@ Index Server is a central knowledge base that AI agents connect to via the [Mode
 
 ## Prerequisite: Node.js
 
-Index Server requires **Node.js 22 or newer** before using the `npx` or source install options. Download Node.js from [nodejs.org](https://nodejs.org/) or install it with Windows Package Manager:
+Index Server requires **Node.js 22 or newer** before using the `npx` or source install options. Download Node.js from [nodejs.org](https://nodejs.org/) or install it with Windows Package Manager from administrator prompt:
 
 ```powershell
-winget install nodejs
+winget install OpenJS.NodeJS.LTS
 ```
 
 ## Quick Start Options
