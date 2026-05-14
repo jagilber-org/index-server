@@ -27,7 +27,7 @@ jobs:
         run: |
           git fetch origin "$BASE_REF" --depth=1
           # Discard build-regenerated artifacts that would block checkout
-          git checkout -- schemas/index-server.code-schema.json schemas/manifest.json 2>/dev/null || true
+          git checkout -- schemas/index-server.code-schema.json schemas/manifest.json docs/TOOLS-GENERATED.md 2>/dev/null || true
           git clean -fd schemas/ 2>/dev/null || true
           git checkout FETCH_HEAD
           npm ci

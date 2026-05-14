@@ -94,7 +94,7 @@ describe('Setup wizard launch integration', () => {
         fs.rmSync(tmpRoot, { recursive: true, force: true });
       }
     },
-    60_000,
+    DEPLOY_TIMEOUT_MS,
   );
 
   it(

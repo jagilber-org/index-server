@@ -56,8 +56,8 @@
 
     function readonlyTooltip(flag) {
         if (!flag || flag.editable === true) return '';
-        var reason = (flag && flag.readonlyReason) || 'reserved';
-        var detail = (flag && flag.readonlyDetail) ? ' — ' + flag.readonlyDetail : '';
+        var reason = flag.readonlyReason || 'reserved';
+        var detail = flag.readonlyDetail ? ' — ' + flag.readonlyDetail : '';
         var human = {
             'derived':    'Derived from other settings; not directly editable.',
             'deprecated': 'Deprecated; do not edit.',
@@ -246,5 +246,5 @@
     };
 
     if (global && typeof global === 'object') global.adminConfigRender = api;
-    if (typeof module !== 'undefined' && module && module.exports) module.exports = api;
+    if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : this));
