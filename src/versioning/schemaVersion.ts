@@ -2,7 +2,7 @@
 // Bump this when making a backward-incompatible on-disk schema change that
 // requires a migration rewrite. Migration logic should detect older versions
 // and transform + persist them once.
-export const SCHEMA_VERSION = '6';
+export const SCHEMA_VERSION = '7';
 
 import { RequirementLevel, AUDIENCES, REQUIREMENTS, STATUSES, PRIORITY_TIERS, CLASSIFICATIONS, PriorityTier } from '../models/instruction';
 
@@ -59,6 +59,16 @@ export function migrateInstructionRecord(rec: Record<string, unknown>): Migratio
   if (prevVersion === '3') {
     // no-op: optional metadata fields are already valid if present
     notes.push('v3→v4: added optional metadata fields to schema');
+  }
+
+  // v6 → v7 migration (spec 006-archive-lifecycle, REQ-25). The new archive
+  // metadata fields (archivedBy, archiveReason, archiveSource, restoreEligible)
+  // are all optional, so loading a v6 record requires no data transforms.
+  // The trailing rewrite-on-write step below stamps schemaVersion='7' on the
+  // first persistence, mirroring the v3→v4 silent bump pattern.
+  if (prevVersion === '6') {
+    // no-op on read: schema v7 fields are optional and absent on legacy records
+    notes.push('v6→v7: archive lifecycle metadata is optional, no transform needed');
   }
 
   // Clean optional nullable fields that upstream tools may emit as null

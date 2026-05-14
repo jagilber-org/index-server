@@ -459,6 +459,79 @@ invalid, and `fields` must contain at least one predicate.
 }
 ```
 
+> **Active vs archive surface** (spec 006-archive-lifecycle).
+> Read actions `list`, `query`, `search`, `categories`, `get`, `export`, and
+> `diff` operate on the **active** surface by default — archived entries are
+> excluded. Pass `includeArchived: true` to fold archived entries into the
+> result set (active ∪ archive), or `onlyArchived: true` to scope the query
+> to the archive surface alone. The default is `false` for both flags so
+> existing callers see no behavior change. See `listArchived` / `getArchived`
+> below for archive-only reads with full archive metadata projection.
+
+#### `listArchived` - List Archived Instructions
+
+**Purpose**: Enumerate archived entries with archive-metadata filtering  
+**Mutation**: No  
+**Performance**: O(n) over the archive store; supports `limit` / `offset` paging
+
+```typescript
+// Request
+{
+  "action": "listArchived",
+  "category"?: string,
+  "contentType"?: string,
+  "reason"?: "deprecated" | "superseded" | "duplicate-merge" | "manual" | "legacy-scope",
+  "source"?: "groom" | "remove" | "archive" | "import-migration",
+  "archivedBy"?: string,
+  "restoreEligible"?: boolean,
+  "includeContent"?: boolean,    // Default false: body omitted to keep payloads small
+  "limit"?: number,
+  "offset"?: number
+}
+
+// Response
+{
+  "count": number,
+  "items": Array<InstructionEntry & {
+    "archived": true,
+    "archivedAt": string,
+    "archivedBy"?: string,
+    "archiveReason"?: ArchiveReason,
+    "archiveSource"?: ArchiveSource,
+    "restoreEligible"?: boolean
+  }>
+}
+```
+
+Items are sorted by `archivedAt` descending. Set `includeContent: true` to
+include each entry's `body` (default omits it).
+
+#### `getArchived` - Fetch Single Archived Instruction
+
+**Purpose**: Fetch one archived entry by id with full archive metadata  
+**Mutation**: No  
+**Performance**: O(1) keyed lookup against the archive store
+
+```typescript
+// Request
+{
+  "action": "getArchived",
+  "id": string
+}
+
+// Response
+{
+  "item": InstructionEntry & { "archived": true, "archivedAt": string, ... }
+} | {
+  "notFound": true,
+  "id": string
+}
+```
+
+`getArchived` does **not** fall back to the active surface — use `get` for
+active entries.
+
+
 #### `graph_export` - Instruction Relationship Graph
 
 Exports a structural or enriched graph representation of the instruction index. Backward-compatible dual-schema design:
@@ -858,31 +931,57 @@ These behaviors are fully described in `VERSIONING.md` (Governance Enhancements 
 
 #### `remove` - Delete Instructions
 
-**Purpose**: Permanently delete instructions by ID  
+**Purpose**: Retire or permanently delete instructions by ID  
 **Mutation**: Yes  
 **Safety**: Requires explicit confirmation for bulk operations
+
+> ⚠️ **Default behavior change ahead** (spec 006-archive-lifecycle). The
+> current default for `index_remove` is destructive purge. A future major
+> release will flip the default to **archive** so retirement is non-destructive
+> and reversible via `restore`. Pass `mode` explicitly today to insulate your
+> caller from the flip:
+>
+> - `mode: "archive"` — move entry to the archive surface; reversible via
+>   `index_restore`; payload, provenance, and audit context are preserved.
+> - `mode: "purge"` (alias: `purge: true`) — permanent deletion; matches
+>   current default behavior.
+>
+> Calls that omit `mode` continue to purge in this release and additionally
+> emit a `remove_default_change_warning` audit entry plus a
+> `defaultBehaviorChangeWarning` field on the response.
 
 ```typescript
 // Request
 {
   "action": "remove",
   "ids": string[],
-  "confirm"?: boolean,    // Required for >10 items
-  "cascade"?: boolean     // Remove dependent items
+  "mode"?: "archive" | "purge",
+  "purge"?: boolean,        // Alias for mode:"purge"
+  "archivedBy"?: string,    // Optional operator id (mode:"archive" only)
+  "force"?: boolean,        // Required for bulk operations beyond INDEX_SERVER_MAX_BULK_DELETE
+  "dryRun"?: boolean,
+  "missingOk"?: boolean
 }
 
-// Response
+// Response (mode: "archive")
 {
+  "mode": "archive",
+  "archived": number,
+  "archivedIds": string[],
+  "missing": string[],
+  "archiveErrors": Array<{ "id": string, "error": string }>
+}
+
+// Response (mode: "purge" — destructive; default this release)
+{
+  "mode": "purge",
   "removed": number,
   "removedIds": string[],
   "missing": string[],
   "errorCount": number,
-  "errors": Array<{
-    "id": string,
-    "error": string,
-    "code": string
-  }>,
-  "cascadeRemovals"?: string[]
+  "errors": Array<{ "id": string, "error": string }>,
+  "backupDir"?: string,
+  "defaultBehaviorChangeWarning"?: string  // Present iff mode omitted
 }
 ```
 
@@ -892,17 +991,28 @@ These behaviors are fully described in `VERSIONING.md` (Governance Enhancements 
 **Mutation**: Yes (conditional)  
 **Safety**: Supports dry-run mode
 
+> **Retirement now archives** (spec 006-archive-lifecycle). When
+> `mode.removeDeprecated`, `mode.mergeDuplicates`, or `mode.purgeLegacyScopes`
+> retire an entry, the entry is moved to the archive surface (audit action
+> `archive`) instead of being unlinked. A separate `mode.purgeArchive` flag
+> permanently deletes archived entries; it cannot be combined with the
+> retirement flags above. Bulk `purgeArchive` invocations are gated by
+> `INDEX_SERVER_MAX_BULK_DELETE` and auto-create a zip backup
+> (`purge_backup` audit) before deletion.
+
 ```typescript
 // Request
 {
   "action": "groom",
+  "ids"?: string[],                  // Required only for purgeArchive when targeting specific ids
+  "force"?: boolean,                 // Required to exceed INDEX_SERVER_MAX_BULK_DELETE for purgeArchive
   "mode": {
     "dryRun"?: boolean,
     "mergeDuplicates"?: boolean,
-    "removeDeprecated"?: boolean,
-    "normalizeCategories"?: boolean,
-    "purgeLegacyScopes"?: boolean,
-    "updateHashes"?: boolean
+    "removeDeprecated"?: boolean,    // Retirement → archive (was: physical delete)
+    "purgeLegacyScopes"?: boolean,   // Retirement → archive (was: physical delete)
+    "remapCategories"?: boolean,
+    "purgeArchive"?: boolean         // NEW — permanently delete archived entries
   }
 }
 
@@ -913,18 +1023,119 @@ These behaviors are fully described in `VERSIONING.md` (Governance Enhancements 
   "scanned": number,
   "repairedHashes": number,
   "normalizedCategories": number,
-  "deprecatedRemoved": number,
+  "deprecatedRemoved": number,       // count of entries moved to archive
   "duplicatesMerged": number,
   "signalApplied": number,
   "filesRewritten": number,
   "migrated": number,
   "remappedCategories": number,
   "purgedScopes": number,
+  "archived"?: number,               // count of entries archived this run
+  "archivedIds"?: string[],
+  "archiveErrors"?: Array<{ "id": string, "error": string }>,
+  "archiveLocation"?: string,        // "json:<path>/.archive" | "sqlite:instructions_archive"
   "dryRun": boolean,
   "notes": string[],
   "performanceMs": number
 }
 ```
+
+For `mode.purgeArchive` the response shape switches to
+`{ purged, purgedIds, purgeErrors?, backupZip?, mode: "purgeArchive" }`.
+
+#### `archive` - Archive Active Instructions
+
+**Purpose**: Move active entries to the archive surface (non-destructive retirement)  
+**Mutation**: Yes  
+**Safety**: Bulk operations gated by `INDEX_SERVER_MAX_BULK_DELETE`
+
+Archived entries are retained with full payload + provenance, suppressed from
+default reads (see `includeArchived` / `onlyArchived` filters above), and are
+reversible via `restore`.
+
+```typescript
+// Request
+{
+  "action": "archive",
+  "ids": string[],
+  "reason"?: "deprecated" | "superseded" | "duplicate-merge" | "manual" | "legacy-scope",
+  "archivedBy"?: string,             // Optional operator identity
+  "dryRun"?: boolean
+}
+
+// Response
+{
+  "archived": number,
+  "archivedIds": string[],
+  "archiveErrors": Array<{ "id": string, "error": string }>,
+  "dryRun": boolean
+}
+```
+
+Audit action: `archive`. Embedding vectors for archived ids are evicted (the
+archived entry cannot surface in semantic search).
+
+#### `restore` - Restore Archived Instructions
+
+**Purpose**: Return one or more archived entries to the active surface  
+**Mutation**: Yes  
+**Eligibility**: Entries with `restoreEligible: false` are rejected
+
+```typescript
+// Request
+{
+  "action": "restore",
+  "ids": string[],
+  "restoreMode"?: "reject" | "overwrite",   // Default "reject" — collision with active id fails
+  "dryRun"?: boolean
+}
+
+// Response
+{
+  "restored": number,
+  "restoredIds": string[],
+  "restoreErrors": Array<{ "id": string, "error": string }>,
+  "restoreMode": "reject" | "overwrite",
+  "dryRun": boolean
+}
+```
+
+Audit action: `restore`. The restored entry's embedding vector is marked
+stale so the next refresh recomputes it.
+
+#### `purgeArchive` - Permanently Delete Archived Instructions
+
+**Purpose**: Terminal destructive deletion of archived entries  
+**Mutation**: Yes  
+**Safety**: Bootstrap mutation-gated; bulk operations require `force: true`
+above `INDEX_SERVER_MAX_BULK_DELETE` and auto-create a zip backup
+(`purge_backup` audit) before deletion. Audit `purge_blocked` on gate denial.
+
+```typescript
+// Request
+{
+  "action": "purgeArchive",
+  "ids": string[],
+  "force"?: boolean,
+  "dryRun"?: boolean
+}
+
+// Response
+{
+  "purged": number,
+  "purgedIds": string[],
+  "missing": string[],
+  "purgeErrors": Array<{ "id": string, "error": string }>,
+  "backupDir"?: string,
+  "bulkBlocked"?: true,
+  "maxBulkDelete"?: number,
+  "requestedCount"?: number
+}
+```
+
+Audit actions: `purge` (per id), `purge_backup` / `purge_backup_failed`
+(pre-mutation backup), `purge_blocked` (gate denial). **Purge is terminal —
+there is no restore path.**
 
 ### 🛠️ **Common Troubleshooting**
 
@@ -1259,13 +1470,13 @@ All mutation operations now return enhanced error information:
 | `index_enrich` | mutation | admin | Persist normalization of placeholder governance fields to disk. |
 | `index_governanceHash` | stable | extended | Return governance projection & deterministic governance hash. |
 | `index_governanceUpdate` | mutation | extended | Patch limited governance fields (owner/status/review dates + optional version bump). |
-| `index_groom` | mutation | admin | Groom Index: normalize, repair hashes, merge duplicates, remove deprecated. |
+| `index_groom` | mutation | admin | Groom Index: normalize, repair hashes, merge duplicates, archive deprecated (spec 006). |
 | `index_health` | stable | admin | Compare live Index to canonical snapshot for drift. |
 | `index_import` | mutation | extended | Import (create/overwrite) instruction entries from provided objects. |
 | `index_inspect` | stable | admin | Return raw instruction entry by ID for debugging (full JSON). |
 | `index_normalize` | mutation | admin | Normalize instruction JSON files (hash repair, version hydrate, timestamps). |
 | `index_reload` | mutation | extended | Force reload of instruction index from disk. |
-| `index_remove` | mutation | extended | Delete one or more instruction entries by id. |
+| `index_remove` | mutation | extended | Retire (mode:"archive") or permanently delete (mode:"purge", current default) one or more instruction entries (spec 006). |
 | `index_repair` | mutation | admin | Repair out-of-sync sourceHash fields (noop if none drifted). |
 | `index_schema` | stable | extended | Return instruction JSON schema, examples, validation rules, and promotion workflow guidance. |
 | `index_search` | stable | core | Search instructions by keywords — returns instruction IDs for targeted retrieval. Supports `mode`: keyword (default), regex, or semantic. |
@@ -1640,28 +1851,35 @@ Effect: Clears in-memory cache and reloads from disk.
 
 ### index_remove (mutation)
 
-Params: { ids: string[] }
-Result: { removed, removedIds: string[], missing: string[], errorCount, errors: [{ id, error }] }
-Notes: Permanently deletes matching instruction JSON files from disk. Missing ids are reported; operation still succeeds unless all fail. Set `INDEX_SERVER_MUTATION=0` when you need to disable this behavior explicitly.
+Params: { ids: string[], mode?: "archive" | "purge", purge?: boolean, archivedBy?: string, force?: boolean, dryRun?: boolean, missingOk?: boolean }
+Result (mode:"archive"): { mode: "archive", archived, archivedIds: string[], missing: string[], archiveErrors: [{ id, error }] }
+Result (mode:"purge", default this release): { mode: "purge", removed, removedIds: string[], missing: string[], errorCount, errors: [{ id, error }], backupDir?, defaultBehaviorChangeWarning? }
+Notes:
+
+* **Default behavior change ahead** (spec 006-archive-lifecycle): omitting `mode` continues to purge in this release but emits a `remove_default_change_warning` audit entry and surfaces `defaultBehaviorChangeWarning` on the response. A future major release flips the default to `archive`. Pass `mode` explicitly to insulate callers.
+* `mode:"archive"` moves entries to the archive surface (reversible via `index_restore` / dispatcher action `restore`).
+* `mode:"purge"` (alias `purge: true`) permanently deletes; matches pre-006 behavior. Bulk operations beyond `INDEX_SERVER_MAX_BULK_DELETE` require `force: true` and auto-create a zip backup first.
+* Missing ids are reported; operation still succeeds unless all fail. Set `INDEX_SERVER_MUTATION=0` to disable mutations.
 
 ### index_groom (mutation)
 
-Params: { mode?: { dryRun?: boolean, mergeDuplicates?: boolean, removeDeprecated?: boolean, purgeLegacyScopes?: boolean, remapCategories?: boolean } }
-Result: { previousHash, hash, scanned, repairedHashes, normalizedCategories, deprecatedRemoved, duplicatesMerged, signalApplied, filesRewritten, purgedScopes, migrated, remappedCategories, dryRun, notes: string[] }
+Params: { ids?: string[], force?: boolean, mode?: { dryRun?: boolean, mergeDuplicates?: boolean, removeDeprecated?: boolean, purgeLegacyScopes?: boolean, remapCategories?: boolean, purgeArchive?: boolean } }
+Result: { previousHash, hash, scanned, repairedHashes, normalizedCategories, deprecatedRemoved, duplicatesMerged, signalApplied, filesRewritten, purgedScopes, migrated, remappedCategories, archived?, archivedIds?, archiveErrors?, archiveLocation?, dryRun, notes: string[] }
 Notes:
 
 * dryRun reports planned changes without modifying files (hash remains the same).
+* **Retirement paths archive instead of delete** (spec 006-archive-lifecycle): `removeDeprecated`, `mergeDuplicates`, and `purgeLegacyScopes` move targeted entries to the archive surface (audit action `archive`) rather than unlinking them. `archivedIds` / `archiveErrors` / `archiveLocation` report the moves; `deprecatedRemoved` continues to count entries retired this run.
+* `mode.purgeArchive` permanently deletes archived entries. Cannot be combined with the retirement flags above. Bulk invocations require `force: true` above `INDEX_SERVER_MAX_BULK_DELETE`; an auto-zip backup is created (`purge_backup` audit) before deletion. Response shape switches to `{ mode: "purgeArchive", purged, purgedIds, purgeErrors?, backupZip? }`.
 * repairedHashes: number of entries whose stored sourceHash was corrected.
 * normalizedCategories: entries whose categories were lowercased/deduped/sorted.
 * duplicatesMerged: number of duplicate entry merges (non-primary members processed).
-* deprecatedRemoved: number of deprecated entries physically removed (when removeDeprecated true and their deprecatedBy target exists).
 * purgedScopes: legacy scope:* category tokens removed from disk when purgeLegacyScopes enabled.
 * mergeDuplicates selects a primary per identical body hash (prefers earliest createdAt then lexicographically smallest id) and merges categories, priority (min), riskScore (max).
 * filesRewritten counts actual JSON files updated on disk (0 in dryRun).
 * signalApplied counts instructions mutated by usage signal feedback (outdated -> deprecated requirement, not-relevant -> priority -10, helpful -> priority +5, applied -> priority +2).
 * migrated counts entries with missing required fields auto-filled (e.g., contentType).
 * remappedCategories counts entries whose primaryCategory was derived from CATEGORY_RULES.
-* notes array contains lightweight action hints (e.g., would-rewrite:N in dryRun).
+* notes array contains lightweight action hints (e.g., would-rewrite:N, would-archive:N in dryRun).
 
 ### promote_from_repo (mutation)
 

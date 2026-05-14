@@ -19,6 +19,8 @@ import { buildHttpServer, bindToPort, closeHttpServer, TlsOptions } from './http
 import { initWebSocket, startMetricsBroadcast } from './wsInit.js';
 import { mountDashboardRoutes } from './routes/index.js';
 import { logInfo } from '../../services/logger.js';
+import { applyOverlay } from '../../config/runtimeOverrides.js';
+import { reloadRuntimeConfig } from '../../config/runtimeConfig.js';
 
 export interface DashboardServerOptions {
   host?: string;
@@ -56,7 +58,7 @@ export class DashboardServer {
   constructor(options: DashboardServerOptions = {}) {
     this.options = {
       host: options.host || '127.0.0.1',
-      port: options.port || 8989,
+      port: options.port ?? 8989,
       maxPortTries: options.maxPortTries || 10,
       enableWebSockets: options.enableWebSockets ?? true,
       enableCors: options.enableCors ?? true,
@@ -78,16 +80,33 @@ export class DashboardServer {
   }
 
   async start(): Promise<{ url: string; port: number; close: () => void }> {
+    // Apply the runtime overrides overlay before binding so the dashboard
+    // surfaces the same `process.env` state that downstream consumers will see.
+    // applyOverlay() captures the pre-overlay env snapshot needed for
+    // `overlayShadowsEnv` on /api/admin/config. We follow with reloadRuntimeConfig()
+    // so the cached singleton reflects the merged env state.
+    try {
+      applyOverlay();
+      reloadRuntimeConfig();
+    } catch (err) {
+      logInfo(`[DashboardServer] applyOverlay/reload failed (continuing): ${(err as Error).message}`);
+    }
     for (let attempt = 0; attempt < this.options.maxPortTries; attempt++) {
       const currentPort = this.options.port + attempt;
       try {
         this.server = buildHttpServer(this.app, this.options.tls);
         await bindToPort(this.server, currentPort, this.options.host);
-        logInfo(`[DashboardServer] Server started on ${this.httpProtocol}://${this.options.host}:${currentPort}`);
+        // When port:0 is requested the OS assigns a free port. Resolve the
+        // actual bound port from the listening socket so the URL we return
+        // (and the URL we log) reach the right place. Falling back to
+        // currentPort keeps behavior identical for fixed-port callers.
+        const addr = this.server.address();
+        const actualPort = (addr && typeof addr === 'object' && typeof addr.port === 'number') ? addr.port : currentPort;
+        logInfo(`[DashboardServer] Server started on ${this.httpProtocol}://${this.options.host}:${actualPort}`);
 
         if (this.options.enableWebSockets) {
           initWebSocket(this.server, this.webSocketManager);
-          logInfo(`[DashboardServer] WebSocket support enabled on ${this.wsProtocol}://${this.options.host}:${currentPort}/ws`);
+          logInfo(`[DashboardServer] WebSocket support enabled on ${this.wsProtocol}://${this.options.host}:${actualPort}/ws`);
           this.metricsBroadcastTimer = startMetricsBroadcast(
             this.webSocketManager,
             this.metricsCollector,
@@ -96,8 +115,8 @@ export class DashboardServer {
         }
 
         return {
-          url: `${this.httpProtocol}://${this.options.host}:${currentPort}/`,
-          port: currentPort,
+          url: `${this.httpProtocol}://${this.options.host}:${actualPort}/`,
+          port: actualPort,
           close: () => this.stop(),
         };
       } catch (error) {

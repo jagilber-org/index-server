@@ -1,9 +1,19 @@
 {
-  "version": "1.28.21",
-  "generatedAt": "2026-05-12T17:41:50.109Z",
+  "version": "1.28.22",
+  "generatedAt": "2026-05-14T21:49:52.490Z",
   "trackedDir": "schemas",
   "distDir": "dist/schemas",
   "jsonSchemas": [
+    {
+      "type": "ArchiveReason",
+      "source": "src/models/instruction.ts",
+      "file": "json-schema/instruction-archive-reason.schema.json"
+    },
+    {
+      "type": "ArchiveSource",
+      "source": "src/models/instruction.ts",
+      "file": "json-schema/instruction-archive-source.schema.json"
+    },
     {
       "type": "AudienceScope",
       "source": "src/models/instruction.ts",
@@ -82,7 +92,7 @@
       "src",
       "scripts"
     ],
-    "fileCount": 277,
+    "fileCount": 282,
     "features": {
       "jsdoc": true,
       "lineNumbers": true,

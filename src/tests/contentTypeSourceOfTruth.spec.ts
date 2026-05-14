@@ -327,6 +327,16 @@ const PROTOCOL_ALLOWLIST = new Set<string>([
   'src/dashboard/server/routes/admin.feedback.routes.ts',
   // Sample-data generator uses the tuples directly.
   'src/dashboard/export/DataExporter.ts',
+  // FLAG_REGISTRY in handlers.dashboardConfig.ts documents the canonical
+  // validation.enum values for log-level / instance-mode / instance-role
+  // flags so the registry stays a self-contained source of truth for the
+  // dashboard. Drift would surface as a validator rejection at runtime
+  // (covered by configValidation.spec.ts) and as an enum-source mismatch
+  // (covered elsewhere in this spec).
+  'src/services/handlers.dashboardConfig.ts',
+  // configValidation.spec.ts asserts log-level format validation against
+  // the same canonical taxonomy; literal values used as test fixtures.
+  'src/tests/configValidation.spec.ts',
   // Browser JS cannot import from TS modules; values are populated server-side
   // via REST endpoints or static dropdowns. Drift here would surface as a
   // server-side validation rejection (covered by handlers.feedback tests).

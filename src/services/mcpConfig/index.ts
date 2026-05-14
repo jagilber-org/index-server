@@ -25,6 +25,13 @@ export interface McpOperationOptions {
   env?: Record<string, string>;
   dryRun?: boolean;
   backup?: string;
+  /**
+   * Pre-resolved target. When supplied, bypasses target/scope resolution.
+   * Required for callers that need to write to a specific flavor (e.g. both
+   * VS Code stable and Insiders), since `resolveConfigTargets` may return
+   * multiple `vscode-global` entries.
+   */
+  targetInfo?: McpTargetInfo;
 }
 
 export interface McpOperationResult {
@@ -42,6 +49,7 @@ export interface McpOperationResult {
 }
 
 function firstTarget(options: McpOperationOptions): McpTargetInfo {
+  if (options.targetInfo) return options.targetInfo;
   return resolveConfigTargets({
     target: options.target,
     targets: options.targets,

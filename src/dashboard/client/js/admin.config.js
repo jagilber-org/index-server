@@ -1,152 +1,194 @@
 /* eslint-disable */
-// Configuration panel – dynamic flags grouped by category with search, auto-refresh, and doc links
+/**
+ * admin.config — Configuration tab orchestrator.
+ *
+ * Issue #359: rewritten to be driven entirely by the FLAG_REGISTRY surfaced
+ * through GET /api/admin/config. The bespoke top form is gone. All rendering
+ * lives in admin.config.render.js (so Tank's T5 jsdom tests can exercise pure
+ * helpers); this file owns fetch, DOM mutation, event wiring, and POST.
+ *
+ * Marks `window.__configExternalLoaded = true` to suppress the inline fallback
+ * in admin.html (which now shows a hard error if this module fails to load).
+ */
 (function(){
+    window.__configExternalLoaded = true;
+
+    var render = window.adminConfigRender;
+    if (!render) {
+        console.error('[admin.config] adminConfigRender helpers missing — admin.config.render.js failed to load before admin.config.js.');
+        return;
+    }
+
     var _configRefreshTimer = null;
-    var _collapsedCategories = {};
+    var _lastSnapshot = { allFlags: [], byKey: {} };
 
-    var escapeHtml = window.adminUtils.escapeHtml;
-
-    function buildFlagRow(f, featureFlags) {
-        var isBool = f.type === 'boolean';
-        var currentVal = (f.enabled !== undefined ? (f.enabled ? 'on' : 'off') : (f.value !== undefined ? f.value : '')) || '';
-        var control = isBool
-            ? '<select data-flag="' + escapeHtml(f.name.toLowerCase()) + '" class="form-input cfg-flag-select">'
-              + '<option value="1"' + ((featureFlags[f.name.toLowerCase()] ?? f.enabled) ? ' selected' : '') + '>On</option>'
-              + '<option value="0"' + (!(featureFlags[f.name.toLowerCase()] ?? f.enabled) ? ' selected' : '') + '>Off</option>'
-              + '</select>'
-            : '<span class="cfg-flag-ro">' + escapeHtml(currentVal) + '</span>';
-        var stabClass = 'cfg-stab-' + (f.stability || 'stable');
-        var docHref = f.docAnchor ? ('https://github.com/jagilber-org/index-server/blob/main/docs/configuration.md#' + encodeURIComponent(f.docAnchor)) : '';
-        var docIcon = docHref ? ' <a class="cfg-doc-link" href="' + docHref + '" target="_blank" rel="noopener" title="Documentation for ' + escapeHtml(f.name) + '">📖</a>' : '';
-        return '<tr class="cfg-flag-row" data-flagname="' + escapeHtml(f.name.toLowerCase()) + '">'
-            + '<td class="cfg-flag-name">' + escapeHtml(f.name) + docIcon + '</td>'
-            + '<td>' + control + '</td>'
-            + '<td class="cfg-flag-default">' + escapeHtml(f.default || '') + '</td>'
-            + '<td class="' + stabClass + '">' + escapeHtml(f.stability || '') + '</td>'
-            + '<td class="cfg-flag-desc">' + escapeHtml(f.description || '') + '</td>'
-            + '</tr>';
+    function snapshotFlags(allFlags) {
+        var byKey = {};
+        (allFlags || []).forEach(function(f){ if (f && f.key) byKey[f.key] = f; });
+        _lastSnapshot = { allFlags: allFlags || [], byKey: byKey };
     }
 
-    function groupByCategory(flags) {
-        var groups = {};
-        var order = [];
-        flags.forEach(function(f) {
-            if (!groups[f.category]) { groups[f.category] = []; order.push(f.category); }
-            groups[f.category].push(f);
-        });
-        return { groups: groups, order: order };
+    function coerceForType(raw, type) {
+        if (type === 'boolean') return raw === true || raw === 'true' || raw === '1' || raw === 1;
+        if (type === 'number') {
+            if (raw === '' || raw === null || raw === undefined) return raw;
+            var n = Number(raw);
+            return Number.isFinite(n) ? n : raw;
+        }
+        return raw;
     }
 
-    function buildFlagsHtml(allFlags, featureFlags) {
-        if (!allFlags.length) return '<div class="cfg-no-flags">No feature flags detected</div>';
-        var catData = groupByCategory(allFlags);
-        var html = '<div class="cfg-flag-filter"><input type="text" id="cfg-flag-search" class="form-input" placeholder="Filter flags..." /></div>';
-        catData.order.forEach(function(cat) {
-            var collapsed = _collapsedCategories[cat];
-            var flags = catData.groups[cat];
-            html += '<div class="cfg-category-group" data-category="' + escapeHtml(cat) + '">';
-            html += '<div class="cfg-category-header" onclick="toggleConfigCategory(\'' + escapeHtml(cat) + '\')">';
-            html += '<span class="cfg-category-chevron">' + (collapsed ? '▶' : '▼') + '</span> ';
-            html += '<span class="cfg-category-name">' + escapeHtml(cat.charAt(0).toUpperCase() + cat.slice(1)) + '</span>';
-            html += ' <span class="cfg-category-count">(' + flags.length + ')</span>';
-            html += '</div>';
-            html += '<table class="cfg-flag-table"' + (collapsed ? ' style="display:none"' : '') + '>';
-            html += '<thead><tr><th>Flag</th><th>Value</th><th>Default</th><th>Stability</th><th>Description</th></tr></thead>';
-            html += '<tbody>';
-            flags.forEach(function(f) { html += buildFlagRow(f, featureFlags); });
-            html += '</tbody></table>';
-            html += '</div>';
+    function collectEdits(rootEl) {
+        var edits = {};
+        var inputs = (rootEl || document).querySelectorAll('.cfg-flag-input');
+        inputs.forEach(function(el){
+            if (el.disabled) return;
+            var key = el.getAttribute('data-flag-key');
+            var type = el.getAttribute('data-flag-type') || 'string';
+            if (!key) return;
+            var raw = (el.tagName === 'SELECT') ? el.value : el.value;
+            var current = _lastSnapshot.byKey[key];
+            if (!current) return;
+            var coerced = coerceForType(raw, type);
+            var prior = current.value;
+            // Only include if the user actually changed it (string-compare avoids
+            // sending the entire registry on every Save).
+            if (String(coerced) === String(prior === undefined || prior === null ? '' : prior)) return;
+            edits[key] = coerced;
         });
-        return html;
+        return edits;
+    }
+
+    function attachFilter() {
+        var input = document.getElementById('cfg-flag-search');
+        if (!input) return;
+        input.addEventListener('input', function(){
+            var term = (input.value || '').toLowerCase();
+            var rows = document.querySelectorAll('.cfg-flag-row');
+            rows.forEach(function(row){
+                var key = (row.getAttribute('data-flag-key') || '').toLowerCase();
+                var desc = ((row.querySelector('.cfg-flag-desc') || {}).textContent || '').toLowerCase();
+                row.style.display = (!term || key.indexOf(term) !== -1 || desc.indexOf(term) !== -1) ? '' : 'none';
+            });
+        });
+    }
+
+    function attachSectionToggles() {
+        var headers = document.querySelectorAll('.cfg-section-header');
+        headers.forEach(function(h){
+            h.style.cursor = 'pointer';
+            h.addEventListener('click', function(){
+                var section = h.parentElement;
+                if (!section) return;
+                var body = section.querySelector('.cfg-section-body');
+                if (!body) return;
+                var collapsed = section.getAttribute('data-collapsed') === 'true';
+                section.setAttribute('data-collapsed', collapsed ? 'false' : 'true');
+                if (collapsed) body.removeAttribute('hidden'); else body.setAttribute('hidden', '');
+            });
+        });
+    }
+
+    function attachSaveAll() {
+        var btn = document.getElementById('cfg-save-all-btn');
+        if (!btn) return;
+        btn.addEventListener('click', function(){ saveAllChanges(); });
+    }
+
+    function attachResetButtons() {
+        // Per-row reset is not currently rendered — handled by the POST
+        // /api/admin/config/reset/:flag endpoint. Reserved for follow-up UI work.
     }
 
     async function loadConfiguration() {
+        var target = document.getElementById('config-form');
+        if (!target) return;
+        target.classList.add('loading');
         try {
             var res = await adminAuth.adminFetch('/api/admin/config');
             var data = await res.json();
-            if (!data.success) throw new Error('Failed to load config');
-            var cfg = data.config;
-            var featureFlags = data.featureFlags || {};
+            if (!data || !data.success) throw new Error((data && data.error) || 'Failed to load /api/admin/config');
             var allFlags = Array.isArray(data.allFlags) ? data.allFlags : [];
-            if (!allFlags.length) {
-                try {
-                    var fres = await adminAuth.adminFetch('/api/admin/flags');
-                    var fdata = await fres.json();
-                    if (fdata.success && Array.isArray(fdata.allFlags)) allFlags = fdata.allFlags;
-                } catch(e) { /* ignore */ }
+            snapshotFlags(allFlags);
+            target.innerHTML = render.buildConfigPanel(allFlags, { timestamp: data.timestamp });
+            attachFilter();
+            attachSectionToggles();
+            attachSaveAll();
+            attachResetButtons();
+        } catch (e) {
+            console.error('[admin.config] load failed', e);
+            target.innerHTML = '<div class="error" role="alert">Failed to load configuration: '
+                + render.escapeHtml(e && e.message ? e.message : String(e)) + '</div>';
+        } finally {
+            target.classList.remove('loading');
+        }
+    }
+
+    function summarizeResults(results) {
+        var applied = 0, errors = 0, restart = 0;
+        var errLines = [];
+        Object.keys(results || {}).forEach(function(k){
+            var r = results[k];
+            if (!r) return;
+            if (r.applied) applied++;
+            if (r.requiresRestart) restart++;
+            if (r.error) { errors++; errLines.push(k + ': ' + r.error); }
+        });
+        return { applied: applied, errors: errors, restart: restart, errLines: errLines };
+    }
+
+    async function saveAllChanges() {
+        var edits = collectEdits(document.getElementById('config-form'));
+        if (!Object.keys(edits).length) {
+            if (typeof showSuccess === 'function') showSuccess('No changes to save.');
+            return;
+        }
+        try {
+            var res = await adminAuth.adminFetch('/api/admin/config', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ updates: edits })
+            });
+            var data = await res.json();
+            if (!data || !data.success) {
+                if (typeof showError === 'function') showError((data && data.error) || 'Update failed');
+                return;
             }
-            var refreshedAt = data.timestamp ? new Date(data.timestamp).toLocaleTimeString() : new Date().toLocaleTimeString();
+            var summary = summarizeResults(data.results);
+            var msg = summary.applied + ' applied';
+            if (summary.restart) msg += ', ' + summary.restart + ' require restart';
+            if (summary.errors) msg += ', ' + summary.errors + ' rejected';
+            if (summary.errors && typeof showError === 'function') {
+                showError(msg + '\n' + summary.errLines.join('\n'));
+            } else if (typeof showSuccess === 'function') {
+                showSuccess(msg);
+            }
+            loadConfiguration();
+        } catch (e) {
+            console.error('[admin.config] save failed', e);
+            if (typeof showError === 'function') showError('Save failed: ' + (e && e.message ? e.message : String(e)));
+        }
+    }
 
-            var html = '<div class="cfg-panel">'
-                + '<form onsubmit="return updateConfiguration(event)" class="cfg-server-form">'
-                + '<div class="cfg-server-grid">'
-                + '<div class="form-group"><label class="form-label">Max Connections</label>'
-                + '<input class="form-input" type="number" id="cfg-maxConnections" value="' + cfg.serverSettings.maxConnections + '" /></div>'
-                + '<div class="form-group"><label class="form-label">Request Timeout (ms)</label>'
-                + '<input class="form-input" type="number" id="cfg-requestTimeout" value="' + cfg.serverSettings.requestTimeout + '" /></div>'
-                + '<div class="form-group"><label class="form-label">Verbose Logging</label>'
-                + '<select class="form-input" id="cfg-verbose"><option value="1"' + (cfg.serverSettings.enableVerboseLogging ? ' selected' : '') + '>Enabled</option>'
-                + '<option value="0"' + (!cfg.serverSettings.enableVerboseLogging ? ' selected' : '') + '>Disabled</option></select></div>'
-                + '<div class="form-group"><label class="form-label">Enable Mutation</label>'
-                + '<select class="form-input" id="cfg-mutation"><option value="1"' + (cfg.serverSettings.enableMutation ? ' selected' : '') + '>Enabled</option>'
-                + '<option value="0"' + (!cfg.serverSettings.enableMutation ? ' selected' : '') + '>Disabled</option></select></div>'
-                + '<div class="form-group"><label class="form-label">Rate Limit (req/min, 0 = off)</label>'
-                + '<input class="form-input" type="number" min="0" id="cfg-rateLimitPerMinute" value="' + (cfg.serverSettings.rateLimit && cfg.serverSettings.rateLimit.perMinute != null ? cfg.serverSettings.rateLimit.perMinute : 0) + '" /></div>'
-                + '</div>'
-                + '<div class="cfg-save-row"><button class="action-btn" type="submit">💾 Save Config</button></div>'
-                + '</form>'
-                + '<div class="cfg-flags-section">'
-                + '<div class="cfg-flags-header">'
-                + '<h3 class="cfg-flags-title">Feature Flags</h3>'
-                + '<span class="cfg-refreshed">Last refreshed: ' + escapeHtml(refreshedAt) + '</span>'
-                + '</div>'
-                + '<div class="cfg-flags-note">All recognized flags grouped by category. Edit boolean flags inline – changes persist to file. Non-boolean flags are read-only.</div>'
-                + buildFlagsHtml(allFlags, featureFlags)
-                + '</div></div>';
-
-            var target = document.getElementById('config-form');
-            if (target) {
-                target.innerHTML = html;
-                target.classList.remove('loading');
-                var searchInput = document.getElementById('cfg-flag-search');
-                if (searchInput) searchInput.addEventListener('input', filterConfigFlags);
+    async function resetFlag(key) {
+        if (!key) return;
+        try {
+            var res = await adminAuth.adminFetch('/api/admin/config/reset/' + encodeURIComponent(key), { method: 'POST' });
+            var data = await res.json();
+            if (data && data.success) {
+                if (typeof showSuccess === 'function') showSuccess(data.message || ('Reset ' + key));
+                loadConfiguration();
+            } else if (typeof showError === 'function') {
+                showError((data && data.error) || 'Reset failed');
             }
         } catch (e) {
-            var target = document.getElementById('config-form');
-            if (target) target.innerHTML = '<div class="error">Failed to load configuration</div>';
+            if (typeof showError === 'function') showError('Reset failed: ' + (e && e.message ? e.message : String(e)));
         }
-    }
-
-    function filterConfigFlags() {
-        var term = (document.getElementById('cfg-flag-search') || {}).value;
-        if (term === undefined) return;
-        term = term.toLowerCase();
-        var rows = document.querySelectorAll('.cfg-flag-row');
-        rows.forEach(function(row) {
-            var name = row.getAttribute('data-flagname') || '';
-            var desc = (row.querySelector('.cfg-flag-desc') || {}).textContent || '';
-            row.style.display = (name.indexOf(term) !== -1 || desc.toLowerCase().indexOf(term) !== -1) ? '' : 'none';
-        });
-        // Show all category groups when filtering
-        if (term) {
-            document.querySelectorAll('.cfg-flag-table').forEach(function(t) { t.style.display = ''; });
-        }
-    }
-
-    function toggleConfigCategory(cat) {
-        _collapsedCategories[cat] = !_collapsedCategories[cat];
-        var group = document.querySelector('.cfg-category-group[data-category="' + cat + '"]');
-        if (!group) return;
-        var table = group.querySelector('.cfg-flag-table');
-        var chevron = group.querySelector('.cfg-category-chevron');
-        if (table) table.style.display = _collapsedCategories[cat] ? 'none' : '';
-        if (chevron) chevron.textContent = _collapsedCategories[cat] ? '▶' : '▼';
     }
 
     function startConfigAutoRefresh() {
         stopConfigAutoRefresh();
-        _configRefreshTimer = setInterval(function() {
-            // Only auto-refresh if config section is visible
+        _configRefreshTimer = setInterval(function(){
             var section = document.getElementById('config-section');
             if (section && !section.classList.contains('hidden')) loadConfiguration();
         }, 15000);
@@ -156,38 +198,9 @@
         if (_configRefreshTimer) { clearInterval(_configRefreshTimer); _configRefreshTimer = null; }
     }
 
-    async function updateConfiguration(ev) {
-        ev.preventDefault();
-        var flagSelects = document.querySelectorAll('[data-flag]');
-        var featureFlags = {};
-        flagSelects.forEach(function(sel) {
-            var name = sel.getAttribute('data-flag');
-            if (name) featureFlags[name] = sel.value === '1';
-        });
-        var updates = {
-            serverSettings: {
-                maxConnections: parseInt(document.getElementById('cfg-maxConnections').value),
-                requestTimeout: parseInt(document.getElementById('cfg-requestTimeout').value),
-                enableVerboseLogging: document.getElementById('cfg-verbose').value === '1',
-                enableMutation: document.getElementById('cfg-mutation').value === '1',
-                rateLimit: {
-                    perMinute: parseInt(document.getElementById('cfg-rateLimitPerMinute').value) || 0
-                }
-            },
-            featureFlags: featureFlags
-        };
-        try {
-            var res = await adminAuth.adminFetch('/api/admin/config', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(updates)});
-            var data = await res.json();
-            if (data.success) { if (typeof showSuccess === 'function') showSuccess('Configuration updated'); loadConfiguration(); }
-            else { if (typeof showError === 'function') showError(data.error || 'Update failed'); }
-        } catch (e) { if (typeof showError === 'function') showError('Update failed'); }
-        return false;
-    }
-
     window.loadConfiguration = loadConfiguration;
-    window.updateConfiguration = updateConfiguration;
-    window.toggleConfigCategory = toggleConfigCategory;
+    window.saveAllChanges = saveAllChanges;
+    window.resetFlag = resetFlag;
     window.startConfigAutoRefresh = startConfigAutoRefresh;
     window.stopConfigAutoRefresh = stopConfigAutoRefresh;
 })();

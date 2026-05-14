@@ -63,6 +63,9 @@
         const instructionName = button.getAttribute('data-instruction-name') || '';
         if (action === 'edit') editInstruction(instructionName);
         if (action === 'delete') deleteInstruction(instructionName);
+        if (action === 'archive') promptArchiveInstruction(instructionName);
+        if (action === 'restore') promptRestoreInstruction(instructionName);
+        if (action === 'purge') promptPurgeArchivedInstruction(instructionName);
       });
       button.__instructionActionBound = true;
     });
@@ -247,6 +250,7 @@
             <div class="instruction-name">${highlightedName}</div>
             <div class="instruction-actions">
               <button class="action-btn" data-instruction-action="edit" data-instruction-name="${escapedName}">✏ Edit</button>
+              <button class="action-btn btn-info" data-instruction-action="archive" data-instruction-name="${escapedName}">📦 Archive</button>
               <button class="action-btn danger" data-instruction-action="delete" data-instruction-name="${escapedName}">🗑 Delete</button>
             </div>
           </div>
@@ -422,6 +426,9 @@
   }
 
   async function loadInstructions() {
+    if (globals.instructionView === 'archived') {
+      return loadArchivedInstructions();
+    }
     const listEl = document.getElementById('instructions-list'); if(listEl) listEl.innerHTML = 'Loading...';
     // create hidden debug sink so Playwright can read client diagnostics from DOM
     try {
@@ -535,6 +542,160 @@
     }
   }
 
+  // ── Archive view (spec 006-archive-lifecycle REQ-27) ──────────────────────
+  if (globals.instructionView == null) globals.instructionView = 'active';
+
+  function setInstructionView(view) {
+    const next = view === 'archived' ? 'archived' : 'active';
+    globals.instructionView = next;
+    const activeBtn = document.getElementById('instruction-view-active');
+    const archivedBtn = document.getElementById('instruction-view-archived');
+    if (activeBtn) activeBtn.classList.toggle('btn-active', next === 'active');
+    if (archivedBtn) archivedBtn.classList.toggle('btn-active', next === 'archived');
+    globals.instructionPage = 1;
+    loadInstructions();
+  }
+
+  function renderArchivedList(instructions) {
+    const listEl = document.getElementById('instructions-list');
+    if (!listEl) return;
+    if (!Array.isArray(instructions) || instructions.length === 0) {
+      listEl.innerHTML = '<p>No archived instructions.</p>';
+      buildInstructionPaginationControls(0);
+      return;
+    }
+    const rows = instructions.map((instr) => {
+      const escapedName = escapeHtml(instr.name);
+      const safeTitle = escapeHtml(instr.title || '');
+      const safeReason = escapeHtml(instr.archiveReason || '—');
+      const safeSource = escapeHtml(instr.archiveSource || '—');
+      const safeArchivedAt = instr.archivedAt ? escapeHtml(new Date(instr.archivedAt).toLocaleString()) : '—';
+      const safeArchivedBy = escapeHtml(instr.archivedBy || '—');
+      const restoreEligible = instr.restoreEligible !== false;
+      const lockedBadge = restoreEligible
+        ? ''
+        : '<span class="archive-badge locked" title="restoreEligible=false">LOCKED</span>';
+      const cats = Array.isArray(instr.categories) ? instr.categories : [];
+      const safeCat = escapeHtml(cats[0] || '—');
+      return `
+        <div class="instruction-item" data-instruction="${escapedName}">
+          <div class="instruction-item-header">
+            <div class="instruction-name">${lockedBadge}${escapedName} <span style="opacity:.6;font-weight:400;">${safeTitle}</span></div>
+            <div class="instruction-actions">
+              <button class="action-btn" data-instruction-action="restore" data-instruction-name="${escapedName}" ${restoreEligible ? '' : 'disabled title="restoreEligible=false"'}>♻ Restore</button>
+              <button class="action-btn danger" data-instruction-action="purge" data-instruction-name="${escapedName}">🗑 Purge</button>
+            </div>
+          </div>
+          <div class="instruction-meta">
+            <div class="meta-chip" title="Category"><span class="chip-label">CAT</span><span class="chip-value">${safeCat}</span></div>
+            <div class="meta-chip" title="Archive reason"><span class="chip-label">REASON</span><span class="chip-value">${safeReason}</span></div>
+            <div class="meta-chip" title="Archive source"><span class="chip-label">SOURCE</span><span class="chip-value">${safeSource}</span></div>
+            <div class="meta-chip" title="Archived at"><span class="chip-label">AT</span><span class="chip-value">${safeArchivedAt}</span></div>
+            <div class="meta-chip" title="Archived by"><span class="chip-label">BY</span><span class="chip-value">${safeArchivedBy}</span></div>
+          </div>
+        </div>`;
+    }).join('');
+    listEl.innerHTML = rows;
+    wireInstructionListActions(listEl);
+    buildInstructionPaginationControls(instructions.length);
+  }
+
+  async function loadArchivedInstructions() {
+    const listEl = document.getElementById('instructions-list');
+    if (listEl) listEl.innerHTML = 'Loading archived...';
+    try {
+      const res = await adminAuth.adminFetch('/api/instructions_archived');
+      if (!res.ok) throw new Error('http ' + res.status);
+      const data = await res.json();
+      const list = Array.isArray(data.instructions) ? data.instructions : [];
+      globals.allArchivedInstructions = list;
+      renderArchivedList(list);
+    } catch (e) {
+      console.warn('loadArchivedInstructions error', e);
+      if (listEl) listEl.innerHTML = '<div class="error">Failed to load archived instructions</div>';
+    }
+  }
+
+  const ARCHIVE_REASONS_CLIENT = ['deprecated', 'superseded', 'duplicate-merge', 'manual', 'legacy-scope'];
+
+  function promptArchiveInstruction(name) {
+    if (!name) return;
+    const reason = window.prompt(
+      'Archive "' + name + '"\n\nReason (one of: ' + ARCHIVE_REASONS_CLIENT.join(', ') + '):',
+      'manual',
+    );
+    if (reason === null) return;
+    const trimmedReason = String(reason).trim();
+    if (!ARCHIVE_REASONS_CLIENT.includes(trimmedReason)) {
+      globals.showError && globals.showError('Invalid archive reason. Allowed: ' + ARCHIVE_REASONS_CLIENT.join(', '));
+      return;
+    }
+    const archivedBy = window.prompt('Archived by (optional identifier, leave blank to skip):', '') || '';
+    const payload = { reason: trimmedReason };
+    if (archivedBy.trim()) payload.archivedBy = archivedBy.trim();
+    adminAuth.adminFetch('/api/instructions/' + encodeURIComponent(name) + '/archive', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }).then(async (res) => {
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || data.message || 'Archive failed');
+      }
+      globals.showSuccess && globals.showSuccess('Instruction archived');
+      loadInstructions();
+    }).catch((e) => {
+      globals.showError && globals.showError(e.message || 'Archive failed');
+    });
+  }
+
+  function promptRestoreInstruction(name) {
+    if (!name) return;
+    const overwrite = window.confirm(
+      'Restore "' + name + '" to the active surface.\n\nClick OK to use overwrite mode (replace any active entry with the same id), or Cancel to use reject mode (fail on collision).',
+    );
+    const payload = { restoreMode: overwrite ? 'overwrite' : 'reject' };
+    adminAuth.adminFetch('/api/instructions_archived/' + encodeURIComponent(name) + '/restore', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }).then(async (res) => {
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || data.message || 'Restore failed');
+      }
+      globals.showSuccess && globals.showSuccess('Instruction restored (' + payload.restoreMode + ')');
+      loadInstructions();
+    }).catch((e) => {
+      globals.showError && globals.showError(e.message || 'Restore failed');
+    });
+  }
+
+  function promptPurgeArchivedInstruction(name) {
+    if (!name) return;
+    const typed = window.prompt(
+      'Hard-purge archived "' + name + '" — this is IRREVERSIBLE.\n\nType the id to confirm:',
+      '',
+    );
+    if (typed === null) return;
+    if (typed.trim() !== name) {
+      globals.showError && globals.showError('Purge cancelled: id did not match.');
+      return;
+    }
+    adminAuth.adminFetch('/api/instructions_archived/' + encodeURIComponent(name) + '?confirm=true', {
+      method: 'DELETE',
+    }).then(async (res) => {
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || data.message || 'Purge failed');
+      }
+      globals.showSuccess && globals.showSuccess('Archived instruction purged');
+      loadInstructions();
+    }).catch((e) => {
+      globals.showError && globals.showError(e.message || 'Purge failed');
+    });
+  }
+
   // Override legacy global renderer with new chip-based implementation.
   // The inline <script> block in admin.html (legacy) runs before deferred external scripts,
   // so its renderInstructionList is captured here (if present). We intentionally DO NOT
@@ -578,7 +739,12 @@
       toggleInstructionPreview,
       applyInstructionTemplate,
       cancelEditInstruction,
-      updateInstructionEditorDiagnostics
+      updateInstructionEditorDiagnostics,
+      setInstructionView,
+      loadArchivedInstructions,
+      promptArchiveInstruction,
+      promptRestoreInstruction,
+      promptPurgeArchivedInstruction
     });
   } catch { /* ignore */ }
 

@@ -8,10 +8,13 @@
 import path from 'node:path';
 import { Router, Request, Response } from 'express';
 import { getLocalHandler } from '../../../server/registry.js';
-import { ensureLoadedAsync, invalidate, touchIndexVersion, writeEntryAsync, removeEntry, getInstructionsDir, isDuplicateInstructionWriteError } from '../../../services/indexContext.js';
+import { ensureLoadedAsync, invalidate, touchIndexVersion, writeEntryAsync, removeEntry, getInstructionsDir, isDuplicateInstructionWriteError, archiveEntry, restoreEntry, purgeEntry, getArchivedEntry, listArchivedEntries } from '../../../services/indexContext.js';
 import { dashboardAdminAuth } from './adminAuth.js';
 import { handleInstructionsSearch } from '../../../services/handlers.search.js';
-import { CONTENT_TYPES, InstructionEntry } from '../../../models/instruction.js';
+import { ARCHIVE_REASONS, CONTENT_TYPES, InstructionEntry, type ArchiveReason, type ArchiveSource } from '../../../models/instruction.js';
+import type { RestoreMode } from '../../../services/storage/types.js';
+import { logAudit } from '../../../services/auditLog.js';
+import { AUDIT_ACTIONS } from '../../../services/auditActions.js';
 import { SCHEMA_VERSION } from '../../../versioning/schemaVersion.js';
 import { getRuntimeConfig } from '../../../config/runtimeConfig.js';
 import type { IndexLocals } from '../middleware/ensureLoadedMiddleware.js';
@@ -400,6 +403,195 @@ export function createInstructionsRoutes(): Router {
       }
       logError('[API] Failed to delete instruction:', error);
       res.status(500).json({ success: false, error: 'Failed to delete instruction' });
+    }
+  });
+
+  /**
+   * GET /api/instructions_archived - list archived entries
+   */
+  router.get('/instructions_archived', (req: Request, res: Response) => { // lgtm[js/missing-rate-limiting] — parent router applies rate-limit
+    try {
+      const categoryFilter = typeof req.query.category === 'string' ? req.query.category : undefined;
+      const contentTypeFilter = typeof req.query.contentType === 'string' ? req.query.contentType : undefined;
+      const limitRaw = req.query.limit !== undefined ? parseInt(String(req.query.limit), 10) : undefined;
+      const offsetRaw = req.query.offset !== undefined ? parseInt(String(req.query.offset), 10) : undefined;
+      const limit = typeof limitRaw === 'number' && !Number.isNaN(limitRaw) && limitRaw > 0
+        ? Math.min(1000, limitRaw) : undefined;
+      const offset = typeof offsetRaw === 'number' && !Number.isNaN(offsetRaw) && offsetRaw >= 0
+        ? offsetRaw : undefined;
+      let entries = listArchivedEntries();
+      if (categoryFilter) {
+        entries = entries.filter(e => Array.isArray(e.categories) && e.categories.includes(categoryFilter));
+      }
+      if (contentTypeFilter) {
+        entries = entries.filter(e => e.contentType === contentTypeFilter);
+      }
+      const total = entries.length;
+      if (offset !== undefined) entries = entries.slice(offset);
+      if (limit !== undefined) entries = entries.slice(0, limit);
+      const instructions = entries.map((entry) => {
+        const bodyStr = typeof entry.body === 'string' ? entry.body : '';
+        const bodySize = Buffer.byteLength(bodyStr, 'utf8');
+        const sizeCategory = bodySize < 1024 ? 'small' : (bodySize < 5 * 1024 ? 'medium' : 'large');
+        const cats = Array.isArray(entry.categories) ? entry.categories : [];
+        const primaryCategory = cats.length > 0 ? cats[0] : 'general';
+        return {
+          name: entry.id,
+          title: entry.title,
+          size: bodySize,
+          mtime: entry.updatedAt ? new Date(entry.updatedAt).getTime() : Date.now(),
+          category: primaryCategory,
+          categories: cats.length ? cats : [primaryCategory],
+          sizeCategory,
+          contentType: entry.contentType,
+          archiveReason: entry.archiveReason,
+          archiveSource: entry.archiveSource,
+          archivedAt: entry.archivedAt,
+          archivedBy: entry.archivedBy,
+          restoreEligible: entry.restoreEligible ?? true,
+        };
+      });
+      res.json({ success: true, instructions, count: instructions.length, total, timestamp: Date.now() });
+    } catch (error) {
+      logError('[API] Failed to list archived instructions:', error);
+      res.status(500).json({ success: false, error: 'Failed to list archived instructions' });
+    }
+  });
+
+  /**
+   * GET /api/instructions_archived/:name - get archived entry by id
+   */
+  router.get('/instructions_archived/:name', (req: Request, res: Response) => { // lgtm[js/missing-rate-limiting] — parent router applies rate-limit
+    try {
+      const id = safeName(req.params.name);
+      const entry = getArchivedEntry(id);
+      if (!entry) return res.status(404).json({ success: false, error: 'Not found' });
+      res.json({ success: true, entry, archived: true, timestamp: Date.now() });
+    } catch (error) {
+      if (isInstructionValidationError(error)) return validationErrorResponse(res, error);
+      logError('[API] Failed to load archived instruction:', error);
+      res.status(500).json({ success: false, error: 'Failed to load archived instruction' });
+    }
+  });
+
+  const ARCHIVE_SOURCE_DASHBOARD: ArchiveSource = 'archive';
+
+  /**
+   * POST /api/instructions/:name/archive - archive an active entry.
+   * Body: { reason: ArchiveReason, archivedBy?: string }
+   */
+  router.post('/instructions/:name/archive', dashboardAdminAuth, async (req: Request, res: Response) => { // lgtm[js/missing-rate-limiting] — parent router applies rate-limit
+    try {
+      const id = safeName(req.params.name);
+      const body = (req.body || {}) as Record<string, unknown>;
+      const reasonRaw = body.reason;
+      if (typeof reasonRaw !== 'string' || !(ARCHIVE_REASONS as readonly string[]).includes(reasonRaw)) {
+        return res.status(400).json({ success: false, error: 'invalid_reason', allowed: ARCHIVE_REASONS });
+      }
+      const reason = reasonRaw as ArchiveReason;
+      const archivedByRaw = body.archivedBy;
+      const archivedBy = typeof archivedByRaw === 'string' && archivedByRaw.trim() ? archivedByRaw.trim() : undefined;
+      const st = (res.locals as IndexLocals).indexState;
+      if (!st.byId.has(id)) return res.status(404).json({ success: false, error: 'Not found' });
+      const archived = archiveEntry(id, {
+        archiveReason: reason,
+        archiveSource: ARCHIVE_SOURCE_DASHBOARD,
+        archivedBy,
+        archivedAt: new Date().toISOString(),
+        restoreEligible: true,
+      });
+      logAudit(AUDIT_ACTIONS.ARCHIVE, [id], {
+        reason,
+        source: ARCHIVE_SOURCE_DASHBOARD,
+        archivedBy,
+        via: 'dashboard',
+      });
+      await ensureLoadedAsync();
+      res.json({
+        success: true,
+        message: 'Instruction archived',
+        entry: {
+          id: archived.id,
+          title: archived.title,
+          archiveReason: archived.archiveReason,
+          archiveSource: archived.archiveSource,
+          archivedAt: archived.archivedAt,
+          archivedBy: archived.archivedBy,
+          restoreEligible: archived.restoreEligible ?? true,
+        },
+        timestamp: Date.now(),
+      });
+    } catch (error) {
+      if (isInstructionValidationError(error)) return validationErrorResponse(res, error);
+      logError('[API] Failed to archive instruction:', error);
+      res.status(500).json({ success: false, error: 'Failed to archive instruction' });
+    }
+  });
+
+  /**
+   * POST /api/instructions_archived/:name/restore - restore an archived entry.
+   * Body: { restoreMode?: 'reject' | 'overwrite' }
+   */
+  router.post('/instructions_archived/:name/restore', dashboardAdminAuth, async (req: Request, res: Response) => { // lgtm[js/missing-rate-limiting] — parent router applies rate-limit
+    try {
+      const id = safeName(req.params.name);
+      const body = (req.body || {}) as Record<string, unknown>;
+      const modeRaw = body.restoreMode;
+      let restoreMode: RestoreMode = 'reject';
+      if (modeRaw !== undefined) {
+        if (modeRaw !== 'reject' && modeRaw !== 'overwrite') {
+          return res.status(400).json({ success: false, error: 'invalid_restoreMode', allowed: ['reject', 'overwrite'] });
+        }
+        restoreMode = modeRaw;
+      }
+      if (!getArchivedEntry(id)) {
+        return res.status(404).json({ success: false, error: 'Not found' });
+      }
+      let restored: InstructionEntry;
+      try {
+        restored = restoreEntry(id, { mode: restoreMode });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'restore-failed';
+        return res.status(409).json({ success: false, error: msg });
+      }
+      logAudit(AUDIT_ACTIONS.RESTORE, [id], { restoreMode, via: 'dashboard' });
+      await ensureLoadedAsync();
+      res.json({
+        success: true,
+        message: 'Instruction restored',
+        entry: { id: restored.id, title: restored.title },
+        restoreMode,
+        timestamp: Date.now(),
+      });
+    } catch (error) {
+      if (isInstructionValidationError(error)) return validationErrorResponse(res, error);
+      logError('[API] Failed to restore instruction:', error);
+      res.status(500).json({ success: false, error: 'Failed to restore instruction' });
+    }
+  });
+
+  /**
+   * DELETE /api/instructions_archived/:name - hard-purge an archived entry.
+   * Requires ?confirm=true.
+   */
+  router.delete('/instructions_archived/:name', dashboardAdminAuth, async (req: Request, res: Response) => { // lgtm[js/missing-rate-limiting] — parent router applies rate-limit
+    try {
+      const id = safeName(req.params.name);
+      const confirm = String(req.query.confirm ?? '').toLowerCase();
+      if (confirm !== 'true') {
+        return res.status(400).json({ success: false, error: 'confirm_required', message: 'Pass ?confirm=true to hard-purge an archived entry.' });
+      }
+      if (!getArchivedEntry(id)) {
+        return res.status(404).json({ success: false, error: 'Not found' });
+      }
+      purgeEntry(id);
+      logAudit(AUDIT_ACTIONS.PURGE, [id], { via: 'dashboard' });
+      await ensureLoadedAsync();
+      res.json({ success: true, message: 'Archived instruction purged', timestamp: Date.now() });
+    } catch (error) {
+      if (isInstructionValidationError(error)) return validationErrorResponse(res, error);
+      logError('[API] Failed to purge archived instruction:', error);
+      res.status(500).json({ success: false, error: 'Failed to purge archived instruction' });
     }
   });
 

@@ -8,6 +8,28 @@
  *   - serverConfig.ts  : MCP server, bootstrap, transport, logging, metrics, tracing
  *   - dashboardConfig.ts : HTTP server, TLS, WebSocket, persistence
  *   - featureConfig.ts : feature flags, feedback, messaging, semantic, graph, storage
+ *
+ * ----------------------------------------------------------------------------
+ * Reload-tier policy (issue #359 / plan §2.1):
+ *
+ *   `getRuntimeConfig()` returns a cached singleton built once via
+ *   `loadRuntimeConfig()`. The cache is reset only by `reloadRuntimeConfig()`.
+ *   For the dashboard's "dynamic" flag tier to be truthful, the consumer must
+ *   read `getRuntimeConfig().…` per call (not cache a sub-reference).
+ *
+ *   Three reload tiers are recognized in `FlagMeta.reloadBehavior`:
+ *     - dynamic           re-read per call site after `reloadRuntimeConfig()`
+ *     - next-request      picked up on the next operation
+ *     - restart-required  captured at boot/init; needs process restart
+ *
+ *   WebSocket reconnect and TLS certificate reload BOTH map to
+ *   `restart-required`. Do not invent a fourth tier for them — the in-place
+ *   reconnect/reload work would require teardown of bound sockets / re-init
+ *   of node:https' SecureContext, which is out of scope for the registry's
+ *   purpose (truthful surfacing of effect). If/when in-place reload is
+ *   implemented for those, promote the affected flags to `dynamic` with
+ *   `dynamicReadSite:true` evidence rather than adding a new tier value.
+ * ----------------------------------------------------------------------------
  */
 import fs from 'fs';
 import path from 'path';

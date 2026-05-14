@@ -5,7 +5,7 @@
  * WAL mode enabled for concurrent read performance.
  */
 
-export const SCHEMA_VERSION = '1';
+export const SCHEMA_VERSION = '2';
 
 export const INSTRUCTIONS_DDL = `
 CREATE TABLE IF NOT EXISTS instructions (
@@ -92,6 +92,59 @@ CREATE TABLE IF NOT EXISTS metadata (
   key TEXT PRIMARY KEY,
   value TEXT
 );
+
+/* ── Archive lifecycle (schema v7 / spec 006-archive-lifecycle) ─────────────
+ * Segregated table mirroring instructions columns plus archive metadata.
+ * No FTS5 triggers are attached: archived entries are excluded from active
+ * full-text search by construction.
+ */
+CREATE TABLE IF NOT EXISTS instructions_archive (
+  id TEXT PRIMARY KEY,
+  title TEXT NOT NULL,
+  body TEXT NOT NULL,
+  rationale TEXT,
+  priority INTEGER NOT NULL DEFAULT 50,
+  audience TEXT NOT NULL DEFAULT 'all',
+  requirement TEXT NOT NULL DEFAULT 'recommended',
+  categories TEXT NOT NULL DEFAULT '[]',
+  content_type TEXT NOT NULL DEFAULT 'instruction',
+  primary_category TEXT,
+  source_hash TEXT NOT NULL DEFAULT '',
+  schema_version TEXT NOT NULL DEFAULT '7',
+  deprecated_by TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  version TEXT DEFAULT '1.0.0',
+  status TEXT DEFAULT 'approved',
+  owner TEXT,
+  priority_tier TEXT,
+  classification TEXT DEFAULT 'public',
+  last_reviewed_at TEXT,
+  next_review_due TEXT,
+  review_interval_days INTEGER,
+  change_log TEXT DEFAULT '[]',
+  supersedes TEXT,
+  archived_at TEXT,
+  workspace_id TEXT,
+  user_id TEXT,
+  team_ids TEXT DEFAULT '[]',
+  semantic_summary TEXT,
+  created_by_agent TEXT,
+  source_workspace TEXT,
+  extensions TEXT,
+  risk_score REAL,
+  usage_count INTEGER DEFAULT 0,
+  first_seen_ts TEXT,
+  last_used_at TEXT,
+  archived_by TEXT,
+  archive_reason TEXT,
+  archive_source TEXT,
+  restore_eligible INTEGER DEFAULT 1
+);
+
+CREATE INDEX IF NOT EXISTS idx_instructions_archive_archived_at ON instructions_archive(archived_at);
+CREATE INDEX IF NOT EXISTS idx_instructions_archive_reason ON instructions_archive(archive_reason);
+CREATE INDEX IF NOT EXISTS idx_instructions_archive_source ON instructions_archive(archive_source);
 `;
 
 /** FTS5 virtual table for full-text search. Created separately since it needs content sync. */

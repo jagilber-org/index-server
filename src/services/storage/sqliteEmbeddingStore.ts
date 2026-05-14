@@ -262,4 +262,31 @@ export class SqliteEmbeddingStore implements IEmbeddingStore {
       // Already closed
     }
   }
+
+  evict(id: string): void {
+    try {
+      const tx = this.db.prepare('BEGIN');
+      const commit = this.db.prepare('COMMIT');
+      const rollback = this.db.prepare('ROLLBACK');
+      try {
+        tx.run();
+        this.db.prepare('DELETE FROM embeddings WHERE instruction_id = ?').run(id);
+        this.db.prepare('DELETE FROM embedding_meta WHERE instruction_id = ?').run(id);
+        commit.run();
+      } catch (err) {
+        try { rollback.run(); } catch { /* ignore rollback failure */ }
+        throw err;
+      }
+    } catch (err) {
+      logWarn(`[embedding-store] evict('${id}') failed: ${err instanceof Error ? err.message : 'unknown'}`);
+    }
+  }
+
+  markStale(id: string): void {
+    try {
+      this.db.prepare('DELETE FROM embedding_meta WHERE instruction_id = ?').run(id);
+    } catch (err) {
+      logWarn(`[embedding-store] markStale('${id}') failed: ${err instanceof Error ? err.message : 'unknown'}`);
+    }
+  }
 }

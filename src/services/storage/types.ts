@@ -9,7 +9,7 @@
  * Queries, search, and usage tracking are backend-agnostic.
  */
 
-import { InstructionEntry } from '../../models/instruction.js';
+import { InstructionEntry, ArchiveReason, ArchiveSource } from '../../models/instruction.js';
 
 // ── Query & Filter Types ─────────────────────────────────────────────────────
 
@@ -96,6 +96,60 @@ export interface LoadResult {
     hashHits?: number;
   };
 }
+
+// ── Archive Types ────────────────────────────────────────────────────────────
+
+/**
+ * Metadata supplied to {@link IInstructionStore.archive} when archiving an
+ * instruction. All fields are optional; the store fills sensible defaults
+ * (`archivedAt = now`, `restoreEligible = true`) when fields are omitted.
+ *
+ * @remarks
+ * - `archivedBy` identifies the agent/operator that triggered the archive.
+ * - `archiveReason` is the closed taxonomy describing *why* the entry was
+ *   archived (deprecated, superseded, duplicate-merge, manual, legacy-scope).
+ * - `archiveSource` identifies the lifecycle pathway (groom, remove, archive,
+ *   import-migration).
+ * - `restoreEligible: false` permanently locks the entry out of `restore()`.
+ */
+export interface ArchiveMeta {
+  /** Identifier of the agent / operator that archived this entry. */
+  archivedBy?: string;
+  /** Closed-enum reason for the archive event. */
+  archiveReason?: ArchiveReason;
+  /** Which lifecycle pathway produced the archive event. */
+  archiveSource?: ArchiveSource;
+  /** Whether the entry may be restored. Default `true`. */
+  restoreEligible?: boolean;
+  /** Override timestamp (ISO 8601). Defaults to current time when omitted. */
+  archivedAt?: string;
+}
+
+/**
+ * Options for listing archived entries.
+ * Filters are AND-combined; omitted filters do not constrain the result.
+ */
+export interface ListArchivedOpts {
+  /** Filter by archive reason. */
+  reason?: ArchiveReason;
+  /** Filter by archive source. */
+  source?: ArchiveSource;
+  /** Filter by archiver identity. */
+  archivedBy?: string;
+  /** Filter by restore eligibility flag. */
+  restoreEligible?: boolean;
+  /** Maximum results to return. */
+  limit?: number;
+  /** Pagination offset. */
+  offset?: number;
+}
+
+/**
+ * Restore conflict-resolution mode.
+ * - `reject` (default): throw when an active entry with the same id exists.
+ * - `overwrite`: replace the active entry with the archived payload.
+ */
+export type RestoreMode = 'reject' | 'overwrite';
 
 // ── Storage Interface ────────────────────────────────────────────────────────
 
@@ -198,6 +252,75 @@ export interface IInstructionStore {
    * Get the count of loaded instructions.
    */
   count(): number;
+
+  // ── Archive Lifecycle ────────────────────────────────────────────────
+
+  /**
+   * Move an active entry to the archive store. Atomic: the entry must vanish
+   * from active storage and appear in archive storage in the same operation,
+   * or neither.
+   *
+   * @param id - Active instruction id to archive.
+   * @param meta - Archive metadata (reason, source, archivedBy, etc.).
+   * @returns The archived entry (with archive metadata populated).
+   * @throws If no active entry exists with the given id.
+   * @throws If the archive write fails (active entry is left intact).
+   */
+  archive(id: string, meta?: ArchiveMeta): InstructionEntry;
+
+  /**
+   * Move an archived entry back to active storage. Atomic.
+   *
+   * @param id - Archived instruction id to restore.
+   * @param mode - Collision behaviour when an active entry with the same id
+   *   already exists. Defaults to `'reject'`.
+   * @returns The restored active entry (archive metadata cleared).
+   * @throws If no archived entry exists with the given id.
+   * @throws If `restoreEligible === false` on the archived entry.
+   * @throws If an active entry with the same id already exists and
+   *   `mode !== 'overwrite'`.
+   */
+  restore(id: string, mode?: RestoreMode): InstructionEntry;
+
+  /**
+   * Permanently delete an archived entry. Irreversible.
+   * No-op if the id is not present in the archive store.
+   *
+   * @param id - Archived instruction id to purge.
+   */
+  purge(id: string): void;
+
+  /**
+   * Get a single archived entry by id.
+   *
+   * @param id - Archived instruction id.
+   * @returns The entry, or `null` if not found in the archive store.
+   */
+  getArchived(id: string): InstructionEntry | null;
+
+  /**
+   * List archived entries with optional filters.
+   *
+   * @param opts - Filter / pagination options.
+   * @returns Array of matching archived entries.
+   */
+  listArchived(opts?: ListArchivedOpts): InstructionEntry[];
+
+  /**
+   * Count entries in the archive store.
+   *
+   * @returns Number of archived entries.
+   */
+  countArchived(): number;
+
+  /**
+   * Compute deterministic hash over the archive set.
+   * Must match across backends for the same archive content (same projection
+   * ordering as {@link computeHash}).
+   *
+   * @returns SHA256 hex string.
+   */
+  computeArchiveHash(): string;
 }
 
 // ── Embedding Store Interface ────────────────────────────────────────────────
@@ -246,6 +369,25 @@ export interface IEmbeddingStore {
    * @returns Array of { id, distance } sorted by distance ascending.
    */
   search(queryVector: Float32Array, limit: number): EmbeddingSearchResult[];
+
+  /**
+   * Evict the cached vector and source hash for a single instruction id.
+   * Used when an entry is archived or permanently purged so its embedding
+   * does not surface in semantic search results. No-op if the id is not
+   * present in the cache.
+   *
+   * @param id - Instruction id to evict.
+   */
+  evict(id: string): void;
+
+  /**
+   * Mark a single id stale so the next embedding refresh recomputes it.
+   * Clears only the per-entry `entryHashes[id]` mapping; the cached vector
+   * remains intact. No-op if the id is not present.
+   *
+   * @param id - Instruction id to mark stale.
+   */
+  markStale(id: string): void;
 
   /**
    * Close the store and release resources.

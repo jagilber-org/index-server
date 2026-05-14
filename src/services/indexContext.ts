@@ -9,7 +9,7 @@ import { ClassificationService } from './classificationService';
 import { resolveOwner } from './ownershipService';
 import { getRuntimeConfig } from '../config/runtimeConfig';
 import { createStore } from './storage/factory';
-import type { IInstructionStore } from './storage/types';
+import type { IInstructionStore, ArchiveMeta, ListArchivedOpts, RestoreMode } from './storage/types';
 import { migrateJsonToSqlite } from './storage/migrationEngine';
 import { assertValidInstructionRecord } from './instructionRecordValidation';
 import { validateForDisk } from './loaderSchemaValidator';
@@ -833,9 +833,275 @@ export async function writeEntryAsync(entry: InstructionEntry, opts?: { createOn
   materializeWrittenEntry(record);
 }
 export function removeEntry(id:string){
-  const store = getStoreForDir(getInstructionsDir());
-  if (store) { store.remove(id); } else { const file = path.join(getInstructionsDir(), `${id}.json`); if(fs.existsSync(file)) fs.unlinkSync(file); }
+  const dir = getInstructionsDir();
+  const store = getStoreForDir(dir);
+  if (store) { store.remove(id); }
+  // Always also unlink the JSON file on disk. After auto-migration
+  // (JSON → SQLite) both representations can coexist; deleting only the
+  // sqlite row leaves an orphan JSON file that the IndexLoader path (used
+  // when backend resolves to 'json' on a later ensureLoaded, or when
+  // auto-migration re-triggers under a different latch key) will
+  // resurrect on the next reload. Removing the file unconditionally keeps
+  // the on-disk and in-store views consistent.
+  const file = path.join(dir, `${id}.json`);
+  try { if(fs.existsSync(file)) fs.unlinkSync(file); } catch { /* ignore */ }
   markindexDirty();
+}
+
+// ── Archive lifecycle (spec 006 Phase C) ─────────────────────────────────────
+// Embedding eviction hook — set by the embedding subsystem (or a test) to
+// receive notifications when an instruction is archived or permanently purged.
+// IndexContext does not import the embedding store directly: this keeps the
+// dependency direction one-way (services → IndexContext) and makes the wiring
+// trivially mockable in unit tests.
+//
+// Per plan §6:
+//   - archive(id) → evict(id)   (drop the vector + entryHash; archived ids
+//                                must not surface in semantic search)
+//   - purge(id)   → evict(id)   (same reason — entry is irrecoverable)
+//   - restore(id) → markStale(id) (vector retained but flagged for refresh;
+//                                  body may have drifted relative to cache)
+export interface EmbeddingEvictionHook {
+  evict?(id: string): void;
+  markStale?(id: string): void;
+}
+let embeddingEvictionHook: EmbeddingEvictionHook | null = null;
+/**
+ * Register a callback invoked when an entry is archived / purged / restored.
+ * Best-effort: hook errors are swallowed so archive operations never fail
+ * because of an embedding cache issue.
+ */
+export function setEmbeddingEvictionHook(hook: EmbeddingEvictionHook | null): void {
+  embeddingEvictionHook = hook;
+}
+/** Test-only accessor for the currently registered hook. @internal */
+export function _getEmbeddingEvictionHookForTests(): EmbeddingEvictionHook | null {
+  return embeddingEvictionHook;
+}
+function safeEvictEmbedding(id: string): void {
+  const hook = embeddingEvictionHook;
+  if (!hook?.evict) return;
+  try { hook.evict(id); } catch (err) {
+    try { logWarn(`[archive] embedding evict('${id}') failed: ${err instanceof Error ? err.message : 'unknown'}`); } catch { /* ignore */ }
+  }
+}
+function safeMarkStaleEmbedding(id: string): void {
+  const hook = embeddingEvictionHook;
+  if (!hook?.markStale) return;
+  try { hook.markStale(id); } catch (err) {
+    try { logWarn(`[archive] embedding markStale('${id}') failed: ${err instanceof Error ? err.message : 'unknown'}`); } catch { /* ignore */ }
+  }
+}
+
+// File-mode fallback paths (mirror removeEntry's pattern): when getStoreForDir
+// returns null (factory failure), we operate on the .archive/<id>.json layout
+// directly so callers in JSON-only environments still get a working API.
+function archiveDirPath(): string { return path.join(getInstructionsDir(), '.archive'); }
+function archiveFilePath(id: string): string { return path.join(archiveDirPath(), `${id}.json`); }
+function ensureArchiveDirExists(): void {
+  const dir = archiveDirPath();
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+}
+function readArchiveFileFallback(id: string): InstructionEntry | null {
+  const file = archiveFilePath(id);
+  if (!fs.existsSync(file)) return null;
+  try {
+    const raw = fs.readFileSync(file, 'utf-8').replace(/^\uFEFF/, '');
+    const parsed = JSON.parse(raw) as InstructionEntry;
+    if (!parsed.id || !parsed.title || !parsed.body) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function archiveEntryFallback(id: string, meta?: ArchiveMeta): InstructionEntry {
+  const activeFile = path.join(getInstructionsDir(), `${id}.json`);
+  if (!fs.existsSync(activeFile)) {
+    throw new Error(`archive: no active entry with id "${id}"`);
+  }
+  const raw = fs.readFileSync(activeFile, 'utf-8').replace(/^\uFEFF/, '');
+  const active = JSON.parse(raw) as InstructionEntry;
+  const archived: InstructionEntry = {
+    ...active,
+    archivedAt: meta?.archivedAt ?? new Date().toISOString(),
+    archivedBy: meta?.archivedBy,
+    archiveReason: meta?.archiveReason,
+    archiveSource: meta?.archiveSource,
+    restoreEligible: meta?.restoreEligible ?? true,
+  };
+  ensureArchiveDirExists();
+  const archivePath = archiveFilePath(id);
+  atomicWriteJson(archivePath, archived);
+  try {
+    fs.unlinkSync(activeFile);
+  } catch (err) {
+    try { if (fs.existsSync(archivePath)) fs.unlinkSync(archivePath); } catch { /* swallow */ }
+    throw err instanceof Error ? err : new Error('archive: failed to remove active file');
+  }
+  return archived;
+}
+
+function restoreEntryFallback(id: string, mode: RestoreMode): InstructionEntry {
+  const archived = readArchiveFileFallback(id);
+  if (!archived) {
+    throw new Error(`restore: no archived entry with id "${id}"`);
+  }
+  if (archived.restoreEligible === false) {
+    throw new Error(`restore: entry "${id}" is marked restoreEligible=false (ineligible)`);
+  }
+  const activePath = path.join(getInstructionsDir(), `${id}.json`);
+  if (fs.existsSync(activePath) && mode !== 'overwrite') {
+    throw new Error(`restore: active entry with id "${id}" already exists (collision)`);
+  }
+  const restored: InstructionEntry = { ...archived };
+  delete restored.archivedAt;
+  delete restored.archivedBy;
+  delete restored.archiveReason;
+  delete restored.archiveSource;
+  delete restored.restoreEligible;
+  const archivePath = archiveFilePath(id);
+  atomicWriteJson(activePath, restored);
+  try {
+    if (fs.existsSync(archivePath)) fs.unlinkSync(archivePath);
+  } catch (err) {
+    if (mode !== 'overwrite') {
+      try { if (fs.existsSync(activePath)) fs.unlinkSync(activePath); } catch { /* swallow */ }
+    }
+    throw err instanceof Error ? err : new Error('restore: failed to remove archive file');
+  }
+  return restored;
+}
+
+function purgeEntryFallback(id: string): void {
+  const file = archiveFilePath(id);
+  try { if (fs.existsSync(file)) fs.unlinkSync(file); } catch { /* no-op */ }
+}
+
+/**
+ * Archive an active entry. Atomic at the storage layer (the entry never
+ * appears in both active + archive sets at rest). Invalidates the in-memory
+ * index and emits an embedding eviction so the archived id cannot surface
+ * in semantic search results.
+ *
+ * @throws If no active entry with the given id exists.
+ */
+export function archiveEntry(id: string, meta?: ArchiveMeta): InstructionEntry {
+  const store = getStoreForDir(getInstructionsDir());
+  const archived = store ? store.archive(id, meta) : archiveEntryFallback(id, meta);
+  invalidate();
+  touchIndexVersion();
+  safeEvictEmbedding(id);
+  return archived;
+}
+
+/**
+ * Restore an archived entry back to active storage.
+ *
+ * @param id - Archived id to restore.
+ * @param opts.mode - Collision behaviour when an active entry already exists.
+ *   Defaults to `'reject'`. Use `'overwrite'` to replace the active entry.
+ *
+ * @remarks Does NOT pre-compute the embedding (plan §6): the entry is marked
+ * stale so the next refresh recomputes the vector. This keeps restore cheap.
+ *
+ * @throws If no archived entry exists, the entry is `restoreEligible:false`,
+ *   or an active entry with the same id exists and `mode !== 'overwrite'`.
+ */
+export function restoreEntry(id: string, opts?: { mode?: RestoreMode }): InstructionEntry {
+  const mode: RestoreMode = opts?.mode ?? 'reject';
+  const store = getStoreForDir(getInstructionsDir());
+  const restored = store ? store.restore(id, mode) : restoreEntryFallback(id, mode);
+  invalidate();
+  touchIndexVersion();
+  safeMarkStaleEmbedding(id);
+  return restored;
+}
+
+/**
+ * Permanently delete an archived entry. Irreversible.
+ * No-op if the id is not present in the archive store.
+ */
+export function purgeEntry(id: string): void {
+  const store = getStoreForDir(getInstructionsDir());
+  if (store) { store.purge(id); } else { purgeEntryFallback(id); }
+  invalidate();
+  touchIndexVersion();
+  safeEvictEmbedding(id);
+}
+
+// ── Archive read accessors (no state mutation, no invalidation) ──────────────
+
+/**
+ * Read a single archived entry by id without touching the active cache.
+ * @returns The archived entry, or `null` if not present.
+ */
+export function getArchivedEntry(id: string): InstructionEntry | null {
+  const store = getStoreForDir(getInstructionsDir());
+  if (store) return store.getArchived(id);
+  return readArchiveFileFallback(id);
+}
+
+/**
+ * List archived entries with optional filters. Does not invalidate the cache
+ * or modify `state`.
+ */
+export function listArchivedEntries(opts?: ListArchivedOpts): InstructionEntry[] {
+  const store = getStoreForDir(getInstructionsDir());
+  if (store) return store.listArchived(opts);
+  // Fallback path: walk the .archive directory directly using the same
+  // filter / ordering rules as JsonFileStore.listArchived.
+  const dir = archiveDirPath();
+  if (!fs.existsSync(dir)) return [];
+  const files = fs.readdirSync(dir).filter(f => f.endsWith('.json') && !f.startsWith('.') && !f.startsWith('_'));
+  const out: InstructionEntry[] = [];
+  for (const file of files) {
+    try {
+      const raw = fs.readFileSync(path.join(dir, file), 'utf-8').replace(/^\uFEFF/, '');
+      const entry = JSON.parse(raw) as InstructionEntry;
+      if (!entry.id || !entry.title || !entry.body) continue;
+      out.push(entry);
+    } catch { /* skip unreadable */ }
+  }
+  let result = out;
+  if (opts?.reason) result = result.filter(e => e.archiveReason === opts.reason);
+  if (opts?.source) result = result.filter(e => e.archiveSource === opts.source);
+  if (opts?.archivedBy) result = result.filter(e => e.archivedBy === opts.archivedBy);
+  if (opts?.restoreEligible !== undefined) {
+    result = result.filter(e => (e.restoreEligible ?? true) === opts.restoreEligible);
+  }
+  result.sort((a, b) => {
+    const ta = a.archivedAt ?? '';
+    const tb = b.archivedAt ?? '';
+    if (ta !== tb) return ta.localeCompare(tb);
+    return a.id.localeCompare(b.id);
+  });
+  if (opts?.offset) result = result.slice(opts.offset);
+  if (opts?.limit !== undefined) result = result.slice(0, opts.limit);
+  return result;
+}
+
+/**
+ * Return active + archive governance hashes without invalidating the cache.
+ * Active hash uses the same projection as `computeHash()`; archive hash uses
+ * `computeArchiveHash()`. Identical sets across backends yield identical
+ * hashes (REQ-13).
+ */
+export function computeActiveAndArchiveHashes(): { active: string; archive: string } {
+  const store = getStoreForDir(getInstructionsDir());
+  if (store) {
+    return { active: store.computeHash(), archive: store.computeArchiveHash() };
+  }
+  // File-mode fallback: derive active hash from the loaded state (already
+  // computed by IndexLoader), and archive hash from listArchivedEntries.
+  const active = ensureLoaded().hash;
+  // Lazy-import to avoid a circular type dependency.
+  /* eslint-disable @typescript-eslint/no-require-imports */
+  const { computeArchiveHashFromEntries } = require('./storage/hashUtils') as {
+    computeArchiveHashFromEntries: (entries: InstructionEntry[]) => string;
+  };
+  /* eslint-enable @typescript-eslint/no-require-imports */
+  return { active, archive: computeArchiveHashFromEntries(listArchivedEntries()) };
 }
 export function scheduleUsagePersist(){ scheduleUsageFlush(); }
 export function incrementUsage(id:string, opts?: UsageTrackOptions){

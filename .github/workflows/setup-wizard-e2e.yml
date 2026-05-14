@@ -88,6 +88,7 @@ jobs:
             --root "$DEPLOY_ROOT" \
             --port 8799 \
             --target vscode,copilot-cli \
+            --scope repo \
             --no-preview \
             --write
           echo "DEPLOY_ROOT=$DEPLOY_ROOT" >> "$GITHUB_ENV"

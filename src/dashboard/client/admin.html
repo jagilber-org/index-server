@@ -16,6 +16,7 @@
     <script defer src="js/admin.instructions.js"></script>
     <script defer src="js/admin.logs.js"></script>
     <script defer src="js/admin.maintenance.js"></script>
+    <script defer src="js/admin.config.render.js"></script>
     <script defer src="js/admin.config.js"></script>
     <script defer src="js/admin.performance.js"></script>
     <script defer src="js/admin.instances.js"></script>
@@ -484,6 +485,10 @@
                 <div class="instr-toolbar">
                     <button class="action-btn" onclick="loadInstructions()">🔄 Refresh</button>
                     <button class="action-btn" onclick="showCreateInstruction()">➕ Create</button>
+                    <div class="instr-view-toggle" role="group" aria-label="Active or archived instructions">
+                        <button type="button" id="instruction-view-active" class="action-btn btn-active" onclick="setInstructionView('active')">Active</button>
+                        <button type="button" id="instruction-view-archived" class="action-btn" onclick="setInstructionView('archived')">Archived</button>
+                    </div>
                     <input id="instruction-filter" placeholder="Filter by name (supports regex)..." class="form-input instr-filter" oninput="filterInstructions()" />
                     <label class="regex-toggle" title="Enable regex matching"><input type="checkbox" id="instruction-regex-toggle" onchange="filterInstructions()" /><span class="regex-label">.*</span></label>
                     <select id="instruction-category-filter" class="form-input w-130" onchange="filterInstructions()">
@@ -1162,66 +1167,26 @@
             }
         }
 
-                async function loadConfiguration() {
-                    // Primary implementation in js/admin.config.js (loaded via defer).
-                    // This inline fallback only fires if the external script failed to load.
-                    if (window.__configExternalLoaded) return;
-                    try {
-                        var res = await adminAuth.adminFetch('/api/admin/config');
-                        var data = await res.json();
-                        if (!data.success) throw new Error('Failed to load config');
-                        var cfg = data.config;
-                        var safeMaxConnections = escapeHtml(String(cfg.serverSettings.maxConnections ?? ''));
-                        var safeRequestTimeout = escapeHtml(String(cfg.serverSettings.requestTimeout ?? ''));
-                        var html = '<form onsubmit="return updateConfiguration(event)">'
-                            + '<div class="form-group"><label class="form-label">Max Connections</label>'
-                            + '<input class="form-input" type="number" id="cfg-maxConnections" value="' + safeMaxConnections + '" /></div>'
-                            + '<div class="form-group"><label class="form-label">Request Timeout (ms)</label>'
-                            + '<input class="form-input" type="number" id="cfg-requestTimeout" value="' + safeRequestTimeout + '" /></div>'
-                            + '<div class="form-group"><label class="form-label">Verbose Logging</label>'
-                            + '<select class="form-input" id="cfg-verbose"><option value="1"' + (cfg.serverSettings.enableVerboseLogging ? ' selected' : '') + '>Enabled</option>'
-                            + '<option value="0"' + (!cfg.serverSettings.enableVerboseLogging ? ' selected' : '') + '>Disabled</option></select></div>'
-                            + '<div class="form-group"><label class="form-label">Enable Mutation</label>'
-                            + '<select class="form-input" id="cfg-mutation"><option value="1"' + (cfg.serverSettings.enableMutation ? ' selected' : '') + '>Enabled</option>'
-                            + '<option value="0"' + (!cfg.serverSettings.enableMutation ? ' selected' : '') + '>Disabled</option></select></div>'
-                            + '<div style="margin-top:10px;"><button class="action-btn" type="submit">💾 Save Config</button></div>'
-                            + '</form>'
-                            + '<div style="opacity:0.5; margin-top:12px; font-size:11px;">Inline fallback — external config JS not loaded. Flags panel unavailable.</div>';
-                        document.getElementById('config-form').innerHTML = html;
-                    } catch (e) {
-                        document.getElementById('config-form').innerHTML = '<div class="error">Failed to load configuration</div>';
-                    }
-                }
+        // Configuration tab is fully owned by js/admin.config.js (loaded via defer).
+        // Issue #359 removed the prior inline fallback because it duplicated registry
+        // logic, referenced the legacy `serverSettings` envelope (gone after the
+        // clean break), and could silently mask script-load failures. We now fail
+        // loudly if the external module fails to attach `window.__configExternalLoaded`.
+        function loadConfiguration() {
+            if (window.__configExternalLoaded) return;
+            var host = document.getElementById('config-form');
+            if (host) {
+                host.innerHTML = '<div class="error" role="alert">'
+                    + '<strong>Configuration unavailable.</strong> '
+                    + 'The dashboard configuration module (js/admin.config.js) failed to load. '
+                    + 'Check the browser console and verify the dashboard build is complete.'
+                    + '</div>';
+            }
+            console.error('[admin.html] js/admin.config.js did not load; configuration tab disabled.');
+        }
 
-        async function updateConfiguration(ev) {
-            ev.preventDefault();
-            var flagSelects = document.querySelectorAll('[data-flag]');
-            var featureFlags = {};
-                        flagSelects.forEach(function(sel){
-                            var name = sel.getAttribute('data-flag');
-                            if(!name) return;
-                            featureFlags[name] = sel.value === '1';
-                        });
-            var updates = {
-                serverSettings: {
-                    maxConnections: parseInt(document.getElementById('cfg-maxConnections').value),
-                    requestTimeout: parseInt(document.getElementById('cfg-requestTimeout').value),
-                    enableVerboseLogging: document.getElementById('cfg-verbose').value === '1',
-                    enableMutation: document.getElementById('cfg-mutation').value === '1',
-                    rateLimit: {
-                        windowMs: parseInt((document.getElementById('cfg-windowMs') || {}).value || '60000'),
-                        maxRequests: parseInt((document.getElementById('cfg-maxRequests') || {}).value || '100')
-                    }
-                },
-                featureFlags: featureFlags
-            };
-                        try {
-                                var res = await adminAuth.adminFetch('/api/admin/config', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(updates)});
-                                var data = await res.json();
-                                if (data.success) { showSuccess('Configuration updated'); loadConfiguration(); } else { showError(data.error || 'Update failed'); }
-                        } catch (e) { showError('Update failed'); }
-                        return false;
-                }
+        // Configuration POST is owned by js/admin.config.js. The inline
+        // updateConfiguration() handler was removed in #359 (clean break).
 
         // Monitoring functions moved to js/admin.monitor.js
 

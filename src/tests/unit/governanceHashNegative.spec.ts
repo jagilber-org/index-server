@@ -83,7 +83,12 @@ describe('Governance hash — negative & behavioral tests', () => {
   }, 30000);
 
   it('governance hash is deterministic for same content', async () => {
-    // Compute hash twice in a row with no changes — should be identical
+    // Warm up: the index_governanceHash handler performs a stale-check reload
+    // (loadedAgo > 50ms) and may trigger one-shot invariant-repair side effects
+    // on the first reload (firstSeenTs hydration, owner auto-resolution) that
+    // persist back to disk and shift the projected fields. After a warmup call,
+    // subsequent calls operate on the stabilized post-repair state.
+    await client.callToolJSON('index_governanceHash', {});
     const h1 = await client.callToolJSON('index_governanceHash', {});
     const h2 = await client.callToolJSON('index_governanceHash', {});
     const hash1 = h1?.hash || h1?.governanceHash;

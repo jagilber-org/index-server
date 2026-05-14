@@ -1,3 +1,4 @@
+import fs from 'fs';
 import os from 'os';
 import path from 'path';
 
@@ -43,8 +44,22 @@ export function resolveConfigTargets(options: ResolveTargetOptions = {}): McpTar
   for (const target of targets) {
     if (target === 'vscode') {
       if (scope === 'global') {
-        const dir = isWin ? pathApi.join(appData, 'Code', 'User') : pathApi.join(home, '.config', 'Code', 'User');
-        results.push({ target, format: 'vscode-global', path: pathApi.join(dir, 'mcp.json') });
+        // VS Code stable and VS Code Insiders maintain separate user data
+        // directories. Emit an entry for each installed flavor so the wizard
+        // updates every MCP-capable VS Code on the machine. If neither dir
+        // exists (e.g. CI / fresh VM), fall back to stable so the user still
+        // gets a config they can copy.
+        const flavors: Array<{ name: string }> = [{ name: 'Code' }, { name: 'Code - Insiders' }];
+        const flavorDir = (name: string) => isWin
+          ? pathApi.join(appData, name, 'User')
+          : isMac
+            ? pathApi.join(home, 'Library', 'Application Support', name, 'User')
+            : pathApi.join(home, '.config', name, 'User');
+        const installed = flavors.filter(f => fs.existsSync(pathApi.dirname(flavorDir(f.name))));
+        const toEmit = installed.length > 0 ? installed : [flavors[0]];
+        for (const f of toEmit) {
+          results.push({ target, format: 'vscode-global', path: pathApi.join(flavorDir(f.name), 'mcp.json') });
+        }
       } else {
         results.push({ target, format: 'vscode', path: pathApi.join(root, '.vscode', 'mcp.json') });
       }

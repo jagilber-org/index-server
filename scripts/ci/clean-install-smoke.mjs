@@ -284,6 +284,8 @@ try {
     deployRoot,
     '--target',
     'vscode',
+    '--scope',
+    'repo',
     '--no-preview',
     '--write',
   ], cleanEnv, setupTimeoutMs);

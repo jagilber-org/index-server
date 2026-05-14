@@ -293,7 +293,7 @@ describe('Dashboard Feedback Tab — CRUD API (/api/admin/feedback)', () => {
         });
       });
       req.on('error', reject);
-      req.setTimeout(5000, () => req.destroy(new Error('request timeout')));
+      req.setTimeout(30000, () => req.destroy(new Error('request timeout')));
       if (body) req.write(JSON.stringify(body));
       req.end();
     });

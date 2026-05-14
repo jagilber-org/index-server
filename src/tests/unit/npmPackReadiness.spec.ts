@@ -132,15 +132,23 @@ describe('npm publish readiness', () => {
   describe('npm pack output', () => {
     let packOutput: string;
 
-    // Run once for all sub-tests
+    // Run once for all sub-tests. `--ignore-scripts` skips the `prepare`
+    // lifecycle hook (which runs scripts/hooks/setup-hooks.cjs and can fail in
+    // CI Windows environments that lack git hooks dir). The test only cares
+    // about the resulting file manifest, not the side-effect hooks.
     try {
-      packOutput = execSync('npm pack --dry-run 2>&1', {
+      packOutput = execSync('npm pack --dry-run --ignore-scripts 2>&1', {
         cwd: REPO_ROOT,
         encoding: 'utf8',
         timeout: 30000,
       });
     } catch (e) {
-      packOutput = (e as { stdout?: string }).stdout ?? '';
+      // On Windows, npm sometimes still exits non-zero and the file listing
+      // is written to stderr. Pull from both streams as a defensive fallback.
+      const err = e as { stdout?: Buffer | string; stderr?: Buffer | string };
+      const out = err.stdout ? err.stdout.toString() : '';
+      const errOut = err.stderr ? err.stderr.toString() : '';
+      packOutput = (out + '\n' + errOut).trim();
     }
 
     it('pack includes dist/server/index-server.js', () => {

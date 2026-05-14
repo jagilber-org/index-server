@@ -33,11 +33,12 @@ describe('canonical content type taxonomy', () => {
     expect([...CONTENT_TYPES]).toEqual(schemaContentTypes());
   });
 
-  it('schemaVersion is bumped to 6 in schema and migration constant', () => {
+  it('schemaVersion enum and migration constant stay in sync', () => {
     const enumValues = (schema as { properties: { schemaVersion: { enum: string[] } } })
       .properties.schemaVersion.enum;
-    expect(enumValues).toEqual(['6']);
-    expect(SCHEMA_VERSION).toBe('6');
+    // SCHEMA_VERSION must always be the latest member of the enum.
+    expect(enumValues).toContain(SCHEMA_VERSION);
+    expect(enumValues[enumValues.length - 1]).toBe(SCHEMA_VERSION);
   });
 
   it('input validation rejects removed contentType values instead of normalizing them', () => {
@@ -62,7 +63,7 @@ describe('canonical content type taxonomy', () => {
       };
       migrateInstructionRecord(rec);
       expect(rec.contentType).toBe(contentType);
-      expect(rec.schemaVersion).toBe('6');
+      expect(rec.schemaVersion).toBe(SCHEMA_VERSION);
     }
   });
 

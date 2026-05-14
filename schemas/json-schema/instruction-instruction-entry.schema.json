@@ -130,6 +130,18 @@
         "archivedAt": {
           "type": "string"
         },
+        "archivedBy": {
+          "type": "string"
+        },
+        "archiveReason": {
+          "$ref": "#/definitions/ArchiveReason"
+        },
+        "archiveSource": {
+          "$ref": "#/definitions/ArchiveSource"
+        },
+        "restoreEligible": {
+          "type": "boolean"
+        },
         "semanticSummary": {
           "type": "string"
         },
@@ -215,6 +227,25 @@
         "public",
         "internal",
         "restricted"
+      ]
+    },
+    "ArchiveReason": {
+      "type": "string",
+      "enum": [
+        "deprecated",
+        "superseded",
+        "duplicate-merge",
+        "manual",
+        "legacy-scope"
+      ]
+    },
+    "ArchiveSource": {
+      "type": "string",
+      "enum": [
+        "groom",
+        "remove",
+        "archive",
+        "import-migration"
       ]
     }
   }

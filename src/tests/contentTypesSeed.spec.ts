@@ -4,6 +4,7 @@ import addFormats from 'ajv-formats';
 import draft7MetaSchema from 'ajv/dist/refs/json-schema-draft-07.json';
 import schema from '../../schemas/instruction.schema.json';
 import { buildContentTypesSeed } from '../services/seedBootstrap.contentTypes';
+import { SCHEMA_VERSION } from '../versioning/schemaVersion';
 
 function makeAjv() {
   const ajv = new Ajv({ allErrors: true, strict: false });
@@ -46,8 +47,11 @@ describe('contentTypesSeed (003-content-types)', () => {
     const first = buildContentTypesSeed();
     const second = buildContentTypesSeed();
     expect(JSON.stringify(first)).toBe(JSON.stringify(second));
-    expect(first.json.schemaVersion).toBe(
-      (schema as { properties: { schemaVersion: { enum: string[] } } }).properties.schemaVersion.enum[0],
-    );
+    // Seed emits the latest schemaVersion (current SCHEMA_VERSION constant);
+    // it must also be a member of the schema enum.
+    const enumValues = (schema as { properties: { schemaVersion: { enum: string[] } } })
+      .properties.schemaVersion.enum;
+    expect(enumValues).toContain(first.json.schemaVersion);
+    expect(first.json.schemaVersion).toBe(SCHEMA_VERSION);
   });
 });

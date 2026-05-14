@@ -134,7 +134,7 @@ describe('Enum validation — migration path (migrateInstructionRecord)', () => 
     const result = migrateInstructionRecord(rec);
     expect(result.changed).toBe(true);
     expect(rec.contentType).toBe('chat-session');
-    expect(rec.schemaVersion).toBe('6');
+    expect(rec.schemaVersion).toBe('7');
     expect(result.notes ?? []).not.toEqual(expect.arrayContaining([expect.stringContaining('chat-session')]));
   });
 
@@ -194,7 +194,7 @@ describe('Enum validation — migration path (migrateInstructionRecord)', () => 
 
   it('does not mark as changed when all enums are already valid', () => {
     // Already at current schema with valid enums — no change expected
-    const rec: Record<string, unknown> = { ...validEntry(), schemaVersion: '6' };
+    const rec: Record<string, unknown> = { ...validEntry(), schemaVersion: '7' };
     const result = migrateInstructionRecord(rec);
     expect(result.changed).toBe(false);
   });

@@ -50,6 +50,17 @@ export function getServerMap(config: Record<string, unknown>, format: McpConfigF
   return servers as Record<string, McpServerEntry>;
 }
 
+/**
+ * Returns true when `p` lies under an npx ephemeral cache (e.g.
+ * `~/.npm/_npx/<hash>/...` on POSIX or `%LocalAppData%\npm-cache\_npx\<hash>\...`
+ * on Windows). Such paths are not safe to bake into an mcp.json: npx may evict
+ * them between wizard run and first MCP-client launch.
+ */
+export function isEphemeralNpxPath(p: string): boolean {
+  const normalized = toForwardSlashes(p);
+  return /\/_npx\//i.test(normalized);
+}
+
 export function resolveServerLaunch(config: { root: string }): { command: string; args: string[]; cwd?: string; source: 'local' | 'packaged' | 'npx' } {
   const packageRoot = path.resolve(__dirname, '..', '..', '..');
   const entryRelative = path.join('dist', 'server', 'index-server.js');
@@ -58,7 +69,10 @@ export function resolveServerLaunch(config: { root: string }): { command: string
   if (fs.existsSync(localEntry)) {
     return { command: 'node', args: [toForwardSlashes(entryRelative)], cwd: config.root, source: 'local' };
   }
-  if (fs.existsSync(packagedEntry)) {
+  // Reject npx ephemeral cache locations — those paths are not durable. Fall
+  // through to the `npx` launch form, which re-resolves the package on each
+  // start. See setup-wizard RCA: https://github.com/jagilber-dev/index-server
+  if (fs.existsSync(packagedEntry) && !isEphemeralNpxPath(packagedEntry)) {
     return { command: 'node', args: [toForwardSlashes(packagedEntry)], source: 'packaged' };
   }
   return { command: 'npx', args: ['-y', '@jagilber-org/index-server'], source: 'npx' };
@@ -77,8 +91,14 @@ export function buildServerEntry(format: McpConfigFormat, config: ServerBuildCon
   if (format === 'vscode' && launch.cwd) entry.cwd = toForwardSlashes(launch.cwd);
   if (format === 'vscode-global' && launch.command === 'node') {
     const firstArg = launch.args[0] ?? '';
-    entry.args = [path.isAbsolute(firstArg) ? toForwardSlashes(firstArg) : toForwardSlashes(path.resolve(launch.cwd ?? config.root, firstArg))];
-    entry.cwd = toForwardSlashes(path.resolve(__dirname, '..', '..', '..'));
+    // For global VS Code configs the entry path must be absolute (no workspace
+    // cwd to anchor it). Anchor to config.root (the user-chosen install root),
+    // never to __dirname — under npx __dirname resolves into the ephemeral
+    // `_npx/<hash>/` cache. See setup-wizard RCA.
+    entry.args = [path.isAbsolute(firstArg)
+      ? toForwardSlashes(firstArg)
+      : toForwardSlashes(path.resolve(launch.cwd ?? config.root, firstArg))];
+    entry.cwd = toForwardSlashes(config.root);
   }
   return entry;
 }

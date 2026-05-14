@@ -14,7 +14,7 @@
 
 import { DatabaseSync } from 'node:sqlite';
 import { InstructionEntry } from '../../models/instruction.js';
-import { computeGovernanceHashFromEntries } from './hashUtils.js';
+import { computeGovernanceHashFromEntries, computeArchiveHashFromEntries } from './hashUtils.js';
 import { INSTRUCTIONS_DDL, FTS5_DDL, PRAGMAS, SCHEMA_VERSION } from './sqliteSchema.js';
 import type {
   IInstructionStore,
@@ -24,6 +24,9 @@ import type {
   SearchOptions,
   SearchResult,
   LoadResult,
+  ArchiveMeta,
+  ListArchivedOpts,
+  RestoreMode,
 } from './types.js';
 
 // ── Column Mapping ───────────────────────────────────────────────────────────
@@ -71,6 +74,20 @@ function rowToEntry(row: Record<string, unknown>): InstructionEntry {
   };
 }
 
+/** Map an `instructions_archive` row to an InstructionEntry (with archive fields). */
+function archiveRowToEntry(row: Record<string, unknown>): InstructionEntry {
+  const base = rowToEntry(row);
+  return {
+    ...base,
+    archivedBy: (row.archived_by as string | null | undefined) ?? undefined,
+    archiveReason: (row.archive_reason as InstructionEntry['archiveReason']) ?? undefined,
+    archiveSource: (row.archive_source as InstructionEntry['archiveSource']) ?? undefined,
+    restoreEligible: row.restore_eligible == null
+      ? undefined
+      : Boolean(row.restore_eligible),
+  };
+}
+
 /** Safely parse a JSON string, returning fallback on failure. */
 function safeJsonParse<T>(raw: string | null | undefined, fallback: T): T {
   if (raw == null) return fallback;
@@ -111,10 +128,14 @@ export class SqliteStore implements IInstructionStore {
     this.ensureColumn('instructions', 'extensions', 'TEXT');
     // FTS5 for full-text search (with content sync triggers)
     try { this.db.exec(FTS5_DDL); } catch { /* FTS5 may already exist */ }
-    // Stamp schema version if not present
-    const meta = this.db.prepare('SELECT value FROM metadata WHERE key = ?').get('schema_version');
+    // Stamp / migrate schema version. CREATE TABLE IF NOT EXISTS makes the
+    // archive table appear on previously-v1 DBs without touching active rows.
+    const meta = this.db.prepare('SELECT value FROM metadata WHERE key = ?').get('schema_version') as
+      | { value: string } | undefined;
     if (!meta) {
       this.db.prepare('INSERT INTO metadata (key, value) VALUES (?, ?)').run('schema_version', SCHEMA_VERSION);
+    } else if (meta.value !== SCHEMA_VERSION) {
+      this.db.prepare('UPDATE metadata SET value = ? WHERE key = ?').run(SCHEMA_VERSION, 'schema_version');
     }
   }
 
@@ -443,6 +464,260 @@ export class SqliteStore implements IInstructionStore {
   count(): number {
     this.ensureLoaded();
     return this.cache.size;
+  }
+
+  // ── Archive Lifecycle ──────────────────────────────────────────────
+
+  /**
+   * Insert a row into `instructions_archive`. Uses the same column order as
+   * the active table plus the four archive metadata columns. Designed to be
+   * called inside a transaction.
+   */
+  private insertArchiveRow(entry: InstructionEntry): void {
+    const sql = `INSERT INTO instructions_archive (
+      id, title, body, rationale, priority, audience, requirement,
+      categories, content_type, primary_category, source_hash,
+      schema_version, deprecated_by, created_at, updated_at,
+      version, status, owner, priority_tier, classification,
+      last_reviewed_at, next_review_due, review_interval_days,
+      change_log, supersedes, archived_at, workspace_id, user_id,
+      team_ids, semantic_summary, created_by_agent, source_workspace,
+      extensions, risk_score, usage_count, first_seen_ts, last_used_at,
+      archived_by, archive_reason, archive_source, restore_eligible
+    ) VALUES (
+      ?, ?, ?, ?, ?, ?, ?,
+      ?, ?, ?, ?,
+      ?, ?, ?, ?,
+      ?, ?, ?, ?, ?,
+      ?, ?, ?,
+      ?, ?, ?, ?, ?,
+      ?, ?, ?, ?,
+      ?, ?, ?, ?, ?,
+      ?, ?, ?, ?
+    )`;
+    this.db.prepare(sql).run(
+      entry.id,
+      entry.title,
+      entry.body,
+      val(entry.rationale),
+      val(entry.priority) ?? 0,
+      val(entry.audience) ?? 'all',
+      val(entry.requirement) ?? 'recommended',
+      JSON.stringify(entry.categories ?? []),
+      val(entry.contentType) ?? 'instruction',
+      val(entry.primaryCategory),
+      entry.sourceHash ?? '',
+      entry.schemaVersion ?? '7',
+      val(entry.deprecatedBy),
+      val(entry.createdAt) ?? new Date().toISOString(),
+      val(entry.updatedAt) ?? new Date().toISOString(),
+      val(entry.version),
+      val(entry.status),
+      val(entry.owner),
+      val(entry.priorityTier),
+      val(entry.classification),
+      val(entry.lastReviewedAt),
+      val(entry.nextReviewDue),
+      val(entry.reviewIntervalDays),
+      JSON.stringify(entry.changeLog ?? []),
+      val(entry.supersedes),
+      val(entry.archivedAt),
+      val(entry.workspaceId),
+      val(entry.userId),
+      JSON.stringify(entry.teamIds ?? []),
+      val(entry.semanticSummary),
+      val(entry.createdByAgent),
+      val(entry.sourceWorkspace),
+      entry.extensions === undefined ? null : JSON.stringify(entry.extensions),
+      val(entry.riskScore),
+      val(entry.usageCount) ?? 0,
+      val(entry.firstSeenTs),
+      val(entry.lastUsedAt),
+      val(entry.archivedBy),
+      val(entry.archiveReason),
+      val(entry.archiveSource),
+      (entry.restoreEligible ?? true) ? 1 : 0,
+    );
+  }
+
+  archive(id: string, meta?: ArchiveMeta): InstructionEntry {
+    const activeRow = this.db.prepare('SELECT * FROM instructions WHERE id = ?').get(id) as
+      | Record<string, unknown> | undefined;
+    if (!activeRow) {
+      throw new Error(`archive: no active entry with id "${id}"`);
+    }
+    const active = rowToEntry(activeRow);
+    const archived: InstructionEntry = {
+      ...active,
+      archivedAt: meta?.archivedAt ?? new Date().toISOString(),
+      archivedBy: meta?.archivedBy,
+      archiveReason: meta?.archiveReason,
+      archiveSource: meta?.archiveSource,
+      restoreEligible: meta?.restoreEligible ?? true,
+    };
+
+    this.db.exec('BEGIN IMMEDIATE');
+    try {
+      this.insertArchiveRow(archived);
+      this.db.prepare('DELETE FROM instructions WHERE id = ?').run(id);
+      this.db.exec('COMMIT');
+    } catch (err) {
+      try { this.db.exec('ROLLBACK'); } catch { /* swallow */ }
+      throw err;
+    }
+
+    this.cache.delete(id);
+    return archived;
+  }
+
+  restore(id: string, mode: RestoreMode = 'reject'): InstructionEntry {
+    const archivedRow = this.db.prepare('SELECT * FROM instructions_archive WHERE id = ?').get(id) as
+      | Record<string, unknown> | undefined;
+    if (!archivedRow) {
+      throw new Error(`restore: no archived entry with id "${id}"`);
+    }
+    const archived = archiveRowToEntry(archivedRow);
+    if (archived.restoreEligible === false) {
+      throw new Error(`restore: entry "${id}" is marked restoreEligible=false (ineligible)`);
+    }
+    const collision = this.db.prepare('SELECT 1 FROM instructions WHERE id = ?').get(id);
+    if (collision && mode !== 'overwrite') {
+      throw new Error(`restore: active entry with id "${id}" already exists (collision)`);
+    }
+
+    const restored: InstructionEntry = { ...archived };
+    delete restored.archivedAt;
+    delete restored.archivedBy;
+    delete restored.archiveReason;
+    delete restored.archiveSource;
+    delete restored.restoreEligible;
+
+    this.db.exec('BEGIN IMMEDIATE');
+    try {
+      // write(entry) uses INSERT OR REPLACE — fine for both branches.
+      this.writeActiveRowFromEntry(restored);
+      this.db.prepare('DELETE FROM instructions_archive WHERE id = ?').run(id);
+      this.db.exec('COMMIT');
+    } catch (err) {
+      try { this.db.exec('ROLLBACK'); } catch { /* swallow */ }
+      throw err;
+    }
+
+    this.cache.set(id, restored);
+    return restored;
+  }
+
+  purge(id: string): void {
+    this.db.prepare('DELETE FROM instructions_archive WHERE id = ?').run(id);
+  }
+
+  getArchived(id: string): InstructionEntry | null {
+    const row = this.db.prepare('SELECT * FROM instructions_archive WHERE id = ?').get(id) as
+      | Record<string, unknown> | undefined;
+    if (!row) return null;
+    return archiveRowToEntry(row);
+  }
+
+  listArchived(opts?: ListArchivedOpts): InstructionEntry[] {
+    const where: string[] = [];
+    const params: unknown[] = [];
+    if (opts?.reason) { where.push('archive_reason = ?'); params.push(opts.reason); }
+    if (opts?.source) { where.push('archive_source = ?'); params.push(opts.source); }
+    if (opts?.archivedBy) { where.push('archived_by = ?'); params.push(opts.archivedBy); }
+    if (opts?.restoreEligible !== undefined) {
+      where.push('restore_eligible = ?');
+      params.push(opts.restoreEligible ? 1 : 0);
+    }
+    let sql = 'SELECT * FROM instructions_archive';
+    if (where.length) sql += ' WHERE ' + where.join(' AND ');
+    sql += ' ORDER BY COALESCE(archived_at, \'\') ASC, id ASC';
+    if (opts?.limit !== undefined) {
+      sql += ' LIMIT ?';
+      params.push(opts.limit);
+      if (opts.offset !== undefined) {
+        sql += ' OFFSET ?';
+        params.push(opts.offset);
+      }
+    } else if (opts?.offset !== undefined) {
+      // SQLite requires LIMIT before OFFSET; use a large sentinel.
+      sql += ' LIMIT -1 OFFSET ?';
+      params.push(opts.offset);
+    }
+    const rows = this.db.prepare(sql).all(...params) as Record<string, unknown>[];
+    return rows.map(archiveRowToEntry);
+  }
+
+  countArchived(): number {
+    const row = this.db.prepare('SELECT COUNT(*) AS n FROM instructions_archive').get() as
+      | { n: number } | undefined;
+    return row?.n ?? 0;
+  }
+
+  computeArchiveHash(): string {
+    return computeArchiveHashFromEntries(this.listArchived());
+  }
+
+  /** @internal Active-row writer used by restore() to avoid touching cache twice. */
+  private writeActiveRowFromEntry(entry: InstructionEntry): void {
+    const sql = `INSERT OR REPLACE INTO instructions (
+      id, title, body, rationale, priority, audience, requirement,
+      categories, content_type, primary_category, source_hash,
+      schema_version, deprecated_by, created_at, updated_at,
+      version, status, owner, priority_tier, classification,
+      last_reviewed_at, next_review_due, review_interval_days,
+      change_log, supersedes, archived_at, workspace_id, user_id,
+      team_ids, semantic_summary, created_by_agent, source_workspace,
+      extensions,
+      risk_score, usage_count, first_seen_ts, last_used_at
+    ) VALUES (
+      ?, ?, ?, ?, ?, ?, ?,
+      ?, ?, ?, ?,
+      ?, ?, ?, ?,
+      ?, ?, ?, ?, ?,
+      ?, ?, ?,
+      ?, ?, ?, ?, ?,
+      ?, ?, ?, ?, ?,
+      ?, ?, ?, ?
+    )`;
+    this.db.prepare(sql).run(
+      entry.id,
+      entry.title,
+      entry.body,
+      val(entry.rationale),
+      val(entry.priority) ?? 0,
+      val(entry.audience) ?? 'all',
+      val(entry.requirement) ?? 'recommended',
+      JSON.stringify(entry.categories ?? []),
+      val(entry.contentType) ?? 'instruction',
+      val(entry.primaryCategory),
+      entry.sourceHash ?? '',
+      entry.schemaVersion ?? '7',
+      val(entry.deprecatedBy),
+      val(entry.createdAt) ?? new Date().toISOString(),
+      val(entry.updatedAt) ?? new Date().toISOString(),
+      val(entry.version),
+      val(entry.status),
+      val(entry.owner),
+      val(entry.priorityTier),
+      val(entry.classification),
+      val(entry.lastReviewedAt),
+      val(entry.nextReviewDue),
+      val(entry.reviewIntervalDays),
+      JSON.stringify(entry.changeLog ?? []),
+      val(entry.supersedes),
+      val(entry.archivedAt),
+      val(entry.workspaceId),
+      val(entry.userId),
+      JSON.stringify(entry.teamIds ?? []),
+      val(entry.semanticSummary),
+      val(entry.createdByAgent),
+      val(entry.sourceWorkspace),
+      entry.extensions === undefined ? null : JSON.stringify(entry.extensions),
+      val(entry.riskScore),
+      val(entry.usageCount) ?? 0,
+      val(entry.firstSeenTs),
+      val(entry.lastUsedAt),
+    );
   }
 
   // ── Internal ───────────────────────────────────────────────────────
