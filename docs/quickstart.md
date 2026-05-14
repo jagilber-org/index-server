@@ -36,6 +36,23 @@ npm run build
 npm run setup               # interactive configuration wizard
 ```
 
+### Re-run setup later
+
+The wizard is idempotent — you can re-run it any time to change profile, port, TLS, or regenerate MCP client configs. It updates the existing data root in place rather than reinstalling.
+
+```bash
+npx -y @jagilber-org/index-server@latest --setup      # works without a global install
+index-server --setup                                  # if installed globally
+```
+
+`--configure` is an alias for `--setup`. For scripted reconfiguration:
+
+```bash
+npx @jagilber-org/index-server --setup --non-interactive --profile enhanced
+```
+
+> The path printed as `Root:` at the end of setup (e.g. `C:/Users/<you>/AppData/Local/index-server`) is the server's **data root**, not the binary location. The `index-server` command itself lives in npm's global bin folder — if it's not found after `npm i -g`, add the output of `npm prefix -g` to your `PATH`.
+
 ## 2. Configure MCP Client
 
 If you used `--setup`, it can generate this for you. Otherwise add this to your VS Code `.vscode/mcp.json`:

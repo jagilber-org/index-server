@@ -868,7 +868,9 @@ export async function handleInstructionsSearch(params: SearchParams): Promise<Se
           retryResult.autoTokenized = true;
           if (retryResult.totalMatches === 0) {
             retryResult.hints = buildSearchHints(retryParams);
-            if (getRuntimeConfig().index.omitZeroResultQuery) delete (retryResult as Partial<SearchResponse>).query;
+            // NOTE: query field is intentionally preserved here even when
+            // omitZeroResultQuery is enabled — when autoTokenized=true the
+            // client requires the echoed tokens to understand the retry.
           } else {
             autoTrackSearchResults(retryResult.results);
           }

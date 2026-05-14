@@ -452,6 +452,119 @@ sqlite-vec backed embedding storage (`src/services/storage/sqliteEmbeddingStore.
 - Multi-Instance Design: `docs/multi_instance_design.md`
 - Change Log: `CHANGELOG.md`
 
+## Archive Lifecycle (spec 006-archive-lifecycle)
+
+Instruction records have a first-class **archive lifecycle** that decouples
+*"retire from the active surface"* from *"permanent deletion"*. Retirement
+paths (`index_groom` deprecated/duplicate cleanup, `index_remove`) move
+entries to an archive store that preserves payload, provenance, and audit
+context with a reversible `restore` path. Permanent deletion is reserved for
+the explicit `purge` semantics and is gated by the existing bulk-delete
+safeguards.
+
+See `specs/006-archive-lifecycle/spec.md` for the full requirements set; this
+section summarizes the architecture-relevant points.
+
+### Lifecycle State Machine
+
+```text
+draft → review → approved → deprecated → archived → purged
+                                ↑           ↓
+                                └── restore ┘
+```
+
+- `archived` is reversible via `index_restore` (dispatcher action `restore`)
+  unless the entry has `restoreEligible: false`.
+- `purged` is terminal — `index_purgeArchive` (or `index_groom`
+  `mode.purgeArchive`) destroys the archived record and its provenance.
+- `deprecated` remains discoverable in active queries; `archived` does not.
+
+### Storage Segregation
+
+The archive surface is segregated from the active surface in both backends:
+
+| Backend  | Active                         | Archive                              |
+|----------|--------------------------------|--------------------------------------|
+| JSON     | `<instructionsDir>/<id>.json`  | `<instructionsDir>/.archive/<id>.json` |
+| SQLite   | `instructions` table           | `instructions_archive` table         |
+
+The leading-dot `.archive/` directory is skipped by the JSON loader's
+dot-directory convention so archived entries cannot leak into the active
+index by mistake. The SQLite `instructions_archive` table has **no FTS5
+projection** by contract — semantic and full-text search are active-only.
+
+### `IInstructionStore` Archive Surface
+
+The storage interface gained seven archive methods, implemented by both
+`JsonFileStore` and `SqliteStore` with parity verified by the archive
+contract suite:
+
+```ts
+interface IInstructionStore {
+  // ...existing active-surface methods...
+  archive(id: string, meta?: ArchiveMeta): InstructionEntry;
+  restore(id: string, mode: RestoreMode): InstructionEntry;
+  purge(id: string): void;
+  getArchived(id: string): InstructionEntry | null;
+  listArchived(opts?: ListArchivedOptions): InstructionEntry[];
+  computeArchiveHash(): string;
+  hasArchived(id: string): boolean;
+}
+```
+
+Archive-store mutations are atomic with the matching active-store mutation
+(SQLite: single transaction; JSON: atomic rename of two files inside a
+backup window).
+
+### IndexContext + Embedding Eviction
+
+`IndexContext` exposes `archiveEntry`, `restoreEntry`, `purgeEntry`,
+`getArchivedEntry`, `listArchivedEntries`, and
+`computeActiveAndArchiveHashes` as the canonical accessors for handlers.
+Each mutating accessor fires registered embedding-store hooks so vectors
+stay coherent with the active surface:
+
+- `archive(id)` → embedding `evict(id)` (drop the vector; archived id must
+  not surface in semantic search).
+- `purge(id)`   → embedding `evict(id)` (entry is irrecoverable).
+- `restore(id)` → embedding `markStale(id)` (vector retained but flagged
+  for refresh on next access — keeps restore cheap).
+
+### Active vs Archive Query Surface
+
+All read dispatcher actions (`list`, `query`, `search`, `categories`, `get`,
+`export`, `diff`) operate on the active surface by default. Two flags
+broaden the scope:
+
+- `includeArchived: true` → result set is `active ∪ archive`.
+- `onlyArchived: true`    → result set is archive only.
+
+Archive-only reads with full archive metadata projection are served by the
+dedicated `listArchived` / `getArchived` actions (see `docs/tools.md`).
+
+### Audit Actions
+
+Archive lifecycle operations emit dedicated audit actions (centralized in
+`src/services/auditActions.ts`):
+
+| Action                          | When                                                          |
+|---------------------------------|---------------------------------------------------------------|
+| `archive`                       | Entry archived (any source)                                   |
+| `restore`                       | Archived entry restored to active                             |
+| `purge`                         | Archived entry permanently deleted                            |
+| `purge_blocked`                 | Bootstrap mutation gate or bulk limit denied a purge attempt  |
+| `purge_backup`                  | Pre-purge zip backup of `instructionsDir` succeeded           |
+| `purge_backup_failed`           | Pre-purge backup failed; purge aborted                        |
+| `remove_default_change_warning` | `index_remove` invoked without explicit `mode` (transition)   |
+
+### Schema Version Bump (v6 → v7)
+
+The instruction record schema introduces the new archive metadata fields
+(`archivedBy`, `archiveReason`, `archiveSource`, `restoreEligible`;
+`archivedAt` was already present). The loader is **lax-accept** on v6/v7 —
+older records are accepted as-is — and the writer promotes records to v7 on
+the next write (no big-bang migration; promotion is opportunistic).
+
 ## Dashboard Asset Refresh & Cache Strategy (1.4.x)
 
 The admin dashboard now separates structural HTML (admin.html) from functional modules (admin.*.js) and styling (admin.css). During the extraction we observed a UX issue: after upgrading the markup for the instruction index (chip‑based meta layout + dual ring card accent) some browsers kept rendering the pre‑extraction stacked layout. Root cause analysis:

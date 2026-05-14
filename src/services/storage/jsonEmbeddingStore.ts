@@ -79,4 +79,28 @@ export class JsonEmbeddingStore implements IEmbeddingStore {
   close(): void {
     // No resources to release for file-based store
   }
+
+  evict(id: string): void {
+    const data = this.load();
+    if (!data) return;
+    let changed = false;
+    if (data.embeddings && Object.prototype.hasOwnProperty.call(data.embeddings, id)) {
+      delete data.embeddings[id];
+      changed = true;
+    }
+    if (data.entryHashes && Object.prototype.hasOwnProperty.call(data.entryHashes, id)) {
+      delete data.entryHashes[id];
+      changed = true;
+    }
+    if (changed) this.save(data);
+  }
+
+  markStale(id: string): void {
+    const data = this.load();
+    if (!data || !data.entryHashes) return;
+    if (Object.prototype.hasOwnProperty.call(data.entryHashes, id)) {
+      delete data.entryHashes[id];
+      this.save(data);
+    }
+  }
 }

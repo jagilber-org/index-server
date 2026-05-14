@@ -1,19 +1,19 @@
 {
   "name": "@jagilber-org/index-server",
-  "version": "1.28.21",
-  "generatedAt": "2026-05-12T17:41:50.096Z",
+  "version": "1.28.22",
+  "generatedAt": "2026-05-14T21:49:52.471Z",
   "sourceRoots": [
     "src",
     "scripts"
   ],
   "summary": {
-    "fileCount": 277,
-    "exportCount": 988,
+    "fileCount": 282,
+    "exportCount": 1031,
     "classCount": 41,
-    "interfaceCount": 314,
-    "typeAliasCount": 75,
+    "interfaceCount": 325,
+    "typeAliasCount": 88,
     "enumCount": 1,
-    "functionCount": 991
+    "functionCount": 1039
   },
   "files": [
     {
@@ -1199,7 +1199,7 @@
             }
           ],
           "returnType": null,
-          "line": 382
+          "line": 383
         },
         {
           "name": "printFolderSummary",
@@ -1218,7 +1218,7 @@
             }
           ],
           "returnType": null,
-          "line": 411
+          "line": 412
         },
         {
           "name": "deployRuntime",
@@ -1232,7 +1232,7 @@
             }
           ],
           "returnType": null,
-          "line": 447
+          "line": 448
         },
         {
           "name": "main",
@@ -1240,7 +1240,7 @@
           "isAsync": true,
           "parameters": [],
           "returnType": null,
-          "line": 585
+          "line": 606
         }
       ],
       "constants": []
@@ -7776,7 +7776,7 @@
           "name": "TimingMap",
           "isExported": false,
           "extends": [],
-          "line": 55,
+          "line": 77,
           "properties": [],
           "methods": []
         },
@@ -7784,19 +7784,19 @@
           "name": "BufferRingConfig",
           "isExported": false,
           "extends": [],
-          "line": 57,
+          "line": 79,
           "properties": [
             {
               "name": "append",
               "type": "boolean",
               "optional": false,
-              "line": 57
+              "line": 79
             },
             {
               "name": "preload",
               "type": "boolean",
               "optional": false,
-              "line": 57
+              "line": 79
             }
           ],
           "methods": []
@@ -7805,31 +7805,31 @@
           "name": "CoverageConfig",
           "isExported": false,
           "extends": [],
-          "line": 59,
+          "line": 81,
           "properties": [
             {
               "name": "hardMin",
               "type": "number",
               "optional": true,
-              "line": 60
+              "line": 82
             },
             {
               "name": "target",
               "type": "number",
               "optional": true,
-              "line": 61
+              "line": 83
             },
             {
               "name": "fastMode",
               "type": "boolean",
               "optional": false,
-              "line": 62
+              "line": 84
             },
             {
               "name": "strictMode",
               "type": "boolean",
               "optional": false,
-              "line": 63
+              "line": 85
             }
           ],
           "methods": []
@@ -7838,19 +7838,19 @@
           "name": "IndexReadRetriesConfig",
           "isExported": false,
           "extends": [],
-          "line": 66,
+          "line": 88,
           "properties": [
             {
               "name": "attempts",
               "type": "number",
               "optional": false,
-              "line": 67
+              "line": 89
             },
             {
               "name": "backoffMs",
               "type": "number",
               "optional": false,
-              "line": 68
+              "line": 90
             }
           ],
           "methods": []
@@ -7859,31 +7859,31 @@
           "name": "IndexGovernanceConfig",
           "isExported": false,
           "extends": [],
-          "line": 71,
+          "line": 93,
           "properties": [
             {
               "name": "trailingNewline",
               "type": "boolean",
               "optional": false,
-              "line": 72
+              "line": 94
             },
             {
               "name": "hashHardeningEnabled",
               "type": "boolean",
               "optional": false,
-              "line": 73
+              "line": 95
             },
             {
               "name": "hashCanonVariants",
               "type": "number",
               "optional": false,
-              "line": 74
+              "line": 96
             },
             {
               "name": "hashImportSetSize",
               "type": "number",
               "optional": false,
-              "line": 75
+              "line": 97
             }
           ],
           "methods": []
@@ -7892,129 +7892,129 @@
           "name": "IndexConfig",
           "isExported": false,
           "extends": [],
-          "line": 78,
+          "line": 100,
           "properties": [
             {
               "name": "mode",
               "type": "IndexMode",
               "optional": false,
-              "line": 79
+              "line": 101
             },
             {
               "name": "baseDir",
               "type": "string",
               "optional": false,
-              "line": 80
+              "line": 102
             },
             {
               "name": "reloadAlways",
               "type": "boolean",
               "optional": false,
-              "line": 81
+              "line": 103
             },
             {
               "name": "memoize",
               "type": "boolean",
               "optional": false,
-              "line": 82
+              "line": 104
             },
             {
               "name": "memoizeDisabledExplicitly",
               "type": "boolean",
               "optional": false,
-              "line": 83
+              "line": 105
             },
             {
               "name": "memoizeHash",
               "type": "boolean",
               "optional": false,
-              "line": 84
+              "line": 106
             },
             {
               "name": "normalizationLog",
               "type": "string | boolean",
               "optional": true,
-              "line": 85
+              "line": 107
             },
             {
               "name": "fileTrace",
               "type": "boolean",
               "optional": false,
-              "line": 86
+              "line": 108
             },
             {
               "name": "eventSilent",
               "type": "boolean",
               "optional": false,
-              "line": 87
+              "line": 109
             },
             {
               "name": "readRetries",
               "type": "IndexReadRetriesConfig",
               "optional": false,
-              "line": 88
+              "line": 110
             },
             {
               "name": "usageFlushMs",
               "type": "number",
               "optional": false,
-              "line": 89
+              "line": 111
             },
             {
               "name": "disableUsageClamp",
               "type": "boolean",
               "optional": false,
-              "line": 90
+              "line": 112
             },
             {
               "name": "govHash",
               "type": "IndexGovernanceConfig",
               "optional": false,
-              "line": 91
+              "line": 113
             },
             {
               "name": "maxFiles",
               "type": "number",
               "optional": true,
-              "line": 92
+              "line": 114
             },
             {
               "name": "loadWarningThreshold",
               "type": "number",
               "optional": true,
-              "line": 93
+              "line": 115
             },
             {
               "name": "bodyWarnLength",
               "type": "number",
               "optional": false,
               "description": "Configurable warn/truncate/reject threshold for instruction body length (default 50000).",
-              "line": 95
+              "line": 117
             },
             {
               "name": "bodyMaxLength",
               "type": "number",
               "optional": false,
               "description": "Hard maximum body character length — schema reject ceiling, always 1MB. Not configurable.",
-              "line": 97
+              "line": 119
             },
             {
               "name": "autoSplitOversized",
               "type": "boolean",
               "optional": false,
-              "line": 98
+              "line": 120
             },
             {
               "name": "autoUsageTrack",
               "type": "boolean",
               "optional": false,
-              "line": 99
+              "line": 121
             },
             {
               "name": "omitZeroResultQuery",
               "type": "boolean",
               "optional": false,
-              "line": 100
+              "line": 122
             }
           ],
           "methods": []
@@ -8023,19 +8023,19 @@
           "name": "InstructionsManifestConfig",
           "isExported": false,
           "extends": [],
-          "line": 103,
+          "line": 125,
           "properties": [
             {
               "name": "writeEnabled",
               "type": "boolean",
               "optional": false,
-              "line": 104
+              "line": 126
             },
             {
               "name": "fastload",
               "type": "boolean",
               "optional": false,
-              "line": 105
+              "line": 127
             }
           ],
           "methods": []
@@ -8044,25 +8044,25 @@
           "name": "InstructionsCIContextConfig",
           "isExported": false,
           "extends": [],
-          "line": 108,
+          "line": 130,
           "properties": [
             {
               "name": "inCI",
               "type": "boolean",
               "optional": false,
-              "line": 109
+              "line": 131
             },
             {
               "name": "githubActions",
               "type": "boolean",
               "optional": false,
-              "line": 110
+              "line": 132
             },
             {
               "name": "tfBuild",
               "type": "boolean",
               "optional": false,
-              "line": 111
+              "line": 133
             }
           ],
           "methods": []
@@ -8071,31 +8071,31 @@
           "name": "InstructionsAuditLogConfig",
           "isExported": false,
           "extends": [],
-          "line": 114,
+          "line": 136,
           "properties": [
             {
               "name": "enabled",
               "type": "boolean",
               "optional": false,
-              "line": 115
+              "line": 137
             },
             {
               "name": "file",
               "type": "string",
               "optional": true,
-              "line": 116
+              "line": 138
             },
             {
               "name": "rawValue",
               "type": "string",
               "optional": true,
-              "line": 117
+              "line": 139
             },
             {
               "name": "usesDefault",
               "type": "boolean",
               "optional": false,
-              "line": 118
+              "line": 140
             }
           ],
           "methods": []
@@ -8104,43 +8104,43 @@
           "name": "InstructionsListValidationConfig",
           "isExported": false,
           "extends": [],
-          "line": 121,
+          "line": 143,
           "properties": [
             {
               "name": "forceFullScan",
               "type": "boolean",
               "optional": false,
-              "line": 122
+              "line": 144
             },
             {
               "name": "allowSampling",
               "type": "boolean",
               "optional": false,
-              "line": 123
+              "line": 145
             },
             {
               "name": "effectiveSampleSize",
               "type": "number",
               "optional": true,
-              "line": 124
+              "line": 146
             },
             {
               "name": "sampleSeed",
               "type": "number",
               "optional": true,
-              "line": 125
+              "line": 147
             },
             {
               "name": "concurrency",
               "type": "number",
               "optional": false,
-              "line": 126
+              "line": 148
             },
             {
               "name": "maxDurationMs",
               "type": "number",
               "optional": false,
-              "line": 127
+              "line": 149
             }
           ],
           "methods": []
@@ -8149,79 +8149,79 @@
           "name": "InstructionsConfig",
           "isExported": false,
           "extends": [],
-          "line": 130,
+          "line": 152,
           "properties": [
             {
               "name": "workspaceId",
               "type": "string",
               "optional": true,
-              "line": 131
+              "line": 153
             },
             {
               "name": "agentId",
               "type": "string",
               "optional": true,
-              "line": 132
+              "line": 154
             },
             {
               "name": "canonicalDisable",
               "type": "boolean",
               "optional": false,
-              "line": 133
+              "line": 155
             },
             {
               "name": "strictVisibility",
               "type": "boolean",
               "optional": false,
-              "line": 134
+              "line": 156
             },
             {
               "name": "strictCreate",
               "type": "boolean",
               "optional": false,
-              "line": 135
+              "line": 157
             },
             {
               "name": "strictRemove",
               "type": "boolean",
               "optional": false,
-              "line": 136
+              "line": 158
             },
             {
               "name": "requireCategory",
               "type": "boolean",
               "optional": false,
-              "line": 137
+              "line": 159
             },
             {
               "name": "traceQueryDiag",
               "type": "boolean",
               "optional": false,
-              "line": 138
+              "line": 160
             },
             {
               "name": "manifest",
               "type": "InstructionsManifestConfig",
               "optional": false,
-              "line": 139
+              "line": 161
             },
             {
               "name": "ciContext",
               "type": "InstructionsCIContextConfig",
               "optional": false,
-              "line": 140
+              "line": 162
             },
             {
               "name": "auditLog",
               "type": "InstructionsAuditLogConfig",
               "optional": false,
-              "line": 141
+              "line": 163
             },
             {
               "name": "listValidation",
               "type": "InstructionsListValidationConfig",
               "optional": false,
-              "line": 142
+              "line": 164
             }
           ],
           "methods": []
@@ -8230,49 +8230,49 @@
           "name": "MutationConfig",
           "isExported": false,
           "extends": [],
-          "line": 145,
+          "line": 167,
           "properties": [
             {
               "name": "enabled",
               "type": "boolean",
               "optional": false,
-              "line": 146
+              "line": 168
             },
             {
               "name": "dispatcherTiming",
               "type": "boolean",
               "optional": false,
-              "line": 147
+              "line": 169
             },
             {
               "name": "maxBulkDelete",
               "type": "number",
               "optional": false,
-              "line": 148
+              "line": 170
             },
             {
               "name": "backupBeforeBulkDelete",
               "type": "boolean",
               "optional": false,
-              "line": 149
+              "line": 171
             },
             {
               "name": "autoBackupEnabled",
               "type": "boolean",
               "optional": false,
-              "line": 150
+              "line": 172
             },
             {
               "name": "autoBackupIntervalMs",
               "type": "number",
               "optional": false,
-              "line": 151
+              "line": 173
             },
             {
               "name": "autoBackupMaxCount",
               "type": "number",
               "optional": false,
-              "line": 152
+              "line": 174
             }
           ],
           "methods": []
@@ -8281,187 +8281,187 @@
           "name": "RuntimeConfig",
           "isExported": true,
           "extends": [],
-          "line": 155,
+          "line": 177,
           "properties": [
             {
               "name": "profile",
               "type": "string",
               "optional": false,
-              "line": 156
+              "line": 178
             },
             {
               "name": "testMode",
               "type": "string | undefined",
               "optional": false,
-              "line": 157
+              "line": 179
             },
             {
               "name": "index",
               "type": "IndexConfig",
               "optional": false,
-              "line": 158
+              "line": 180
             },
             {
               "name": "mutationEnabled",
               "type": "boolean",
               "optional": false,
-              "line": 159
+              "line": 181
             },
             {
               "name": "logLevel",
               "type": "LogLevel",
               "optional": false,
-              "line": 160
+              "line": 182
             },
             {
               "name": "trace",
               "type": "Set<string>",
               "optional": false,
-              "line": 161
+              "line": 183
             },
             {
               "name": "initFeatures",
               "type": "Set<string>",
               "optional": false,
-              "line": 162
+              "line": 184
             },
             {
               "name": "bufferRing",
               "type": "BufferRingConfig",
               "optional": false,
-              "line": 163
+              "line": 185
             },
             {
               "name": "timing",
               "type": "(key: string, fallback?: number) => number | undefined",
               "optional": false,
-              "line": 164
+              "line": 186
             },
             {
               "name": "rawTiming",
               "type": "TimingMap",
               "optional": false,
-              "line": 165
+              "line": 187
             },
             {
               "name": "coverage",
               "type": "CoverageConfig",
               "optional": false,
-              "line": 166
+              "line": 188
             },
             {
               "name": "dashboard",
               "type": "DashboardConfig",
               "optional": false,
-              "line": 167
+              "line": 189
             },
             {
               "name": "server",
               "type": "ServerConfig",
               "optional": false,
-              "line": 168
+              "line": 190
             },
             {
               "name": "logging",
               "type": "LoggingConfig",
               "optional": false,
-              "line": 169
+              "line": 191
             },
             {
               "name": "metrics",
               "type": "MetricsConfig",
               "optional": false,
-              "line": 170
+              "line": 192
             },
             {
               "name": "instructions",
               "type": "InstructionsConfig",
               "optional": false,
-              "line": 171
+              "line": 193
             },
             {
               "name": "tracing",
               "type": "TracingConfig",
               "optional": false,
-              "line": 172
+              "line": 194
             },
             {
               "name": "mutation",
               "type": "MutationConfig",
               "optional": false,
-              "line": 173
+              "line": 195
             },
             {
               "name": "featureFlags",
               "type": "FeatureFlagsConfig",
               "optional": false,
-              "line": 174
+              "line": 196
             },
             {
               "name": "feedback",
               "type": "FeedbackConfig",
               "optional": false,
-              "line": 175
+              "line": 197
             },
             {
               "name": "messaging",
               "type": "MessagingConfig",
               "optional": false,
-              "line": 176
+              "line": 198
             },
             {
               "name": "semantic",
               "type": "SemanticConfig",
               "optional": false,
-              "line": 177
+              "line": 199
             },
             {
               "name": "minimal",
               "type": "MinimalConfig",
               "optional": false,
-              "line": 178
+              "line": 200
             },
             {
               "name": "bootstrapSeed",
               "type": "BootstrapSeedConfig",
               "optional": false,
-              "line": 179
+              "line": 201
             },
             {
               "name": "atomicFs",
               "type": "AtomicFsConfig",
               "optional": false,
-              "line": 180
+              "line": 202
             },
             {
               "name": "preflight",
               "type": "PreflightConfig",
               "optional": false,
-              "line": 181
+              "line": 203
             },
             {
               "name": "validation",
               "type": "ValidationConfig",
               "optional": false,
-              "line": 182
+              "line": 204
             },
             {
               "name": "dynamic",
               "type": "DynamicConfig",
               "optional": false,
-              "line": 183
+              "line": 205
             },
             {
               "name": "graph",
               "type": "GraphConfig",
               "optional": false,
-              "line": 184
+              "line": 206
             },
             {
               "name": "storage",
               "type": "StorageConfig",
               "optional": false,
-              "line": 185
+              "line": 207
             }
           ],
           "methods": []
@@ -8472,7 +8472,7 @@
           "name": "IndexMode",
           "isExported": true,
           "type": "'normal' | 'memoize' | 'memoize+hash' | 'reload' | 'reload+memo'",
-          "line": 48
+          "line": 70
         }
       ],
       "enums": [],
@@ -8483,7 +8483,7 @@
           "isAsync": false,
           "parameters": [],
           "returnType": "TimingMap",
-          "line": 189
+          "line": 211
         },
         {
           "name": "deriveIndexMode",
@@ -8491,7 +8491,7 @@
           "isAsync": false,
           "parameters": [],
           "returnType": "IndexMode",
-          "line": 205
+          "line": 227
         },
         {
           "name": "parseTrace",
@@ -8499,7 +8499,7 @@
           "isAsync": false,
           "parameters": [],
           "returnType": "Set<string>",
-          "line": 219
+          "line": 241
         },
         {
           "name": "parseInitFeatures",
@@ -8507,7 +8507,7 @@
           "isAsync": false,
           "parameters": [],
           "returnType": "Set<string>",
-          "line": 228
+          "line": 250
         },
         {
           "name": "parseLogLevel",
@@ -8521,7 +8521,7 @@
             }
           ],
           "returnType": "LogLevel",
-          "line": 235
+          "line": 257
         },
         {
           "name": "parseBufferRing",
@@ -8529,7 +8529,7 @@
           "isAsync": false,
           "parameters": [],
           "returnType": "BufferRingConfig",
-          "line": 243
+          "line": 265
         },
         {
           "name": "parseMutation",
@@ -8537,7 +8537,7 @@
           "isAsync": false,
           "parameters": [],
           "returnType": "boolean",
-          "line": 254
+          "line": 276
         },
         {
           "name": "parseCoverage",
@@ -8545,7 +8545,7 @@
           "isAsync": false,
           "parameters": [],
           "returnType": "CoverageConfig",
-          "line": 260
+          "line": 282
         },
         {
           "name": "resolveInstructionsAuditLog",
@@ -8553,7 +8553,7 @@
           "isAsync": false,
           "parameters": [],
           "returnType": "InstructionsAuditLogConfig",
-          "line": 270
+          "line": 292
         },
         {
           "name": "resolveInstructionsDir",
@@ -8561,7 +8561,7 @@
           "isAsync": false,
           "parameters": [],
           "returnType": "string",
-          "line": 289
+          "line": 311
         },
         {
           "name": "parseIndexConfig",
@@ -8569,7 +8569,7 @@
           "isAsync": false,
           "parameters": [],
           "returnType": "IndexConfig",
-          "line": 295
+          "line": 317
         },
         {
           "name": "parseInstructionsConfig",
@@ -8583,7 +8583,7 @@
             }
           ],
           "returnType": "InstructionsConfig",
-          "line": 352
+          "line": 374
         },
         {
           "name": "parseMutationConfig",
@@ -8597,7 +8597,7 @@
             }
           ],
           "returnType": "MutationConfig",
-          "line": 394
+          "line": 416
         },
         {
           "name": "applyProfileDefaults",
@@ -8612,7 +8612,7 @@
           ],
           "returnType": "void",
           "description": "Apply profile-aware environment defaults.\nCalled early in loadRuntimeConfig, sets env vars only when not already set.\nThis ensures the wizard's profile choice flows through to all downstream parsers.",
-          "line": 421
+          "line": 443
         },
         {
           "name": "loadRuntimeConfig",
@@ -8621,7 +8621,7 @@
           "parameters": [],
           "returnType": "RuntimeConfig",
           "description": "Parse all environment variables and construct a fresh {@link RuntimeConfig} object.\nPrefer {@link getRuntimeConfig} for normal use — this function always re-parses.",
-          "line": 457
+          "line": 479
         },
         {
           "name": "getRuntimeConfig",
@@ -8630,7 +8630,7 @@
           "parameters": [],
           "returnType": "RuntimeConfig",
           "description": "Return the cached singleton {@link RuntimeConfig}, loading it on first call.",
-          "line": 526
+          "line": 548
         },
         {
           "name": "reloadRuntimeConfig",
@@ -8639,7 +8639,336 @@
           "parameters": [],
           "returnType": "RuntimeConfig",
           "description": "Force a reload of the runtime configuration by discarding the cache and re-parsing all env vars.",
-          "line": 535
+          "line": 557
+        }
+      ],
+      "constants": []
+    },
+    {
+      "path": "src/config/runtimeOverrides.ts",
+      "imports": [
+        {
+          "module": "fs",
+          "defaultImport": "fs",
+          "namedImports": [],
+          "namespaceImport": null
+        },
+        {
+          "module": "path",
+          "defaultImport": "path",
+          "namedImports": [],
+          "namespaceImport": null
+        }
+      ],
+      "exports": [
+        {
+          "name": "__resetReadonlyBlocklistForTests",
+          "kinds": [
+            "FunctionDeclaration"
+          ]
+        },
+        {
+          "name": "applyOverlay",
+          "kinds": [
+            "FunctionDeclaration"
+          ]
+        },
+        {
+          "name": "ApplyOverlayResult",
+          "kinds": [
+            "InterfaceDeclaration"
+          ]
+        },
+        {
+          "name": "clearOverride",
+          "kinds": [
+            "FunctionDeclaration"
+          ]
+        },
+        {
+          "name": "lastOverlayResult",
+          "kinds": [
+            "FunctionDeclaration"
+          ]
+        },
+        {
+          "name": "overlayFilePath",
+          "kinds": [
+            "FunctionDeclaration"
+          ]
+        },
+        {
+          "name": "readOverlay",
+          "kinds": [
+            "FunctionDeclaration"
+          ]
+        },
+        {
+          "name": "registerReadonlyFlags",
+          "kinds": [
+            "FunctionDeclaration"
+          ]
+        },
+        {
+          "name": "shadowedEnv",
+          "kinds": [
+            "FunctionDeclaration"
+          ]
+        },
+        {
+          "name": "writeOverride",
+          "kinds": [
+            "FunctionDeclaration"
+          ]
+        }
+      ],
+      "classes": [],
+      "interfaces": [
+        {
+          "name": "ApplyOverlayResult",
+          "isExported": true,
+          "extends": [],
+          "description": "Diagnostic record from the last applyOverlay() call.",
+          "line": 49,
+          "properties": [
+            {
+              "name": "file",
+              "type": "string",
+              "optional": true,
+              "description": "Overlay file that was read (may be undefined when missing).",
+              "line": 51
+            },
+            {
+              "name": "applied",
+              "type": "number",
+              "optional": false,
+              "description": "Number of keys merged into process.env.",
+              "line": 53
+            },
+            {
+              "name": "disabled",
+              "type": "boolean",
+              "optional": false,
+              "description": "Whether overlay was disabled (INDEX_SERVER_DISABLE_OVERRIDES=1).",
+              "line": 55
+            },
+            {
+              "name": "missing",
+              "type": "boolean",
+              "optional": false,
+              "description": "Whether the file was missing or unreadable.",
+              "line": 57
+            },
+            {
+              "name": "shadowed",
+              "type": "Record<string, string | undefined>",
+              "optional": false,
+              "description": "For each overlay key: the prior process.env value (if any) at boot.\nUsed to compute `overlayShadowsEnv` on the GET /api/admin/config response.",
+              "line": 62
+            }
+          ],
+          "methods": []
+        }
+      ],
+      "typeAliases": [
+        {
+          "name": "EnvSnapshot",
+          "isExported": false,
+          "type": "Record<string, string | undefined>",
+          "description": "Map of env-var name -> string value present at the moment applyOverlay() ran.",
+          "line": 46
+        }
+      ],
+      "enums": [],
+      "functions": [
+        {
+          "name": "overlayFilePath",
+          "isExported": true,
+          "isAsync": false,
+          "parameters": [],
+          "returnType": "string",
+          "description": "Resolve the overlay file path. Honors INDEX_SERVER_OVERRIDES_FILE.\nReturns an absolute path; the file may or may not exist.",
+          "line": 77
+        },
+        {
+          "name": "readOverlay",
+          "isExported": true,
+          "isAsync": false,
+          "parameters": [],
+          "returnType": "Record<string, string>",
+          "description": "Read the overlay file. Returns `{}` for any failure mode:\n - file missing\n - read error\n - JSON parse error\n - root is not an object\n - values that are not strings are dropped (with a single WARN)\n\nCallers must tolerate `{}` as a valid result and proceed.",
+          "line": 95
+        },
+        {
+          "name": "readOverlayDetailed",
+          "isExported": false,
+          "isAsync": false,
+          "parameters": [],
+          "returnType": "{ entries: Record<string, string>; missing: boolean }",
+          "description": "Internal variant of readOverlay that also reports whether the file was\nmissing at read time. Used by applyOverlay() to avoid the\n`fs.readFileSync` → `fs.existsSync` TOCTOU window where the file could\nappear or vanish between the two probes.",
+          "line": 105
+        },
+        {
+          "name": "applyOverlay",
+          "isExported": true,
+          "isAsync": false,
+          "parameters": [],
+          "returnType": "ApplyOverlayResult",
+          "description": "Merge the overlay file into process.env.\n\nPrecedence: overlay value WINS over any pre-existing process.env value.\nPre-existing values are captured in the shadow snapshot so the dashboard\ncan later surface `overlayShadowsEnv:true` plus the original ENV value.\n\nNo-op when INDEX_SERVER_DISABLE_OVERRIDES is truthy.\n\nIdempotent: calling twice has the same effect as calling once, except that\nthe shadow snapshot reflects the env state at the SECOND call (current env\nalready contains the overlay values from the first call). For correct\noverlayShadowsEnv reporting, callers should invoke applyOverlay() exactly\nonce per boot, before any consumer reads process.env.",
+          "line": 161
+        },
+        {
+          "name": "writeOverride",
+          "isExported": true,
+          "isAsync": false,
+          "parameters": [
+            {
+              "name": "key",
+              "type": "string",
+              "optional": false
+            },
+            {
+              "name": "value",
+              "type": "string",
+              "optional": false
+            }
+          ],
+          "returnType": "void",
+          "description": "Atomically persist a single overlay entry. The on-disk file is read,\nmerged, and rewritten via a sibling `.tmp` file + rename.\n\nThrows on filesystem failure or when the key targets a readonly flag.\nCaller is responsible for invoking `reloadRuntimeConfig()` after writing\nif the change should take effect for `dynamic` reload-behavior flags.\nAlso mutates process.env[key] synchronously so subsequent reads observe\nthe new value without a reload.\n\nDefense-in-depth (#359 H1): the admin route already filters writes through\nthe FLAG_REGISTRY before calling, but this module performs an independent\nlazy lookup so any future caller cannot accidentally bypass the readonly\ncontract and persist secrets to the on-disk overlay.",
+          "line": 200
+        },
+        {
+          "name": "clearOverride",
+          "isExported": true,
+          "isAsync": false,
+          "parameters": [
+            {
+              "name": "key",
+              "type": "string",
+              "optional": false
+            }
+          ],
+          "returnType": "void",
+          "description": "Remove a single overlay entry. The on-disk file is rewritten via the\nsame atomic temp+rename pattern. Idempotent — clearing a missing key\nstill rewrites the overlay (canonicalized) but is otherwise a no-op\nfor process.env.\n\nAlso restores `process.env[key]` to its boot-time shadowed value when\none was captured by applyOverlay(); otherwise deletes the env var so\nthe next runtimeConfig load falls back to the built-in default.\nThis colocates the env-restore contract with the on-disk removal so\ncallers can rely on \"after clearOverride, process.env reflects the\npre-overlay world\" without having to reproduce the shadow lookup\n(#359 reliability advisory).",
+          "line": 241
+        },
+        {
+          "name": "shadowedEnv",
+          "isExported": true,
+          "isAsync": false,
+          "parameters": [],
+          "returnType": "Readonly<EnvSnapshot>",
+          "description": "Returns the snapshot of pre-overlay process.env values captured during the\nlast applyOverlay() call. Maps `INDEX_SERVER_*` -> the value that was in\nprocess.env BEFORE the overlay wrote on top of it.\n\nUsed by the dashboard API to populate `overlayShadowsEnv` per flag.",
+          "line": 270
+        },
+        {
+          "name": "lastOverlayResult",
+          "isExported": true,
+          "isAsync": false,
+          "parameters": [],
+          "returnType": "ApplyOverlayResult | undefined",
+          "description": "Diagnostic getter for the most recent applyOverlay() invocation.",
+          "line": 275
+        },
+        {
+          "name": "isTruthy",
+          "isExported": false,
+          "isAsync": false,
+          "parameters": [
+            {
+              "name": "v",
+              "type": "string | undefined",
+              "optional": false
+            }
+          ],
+          "returnType": "boolean",
+          "line": 281
+        },
+        {
+          "name": "validateKey",
+          "isExported": false,
+          "isAsync": false,
+          "parameters": [
+            {
+              "name": "key",
+              "type": "string",
+              "optional": false
+            }
+          ],
+          "returnType": "void",
+          "line": 287
+        },
+        {
+          "name": "registerReadonlyFlags",
+          "isExported": true,
+          "isAsync": false,
+          "parameters": [
+            {
+              "name": "names",
+              "type": "Iterable<string>",
+              "optional": false
+            }
+          ],
+          "returnType": "void",
+          "description": "Register the set of registry flags that are NOT dashboard-writable\n(`editable: false` in FlagMeta). Idempotent; subsequent calls replace the\nset entirely.",
+          "line": 321
+        },
+        {
+          "name": "assertWriteable",
+          "isExported": false,
+          "isAsync": false,
+          "parameters": [
+            {
+              "name": "key",
+              "type": "string",
+              "optional": false
+            }
+          ],
+          "returnType": "void",
+          "line": 325
+        },
+        {
+          "name": "__resetReadonlyBlocklistForTests",
+          "isExported": true,
+          "isAsync": false,
+          "parameters": [],
+          "returnType": "void",
+          "description": "Test-only: clear the readonly registry so subsequent registration is observable.",
+          "line": 332
+        },
+        {
+          "name": "atomicWriteJson",
+          "isExported": false,
+          "isAsync": false,
+          "parameters": [
+            {
+              "name": "target",
+              "type": "string",
+              "optional": false
+            },
+            {
+              "name": "data",
+              "type": "Record<string, string>",
+              "optional": false
+            }
+          ],
+          "returnType": "void",
+          "line": 336
+        },
+        {
+          "name": "sortedKeys",
+          "isExported": false,
+          "isAsync": false,
+          "parameters": [
+            {
+              "name": "data",
+              "type": "Record<string, string>",
+              "optional": false
+            }
+          ],
+          "returnType": "(this: unknown, key: string, value: unknown) => unknown",
+          "description": "JSON.stringify replacer that emits keys in sorted order for diff-friendliness.",
+          "line": 350
         }
       ],
       "constants": []
@@ -13570,7 +13899,7 @@
         {
           "name": "AdminConfig",
           "kinds": [
-            "InterfaceDeclaration"
+            "TypeAliasDeclaration"
           ]
         },
         {
@@ -13621,31 +13950,11 @@
               "line": 104
             },
             {
-              "name": "getAdminConfig",
-              "isStatic": false,
-              "parameters": [],
-              "returnType": "AdminConfig",
-              "line": 136
-            },
-            {
-              "name": "updateAdminConfig",
-              "isStatic": false,
-              "parameters": [
-                {
-                  "name": "updates",
-                  "type": "Partial<AdminConfig>",
-                  "optional": false
-                }
-              ],
-              "returnType": "{ success: boolean; message: string }",
-              "line": 140
-            },
-            {
               "name": "getActiveSessions",
               "isStatic": false,
               "parameters": [],
               "returnType": "AdminSession[]",
-              "line": 146
+              "line": 141
             },
             {
               "name": "createAdminSession",
@@ -13668,7 +13977,7 @@
                 }
               ],
               "returnType": "AdminSession",
-              "line": 150
+              "line": 145
             },
             {
               "name": "terminateSession",
@@ -13681,7 +13990,7 @@
                 }
               ],
               "returnType": "boolean",
-              "line": 154
+              "line": 149
             },
             {
               "name": "getMaintenanceInfo",
@@ -13689,7 +13998,7 @@
               "parameters": [],
               "returnType": "SystemMaintenance",
               "description": "Get system maintenance information",
-              "line": 161
+              "line": 156
             },
             {
               "name": "setMaintenanceMode",
@@ -13708,7 +14017,7 @@
               ],
               "returnType": "{ success: boolean; message: string }",
               "description": "Set maintenance mode",
-              "line": 170
+              "line": 165
             },
             {
               "name": "performBackup",
@@ -13716,14 +14025,14 @@
               "parameters": [],
               "returnType": "Promise<{ success: boolean; message: string; backupId?: string; files?: number }>",
               "description": "Perform system backup",
-              "line": 195
+              "line": 190
             },
             {
               "name": "listBackups",
               "isStatic": false,
               "parameters": [],
               "returnType": "{ id: string; createdAt: string; instructionCount: number; schemaVersion?: string; sizeBytes: number; warnings?: string[] }[]",
-              "line": 240
+              "line": 235
             },
             {
               "name": "restoreBackup",
@@ -13736,7 +14045,7 @@
                 }
               ],
               "returnType": "{ success: boolean; message: string; restored?: number }",
-              "line": 306
+              "line": 301
             },
             {
               "name": "deleteBackup",
@@ -13750,7 +14059,7 @@
               ],
               "returnType": "{ success: boolean; message: string; removed?: boolean }",
               "description": "Delete a backup zip or directory (safety checks on name)",
-              "line": 434
+              "line": 429
             },
             {
               "name": "pruneBackups",
@@ -13764,7 +14073,7 @@
               ],
               "returnType": "{ success: boolean; message: string; pruned?: number; errors?: string[] }",
               "description": "Prune backups keeping newest N (by createdAt / mtime). Returns count pruned.",
-              "line": 465
+              "line": 460
             },
             {
               "name": "exportBackup",
@@ -13778,7 +14087,7 @@
               ],
               "returnType": "{ success: boolean; message: string; zipPath?: string; bundle?: { manifest: Record<string, unknown>; files: Record<string, unknown> }; warnings?: string[] }",
               "description": "Export a backup — returns the zip file path for streaming, or falls back to JSON bundle for legacy dirs",
-              "line": 547
+              "line": 542
             },
             {
               "name": "importBackup",
@@ -13792,7 +14101,7 @@
               ],
               "returnType": "{ success: boolean; message: string; backupId?: string; files?: number }",
               "description": "Import a backup from a JSON bundle uploaded by the client — creates a zip",
-              "line": 599
+              "line": 594
             },
             {
               "name": "importZipBackup",
@@ -13811,7 +14120,7 @@
               ],
               "returnType": "{ success: boolean; message: string; backupId?: string; files?: number }",
               "description": "Import a zip backup uploaded by the client without rewriting its contents.",
-              "line": 644
+              "line": 639
             },
             {
               "name": "calculateCpuUsage",
@@ -13819,7 +14128,7 @@
               "parameters": [],
               "returnType": "{ user: number; system: number; percent: number }",
               "description": "Calculate current CPU usage with historical tracking",
-              "line": 705
+              "line": 700
             },
             {
               "name": "analyzeCpuTrends",
@@ -13827,7 +14136,7 @@
               "parameters": [],
               "returnType": "{ trend: TrendDirection; avgUsage: number; peakUsage: number }",
               "description": "Analyze CPU trends for potential leaks",
-              "line": 751
+              "line": 746
             },
             {
               "name": "analyzeMemoryTrends",
@@ -13835,7 +14144,7 @@
               "parameters": [],
               "returnType": "{ trend: TrendDirection; avgHeapUsed: number; peakHeapUsed: number; growthRate: number }",
               "description": "Analyze memory usage trends for leak detection",
-              "line": 779
+              "line": 774
             },
             {
               "name": "getAdminStats",
@@ -13843,14 +14152,14 @@
               "parameters": [],
               "returnType": "AdminStats",
               "description": "Get comprehensive admin statistics",
-              "line": 814
+              "line": 809
             },
             {
               "name": "updateSystemHealth",
               "isStatic": false,
               "parameters": [],
               "returnType": "void",
-              "line": 938
+              "line": 933
             },
             {
               "name": "getSessionHistory",
@@ -13864,14 +14173,14 @@
               ],
               "returnType": "AdminSessionHistoryEntry[]",
               "description": "Return immutable copy of session history",
-              "line": 1034
+              "line": 1029
             },
             {
               "name": "clearSessionHistory",
               "isStatic": false,
               "parameters": [],
               "returnType": "Promise<{ success: boolean; message: string; clearedCount: number }>",
-              "line": 1038
+              "line": 1033
             },
             {
               "name": "updateSessionActivity",
@@ -13884,42 +14193,42 @@
                 }
               ],
               "returnType": "boolean",
-              "line": 1042
+              "line": 1037
             },
             {
               "name": "getTotalConnections",
               "isStatic": false,
               "parameters": [],
               "returnType": "number",
-              "line": 1046
+              "line": 1041
             },
             {
               "name": "getTotalRequests",
               "isStatic": false,
               "parameters": [],
               "returnType": "number",
-              "line": 1050
+              "line": 1045
             },
             {
               "name": "getErrorRate",
               "isStatic": false,
               "parameters": [],
               "returnType": "number",
-              "line": 1055
+              "line": 1050
             },
             {
               "name": "getAvgResponseTime",
               "isStatic": false,
               "parameters": [],
               "returnType": "number",
-              "line": 1059
+              "line": 1054
             },
             {
               "name": "getIndexInstructionCount",
               "isStatic": false,
               "parameters": [],
               "returnType": "number",
-              "line": 1063
+              "line": 1058
             },
             {
               "name": "restartServer",
@@ -13933,7 +14242,7 @@
               ],
               "returnType": "Promise<{ success: boolean; message: string }>",
               "description": "Restart server components",
-              "line": 1084
+              "line": 1079
             },
             {
               "name": "clearCaches",
@@ -13941,7 +14250,7 @@
               "parameters": [],
               "returnType": "{ success: boolean; message: string; cleared: string[] }",
               "description": "Clear server caches",
-              "line": 1106
+              "line": 1101
             }
           ],
           "properties": [
@@ -14128,35 +14437,31 @@
           "isAsync": false,
           "parameters": [],
           "returnType": "AdminPanel",
-          "line": 1139
+          "line": 1134
         }
       ],
       "constants": []
     },
     {
       "path": "src/dashboard/server/AdminPanelConfig.ts",
-      "imports": [
-        {
-          "module": "../../config/runtimeConfig",
-          "defaultImport": null,
-          "namedImports": [
-            "getRuntimeConfig",
-            "reloadRuntimeConfig"
-          ],
-          "namespaceImport": null
-        }
-      ],
+      "imports": [],
       "exports": [
         {
           "name": "AdminConfig",
           "kinds": [
-            "InterfaceDeclaration"
+            "TypeAliasDeclaration"
           ]
         },
         {
           "name": "AdminPanelConfig",
           "kinds": [
             "ClassDeclaration"
+          ]
+        },
+        {
+          "name": "SessionTimingConfig",
+          "kinds": [
+            "InterfaceDeclaration"
           ]
         }
       ],
@@ -14166,96 +14471,46 @@
           "isExported": true,
           "extends": null,
           "implements": [],
-          "line": 37,
-          "methods": [
-            {
-              "name": "loadDefaultConfig",
-              "isStatic": false,
-              "parameters": [],
-              "returnType": "AdminConfig",
-              "line": 44
-            },
-            {
-              "name": "getAdminConfig",
-              "isStatic": false,
-              "parameters": [],
-              "returnType": "AdminConfig",
-              "description": "Re-read from runtime config so callers always see the current authoritative values.",
-              "line": 72
-            },
-            {
-              "name": "updateAdminConfig",
-              "isStatic": false,
-              "parameters": [
-                {
-                  "name": "updates",
-                  "type": "Partial<AdminConfig>",
-                  "optional": false
-                }
-              ],
-              "returnType": "{ success: boolean; message: string; appliedFields?: string[] }",
-              "line": 77
-            },
-            {
-              "name": "applyConfigChanges",
-              "isStatic": false,
-              "parameters": [
-                {
-                  "name": "updates",
-                  "type": "Partial<AdminConfig>",
-                  "optional": false
-                },
-                {
-                  "name": "applied",
-                  "type": "string[]",
-                  "optional": true
-                }
-              ],
-              "returnType": "void",
-              "description": "Apply incoming serverSettings to `process.env.INDEX_SERVER_*` and reload runtime config\nso the dashboard form actually drives behavior. Bind every editable field to its env var\n(per constitution S-4: \"All environment configuration must flow through runtimeConfig.ts\").",
-              "line": 97
-            }
-          ],
+          "line": 46,
+          "methods": [],
           "properties": [
             {
-              "name": "config",
-              "type": "AdminConfig",
+              "name": "timing",
+              "type": "SessionTimingConfig",
               "isStatic": false,
-              "line": 38
+              "line": 47
             }
           ]
         }
       ],
       "interfaces": [
         {
-          "name": "AdminConfig",
+          "name": "SessionTimingConfig",
           "isExported": true,
           "extends": [],
-          "line": 14,
+          "description": "AdminPanelConfig — Session timing configuration for the admin panel.\n\nHistorical note (#359, plan §2.6 T6 / clean break):\n Pre-1.29 this module owned `serverSettings`, `indexSettings`, and\n `securitySettings` envelopes that mirrored a subset of runtime config.\n Those structures duplicated the flag registry surfaced through\n `/api/admin/config` and `dashboard_config`, so they were removed in\n favor of the single source of truth. The only piece worth preserving\n was `sessionTimeout` (consumed by AdminPanelState for session expiry),\n which now lives on `SessionTimingConfig`.\n\nFor runtime flag CRUD, see:\n  - GET/POST /api/admin/config  (src/dashboard/server/routes/admin.routes.ts)\n  - src/services/handlers.dashboardConfig.ts (FLAG_REGISTRY)\n  - src/services/configValidation.ts (validateFlagUpdate)\n  - src/config/runtimeOverrides.ts (overlay persistence)\nSession timing knobs consumed by AdminPanelState. Intentionally minimal —\nNOT a place to re-introduce duplicate envelopes. Add new fields here only\nwhen they belong to session lifetime, not to general server configuration.",
+          "line": 25,
           "properties": [
             {
-              "name": "serverSettings",
-              "type": "{\n    maxConnections: number;\n    requestTimeout: number;\n    enableVerboseLogging: boolean;\n    enableMutation: boolean;\n    rateLimit: {\n      perMinute: number;\n    };\n  }",
+              "name": "sessionTimeout",
+              "type": "number",
               "optional": false,
-              "line": 15
-            },
-            {
-              "name": "indexSettings",
-              "type": "{\n    autoRefreshInterval: number;\n    cacheSize: number;\n    enableVersioning: boolean;\n  }",
-              "optional": false,
-              "line": 24
-            },
-            {
-              "name": "securitySettings",
-              "type": "{\n    enableCors: boolean;\n    allowedOrigins: string[];\n    enableAuthentication: boolean;\n    sessionTimeout: number;\n  }",
-              "optional": false,
-              "line": 29
+              "description": "Inactivity timeout for admin sessions, in milliseconds.",
+              "line": 27
             }
           ],
           "methods": []
         }
       ],
-      "typeAliases": [],
+      "typeAliases": [
+        {
+          "name": "AdminConfig",
+          "isExported": true,
+          "type": "{}",
+          "description": "Legacy export retained as an empty alias so type-only consumers that still\nimport `AdminConfig` do not break the build. The T6 compile-time guard in\nadminConfigRoute.spec.ts asserts the legacy keys are gone via\n`'indexSettings' extends keyof AdminConfig` style checks; both work on `{}`.\n\nMarked deprecated to discourage new usage.",
+          "line": 42
+        }
+      ],
       "enums": [],
       "functions": [],
       "constants": []
@@ -14856,6 +15111,22 @@
             "logInfo"
           ],
           "namespaceImport": null
+        },
+        {
+          "module": "../../config/runtimeOverrides.js",
+          "defaultImport": null,
+          "namedImports": [
+            "applyOverlay"
+          ],
+          "namespaceImport": null
+        },
+        {
+          "module": "../../config/runtimeConfig.js",
+          "defaultImport": null,
+          "namedImports": [
+            "reloadRuntimeConfig"
+          ],
+          "namespaceImport": null
         }
       ],
       "exports": [
@@ -14890,35 +15161,35 @@
           "isExported": true,
           "extends": null,
           "implements": [],
-          "line": 43,
+          "line": 45,
           "methods": [
             {
               "name": "start",
               "isStatic": false,
               "parameters": [],
               "returnType": "Promise<{ url: string; port: number; close: () => void }>",
-              "line": 80
+              "line": 82
             },
             {
               "name": "stop",
               "isStatic": false,
               "parameters": [],
               "returnType": "Promise<void>",
-              "line": 115
+              "line": 134
             },
             {
               "name": "getServerInfo",
               "isStatic": false,
               "parameters": [],
               "returnType": "ServerInfo | null",
-              "line": 128
+              "line": 147
             },
             {
               "name": "setupMiddleware",
               "isStatic": false,
               "parameters": [],
               "returnType": "void",
-              "line": 145
+              "line": 164
             }
           ],
           "properties": [
@@ -14926,37 +15197,37 @@
               "name": "app",
               "type": "Express",
               "isStatic": false,
-              "line": 44
+              "line": 46
             },
             {
               "name": "server",
               "type": "HttpServer | null",
               "isStatic": false,
-              "line": 45
+              "line": 47
             },
             {
               "name": "metricsCollector",
               "type": null,
               "isStatic": false,
-              "line": 46
+              "line": 48
             },
             {
               "name": "webSocketManager",
               "type": null,
               "isStatic": false,
-              "line": 47
+              "line": 49
             },
             {
               "name": "metricsBroadcastTimer",
               "type": "NodeJS.Timeout | null",
               "isStatic": false,
-              "line": 48
+              "line": 50
             },
             {
               "name": "options",
               "type": "Required<Omit<DashboardServerOptions, 'tls'>> & { tls?: TlsOptions }",
               "isStatic": false,
-              "line": 50
+              "line": 52
             }
           ]
         }
@@ -14966,58 +15237,58 @@
           "name": "DashboardServerOptions",
           "isExported": true,
           "extends": [],
-          "line": 23,
+          "line": 25,
           "properties": [
             {
               "name": "host",
               "type": "string",
               "optional": true,
-              "line": 24
+              "line": 26
             },
             {
               "name": "port",
               "type": "number",
               "optional": true,
-              "line": 25
+              "line": 27
             },
             {
               "name": "maxPortTries",
               "type": "number",
               "optional": true,
-              "line": 26
+              "line": 28
             },
             {
               "name": "enableWebSockets",
               "type": "boolean",
               "optional": true,
-              "line": 27
+              "line": 29
             },
             {
               "name": "enableCors",
               "type": "boolean",
               "optional": true,
-              "line": 28
+              "line": 30
             },
             {
               "name": "metricsBroadcastIntervalMs",
               "type": "number",
               "optional": true,
               "description": "Interval (ms) for broadcasting metrics_update messages over WebSocket (default 5000).",
-              "line": 30
+              "line": 32
             },
             {
               "name": "tls",
               "type": "TlsOptions",
               "optional": true,
               "description": "TLS certificate and key for HTTPS. When provided the dashboard serves over HTTPS/WSS.",
-              "line": 32
+              "line": 34
             },
             {
               "name": "graphEnabled",
               "type": "boolean",
               "optional": true,
               "description": "Enable the Graph visualization tab (loads ~4.5MB of mermaid+elkjs). Default false.",
-              "line": 34
+              "line": 36
             }
           ],
           "methods": []
@@ -15026,25 +15297,25 @@
           "name": "ServerInfo",
           "isExported": false,
           "extends": [],
-          "line": 37,
+          "line": 39,
           "properties": [
             {
               "name": "port",
               "type": "number",
               "optional": false,
-              "line": 38
+              "line": 40
             },
             {
               "name": "host",
               "type": "string",
               "optional": false,
-              "line": 39
+              "line": 41
             },
             {
               "name": "url",
               "type": "string",
               "optional": false,
-              "line": 40
+              "line": 42
             }
           ],
           "methods": []
@@ -15065,7 +15336,7 @@
             }
           ],
           "returnType": "DashboardServer",
-          "line": 211
+          "line": 230
         }
       ],
       "constants": []
@@ -19773,7 +20044,8 @@
           "module": "../../../services/handlers.dashboardConfig.js",
           "defaultImport": null,
           "namedImports": [
-            "getFlagRegistrySnapshot"
+            "getFlagRegistrySnapshot",
+            "FLAG_REGISTRY"
           ],
           "namespaceImport": null
         },
@@ -19782,6 +20054,25 @@
           "defaultImport": null,
           "namedImports": [
             "reloadRuntimeConfig"
+          ],
+          "namespaceImport": null
+        },
+        {
+          "module": "../../../config/runtimeOverrides.js",
+          "defaultImport": null,
+          "namedImports": [
+            "writeOverride",
+            "clearOverride",
+            "shadowedEnv"
+          ],
+          "namespaceImport": null
+        },
+        {
+          "module": "../../../services/configValidation.js",
+          "defaultImport": null,
+          "namedImports": [
+            "validateFlagUpdate",
+            "isWriteable"
           ],
           "namespaceImport": null
         },
@@ -19847,7 +20138,7 @@
             }
           ],
           "returnType": "Router",
-          "line": 28
+          "line": 30
         }
       ],
       "constants": []
@@ -22431,7 +22722,12 @@
             "writeEntryAsync",
             "removeEntry",
             "getInstructionsDir",
-            "isDuplicateInstructionWriteError"
+            "isDuplicateInstructionWriteError",
+            "archiveEntry",
+            "restoreEntry",
+            "purgeEntry",
+            "getArchivedEntry",
+            "listArchivedEntries"
           ],
           "namespaceImport": null
         },
@@ -22455,8 +22751,35 @@
           "module": "../../../models/instruction.js",
           "defaultImport": null,
           "namedImports": [
+            "ARCHIVE_REASONS",
             "CONTENT_TYPES",
-            "InstructionEntry"
+            "InstructionEntry",
+            "ArchiveReason",
+            "ArchiveSource"
+          ],
+          "namespaceImport": null
+        },
+        {
+          "module": "../../../services/storage/types.js",
+          "defaultImport": null,
+          "namedImports": [
+            "RestoreMode"
+          ],
+          "namespaceImport": null
+        },
+        {
+          "module": "../../../services/auditLog.js",
+          "defaultImport": null,
+          "namedImports": [
+            "logAudit"
+          ],
+          "namespaceImport": null
+        },
+        {
+          "module": "../../../services/auditActions.js",
+          "defaultImport": null,
+          "namedImports": [
+            "AUDIT_ACTIONS"
           ],
           "namespaceImport": null
         },
@@ -22538,7 +22861,7 @@
           ],
           "returnType": "string",
           "description": "Validate an instruction name with a defense-in-depth path-containment guard.",
-          "line": 28
+          "line": 31
         },
         {
           "name": "requireInstructionContentObject",
@@ -22552,7 +22875,7 @@
             }
           ],
           "returnType": "Record<string, unknown>",
-          "line": 39
+          "line": 42
         },
         {
           "name": "assertValidDashboardInstructionEnums",
@@ -22566,7 +22889,7 @@
             }
           ],
           "returnType": "void",
-          "line": 46
+          "line": 49
         },
         {
           "name": "assertValidDashboardInstructionShape",
@@ -22580,7 +22903,7 @@
             }
           ],
           "returnType": "void",
-          "line": 53
+          "line": 56
         },
         {
           "name": "assertDashboardBodyWithinLimit",
@@ -22594,7 +22917,7 @@
             }
           ],
           "returnType": "void",
-          "line": 94
+          "line": 97
         },
         {
           "name": "validationErrorResponse",
@@ -22613,7 +22936,7 @@
             }
           ],
           "returnType": "Response",
-          "line": 103
+          "line": 106
         },
         {
           "name": "dashboardAudience",
@@ -22627,7 +22950,7 @@
             }
           ],
           "returnType": "InstructionEntry['audience']",
-          "line": 107
+          "line": 110
         },
         {
           "name": "dashboardRequirement",
@@ -22641,7 +22964,7 @@
             }
           ],
           "returnType": "InstructionEntry['requirement']",
-          "line": 118
+          "line": 121
         },
         {
           "name": "dashboardContentType",
@@ -22655,7 +22978,7 @@
             }
           ],
           "returnType": "InstructionEntry['contentType']",
-          "line": 131
+          "line": 134
         },
         {
           "name": "createInstructionsRoutes",
@@ -22663,7 +22986,7 @@
           "isAsync": false,
           "parameters": [],
           "returnType": "Router",
-          "line": 137
+          "line": 140
         }
       ],
       "constants": []
@@ -25749,6 +26072,14 @@
           "namespaceImport": null
         },
         {
+          "module": "../config/runtimeOverrides",
+          "defaultImport": null,
+          "namedImports": [
+            "applyOverlay"
+          ],
+          "namespaceImport": null
+        },
+        {
           "module": "../config/runtimeConfig",
           "defaultImport": null,
           "namedImports": [
@@ -25764,31 +26095,31 @@
           "name": "JsonRpcReq",
           "isExported": false,
           "extends": [],
-          "line": 16,
+          "line": 20,
           "properties": [
             {
               "name": "jsonrpc",
               "type": "'2.0'",
               "optional": false,
-              "line": 16
+              "line": 20
             },
             {
               "name": "id",
               "type": "number|string|null",
               "optional": true,
-              "line": 16
+              "line": 20
             },
             {
               "name": "method",
               "type": "string",
               "optional": false,
-              "line": 16
+              "line": 20
             },
             {
               "name": "params",
               "type": "Record<string,unknown>",
               "optional": true,
-              "line": 16
+              "line": 20
             }
           ],
           "methods": []
@@ -25803,7 +26134,7 @@
           "isAsync": false,
           "parameters": [],
           "returnType": null,
-          "line": 10
+          "line": 14
         },
         {
           "name": "write",
@@ -25817,7 +26148,7 @@
             }
           ],
           "returnType": null,
-          "line": 23
+          "line": 27
         },
         {
           "name": "debug",
@@ -25831,7 +26162,7 @@
             }
           ],
           "returnType": null,
-          "line": 24
+          "line": 28
         },
         {
           "name": "sendInitResult",
@@ -25850,7 +26181,7 @@
             }
           ],
           "returnType": null,
-          "line": 26
+          "line": 30
         },
         {
           "name": "scheduleReady",
@@ -25864,7 +26195,7 @@
             }
           ],
           "returnType": null,
-          "line": 46
+          "line": 50
         },
         {
           "name": "isRequest",
@@ -25878,7 +26209,7 @@
             }
           ],
           "returnType": "v is JsonRpcReq",
-          "line": 104
+          "line": 108
         }
       ],
       "constants": []
@@ -25894,6 +26225,30 @@
         }
       ],
       "exports": [
+        {
+          "name": "ARCHIVE_REASONS",
+          "kinds": [
+            "VariableDeclaration"
+          ]
+        },
+        {
+          "name": "ARCHIVE_SOURCES",
+          "kinds": [
+            "VariableDeclaration"
+          ]
+        },
+        {
+          "name": "ArchiveReason",
+          "kinds": [
+            "TypeAliasDeclaration"
+          ]
+        },
+        {
+          "name": "ArchiveSource",
+          "kinds": [
+            "TypeAliasDeclaration"
+          ]
+        },
         {
           "name": "AUDIENCES",
           "kinds": [
@@ -25979,229 +26334,253 @@
           "name": "InstructionEntry",
           "isExported": true,
           "extends": [],
-          "line": 84,
+          "line": 101,
           "properties": [
             {
               "name": "id",
               "type": "string",
               "optional": false,
-              "line": 85
+              "line": 102
             },
             {
               "name": "title",
               "type": "string",
               "optional": false,
-              "line": 86
+              "line": 103
             },
             {
               "name": "body",
               "type": "string",
               "optional": false,
-              "line": 87
+              "line": 104
             },
             {
               "name": "rationale",
               "type": "string",
               "optional": true,
-              "line": 88
+              "line": 105
             },
             {
               "name": "priority",
               "type": "number",
               "optional": false,
-              "line": 89
+              "line": 106
             },
             {
               "name": "audience",
               "type": "AudienceScope",
               "optional": false,
-              "line": 90
+              "line": 107
             },
             {
               "name": "requirement",
               "type": "RequirementLevel",
               "optional": false,
-              "line": 91
+              "line": 108
             },
             {
               "name": "categories",
               "type": "string[]",
               "optional": false,
-              "line": 92
+              "line": 109
             },
             {
               "name": "contentType",
               "type": "ContentType",
               "optional": false,
-              "line": 93
+              "line": 110
             },
             {
               "name": "primaryCategory",
               "type": "string",
               "optional": true,
-              "line": 96
+              "line": 113
             },
             {
               "name": "sourceHash",
               "type": "string",
               "optional": false,
-              "line": 97
+              "line": 114
             },
             {
               "name": "schemaVersion",
               "type": "string",
               "optional": false,
-              "line": 98
+              "line": 115
             },
             {
               "name": "deprecatedBy",
               "type": "string",
               "optional": true,
-              "line": 99
+              "line": 116
             },
             {
               "name": "createdAt",
               "type": "string",
               "optional": false,
-              "line": 100
+              "line": 117
             },
             {
               "name": "updatedAt",
               "type": "string",
               "optional": false,
-              "line": 101
+              "line": 118
             },
             {
               "name": "usageCount",
               "type": "number",
               "optional": true,
-              "line": 102
+              "line": 119
             },
             {
               "name": "firstSeenTs",
               "type": "string",
               "optional": true,
-              "line": 103
+              "line": 120
             },
             {
               "name": "lastUsedAt",
               "type": "string",
               "optional": true,
-              "line": 104
+              "line": 121
             },
             {
               "name": "riskScore",
               "type": "number",
               "optional": true,
-              "line": 105
+              "line": 122
             },
             {
               "name": "workspaceId",
               "type": "string",
               "optional": true,
-              "line": 107
+              "line": 124
             },
             {
               "name": "userId",
               "type": "string",
               "optional": true,
-              "line": 108
+              "line": 125
             },
             {
               "name": "teamIds",
               "type": "string[]",
               "optional": true,
-              "line": 109
+              "line": 126
             },
             {
               "name": "version",
               "type": "string",
               "optional": true,
-              "line": 111
+              "line": 128
             },
             {
               "name": "status",
               "type": "GovernanceStatus",
               "optional": true,
-              "line": 112
+              "line": 129
             },
             {
               "name": "owner",
               "type": "string",
               "optional": true,
-              "line": 113
+              "line": 130
             },
             {
               "name": "priorityTier",
               "type": "PriorityTier",
               "optional": true,
-              "line": 114
+              "line": 131
             },
             {
               "name": "classification",
               "type": "Classification",
               "optional": true,
-              "line": 115
+              "line": 132
             },
             {
               "name": "lastReviewedAt",
               "type": "string",
               "optional": true,
-              "line": 116
+              "line": 133
             },
             {
               "name": "nextReviewDue",
               "type": "string",
               "optional": true,
-              "line": 117
+              "line": 134
             },
             {
               "name": "reviewIntervalDays",
               "type": "number",
               "optional": true,
-              "line": 118
+              "line": 135
             },
             {
               "name": "changeLog",
               "type": "{ version: string; changedAt: string; summary: string }[]",
               "optional": true,
-              "line": 119
+              "line": 136
             },
             {
               "name": "supersedes",
               "type": "string",
               "optional": true,
-              "line": 120
+              "line": 137
             },
             {
               "name": "archivedAt",
               "type": "string",
               "optional": true,
-              "line": 121
+              "line": 138
+            },
+            {
+              "name": "archivedBy",
+              "type": "string",
+              "optional": true,
+              "line": 142
+            },
+            {
+              "name": "archiveReason",
+              "type": "ArchiveReason",
+              "optional": true,
+              "line": 143
+            },
+            {
+              "name": "archiveSource",
+              "type": "ArchiveSource",
+              "optional": true,
+              "line": 144
+            },
+            {
+              "name": "restoreEligible",
+              "type": "boolean",
+              "optional": true,
+              "line": 145
             },
             {
               "name": "semanticSummary",
               "type": "string",
               "optional": true,
-              "line": 123
+              "line": 147
             },
             {
               "name": "createdByAgent",
               "type": "string",
               "optional": true,
-              "line": 125
+              "line": 149
             },
             {
               "name": "sourceWorkspace",
               "type": "string",
               "optional": true,
-              "line": 126
+              "line": 150
             },
             {
               "name": "extensions",
               "type": "Record<string, unknown>",
               "optional": true,
-              "line": 127
+              "line": 151
             }
           ],
           "methods": []
@@ -26243,6 +26622,18 @@
           "isExported": true,
           "type": "typeof CLASSIFICATIONS[number]",
           "line": 51
+        },
+        {
+          "name": "ArchiveReason",
+          "isExported": true,
+          "type": "typeof ARCHIVE_REASONS[number]",
+          "line": 61
+        },
+        {
+          "name": "ArchiveSource",
+          "isExported": true,
+          "type": "typeof ARCHIVE_SOURCES[number]",
+          "line": 66
         }
       ],
       "enums": [],
@@ -26298,6 +26689,18 @@
           "type": null,
           "initializerKind": "AsExpression",
           "line": 50
+        },
+        {
+          "name": "ARCHIVE_REASONS",
+          "type": null,
+          "initializerKind": "AsExpression",
+          "line": 58
+        },
+        {
+          "name": "ARCHIVE_SOURCES",
+          "type": null,
+          "initializerKind": "AsExpression",
+          "line": 63
         }
       ]
     },
@@ -28870,6 +29273,14 @@
           "namespaceImport": null
         },
         {
+          "module": "../config/runtimeOverrides",
+          "defaultImport": null,
+          "namedImports": [
+            "applyOverlay"
+          ],
+          "namespaceImport": null
+        },
+        {
           "module": "../config/runtimeConfig",
           "defaultImport": null,
           "namedImports": [
@@ -29108,138 +29519,138 @@
           "name": "CliConfig",
           "isExported": false,
           "extends": [],
-          "line": 205,
+          "line": 219,
           "properties": [
             {
               "name": "dashboard",
               "type": "boolean",
               "optional": false,
-              "line": 206
+              "line": 220
             },
             {
               "name": "dashboardPort",
               "type": "number",
               "optional": false,
-              "line": 207
+              "line": 221
             },
             {
               "name": "dashboardHost",
               "type": "string",
               "optional": false,
-              "line": 208
+              "line": 222
             },
             {
               "name": "maxPortTries",
               "type": "number",
               "optional": false,
-              "line": 209
+              "line": 223
             },
             {
               "name": "legacy",
               "type": "boolean",
               "optional": false,
-              "line": 210
+              "line": 224
             },
             {
               "name": "dashboardTls",
               "type": "boolean",
               "optional": false,
-              "line": 211
+              "line": 225
             },
             {
               "name": "dashboardTlsCert",
               "type": "string",
               "optional": true,
-              "line": 212
+              "line": 226
             },
             {
               "name": "dashboardTlsKey",
               "type": "string",
               "optional": true,
-              "line": 213
+              "line": 227
             },
             {
               "name": "dashboardTlsCa",
               "type": "string",
               "optional": true,
-              "line": 214
+              "line": 228
             },
             {
               "name": "initCert",
               "type": "boolean",
               "optional": true,
               "description": "Trigger TLS cert generation on startup.",
-              "line": 217
+              "line": 231
             },
             {
               "name": "certDir",
               "type": "string",
               "optional": true,
               "description": "Output directory for generated cert/key. Defaults to <home>/.index-server/certs.",
-              "line": 219
+              "line": 233
             },
             {
               "name": "certFile",
               "type": "string",
               "optional": true,
               "description": "Override path for generated certificate file.",
-              "line": 221
+              "line": 235
             },
             {
               "name": "keyFile",
               "type": "string",
               "optional": true,
               "description": "Override path for generated private key file.",
-              "line": 223
+              "line": 237
             },
             {
               "name": "certCn",
               "type": "string",
               "optional": true,
               "description": "CommonName for the generated certificate.",
-              "line": 225
+              "line": 239
             },
             {
               "name": "certSan",
               "type": "string",
               "optional": true,
               "description": "Comma-separated SAN entries (DNS:/IP: prefixed).",
-              "line": 227
+              "line": 241
             },
             {
               "name": "certDays",
               "type": "number",
               "optional": true,
               "description": "Validity period in days (1..3650).",
-              "line": 229
+              "line": 243
             },
             {
               "name": "certKeyBits",
               "type": "number",
               "optional": true,
               "description": "RSA key size in bits (2048 or 4096).",
-              "line": 231
+              "line": 245
             },
             {
               "name": "certForce",
               "type": "boolean",
               "optional": true,
               "description": "Overwrite existing cert/key files.",
-              "line": 233
+              "line": 247
             },
             {
               "name": "certPrintEnv",
               "type": "boolean | string",
               "optional": true,
               "description": "Print env-var lines after generation. true=auto, or 'posix'|'powershell'|'both'.",
-              "line": 235
+              "line": 249
             },
             {
               "name": "start",
               "type": "boolean",
               "optional": true,
               "description": "Continue normal server startup after cert-init (composes with --init-cert).",
-              "line": 237
+              "line": 251
             }
           ],
           "methods": []
@@ -29260,7 +29671,7 @@
             }
           ],
           "returnType": null,
-          "line": 41
+          "line": 55
         },
         {
           "name": "parseArgs",
@@ -29274,7 +29685,7 @@
             }
           ],
           "returnType": "CliConfig",
-          "line": 240
+          "line": 254
         },
         {
           "name": "launchSetupWizard",
@@ -29288,7 +29699,7 @@
             }
           ],
           "returnType": "never",
-          "line": 313
+          "line": 327
         },
         {
           "name": "parseMcpConfigOptions",
@@ -29302,7 +29713,7 @@
             }
           ],
           "returnType": "{ command?: string; options: McpOperationOptions; json: boolean }",
-          "line": 329
+          "line": 343
         },
         {
           "name": "handleMcpConfigCli",
@@ -29316,7 +29727,7 @@
             }
           ],
           "returnType": "void",
-          "line": 359
+          "line": 373
         },
         {
           "name": "printHelpAndExit",
@@ -29324,7 +29735,7 @@
           "isAsync": false,
           "parameters": [],
           "returnType": null,
-          "line": 391
+          "line": 405
         },
         {
           "name": "findPackageVersion",
@@ -29332,7 +29743,7 @@
           "isAsync": false,
           "parameters": [],
           "returnType": "string",
-          "line": 481
+          "line": 495
         },
         {
           "name": "startDashboard",
@@ -29346,7 +29757,7 @@
             }
           ],
           "returnType": "Promise<{ url: string; close: () => void } | null>",
-          "line": 499
+          "line": 513
         },
         {
           "name": "main",
@@ -29354,7 +29765,7 @@
           "isAsync": true,
           "parameters": [],
           "returnType": null,
-          "line": 548
+          "line": 562
         }
       ],
       "constants": [
@@ -29362,7 +29773,7 @@
           "name": "shutdownGuard",
           "type": null,
           "initializerKind": "CallExpression",
-          "line": 93
+          "line": 107
         }
       ]
     },
@@ -30962,6 +31373,58 @@
         }
       ],
       "constants": []
+    },
+    {
+      "path": "src/services/auditActions.ts",
+      "imports": [],
+      "exports": [
+        {
+          "name": "ARCHIVE_AUDIT_ACTIONS",
+          "kinds": [
+            "VariableDeclaration"
+          ]
+        },
+        {
+          "name": "ArchiveAuditAction",
+          "kinds": [
+            "TypeAliasDeclaration"
+          ]
+        },
+        {
+          "name": "AUDIT_ACTIONS",
+          "kinds": [
+            "VariableDeclaration"
+          ]
+        }
+      ],
+      "classes": [],
+      "interfaces": [],
+      "typeAliases": [
+        {
+          "name": "ArchiveAuditAction",
+          "isExported": true,
+          "type": "typeof AUDIT_ACTIONS[keyof typeof AUDIT_ACTIONS]",
+          "line": 33
+        }
+      ],
+      "enums": [],
+      "functions": [],
+      "constants": [
+        {
+          "name": "AUDIT_ACTIONS",
+          "type": null,
+          "initializerKind": "AsExpression",
+          "description": "Centralized audit action name constants.\n\nPhase E1 of spec 006-archive-lifecycle introduces this module to replace\ninline string literals at audit emission sites for the archive lifecycle.\nCallers should import the constants below rather than passing raw strings\nto {@link logAudit}; the {@link ArchiveAuditAction} union enables TS to\nflag typos in switch / equality checks downstream.\n\nExisting pre-Phase-D audit actions (e.g. `remove`, `remove_blocked`,\n`remove_backup`, `remove_backup_failed`, `groom`, `governanceUpdate`, …)\nremain inline strings for now; this module focuses on the archive\nlifecycle additions and the `remove`-default transition warning.",
+          "line": 16
+        },
+        {
+          "name": "ARCHIVE_AUDIT_ACTIONS",
+          "type": "readonly ArchiveAuditAction[]",
+          "initializerKind": "CallExpression",
+          "description": "Frozen list of all archive-lifecycle audit action names (for iteration / assertions).",
+          "line": 36
+        }
+      ]
     },
     {
       "path": "src/services/auditLog.ts",
@@ -32628,6 +33091,264 @@
       "typeAliases": [],
       "enums": [],
       "functions": [],
+      "constants": []
+    },
+    {
+      "path": "src/services/configValidation.ts",
+      "imports": [],
+      "exports": [
+        {
+          "name": "FlagValidationResult",
+          "kinds": [
+            "TypeAliasDeclaration"
+          ]
+        },
+        {
+          "name": "isWriteable",
+          "kinds": [
+            "FunctionDeclaration"
+          ]
+        },
+        {
+          "name": "validateFlagUpdate",
+          "kinds": [
+            "FunctionDeclaration"
+          ]
+        }
+      ],
+      "classes": [],
+      "interfaces": [
+        {
+          "name": "FlagValidationRules",
+          "isExported": false,
+          "extends": [],
+          "line": 25,
+          "properties": [
+            {
+              "name": "min",
+              "type": "number",
+              "optional": true,
+              "line": 26
+            },
+            {
+              "name": "max",
+              "type": "number",
+              "optional": true,
+              "line": 27
+            },
+            {
+              "name": "enum",
+              "type": "readonly (string | number)[]",
+              "optional": true,
+              "line": 28
+            },
+            {
+              "name": "pattern",
+              "type": "string",
+              "optional": true,
+              "line": 29
+            },
+            {
+              "name": "format",
+              "type": "'url' | 'port' | 'path' | 'duration-ms' | 'host'",
+              "optional": true,
+              "line": 30
+            },
+            {
+              "name": "unit",
+              "type": "string",
+              "optional": true,
+              "line": 31
+            }
+          ],
+          "methods": []
+        },
+        {
+          "name": "FlagEntryShape",
+          "isExported": false,
+          "extends": [],
+          "line": 34,
+          "properties": [
+            {
+              "name": "name",
+              "type": "string",
+              "optional": true,
+              "line": 35
+            },
+            {
+              "name": "type",
+              "type": "'boolean' | 'number' | 'string'",
+              "optional": false,
+              "line": 36
+            },
+            {
+              "name": "editable",
+              "type": "boolean",
+              "optional": true,
+              "line": 37
+            },
+            {
+              "name": "readonlyReason",
+              "type": "string",
+              "optional": true,
+              "line": 38
+            },
+            {
+              "name": "validation",
+              "type": "FlagValidationRules",
+              "optional": true,
+              "line": 39
+            }
+          ],
+          "methods": []
+        }
+      ],
+      "typeAliases": [
+        {
+          "name": "FlagValidationResult",
+          "isExported": true,
+          "type": "| { ok: true; value: string | number | boolean }\n  | { ok: false; code: 'READONLY' | 'TYPE' | 'RANGE' | 'ENUM' | 'PATTERN' | 'FORMAT'; error: string }",
+          "description": "Per-flag validator layer (Plan §2.6 T2, #359).\n\n`validateFlagUpdate(entry, raw)` returns a discriminated-union result:\n  - `{ ok:true,  value }`      coerced/normalized canonical value for persistence.\n  - `{ ok:false, code, error }` machine-readable rejection (READONLY|TYPE|RANGE|ENUM|PATTERN|FORMAT).\n\nRule order (short-circuits on first failure):\n  1. READONLY    -- editable:false (any readonlyReason) always rejects writes.\n  2. TYPE        -- coerce raw into the canonical primitive (boolean|number|string).\n  3. RANGE       -- numeric min/max (numbers only).\n  4. ENUM        -- exact-match membership (case-sensitive).\n  5. PATTERN     -- RegExp test against the stringified value.\n  6. FORMAT      -- url|port|path|duration-ms|host (Morpheus revision #3).\n\nConsumers: api-redesign POST handler (per-field result on /api/admin/config).",
+          "line": 21
+        },
+        {
+          "name": "FailCode",
+          "isExported": false,
+          "type": "'READONLY' | 'TYPE' | 'RANGE' | 'ENUM' | 'PATTERN' | 'FORMAT'",
+          "line": 68
+        }
+      ],
+      "enums": [],
+      "functions": [
+        {
+          "name": "coerceBoolean",
+          "isExported": false,
+          "isAsync": false,
+          "parameters": [
+            {
+              "name": "raw",
+              "type": "unknown",
+              "optional": false
+            }
+          ],
+          "returnType": "boolean | undefined",
+          "line": 42
+        },
+        {
+          "name": "coerceNumber",
+          "isExported": false,
+          "isAsync": false,
+          "parameters": [
+            {
+              "name": "raw",
+              "type": "unknown",
+              "optional": false
+            }
+          ],
+          "returnType": "number | undefined",
+          "line": 53
+        },
+        {
+          "name": "coerceString",
+          "isExported": false,
+          "isAsync": false,
+          "parameters": [
+            {
+              "name": "raw",
+              "type": "unknown",
+              "optional": false
+            }
+          ],
+          "returnType": "string | undefined",
+          "line": 64
+        },
+        {
+          "name": "fail",
+          "isExported": false,
+          "isAsync": false,
+          "parameters": [
+            {
+              "name": "code",
+              "type": "FailCode",
+              "optional": false
+            },
+            {
+              "name": "error",
+              "type": "string",
+              "optional": false
+            }
+          ],
+          "returnType": "FlagValidationResult",
+          "line": 70
+        },
+        {
+          "name": "checkFormat",
+          "isExported": false,
+          "isAsync": false,
+          "parameters": [
+            {
+              "name": "format",
+              "type": "NonNullable<FlagValidationRules['format']>",
+              "optional": false
+            },
+            {
+              "name": "value",
+              "type": "string | number",
+              "optional": false
+            }
+          ],
+          "returnType": "FlagValidationResult | null",
+          "line": 74
+        },
+        {
+          "name": "isWriteable",
+          "isExported": true,
+          "isAsync": false,
+          "parameters": [
+            {
+              "name": "entry",
+              "type": "FlagEntryShape | any",
+              "optional": false
+            }
+          ],
+          "returnType": "boolean",
+          "description": "Single source of truth for the \"is this flag mutable from the dashboard?\" check.\nUsed by:\n - validateFlagUpdate() below (READONLY rule)\n - admin.routes.ts POST /admin/config/reset/:flag handler (#359 C1 fix)\n - runtimeOverrides.writeOverride() defense-in-depth (#359 H1 fix)\n\n`editable:false` always blocks regardless of `readonlyReason`. Sensitive\nsecrets must never be writable via the dashboard API surface.",
+          "line": 125
+        },
+        {
+          "name": "validateFlagUpdate",
+          "isExported": true,
+          "isAsync": false,
+          "parameters": [
+            {
+              "name": "entry",
+              "type": "FlagEntryShape | any",
+              "optional": false
+            },
+            {
+              "name": "raw",
+              "type": "unknown",
+              "optional": false
+            }
+          ],
+          "returnType": "FlagValidationResult",
+          "line": 130
+        },
+        {
+          "name": "describe",
+          "isExported": false,
+          "isAsync": false,
+          "parameters": [
+            {
+              "name": "raw",
+              "type": "unknown",
+              "optional": false
+            }
+          ],
+          "returnType": "string",
+          "line": 190
+        }
+      ],
       "constants": []
     },
     {
@@ -34393,6 +35114,16 @@
             "getBooleanEnv"
           ],
           "namespaceImport": null
+        },
+        {
+          "module": "../config/runtimeOverrides",
+          "defaultImport": null,
+          "namedImports": [
+            "readOverlay",
+            "shadowedEnv",
+            "registerReadonlyFlags"
+          ],
+          "namespaceImport": null
         }
       ],
       "exports": [
@@ -34403,13 +35134,25 @@
           ]
         },
         {
+          "name": "FlagEditability",
+          "kinds": [
+            "TypeAliasDeclaration"
+          ]
+        },
+        {
           "name": "FlagMeta",
           "kinds": [
-            "InterfaceDeclaration"
+            "TypeAliasDeclaration"
           ]
         },
         {
           "name": "FlagRuntime",
+          "kinds": [
+            "TypeAliasDeclaration"
+          ]
+        },
+        {
+          "name": "FlagValidation",
           "kinds": [
             "InterfaceDeclaration"
           ]
@@ -34419,99 +35162,91 @@
           "kinds": [
             "FunctionDeclaration"
           ]
+        },
+        {
+          "name": "ReloadBehavior",
+          "kinds": [
+            "TypeAliasDeclaration"
+          ]
         }
       ],
       "classes": [],
       "interfaces": [
         {
-          "name": "FlagMeta",
+          "name": "FlagValidation",
           "isExported": true,
           "extends": [],
-          "description": "dashboard_config\nReturns a deterministic snapshot of all recognized environment / feature flags regardless of current value.\nThis consolidates scattered documentation, enabling the dashboard (and tests) to surface:\n - Current value (raw)\n - Parsed boolean (when applicable)\n - Default semantics\n - Category (core | dashboard | instructions | manifest | tracing | diagnostics | stress | usage | validation | auth | metrics | experimental)\n - Description\n - Stability (stable | diagnostic | experimental | reserved)\n - Since (version first introduced when known – best effort)\n\nThe list is curated (not discovered dynamically) to ensure ordering stability and to include flags\nthat might not appear in code paths when disabled. Additions should append (not reorder) to maintain\npredictable client diffing.",
-          "line": 21,
+          "description": "Validation/coercion constraints (Morpheus §2.1 revision #3).\n`format` adds high-level semantic checks beyond min/max/pattern/enum.\nv1 implements `url` and `port`; `path` falls back to `pattern`,\n`duration-ms` to `min:0 + unit:'ms'`. No byte-size suffix parsing.",
+          "line": 58,
           "properties": [
             {
-              "name": "name",
-              "type": "string",
-              "optional": false,
-              "line": 21
+              "name": "min",
+              "type": "number",
+              "optional": true,
+              "line": 59
             },
             {
-              "name": "category",
-              "type": "string",
-              "optional": false,
-              "line": 21
+              "name": "max",
+              "type": "number",
+              "optional": true,
+              "line": 60
             },
             {
-              "name": "description",
-              "type": "string",
-              "optional": false,
-              "line": 21
-            },
-            {
-              "name": "stability",
-              "type": "'stable'|'diagnostic'|'experimental'|'reserved'",
-              "optional": false,
-              "line": 21
-            },
-            {
-              "name": "since",
+              "name": "pattern",
               "type": "string",
               "optional": true,
-              "line": 21
+              "line": 61
             },
             {
-              "name": "default",
+              "name": "enum",
+              "type": "string[]",
+              "optional": true,
+              "line": 62
+            },
+            {
+              "name": "format",
+              "type": "'url' | 'port' | 'path' | 'duration-ms' | 'host'",
+              "optional": true,
+              "line": 63
+            },
+            {
+              "name": "unit",
               "type": "string",
               "optional": true,
-              "line": 21
-            },
-            {
-              "name": "type",
-              "type": "'boolean'|'string'|'number'",
-              "optional": true,
-              "line": 21
-            }
-          ],
-          "methods": []
-        },
-        {
-          "name": "FlagRuntime",
-          "isExported": true,
-          "extends": [
-            "FlagMeta"
-          ],
-          "line": 22,
-          "properties": [
-            {
-              "name": "value",
-              "type": "string",
-              "optional": true,
-              "line": 22
-            },
-            {
-              "name": "enabled",
-              "type": "boolean",
-              "optional": true,
-              "line": 22
-            },
-            {
-              "name": "parsed",
-              "type": "unknown",
-              "optional": true,
-              "line": 22
-            },
-            {
-              "name": "docAnchor",
-              "type": "string",
-              "optional": true,
-              "line": 22
+              "line": 64
             }
           ],
           "methods": []
         }
       ],
-      "typeAliases": [],
+      "typeAliases": [
+        {
+          "name": "ReloadBehavior",
+          "isExported": true,
+          "type": "'dynamic' | 'next-request' | 'restart-required'",
+          "description": "dashboard_config\nReturns a deterministic snapshot of all recognized environment / feature flags regardless of current value.\nThis consolidates scattered documentation, enabling the dashboard (and tests) to surface:\n - Current value (raw)\n - Parsed boolean (when applicable)\n - Default semantics\n - Category (core | dashboard | instructions | manifest | tracing | diagnostics | stress | usage | validation | auth | metrics | experimental)\n - Description\n - Stability (stable | diagnostic | experimental | reserved)\n - Since (version first introduced when known – best effort)\n\nThe list is curated (not discovered dynamically) to ensure ordering stability and to include flags\nthat might not appear in code paths when disabled. Additions should append (not reorder) to maintain\npredictable client diffing.\nReload-behavior tier for a flag (plan §2.1, issue #359).\n\n  - dynamic           re-read on every consumer call site; safe to change at runtime\n  - next-request      picked up by the next operation; not retroactive\n  - restart-required  captured at boot/init; consumers cache; needs process restart\n\nDefault classification when audit evidence is inconclusive: `restart-required`\n(safe choice — never lies about effect). Promotion to `dynamic` requires\nexplicit `dynamicReadSite:true` evidence (T1 schema spec enforces this).\n\nNOTE for future maintainers: do not invent a fourth tier for WS-reconnect or\nTLS-reload semantics. Both currently map to `restart-required` — see\n`src/config/runtimeConfig.ts` header comment for the rationale.",
+          "line": 37
+        },
+        {
+          "name": "FlagEditability",
+          "isExported": true,
+          "type": "| { editable: true }\n  | {\n      editable: false;\n      readonlyReason: 'derived' | 'deprecated' | 'reserved' | 'sensitive' | 'legacy';\n      readonlyDetail?: string;\n    }",
+          "description": "Discriminated union for flag editability (Morpheus §2.1 revision #1).\n`readonlyReason` is required for any non-editable flag; `readonlyDetail`\nis an optional human-readable expansion surfaced as the row tooltip.",
+          "line": 44
+        },
+        {
+          "name": "FlagMeta",
+          "isExported": true,
+          "type": "{\n  name: string;\n  category: string;\n  description: string;\n  stability: 'stable' | 'diagnostic' | 'experimental' | 'reserved';\n  since?: string;\n  default?: string;\n  type?: 'boolean' | 'string' | 'number';\n  reloadBehavior: ReloadBehavior;\n  /** Optional UI surface hint (Morpheus §2.1 revision #2). */\n  surfaces?: ('pinned' | 'advanced')[];\n  validation?: FlagValidation;\n  /**\n   * Opt-in marker that promotes a `dynamic` / `next-request` classification.\n   * Required by the T1 boot-time-read audit when a flag is read in a\n   * constructor or load/init/setup/build function AND classified as\n   * anything other than `restart-required`.\n   */\n  dynamicReadSite?: boolean;\n} & FlagEditability",
+          "line": 67
+        },
+        {
+          "name": "FlagRuntime",
+          "isExported": true,
+          "type": "FlagMeta & {\n  value?: string;\n  enabled?: boolean;\n  parsed?: unknown;\n  docAnchor?: string;\n  /**\n   * True when an overlay entry exists for this flag AND a different `process.env`\n   * value was present at boot (silent shadow). Surfaced by the dashboard so\n   * operators can recognize when overlay state diverges from inherited ENV.\n   * Plan §3.1 Morpheus revision #4.\n   */\n  overlayShadowsEnv: boolean;\n  /**\n   * For sensitive readonly flags (`editable:false` + `readonlyReason:'sensitive'`),\n   * `value`/`parsed`/`enabled` are omitted from the snapshot to prevent secret\n   * leakage into HTTP logs, browser DevTools, dashboard render state, and\n   * session-history backups (#359 C2). `present` exposes the boolean\n   * \"configured / not configured\" signal the UI needs.\n   *\n   * For non-sensitive flags this field is undefined.\n   */\n  present?: boolean;\n}",
+          "line": 88
+        }
+      ],
       "enums": [],
       "functions": [
         {
@@ -34525,8 +35260,8 @@
               "optional": false
             }
           ],
-          "returnType": "{ value?:string; enabled?:boolean; parsed?:unknown }",
-          "line": 202
+          "returnType": "{ value?:string; enabled?:boolean; parsed?:unknown; present?:boolean }",
+          "line": 301
         },
         {
           "name": "getFlagRegistrySnapshot",
@@ -34534,7 +35269,7 @@
           "isAsync": false,
           "parameters": [],
           "returnType": "FlagRuntime[]",
-          "line": 215
+          "line": 321
         }
       ],
       "constants": [
@@ -34542,7 +35277,7 @@
           "name": "FLAG_REGISTRY",
           "type": "FlagMeta[]",
           "initializerKind": "ArrayLiteralExpression",
-          "line": 25
+          "line": 113
         }
       ]
     },
@@ -35746,6 +36481,12 @@
         },
         {
           "module": "./handlers/instructions.query",
+          "defaultImport": null,
+          "namedImports": [],
+          "namespaceImport": null
+        },
+        {
+          "module": "./handlers/instructions.archive",
           "defaultImport": null,
           "namedImports": [],
           "namespaceImport": null
@@ -37555,7 +38296,7 @@
           ],
           "returnType": "void",
           "description": "Fire-and-forget usage tracking for search results.\nTracks top results only to avoid excessive writes.",
-          "line": 910
+          "line": 912
         },
         {
           "name": "buildAfterRetrievalMeta",
@@ -37564,7 +38305,7 @@
           "parameters": [],
           "returnType": "{ afterRetrieval: string[] }",
           "description": "Build _meta.afterRetrieval hints for MCP clients.\nEncourages callers to record usage and submit feedback.",
-          "line": 922
+          "line": 924
         },
         {
           "name": "buildSearchHints",
@@ -37579,7 +38320,7 @@
           ],
           "returnType": "string[]",
           "description": "Build actionable hints for zero-result searches",
-          "line": 934
+          "line": 936
         }
       ],
       "constants": []
@@ -37922,6 +38663,276 @@
       "constants": []
     },
     {
+      "path": "src/services/handlers/instructions.archive.ts",
+      "imports": [
+        {
+          "module": "../../server/registry",
+          "defaultImport": null,
+          "namedImports": [
+            "registerHandler"
+          ],
+          "namespaceImport": null
+        },
+        {
+          "module": "../indexContext",
+          "defaultImport": null,
+          "namedImports": [
+            "archiveEntry",
+            "restoreEntry",
+            "purgeEntry",
+            "getArchivedEntry",
+            "listArchivedEntries"
+          ],
+          "namespaceImport": null
+        },
+        {
+          "module": "../auditLog",
+          "defaultImport": null,
+          "namedImports": [
+            "logAudit"
+          ],
+          "namespaceImport": null
+        },
+        {
+          "module": "../auditActions",
+          "defaultImport": null,
+          "namedImports": [
+            "AUDIT_ACTIONS"
+          ],
+          "namespaceImport": null
+        },
+        {
+          "module": "../../config/runtimeConfig",
+          "defaultImport": null,
+          "namedImports": [
+            "getRuntimeConfig"
+          ],
+          "namespaceImport": null
+        },
+        {
+          "module": "../bootstrapGating",
+          "defaultImport": null,
+          "namedImports": [
+            "mutationGatedReason"
+          ],
+          "namespaceImport": null
+        },
+        {
+          "module": "./instructions.shared",
+          "defaultImport": null,
+          "namedImports": [
+            "guard"
+          ],
+          "namespaceImport": null
+        },
+        {
+          "module": "../instructionsBackup",
+          "defaultImport": null,
+          "namedImports": [
+            "backupInstructionsDir"
+          ],
+          "namespaceImport": null
+        },
+        {
+          "module": "../../models/instruction",
+          "defaultImport": null,
+          "namedImports": [
+            "ArchiveReason",
+            "ArchiveSource",
+            "InstructionEntry"
+          ],
+          "namespaceImport": null
+        },
+        {
+          "module": "../storage/types",
+          "defaultImport": null,
+          "namedImports": [
+            "RestoreMode"
+          ],
+          "namespaceImport": null
+        }
+      ],
+      "exports": [],
+      "classes": [],
+      "interfaces": [
+        {
+          "name": "ArchiveParams",
+          "isExported": false,
+          "extends": [],
+          "line": 32,
+          "properties": [
+            {
+              "name": "ids",
+              "type": "string[]",
+              "optional": false,
+              "line": 33
+            },
+            {
+              "name": "reason",
+              "type": "ArchiveReason",
+              "optional": true,
+              "line": 34
+            },
+            {
+              "name": "archivedBy",
+              "type": "string",
+              "optional": true,
+              "line": 35
+            },
+            {
+              "name": "dryRun",
+              "type": "boolean",
+              "optional": true,
+              "line": 36
+            }
+          ],
+          "methods": []
+        },
+        {
+          "name": "ArchiveErrorRow",
+          "isExported": false,
+          "extends": [],
+          "line": 39,
+          "properties": [
+            {
+              "name": "id",
+              "type": "string",
+              "optional": false,
+              "line": 39
+            },
+            {
+              "name": "error",
+              "type": "string",
+              "optional": false,
+              "line": 39
+            }
+          ],
+          "methods": []
+        },
+        {
+          "name": "RestoreParams",
+          "isExported": false,
+          "extends": [],
+          "line": 83,
+          "properties": [
+            {
+              "name": "ids",
+              "type": "string[]",
+              "optional": false,
+              "line": 84
+            },
+            {
+              "name": "restoreMode",
+              "type": "RestoreMode",
+              "optional": true,
+              "line": 85
+            },
+            {
+              "name": "dryRun",
+              "type": "boolean",
+              "optional": true,
+              "line": 86
+            }
+          ],
+          "methods": []
+        },
+        {
+          "name": "PurgeArchiveParams",
+          "isExported": false,
+          "extends": [],
+          "line": 119,
+          "properties": [
+            {
+              "name": "ids",
+              "type": "string[]",
+              "optional": false,
+              "line": 120
+            },
+            {
+              "name": "dryRun",
+              "type": "boolean",
+              "optional": true,
+              "line": 121
+            },
+            {
+              "name": "force",
+              "type": "boolean",
+              "optional": true,
+              "line": 122
+            }
+          ],
+          "methods": []
+        },
+        {
+          "name": "ListArchivedParams",
+          "isExported": false,
+          "extends": [],
+          "line": 205,
+          "properties": [
+            {
+              "name": "category",
+              "type": "string",
+              "optional": true,
+              "line": 206
+            },
+            {
+              "name": "contentType",
+              "type": "string",
+              "optional": true,
+              "line": 207
+            },
+            {
+              "name": "reason",
+              "type": "ArchiveReason",
+              "optional": true,
+              "line": 208
+            },
+            {
+              "name": "source",
+              "type": "ArchiveSource",
+              "optional": true,
+              "line": 209
+            },
+            {
+              "name": "archivedBy",
+              "type": "string",
+              "optional": true,
+              "line": 210
+            },
+            {
+              "name": "restoreEligible",
+              "type": "boolean",
+              "optional": true,
+              "line": 211
+            },
+            {
+              "name": "includeContent",
+              "type": "boolean",
+              "optional": true,
+              "line": 212
+            },
+            {
+              "name": "limit",
+              "type": "number",
+              "optional": true,
+              "line": 213
+            },
+            {
+              "name": "offset",
+              "type": "number",
+              "optional": true,
+              "line": 214
+            }
+          ],
+          "methods": []
+        }
+      ],
+      "typeAliases": [],
+      "enums": [],
+      "functions": [],
+      "constants": []
+    },
+    {
       "path": "src/services/handlers/instructions.groom.ts",
       "imports": [
         {
@@ -37960,7 +38971,11 @@
             "loadUsageSnapshot",
             "touchIndexVersion",
             "writeEntry",
-            "removeEntry"
+            "removeEntry",
+            "archiveEntry",
+            "purgeEntry",
+            "listArchivedEntries",
+            "getArchivedEntry"
           ],
           "namespaceImport": null
         },
@@ -37985,6 +39000,14 @@
           "defaultImport": null,
           "namedImports": [
             "attemptManifestUpdate"
+          ],
+          "namespaceImport": null
+        },
+        {
+          "module": "../bootstrapGating",
+          "defaultImport": null,
+          "namedImports": [
+            "mutationGatedReason"
           ],
           "namespaceImport": null
         },
@@ -38018,7 +39041,8 @@
           "defaultImport": null,
           "namedImports": [
             "InstructionEntry",
-            "PRIORITY_TIERS"
+            "PRIORITY_TIERS",
+            "ArchiveReason"
           ],
           "namespaceImport": null
         },
@@ -38057,6 +39081,22 @@
             "SchemaMigrationResult"
           ],
           "namespaceImport": null
+        },
+        {
+          "module": "../auditActions",
+          "defaultImport": null,
+          "namedImports": [
+            "AUDIT_ACTIONS"
+          ],
+          "namespaceImport": null
+        },
+        {
+          "module": "../instructionsBackup",
+          "defaultImport": null,
+          "namedImports": [
+            "backupInstructionsDir"
+          ],
+          "namespaceImport": null
         }
       ],
       "exports": [],
@@ -38064,7 +39104,24 @@
       "interfaces": [],
       "typeAliases": [],
       "enums": [],
-      "functions": [],
+      "functions": [
+        {
+          "name": "groomBackup",
+          "isExported": false,
+          "isAsync": false,
+          "parameters": [],
+          "returnType": "string",
+          "line": 182
+        },
+        {
+          "name": "resolveArchiveLocation",
+          "isExported": false,
+          "isAsync": false,
+          "parameters": [],
+          "returnType": "string",
+          "line": 186
+        }
+      ],
       "constants": []
     },
     {
@@ -38556,7 +39613,8 @@
             "invalidate",
             "touchIndexVersion",
             "ensureLoaded",
-            "removeEntry"
+            "removeEntry",
+            "archiveEntry"
           ],
           "namespaceImport": null
         },
@@ -38565,6 +39623,14 @@
           "defaultImport": null,
           "namedImports": [
             "logAudit"
+          ],
+          "namespaceImport": null
+        },
+        {
+          "module": "../auditActions",
+          "defaultImport": null,
+          "namedImports": [
+            "AUDIT_ACTIONS"
           ],
           "namespaceImport": null
         },
@@ -38602,27 +39668,94 @@
           "namespaceImport": null
         },
         {
-          "module": "../backupZip",
+          "module": "../instructionsBackup",
           "defaultImport": null,
           "namedImports": [
-            "createZipBackup"
+            "backupInstructionsDir"
           ],
           "namespaceImport": null
         }
       ],
       "exports": [],
       "classes": [],
-      "interfaces": [],
-      "typeAliases": [],
+      "interfaces": [
+        {
+          "name": "RemoveParams",
+          "isExported": false,
+          "extends": [],
+          "line": 15,
+          "properties": [
+            {
+              "name": "ids",
+              "type": "string[]",
+              "optional": false,
+              "line": 16
+            },
+            {
+              "name": "missingOk",
+              "type": "boolean",
+              "optional": true,
+              "line": 17
+            },
+            {
+              "name": "force",
+              "type": "boolean",
+              "optional": true,
+              "line": 18
+            },
+            {
+              "name": "dryRun",
+              "type": "boolean",
+              "optional": true,
+              "line": 19
+            },
+            {
+              "name": "mode",
+              "type": "RemoveMode",
+              "optional": true,
+              "line": 20
+            },
+            {
+              "name": "purge",
+              "type": "boolean",
+              "optional": true,
+              "description": "Alias for mode:'purge'. Documented in spec 006-archive-lifecycle D2.",
+              "line": 22
+            },
+            {
+              "name": "archivedBy",
+              "type": "string",
+              "optional": true,
+              "description": "Optional operator identity threaded into archive metadata (mode='archive').",
+              "line": 24
+            }
+          ],
+          "methods": []
+        }
+      ],
+      "typeAliases": [
+        {
+          "name": "RemoveMode",
+          "isExported": false,
+          "type": "'archive' | 'purge'",
+          "line": 13
+        }
+      ],
       "enums": [],
       "functions": [
         {
-          "name": "backupInstructionsDir",
+          "name": "resolveMode",
           "isExported": false,
           "isAsync": false,
-          "parameters": [],
-          "returnType": "string",
-          "line": 12
+          "parameters": [
+            {
+              "name": "p",
+              "type": "RemoveParams",
+              "optional": false
+            }
+          ],
+          "returnType": "{ mode: RemoveMode; defaulted: boolean }",
+          "line": 30
         }
       ],
       "constants": []
@@ -39717,7 +40850,10 @@
           "module": "./storage/types",
           "defaultImport": null,
           "namedImports": [
-            "IInstructionStore"
+            "IInstructionStore",
+            "ArchiveMeta",
+            "ListArchivedOpts",
+            "RestoreMode"
           ],
           "namespaceImport": null
         },
@@ -39782,6 +40918,12 @@
           ]
         },
         {
+          "name": "_getEmbeddingEvictionHookForTests",
+          "kinds": [
+            "FunctionDeclaration"
+          ]
+        },
+        {
           "name": "_internal",
           "kinds": [
             "VariableDeclaration"
@@ -39800,7 +40942,19 @@
           ]
         },
         {
+          "name": "archiveEntry",
+          "kinds": [
+            "FunctionDeclaration"
+          ]
+        },
+        {
           "name": "clearUsageRateLimit",
+          "kinds": [
+            "FunctionDeclaration"
+          ]
+        },
+        {
+          "name": "computeActiveAndArchiveHashes",
           "kinds": [
             "FunctionDeclaration"
           ]
@@ -39818,6 +40972,12 @@
           ]
         },
         {
+          "name": "EmbeddingEvictionHook",
+          "kinds": [
+            "InterfaceDeclaration"
+          ]
+        },
+        {
           "name": "ensureLoaded",
           "kinds": [
             "FunctionDeclaration"
@@ -39825,6 +40985,12 @@
         },
         {
           "name": "ensureLoadedAsync",
+          "kinds": [
+            "FunctionDeclaration"
+          ]
+        },
+        {
+          "name": "getArchivedEntry",
           "kinds": [
             "FunctionDeclaration"
           ]
@@ -39896,6 +41062,12 @@
           ]
         },
         {
+          "name": "listArchivedEntries",
+          "kinds": [
+            "FunctionDeclaration"
+          ]
+        },
+        {
           "name": "loadUsageSnapshot",
           "kinds": [
             "FunctionDeclaration"
@@ -39914,13 +41086,31 @@
           ]
         },
         {
+          "name": "purgeEntry",
+          "kinds": [
+            "FunctionDeclaration"
+          ]
+        },
+        {
           "name": "removeEntry",
           "kinds": [
             "FunctionDeclaration"
           ]
         },
         {
+          "name": "restoreEntry",
+          "kinds": [
+            "FunctionDeclaration"
+          ]
+        },
+        {
           "name": "scheduleUsagePersist",
+          "kinds": [
+            "FunctionDeclaration"
+          ]
+        },
+        {
+          "name": "setEmbeddingEvictionHook",
           "kinds": [
             "FunctionDeclaration"
           ]
@@ -40131,6 +41321,39 @@
             }
           ],
           "methods": []
+        },
+        {
+          "name": "EmbeddingEvictionHook",
+          "isExported": true,
+          "extends": [],
+          "line": 864,
+          "properties": [],
+          "methods": [
+            {
+              "name": "evict",
+              "parameters": [
+                {
+                  "name": "id",
+                  "type": "string",
+                  "optional": false
+                }
+              ],
+              "returnType": "void",
+              "line": 865
+            },
+            {
+              "name": "markStale",
+              "parameters": [
+                {
+                  "name": "id",
+                  "type": "string",
+                  "optional": false
+                }
+              ],
+              "returnType": "void",
+              "line": 866
+            }
+          ]
         }
       ],
       "typeAliases": [],
@@ -40568,12 +41791,254 @@
           "line": 835
         },
         {
+          "name": "setEmbeddingEvictionHook",
+          "isExported": true,
+          "isAsync": false,
+          "parameters": [
+            {
+              "name": "hook",
+              "type": "EmbeddingEvictionHook | null",
+              "optional": false
+            }
+          ],
+          "returnType": "void",
+          "description": "Register a callback invoked when an entry is archived / purged / restored.\nBest-effort: hook errors are swallowed so archive operations never fail\nbecause of an embedding cache issue.",
+          "line": 874
+        },
+        {
+          "name": "_getEmbeddingEvictionHookForTests",
+          "isExported": true,
+          "isAsync": false,
+          "parameters": [],
+          "returnType": "EmbeddingEvictionHook | null",
+          "description": "Test-only accessor for the currently registered hook.",
+          "line": 878
+        },
+        {
+          "name": "safeEvictEmbedding",
+          "isExported": false,
+          "isAsync": false,
+          "parameters": [
+            {
+              "name": "id",
+              "type": "string",
+              "optional": false
+            }
+          ],
+          "returnType": "void",
+          "line": 881
+        },
+        {
+          "name": "safeMarkStaleEmbedding",
+          "isExported": false,
+          "isAsync": false,
+          "parameters": [
+            {
+              "name": "id",
+              "type": "string",
+              "optional": false
+            }
+          ],
+          "returnType": "void",
+          "line": 888
+        },
+        {
+          "name": "archiveDirPath",
+          "isExported": false,
+          "isAsync": false,
+          "parameters": [],
+          "returnType": "string",
+          "line": 899
+        },
+        {
+          "name": "archiveFilePath",
+          "isExported": false,
+          "isAsync": false,
+          "parameters": [
+            {
+              "name": "id",
+              "type": "string",
+              "optional": false
+            }
+          ],
+          "returnType": "string",
+          "line": 900
+        },
+        {
+          "name": "ensureArchiveDirExists",
+          "isExported": false,
+          "isAsync": false,
+          "parameters": [],
+          "returnType": "void",
+          "line": 901
+        },
+        {
+          "name": "readArchiveFileFallback",
+          "isExported": false,
+          "isAsync": false,
+          "parameters": [
+            {
+              "name": "id",
+              "type": "string",
+              "optional": false
+            }
+          ],
+          "returnType": "InstructionEntry | null",
+          "line": 905
+        },
+        {
+          "name": "archiveEntryFallback",
+          "isExported": false,
+          "isAsync": false,
+          "parameters": [
+            {
+              "name": "id",
+              "type": "string",
+              "optional": false
+            },
+            {
+              "name": "meta",
+              "type": "ArchiveMeta",
+              "optional": true
+            }
+          ],
+          "returnType": "InstructionEntry",
+          "line": 918
+        },
+        {
+          "name": "restoreEntryFallback",
+          "isExported": false,
+          "isAsync": false,
+          "parameters": [
+            {
+              "name": "id",
+              "type": "string",
+              "optional": false
+            },
+            {
+              "name": "mode",
+              "type": "RestoreMode",
+              "optional": false
+            }
+          ],
+          "returnType": "InstructionEntry",
+          "line": 945
+        },
+        {
+          "name": "purgeEntryFallback",
+          "isExported": false,
+          "isAsync": false,
+          "parameters": [
+            {
+              "name": "id",
+              "type": "string",
+              "optional": false
+            }
+          ],
+          "returnType": "void",
+          "line": 976
+        },
+        {
+          "name": "archiveEntry",
+          "isExported": true,
+          "isAsync": false,
+          "parameters": [
+            {
+              "name": "id",
+              "type": "string",
+              "optional": false
+            },
+            {
+              "name": "meta",
+              "type": "ArchiveMeta",
+              "optional": true
+            }
+          ],
+          "returnType": "InstructionEntry",
+          "description": "Archive an active entry. Atomic at the storage layer (the entry never\nappears in both active + archive sets at rest). Invalidates the in-memory\nindex and emits an embedding eviction so the archived id cannot surface\nin semantic search results.",
+          "line": 989
+        },
+        {
+          "name": "restoreEntry",
+          "isExported": true,
+          "isAsync": false,
+          "parameters": [
+            {
+              "name": "id",
+              "type": "string",
+              "optional": false
+            },
+            {
+              "name": "opts",
+              "type": "{ mode?: RestoreMode }",
+              "optional": true
+            }
+          ],
+          "returnType": "InstructionEntry",
+          "description": "Restore an archived entry back to active storage.",
+          "line": 1011
+        },
+        {
+          "name": "purgeEntry",
+          "isExported": true,
+          "isAsync": false,
+          "parameters": [
+            {
+              "name": "id",
+              "type": "string",
+              "optional": false
+            }
+          ],
+          "returnType": "void",
+          "description": "Permanently delete an archived entry. Irreversible.\nNo-op if the id is not present in the archive store.",
+          "line": 1025
+        },
+        {
+          "name": "getArchivedEntry",
+          "isExported": true,
+          "isAsync": false,
+          "parameters": [
+            {
+              "name": "id",
+              "type": "string",
+              "optional": false
+            }
+          ],
+          "returnType": "InstructionEntry | null",
+          "description": "Read a single archived entry by id without touching the active cache.",
+          "line": 1039
+        },
+        {
+          "name": "listArchivedEntries",
+          "isExported": true,
+          "isAsync": false,
+          "parameters": [
+            {
+              "name": "opts",
+              "type": "ListArchivedOpts",
+              "optional": true
+            }
+          ],
+          "returnType": "InstructionEntry[]",
+          "description": "List archived entries with optional filters. Does not invalidate the cache\nor modify `state`.",
+          "line": 1049
+        },
+        {
+          "name": "computeActiveAndArchiveHashes",
+          "isExported": true,
+          "isAsync": false,
+          "parameters": [],
+          "returnType": "{ active: string; archive: string }",
+          "description": "Return active + archive governance hashes without invalidating the cache.\nActive hash uses the same projection as `computeHash()`; archive hash uses\n`computeArchiveHash()`. Identical sets across backends yield identical\nhashes (REQ-13).",
+          "line": 1090
+        },
+        {
           "name": "scheduleUsagePersist",
           "isExported": true,
           "isAsync": false,
           "parameters": [],
           "returnType": null,
-          "line": 840
+          "line": 1106
         },
         {
           "name": "incrementUsage",
@@ -40592,7 +42057,7 @@
             }
           ],
           "returnType": null,
-          "line": 841
+          "line": 1107
         },
         {
           "name": "__testResetUsageState",
@@ -40600,7 +42065,7 @@
           "isAsync": false,
           "parameters": [],
           "returnType": null,
-          "line": 1011
+          "line": 1277
         }
       ],
       "constants": [
@@ -42079,7 +43544,10 @@
           "namedImports": [
             "getInstructionsDir",
             "ensureLoaded",
-            "incrementUsage"
+            "incrementUsage",
+            "listArchivedEntries",
+            "getArchivedEntry",
+            "computeActiveAndArchiveHashes"
           ],
           "namespaceImport": null
         },
@@ -42106,6 +43574,14 @@
             "buildAfterRetrievalMeta"
           ],
           "namespaceImport": null
+        },
+        {
+          "module": "../models/instruction",
+          "defaultImport": null,
+          "namedImports": [
+            "InstructionEntry"
+          ],
+          "namespaceImport": null
         }
       ],
       "exports": [],
@@ -42115,13 +43591,13 @@
           "name": "DispatchBase",
           "isExported": false,
           "extends": [],
-          "line": 11,
+          "line": 12,
           "properties": [
             {
               "name": "action",
               "type": "string",
               "optional": false,
-              "line": 11
+              "line": 12
             }
           ],
           "methods": []
@@ -42132,7 +43608,7 @@
           "extends": [
             "DispatchBase"
           ],
-          "line": 14,
+          "line": 15,
           "properties": [],
           "methods": []
         }
@@ -42142,7 +43618,7 @@
           "name": "DispatchParams",
           "isExported": false,
           "type": "DispatchBase & { [k: string]: unknown }",
-          "line": 24
+          "line": 40
         }
       ],
       "enums": [],
@@ -42153,7 +43629,86 @@
           "isAsync": false,
           "parameters": [],
           "returnType": null,
-          "line": 19
+          "line": 21
+        },
+        {
+          "name": "mapArchivedAsItems",
+          "isExported": false,
+          "isAsync": false,
+          "parameters": [
+            {
+              "name": "p",
+              "type": "{ reason?: unknown; source?: unknown; archivedBy?: unknown; restoreEligible?: unknown; limit?: unknown; offset?: unknown }",
+              "optional": false
+            }
+          ],
+          "returnType": "(InstructionEntry & { archived: true })[]",
+          "line": 28
+        }
+      ],
+      "constants": []
+    },
+    {
+      "path": "src/services/instructionsBackup.ts",
+      "imports": [
+        {
+          "module": "fs",
+          "defaultImport": "fs",
+          "namedImports": [],
+          "namespaceImport": null
+        },
+        {
+          "module": "path",
+          "defaultImport": "path",
+          "namedImports": [],
+          "namespaceImport": null
+        },
+        {
+          "module": "../config/runtimeConfig",
+          "defaultImport": null,
+          "namedImports": [
+            "getRuntimeConfig"
+          ],
+          "namespaceImport": null
+        },
+        {
+          "module": "./indexContext",
+          "defaultImport": null,
+          "namedImports": [
+            "getInstructionsDir"
+          ],
+          "namespaceImport": null
+        },
+        {
+          "module": "./backupZip",
+          "defaultImport": null,
+          "namedImports": [
+            "createZipBackup"
+          ],
+          "namespaceImport": null
+        }
+      ],
+      "exports": [
+        {
+          "name": "backupInstructionsDir",
+          "kinds": [
+            "FunctionDeclaration"
+          ]
+        }
+      ],
+      "classes": [],
+      "interfaces": [],
+      "typeAliases": [],
+      "enums": [],
+      "functions": [
+        {
+          "name": "backupInstructionsDir",
+          "isExported": true,
+          "isAsync": false,
+          "parameters": [],
+          "returnType": "string",
+          "description": "Create a pre-mutation zip backup of the active instructions directory.\n\nReturns the absolute path of the written zip. Throws if the backups root\ncannot be created or the zip write fails — callers should catch and emit\na `purge_backup_failed` (or analogous) audit entry.\n\nIf the instructions directory does not exist, the resulting zip will be\nempty rather than throwing — this mirrors the pre-consolidation behavior\nof bulk-remove / groom backup paths.",
+          "line": 31
         }
       ],
       "constants": []
@@ -43717,7 +45272,7 @@
             }
           ],
           "returnType": "string",
-          "line": 239
+          "line": 241
         },
         {
           "name": "resolveDataPaths",
@@ -43731,7 +45286,7 @@
             }
           ],
           "returnType": "McpDataPaths",
-          "line": 243
+          "line": 245
         },
         {
           "name": "buildEnvCatalog",
@@ -43750,7 +45305,7 @@
             }
           ],
           "returnType": "McpEnvCatalogEntry[]",
-          "line": 262
+          "line": 264
         },
         {
           "name": "activeEnvFromCatalog",
@@ -43764,7 +45319,7 @@
             }
           ],
           "returnType": "Record<string, string>",
-          "line": 357
+          "line": 359
         }
       ],
       "constants": [
@@ -43843,6 +45398,12 @@
         },
         {
           "name": "getServerMap",
+          "kinds": [
+            "FunctionDeclaration"
+          ]
+        },
+        {
+          "name": "isEphemeralNpxPath",
           "kinds": [
             "FunctionDeclaration"
           ]
@@ -44056,6 +45617,21 @@
           "line": 43
         },
         {
+          "name": "isEphemeralNpxPath",
+          "isExported": true,
+          "isAsync": false,
+          "parameters": [
+            {
+              "name": "p",
+              "type": "string",
+              "optional": false
+            }
+          ],
+          "returnType": "boolean",
+          "description": "Returns true when `p` lies under an npx ephemeral cache (e.g.\n`~/.npm/_npx/<hash>/...` on POSIX or `%LocalAppData%\\npm-cache\\_npx\\<hash>\\...`\non Windows). Such paths are not safe to bake into an mcp.json: npx may evict\nthem between wizard run and first MCP-client launch.",
+          "line": 59
+        },
+        {
           "name": "resolveServerLaunch",
           "isExported": true,
           "isAsync": false,
@@ -44067,7 +45643,7 @@
             }
           ],
           "returnType": "{ command: string; args: string[]; cwd?: string; source: 'local' | 'packaged' | 'npx' }",
-          "line": 53
+          "line": 64
         },
         {
           "name": "buildServerEntry",
@@ -44096,7 +45672,7 @@
             }
           ],
           "returnType": "McpServerEntry",
-          "line": 67
+          "line": 81
         },
         {
           "name": "renderConfig",
@@ -44120,7 +45696,7 @@
             }
           ],
           "returnType": "string",
-          "line": 86
+          "line": 106
         },
         {
           "name": "upsertConfigText",
@@ -44149,7 +45725,7 @@
             }
           ],
           "returnType": "string",
-          "line": 95
+          "line": 115
         },
         {
           "name": "removeConfigText",
@@ -44173,7 +45749,7 @@
             }
           ],
           "returnType": "string",
-          "line": 108
+          "line": 128
         }
       ],
       "constants": []
@@ -44491,6 +46067,13 @@
               "type": "string",
               "optional": true,
               "line": 27
+            },
+            {
+              "name": "targetInfo",
+              "type": "McpTargetInfo",
+              "optional": true,
+              "description": "Pre-resolved target. When supplied, bypasses target/scope resolution.\nRequired for callers that need to write to a specific flavor (e.g. both\nVS Code stable and Insiders), since `resolveConfigTargets` may return\nmultiple `vscode-global` entries.",
+              "line": 34
             }
           ],
           "methods": []
@@ -44499,73 +46082,73 @@
           "name": "McpOperationResult",
           "isExported": true,
           "extends": [],
-          "line": 30,
+          "line": 37,
           "properties": [
             {
               "name": "ok",
               "type": "boolean",
               "optional": false,
-              "line": 31
+              "line": 38
             },
             {
               "name": "action",
               "type": "string",
               "optional": false,
-              "line": 32
+              "line": 39
             },
             {
               "name": "target",
               "type": "McpClientTarget",
               "optional": false,
-              "line": 33
+              "line": 40
             },
             {
               "name": "format",
               "type": "McpConfigFormat",
               "optional": false,
-              "line": 34
+              "line": 41
             },
             {
               "name": "path",
               "type": "string",
               "optional": false,
-              "line": 35
+              "line": 42
             },
             {
               "name": "name",
               "type": "string",
               "optional": true,
-              "line": 36
+              "line": 43
             },
             {
               "name": "server",
               "type": "McpServerEntry | null",
               "optional": true,
-              "line": 37
+              "line": 44
             },
             {
               "name": "servers",
               "type": "string[]",
               "optional": true,
-              "line": 38
+              "line": 45
             },
             {
               "name": "validation",
               "type": "ValidationResult",
               "optional": true,
-              "line": 39
+              "line": 46
             },
             {
               "name": "backupPath",
               "type": "string",
               "optional": true,
-              "line": 40
+              "line": 47
             },
             {
               "name": "dryRun",
               "type": "boolean",
               "optional": true,
-              "line": 41
+              "line": 48
             }
           ],
           "methods": []
@@ -44586,7 +46169,7 @@
             }
           ],
           "returnType": "McpTargetInfo",
-          "line": 44
+          "line": 51
         },
         {
           "name": "defaultName",
@@ -44600,7 +46183,7 @@
             }
           ],
           "returnType": "string",
-          "line": 53
+          "line": 61
         },
         {
           "name": "buildConfig",
@@ -44614,7 +46197,7 @@
             }
           ],
           "returnType": "ServerBuildConfig",
-          "line": 57
+          "line": 65
         },
         {
           "name": "readExistingText",
@@ -44633,7 +46216,7 @@
             }
           ],
           "returnType": "string",
-          "line": 72
+          "line": 80
         },
         {
           "name": "listServers",
@@ -44647,7 +46230,7 @@
             }
           ],
           "returnType": "McpOperationResult",
-          "line": 80
+          "line": 88
         },
         {
           "name": "getServer",
@@ -44661,7 +46244,7 @@
             }
           ],
           "returnType": "McpOperationResult",
-          "line": 87
+          "line": 95
         },
         {
           "name": "upsertServer",
@@ -44675,7 +46258,7 @@
             }
           ],
           "returnType": "McpOperationResult",
-          "line": 94
+          "line": 102
         },
         {
           "name": "removeServer",
@@ -44689,7 +46272,7 @@
             }
           ],
           "returnType": "McpOperationResult",
-          "line": 113
+          "line": 121
         },
         {
           "name": "restoreLatestBackup",
@@ -44703,7 +46286,7 @@
             }
           ],
           "returnType": "McpOperationResult",
-          "line": 129
+          "line": 137
         },
         {
           "name": "restoreServer",
@@ -44717,7 +46300,7 @@
             }
           ],
           "returnType": "McpOperationResult",
-          "line": 136
+          "line": 144
         },
         {
           "name": "validateFile",
@@ -44731,7 +46314,7 @@
             }
           ],
           "returnType": "McpOperationResult",
-          "line": 140
+          "line": 148
         },
         {
           "name": "renderServerConfigForTarget",
@@ -44750,7 +46333,7 @@
             }
           ],
           "returnType": "string",
-          "line": 147
+          "line": 155
         },
         {
           "name": "writeGeneratedConfig",
@@ -44769,7 +46352,7 @@
             }
           ],
           "returnType": "void",
-          "line": 154
+          "line": 162
         }
       ],
       "constants": []
@@ -44867,6 +46450,12 @@
       "path": "src/services/mcpConfig/paths.ts",
       "imports": [
         {
+          "module": "fs",
+          "defaultImport": "fs",
+          "namedImports": [],
+          "namespaceImport": null
+        },
+        {
           "module": "os",
           "defaultImport": "os",
           "namedImports": [],
@@ -44929,43 +46518,43 @@
           "name": "ResolveTargetOptions",
           "isExported": true,
           "extends": [],
-          "line": 8,
+          "line": 9,
           "properties": [
             {
               "name": "targets",
               "type": "McpClientTarget[]",
               "optional": true,
-              "line": 9
+              "line": 10
             },
             {
               "name": "target",
               "type": "McpClientTarget",
               "optional": true,
-              "line": 10
+              "line": 11
             },
             {
               "name": "scope",
               "type": "McpScope",
               "optional": true,
-              "line": 11
+              "line": 12
             },
             {
               "name": "root",
               "type": "string",
               "optional": true,
-              "line": 12
+              "line": 13
             },
             {
               "name": "home",
               "type": "string",
               "optional": true,
-              "line": 13
+              "line": 14
             },
             {
               "name": "appData",
               "type": "string",
               "optional": true,
-              "line": 14
+              "line": 15
             }
           ],
           "methods": []
@@ -44974,25 +46563,25 @@
           "name": "McpTargetInfo",
           "isExported": true,
           "extends": [],
-          "line": 17,
+          "line": 18,
           "properties": [
             {
               "name": "target",
               "type": "McpClientTarget",
               "optional": false,
-              "line": 18
+              "line": 19
             },
             {
               "name": "format",
               "type": "McpConfigFormat",
               "optional": false,
-              "line": 19
+              "line": 20
             },
             {
               "name": "path",
               "type": "string",
               "optional": false,
-              "line": 20
+              "line": 21
             }
           ],
           "methods": []
@@ -45003,19 +46592,19 @@
           "name": "McpClientTarget",
           "isExported": true,
           "type": "'vscode' | 'copilot-cli' | 'claude'",
-          "line": 4
+          "line": 5
         },
         {
           "name": "McpConfigFormat",
           "isExported": true,
           "type": "'vscode' | 'vscode-global' | 'copilot-cli' | 'claude'",
-          "line": 5
+          "line": 6
         },
         {
           "name": "McpScope",
           "isExported": true,
           "type": "'repo' | 'global'",
-          "line": 6
+          "line": 7
         }
       ],
       "enums": [],
@@ -45032,7 +46621,7 @@
             }
           ],
           "returnType": "string | undefined",
-          "line": 23
+          "line": 24
         },
         {
           "name": "defaultConfigRoot",
@@ -45040,7 +46629,7 @@
           "isAsync": false,
           "parameters": [],
           "returnType": "string",
-          "line": 28
+          "line": 29
         },
         {
           "name": "resolveConfigTargets",
@@ -45054,7 +46643,7 @@
             }
           ],
           "returnType": "McpTargetInfo[]",
-          "line": 32
+          "line": 33
         }
       ],
       "constants": []
@@ -48329,7 +49918,19 @@
       ],
       "exports": [
         {
+          "name": "computeArchiveHashFromEntries",
+          "kinds": [
+            "FunctionDeclaration"
+          ]
+        },
+        {
           "name": "computeGovernanceHashFromEntries",
+          "kinds": [
+            "FunctionDeclaration"
+          ]
+        },
+        {
+          "name": "projectArchive",
           "kinds": [
             "FunctionDeclaration"
           ]
@@ -48374,6 +49975,35 @@
           "returnType": "string",
           "description": "Compute deterministic governance hash from an array of entries.",
           "line": 28
+        },
+        {
+          "name": "projectArchive",
+          "isExported": true,
+          "isAsync": false,
+          "parameters": [
+            {
+              "name": "e",
+              "type": "InstructionEntry",
+              "optional": false
+            }
+          ],
+          "returnType": "Record<string, unknown>",
+          "line": 39
+        },
+        {
+          "name": "computeArchiveHashFromEntries",
+          "isExported": true,
+          "isAsync": false,
+          "parameters": [
+            {
+              "name": "entries",
+              "type": "InstructionEntry[]",
+              "optional": false
+            }
+          ],
+          "returnType": "string",
+          "description": "Compute deterministic archive hash from an array of archived entries.",
+          "line": 51
         }
       ],
       "constants": []
@@ -48382,6 +50012,12 @@
       "path": "src/services/storage/index.ts",
       "imports": [],
       "exports": [
+        {
+          "name": "ArchiveMeta",
+          "kinds": [
+            "InterfaceDeclaration"
+          ]
+        },
         {
           "name": "computeGovernanceHashFromEntries",
           "kinds": [
@@ -48407,6 +50043,12 @@
           ]
         },
         {
+          "name": "ListArchivedOpts",
+          "kinds": [
+            "InterfaceDeclaration"
+          ]
+        },
+        {
           "name": "ListOptions",
           "kinds": [
             "InterfaceDeclaration"
@@ -48428,6 +50070,12 @@
           "name": "QueryOptions",
           "kinds": [
             "InterfaceDeclaration"
+          ]
+        },
+        {
+          "name": "RestoreMode",
+          "kinds": [
+            "TypeAliasDeclaration"
           ]
         },
         {
@@ -48568,6 +50216,32 @@
               "parameters": [],
               "returnType": "void",
               "line": 79
+            },
+            {
+              "name": "evict",
+              "isStatic": false,
+              "parameters": [
+                {
+                  "name": "id",
+                  "type": "string",
+                  "optional": false
+                }
+              ],
+              "returnType": "void",
+              "line": 83
+            },
+            {
+              "name": "markStale",
+              "isStatic": false,
+              "parameters": [
+                {
+                  "name": "id",
+                  "type": "string",
+                  "optional": false
+                }
+              ],
+              "returnType": "void",
+              "line": 98
             }
           ],
           "properties": [
@@ -48634,7 +50308,8 @@
           "module": "./hashUtils.js",
           "defaultImport": null,
           "namedImports": [
-            "computeGovernanceHashFromEntries"
+            "computeGovernanceHashFromEntries",
+            "computeArchiveHashFromEntries"
           ],
           "namespaceImport": null
         },
@@ -48657,7 +50332,10 @@
             "ScopedListOptions",
             "SearchOptions",
             "SearchResult",
-            "LoadResult"
+            "LoadResult",
+            "ArchiveMeta",
+            "ListArchivedOpts",
+            "RestoreMode"
           ],
           "namespaceImport": null
         }
@@ -48678,21 +50356,21 @@
           "implements": [
             "IInstructionStore"
           ],
-          "line": 25,
+          "line": 28,
           "methods": [
             {
               "name": "load",
               "isStatic": false,
               "parameters": [],
               "returnType": "LoadResult",
-              "line": 42
+              "line": 45
             },
             {
               "name": "close",
               "isStatic": false,
               "parameters": [],
               "returnType": "void",
-              "line": 98
+              "line": 105
             },
             {
               "name": "get",
@@ -48705,7 +50383,7 @@
                 }
               ],
               "returnType": "InstructionEntry | null",
-              "line": 105
+              "line": 112
             },
             {
               "name": "write",
@@ -48723,7 +50401,7 @@
                 }
               ],
               "returnType": "void",
-              "line": 110
+              "line": 117
             },
             {
               "name": "remove",
@@ -48736,7 +50414,7 @@
                 }
               ],
               "returnType": "void",
-              "line": 123
+              "line": 130
             },
             {
               "name": "list",
@@ -48749,7 +50427,7 @@
                 }
               ],
               "returnType": "InstructionEntry[]",
-              "line": 137
+              "line": 144
             },
             {
               "name": "query",
@@ -48762,7 +50440,7 @@
                 }
               ],
               "returnType": "InstructionEntry[]",
-              "line": 151
+              "line": 158
             },
             {
               "name": "listScoped",
@@ -48775,7 +50453,7 @@
                 }
               ],
               "returnType": "InstructionEntry[]",
-              "line": 213
+              "line": 220
             },
             {
               "name": "search",
@@ -48788,35 +50466,165 @@
                 }
               ],
               "returnType": "SearchResult[]",
-              "line": 234
+              "line": 241
             },
             {
               "name": "categories",
               "isStatic": false,
               "parameters": [],
               "returnType": "Map<string, number>",
-              "line": 266
+              "line": 273
             },
             {
               "name": "computeHash",
               "isStatic": false,
               "parameters": [],
               "returnType": "string",
-              "line": 279
+              "line": 286
             },
             {
               "name": "count",
               "isStatic": false,
               "parameters": [],
               "returnType": "number",
-              "line": 284
+              "line": 291
+            },
+            {
+              "name": "archiveDir",
+              "isStatic": false,
+              "parameters": [],
+              "returnType": "string",
+              "description": "Path to the segregated archive directory. Active `load()` skips any\nsubdirectory whose basename starts with `.`, so `.archive/` is invisible\nto active queries by construction.",
+              "line": 303
+            },
+            {
+              "name": "archiveFilePath",
+              "isStatic": false,
+              "parameters": [
+                {
+                  "name": "id",
+                  "type": "string",
+                  "optional": false
+                }
+              ],
+              "returnType": "string",
+              "line": 307
+            },
+            {
+              "name": "ensureArchiveDir",
+              "isStatic": false,
+              "parameters": [],
+              "returnType": "void",
+              "line": 311
+            },
+            {
+              "name": "readArchiveFile",
+              "isStatic": false,
+              "parameters": [
+                {
+                  "name": "id",
+                  "type": "string",
+                  "optional": false
+                }
+              ],
+              "returnType": "InstructionEntry | null",
+              "line": 318
+            },
+            {
+              "name": "archive",
+              "isStatic": false,
+              "parameters": [
+                {
+                  "name": "id",
+                  "type": "string",
+                  "optional": false
+                },
+                {
+                  "name": "meta",
+                  "type": "ArchiveMeta",
+                  "optional": true
+                }
+              ],
+              "returnType": "InstructionEntry",
+              "line": 331
+            },
+            {
+              "name": "restore",
+              "isStatic": false,
+              "parameters": [
+                {
+                  "name": "id",
+                  "type": "string",
+                  "optional": false
+                },
+                {
+                  "name": "mode",
+                  "type": "RestoreMode",
+                  "optional": true
+                }
+              ],
+              "returnType": "InstructionEntry",
+              "line": 369
+            },
+            {
+              "name": "purge",
+              "isStatic": false,
+              "parameters": [
+                {
+                  "name": "id",
+                  "type": "string",
+                  "optional": false
+                }
+              ],
+              "returnType": "void",
+              "line": 415
+            },
+            {
+              "name": "getArchived",
+              "isStatic": false,
+              "parameters": [
+                {
+                  "name": "id",
+                  "type": "string",
+                  "optional": false
+                }
+              ],
+              "returnType": "InstructionEntry | null",
+              "line": 424
+            },
+            {
+              "name": "listArchived",
+              "isStatic": false,
+              "parameters": [
+                {
+                  "name": "opts",
+                  "type": "ListArchivedOpts",
+                  "optional": true
+                }
+              ],
+              "returnType": "InstructionEntry[]",
+              "line": 428
+            },
+            {
+              "name": "countArchived",
+              "isStatic": false,
+              "parameters": [],
+              "returnType": "number",
+              "line": 465
+            },
+            {
+              "name": "computeArchiveHash",
+              "isStatic": false,
+              "parameters": [],
+              "returnType": "string",
+              "line": 471
             },
             {
               "name": "ensureLoaded",
               "isStatic": false,
               "parameters": [],
               "returnType": "void",
-              "line": 291
+              "line": 477
             }
           ],
           "properties": [
@@ -48824,19 +50632,19 @@
               "name": "dir",
               "type": "string",
               "isStatic": false,
-              "line": 26
+              "line": 29
             },
             {
               "name": "cache",
               "type": "Map<string, InstructionEntry>",
               "isStatic": false,
-              "line": 27
+              "line": 30
             },
             {
               "name": "loaded",
               "type": null,
               "isStatic": false,
-              "line": 28
+              "line": 31
             }
           ]
         }
@@ -48969,10 +50777,17 @@
               "line": 19
             },
             {
+              "name": "archivedMigrated",
+              "type": "number",
+              "optional": false,
+              "description": "Number of archived entries also migrated (Phase B5 / spec 006).",
+              "line": 21
+            },
+            {
               "name": "errors",
               "type": "{ file: string; error: string }[]",
               "optional": false,
-              "line": 20
+              "line": 22
             }
           ],
           "methods": []
@@ -48981,19 +50796,26 @@
           "name": "ExportResult",
           "isExported": true,
           "extends": [],
-          "line": 23,
+          "line": 25,
           "properties": [
             {
               "name": "exported",
               "type": "number",
               "optional": false,
-              "line": 24
+              "line": 26
+            },
+            {
+              "name": "archivedExported",
+              "type": "number",
+              "optional": false,
+              "description": "Number of archived entries also exported (Phase B5 / spec 006).",
+              "line": 28
             },
             {
               "name": "errors",
               "type": "{ id: string; error: string }[]",
               "optional": false,
-              "line": 25
+              "line": 29
             }
           ],
           "methods": []
@@ -49002,25 +50824,25 @@
           "name": "EmbeddingMigrationResult",
           "isExported": true,
           "extends": [],
-          "line": 120,
+          "line": 202,
           "properties": [
             {
               "name": "migrated",
               "type": "number",
               "optional": false,
-              "line": 121
+              "line": 203
             },
             {
               "name": "skipped",
               "type": "number",
               "optional": false,
-              "line": 122
+              "line": 204
             },
             {
               "name": "error",
               "type": "string",
               "optional": true,
-              "line": 123
+              "line": 205
             }
           ],
           "methods": []
@@ -49051,8 +50873,8 @@
             }
           ],
           "returnType": "MigrationResult",
-          "description": "Migrate all instructions from JSON files to a SQLite database.\n\nIdempotent: uses INSERT OR REPLACE so re-running is safe.\nAtomic: all writes happen via SqliteStore (individual INSERT OR REPLACE).",
-          "line": 34
+          "description": "Migrate all instructions from JSON files to a SQLite database.\n\nIdempotent: uses INSERT OR REPLACE so re-running is safe.\nAtomic: all writes happen via SqliteStore (individual INSERT OR REPLACE).\n\nArchive parity (spec 006-archive-lifecycle B5): archived entries in\n`<jsonDir>/.archive/` are migrated into the `instructions_archive` table.\nArchived entries are NEVER reactivated by the migration.",
+          "line": 42
         },
         {
           "name": "migrateSqliteToJson",
@@ -49076,8 +50898,8 @@
             }
           ],
           "returnType": "ExportResult",
-          "description": "Export all instructions from a SQLite database to JSON files.\n\nEach entry becomes a separate .json file named by ID.",
-          "line": 81
+          "description": "Export all instructions from a SQLite database to JSON files.\n\nEach entry becomes a separate .json file named by ID.\n\nArchive parity (spec 006-archive-lifecycle B5): archived entries in the\n`instructions_archive` table are exported into `<jsonDir>/.archive/<id>.json`.\nArchived entries are NEVER reactivated by the migration.",
+          "line": 130
         },
         {
           "name": "migrateJsonEmbeddingsToStore",
@@ -49097,7 +50919,7 @@
           ],
           "returnType": "EmbeddingMigrationResult",
           "description": "Migrate embeddings from a JSON file to an IEmbeddingStore (e.g. SqliteEmbeddingStore).\n\nReads the JSON embedding cache and saves it into the target store.\nIdempotent: calling again with the same data overwrites safely.",
-          "line": 132
+          "line": 214
         }
       ],
       "constants": []
@@ -49245,6 +51067,32 @@
               "parameters": [],
               "returnType": "void",
               "line": 258
+            },
+            {
+              "name": "evict",
+              "isStatic": false,
+              "parameters": [
+                {
+                  "name": "id",
+                  "type": "string",
+                  "optional": false
+                }
+              ],
+              "returnType": "void",
+              "line": 266
+            },
+            {
+              "name": "markStale",
+              "isStatic": false,
+              "parameters": [
+                {
+                  "name": "id",
+                  "type": "string",
+                  "optional": false
+                }
+              ],
+              "returnType": "void",
+              "line": 285
             }
           ],
           "properties": [
@@ -49699,14 +51547,14 @@
           "type": null,
           "initializerKind": "NoSubstitutionTemplateLiteral",
           "description": "FTS5 virtual table for full-text search. Created separately since it needs content sync.",
-          "line": 98
+          "line": 151
         },
         {
           "name": "PRAGMAS",
           "type": null,
           "initializerKind": "NoSubstitutionTemplateLiteral",
           "description": "Enable WAL mode and recommended pragmas.",
-          "line": 119
+          "line": 172
         }
       ]
     },
@@ -49733,7 +51581,8 @@
           "module": "./hashUtils.js",
           "defaultImport": null,
           "namedImports": [
-            "computeGovernanceHashFromEntries"
+            "computeGovernanceHashFromEntries",
+            "computeArchiveHashFromEntries"
           ],
           "namespaceImport": null
         },
@@ -49758,7 +51607,10 @@
             "ScopedListOptions",
             "SearchOptions",
             "SearchResult",
-            "LoadResult"
+            "LoadResult",
+            "ArchiveMeta",
+            "ListArchivedOpts",
+            "RestoreMode"
           ],
           "namespaceImport": null
         }
@@ -49779,14 +51631,14 @@
           "implements": [
             "IInstructionStore"
           ],
-          "line": 98,
+          "line": 115,
           "methods": [
             {
               "name": "initSchema",
               "isStatic": false,
               "parameters": [],
               "returnType": "void",
-              "line": 108
+              "line": 125
             },
             {
               "name": "ensureColumn",
@@ -49809,21 +51661,21 @@
                 }
               ],
               "returnType": "void",
-              "line": 121
+              "line": 142
             },
             {
               "name": "load",
               "isStatic": false,
               "parameters": [],
               "returnType": "LoadResult",
-              "line": 133
+              "line": 154
             },
             {
               "name": "close",
               "isStatic": false,
               "parameters": [],
               "returnType": "void",
-              "line": 169
+              "line": 190
             },
             {
               "name": "get",
@@ -49836,7 +51688,7 @@
                 }
               ],
               "returnType": "InstructionEntry | null",
-              "line": 177
+              "line": 198
             },
             {
               "name": "write",
@@ -49854,7 +51706,7 @@
                 }
               ],
               "returnType": "void",
-              "line": 182
+              "line": 203
             },
             {
               "name": "remove",
@@ -49867,7 +51719,7 @@
                 }
               ],
               "returnType": "void",
-              "line": 249
+              "line": 270
             },
             {
               "name": "list",
@@ -49880,7 +51732,7 @@
                 }
               ],
               "returnType": "InstructionEntry[]",
-              "line": 256
+              "line": 277
             },
             {
               "name": "query",
@@ -49893,7 +51745,7 @@
                 }
               ],
               "returnType": "InstructionEntry[]",
-              "line": 270
+              "line": 291
             },
             {
               "name": "listScoped",
@@ -49906,7 +51758,7 @@
                 }
               ],
               "returnType": "InstructionEntry[]",
-              "line": 331
+              "line": 352
             },
             {
               "name": "search",
@@ -49919,14 +51771,14 @@
                 }
               ],
               "returnType": "SearchResult[]",
-              "line": 352
+              "line": 373
             },
             {
               "name": "categories",
               "isStatic": false,
               "parameters": [],
               "returnType": "Map<string, number>",
-              "line": 384
+              "line": 405
             },
             {
               "name": "searchFts",
@@ -49940,28 +51792,144 @@
               ],
               "returnType": "SearchResult[]",
               "description": "Full-text search using FTS5 with BM25 ranking.\nMore efficient than in-memory scan for large instruction sets.\nFalls back to in-memory search if FTS5 is unavailable.",
-              "line": 402
+              "line": 423
             },
             {
               "name": "computeHash",
               "isStatic": false,
               "parameters": [],
               "returnType": "string",
-              "line": 438
+              "line": 459
             },
             {
               "name": "count",
               "isStatic": false,
               "parameters": [],
               "returnType": "number",
-              "line": 443
+              "line": 464
+            },
+            {
+              "name": "insertArchiveRow",
+              "isStatic": false,
+              "parameters": [
+                {
+                  "name": "entry",
+                  "type": "InstructionEntry",
+                  "optional": false
+                }
+              ],
+              "returnType": "void",
+              "description": "Insert a row into `instructions_archive`. Uses the same column order as\nthe active table plus the four archive metadata columns. Designed to be\ncalled inside a transaction.",
+              "line": 476
+            },
+            {
+              "name": "archive",
+              "isStatic": false,
+              "parameters": [
+                {
+                  "name": "id",
+                  "type": "string",
+                  "optional": false
+                },
+                {
+                  "name": "meta",
+                  "type": "ArchiveMeta",
+                  "optional": true
+                }
+              ],
+              "returnType": "InstructionEntry",
+              "line": 543
+            },
+            {
+              "name": "restore",
+              "isStatic": false,
+              "parameters": [
+                {
+                  "name": "id",
+                  "type": "string",
+                  "optional": false
+                },
+                {
+                  "name": "mode",
+                  "type": "RestoreMode",
+                  "optional": true
+                }
+              ],
+              "returnType": "InstructionEntry",
+              "line": 573
+            },
+            {
+              "name": "purge",
+              "isStatic": false,
+              "parameters": [
+                {
+                  "name": "id",
+                  "type": "string",
+                  "optional": false
+                }
+              ],
+              "returnType": "void",
+              "line": 610
+            },
+            {
+              "name": "getArchived",
+              "isStatic": false,
+              "parameters": [
+                {
+                  "name": "id",
+                  "type": "string",
+                  "optional": false
+                }
+              ],
+              "returnType": "InstructionEntry | null",
+              "line": 614
+            },
+            {
+              "name": "listArchived",
+              "isStatic": false,
+              "parameters": [
+                {
+                  "name": "opts",
+                  "type": "ListArchivedOpts",
+                  "optional": true
+                }
+              ],
+              "returnType": "InstructionEntry[]",
+              "line": 621
+            },
+            {
+              "name": "countArchived",
+              "isStatic": false,
+              "parameters": [],
+              "returnType": "number",
+              "line": 650
+            },
+            {
+              "name": "computeArchiveHash",
+              "isStatic": false,
+              "parameters": [],
+              "returnType": "string",
+              "line": 656
+            },
+            {
+              "name": "writeActiveRowFromEntry",
+              "isStatic": false,
+              "parameters": [
+                {
+                  "name": "entry",
+                  "type": "InstructionEntry",
+                  "optional": false
+                }
+              ],
+              "returnType": "void",
+              "line": 661
             },
             {
               "name": "ensureLoaded",
               "isStatic": false,
               "parameters": [],
               "returnType": "void",
-              "line": 450
+              "line": 725
             }
           ],
           "properties": [
@@ -49969,19 +51937,19 @@
               "name": "db",
               "type": "DatabaseSync",
               "isStatic": false,
-              "line": 99
+              "line": 116
             },
             {
               "name": "loaded",
               "type": null,
               "isStatic": false,
-              "line": 100
+              "line": 117
             },
             {
               "name": "cache",
               "type": "Map<string, InstructionEntry>",
               "isStatic": false,
-              "line": 101
+              "line": 118
             }
           ]
         }
@@ -50003,7 +51971,22 @@
           ],
           "returnType": "InstructionEntry",
           "description": "Map DB row (snake_case) to InstructionEntry (camelCase).",
-          "line": 32
+          "line": 35
+        },
+        {
+          "name": "archiveRowToEntry",
+          "isExported": false,
+          "isAsync": false,
+          "parameters": [
+            {
+              "name": "row",
+              "type": "Record<string, unknown>",
+              "optional": false
+            }
+          ],
+          "returnType": "InstructionEntry",
+          "description": "Map an `instructions_archive` row to an InstructionEntry (with archive fields).",
+          "line": 78
         },
         {
           "name": "safeJsonParse",
@@ -50023,7 +52006,7 @@
           ],
           "returnType": "T",
           "description": "Safely parse a JSON string, returning fallback on failure.",
-          "line": 75,
+          "line": 92,
           "typeParameters": [
             {
               "name": "T",
@@ -50045,7 +52028,7 @@
           ],
           "returnType": "unknown",
           "description": "Strip undefined values from entry to avoid SQLite binding issues.",
-          "line": 85
+          "line": 102
         },
         {
           "name": "isDuplicateColumnError",
@@ -50064,7 +52047,7 @@
             }
           ],
           "returnType": "boolean",
-          "line": 89
+          "line": 106
         }
       ],
       "constants": []
@@ -50291,12 +52274,20 @@
           "module": "../../models/instruction.js",
           "defaultImport": null,
           "namedImports": [
-            "InstructionEntry"
+            "InstructionEntry",
+            "ArchiveReason",
+            "ArchiveSource"
           ],
           "namespaceImport": null
         }
       ],
       "exports": [
+        {
+          "name": "ArchiveMeta",
+          "kinds": [
+            "InterfaceDeclaration"
+          ]
+        },
         {
           "name": "EmbeddingCacheData",
           "kinds": [
@@ -50322,6 +52313,12 @@
           ]
         },
         {
+          "name": "ListArchivedOpts",
+          "kinds": [
+            "InterfaceDeclaration"
+          ]
+        },
+        {
           "name": "ListOptions",
           "kinds": [
             "InterfaceDeclaration"
@@ -50337,6 +52334,12 @@
           "name": "QueryOptions",
           "kinds": [
             "InterfaceDeclaration"
+          ]
+        },
+        {
+          "name": "RestoreMode",
+          "kinds": [
+            "TypeAliasDeclaration"
           ]
         },
         {
@@ -50669,11 +52672,108 @@
           "methods": []
         },
         {
+          "name": "ArchiveMeta",
+          "isExported": true,
+          "extends": [],
+          "description": "Metadata supplied to {@link IInstructionStore.archive} when archiving an\ninstruction. All fields are optional; the store fills sensible defaults\n(`archivedAt = now`, `restoreEligible = true`) when fields are omitted.",
+          "line": 115,
+          "properties": [
+            {
+              "name": "archivedBy",
+              "type": "string",
+              "optional": true,
+              "description": "Identifier of the agent / operator that archived this entry.",
+              "line": 117
+            },
+            {
+              "name": "archiveReason",
+              "type": "ArchiveReason",
+              "optional": true,
+              "description": "Closed-enum reason for the archive event.",
+              "line": 119
+            },
+            {
+              "name": "archiveSource",
+              "type": "ArchiveSource",
+              "optional": true,
+              "description": "Which lifecycle pathway produced the archive event.",
+              "line": 121
+            },
+            {
+              "name": "restoreEligible",
+              "type": "boolean",
+              "optional": true,
+              "description": "Whether the entry may be restored. Default `true`.",
+              "line": 123
+            },
+            {
+              "name": "archivedAt",
+              "type": "string",
+              "optional": true,
+              "description": "Override timestamp (ISO 8601). Defaults to current time when omitted.",
+              "line": 125
+            }
+          ],
+          "methods": []
+        },
+        {
+          "name": "ListArchivedOpts",
+          "isExported": true,
+          "extends": [],
+          "description": "Options for listing archived entries.\nFilters are AND-combined; omitted filters do not constrain the result.",
+          "line": 132,
+          "properties": [
+            {
+              "name": "reason",
+              "type": "ArchiveReason",
+              "optional": true,
+              "description": "Filter by archive reason.",
+              "line": 134
+            },
+            {
+              "name": "source",
+              "type": "ArchiveSource",
+              "optional": true,
+              "description": "Filter by archive source.",
+              "line": 136
+            },
+            {
+              "name": "archivedBy",
+              "type": "string",
+              "optional": true,
+              "description": "Filter by archiver identity.",
+              "line": 138
+            },
+            {
+              "name": "restoreEligible",
+              "type": "boolean",
+              "optional": true,
+              "description": "Filter by restore eligibility flag.",
+              "line": 140
+            },
+            {
+              "name": "limit",
+              "type": "number",
+              "optional": true,
+              "description": "Maximum results to return.",
+              "line": 142
+            },
+            {
+              "name": "offset",
+              "type": "number",
+              "optional": true,
+              "description": "Pagination offset.",
+              "line": 144
+            }
+          ],
+          "methods": []
+        },
+        {
           "name": "IInstructionStore",
           "isExported": true,
           "extends": [],
           "description": "Storage backend interface for the instruction index.\n\nAll methods are synchronous unless otherwise noted (matching current\nIndexContext behavior). Async methods are marked with Promise return types.",
-          "line": 116,
+          "line": 170,
           "properties": [],
           "methods": [
             {
@@ -50681,14 +52781,14 @@
               "parameters": [],
               "returnType": "LoadResult",
               "description": "Load all instructions from the backing store.",
-              "line": 123
+              "line": 177
             },
             {
               "name": "close",
               "parameters": [],
               "returnType": "void",
               "description": "Close the store and release resources (e.g., DB connections).\nNo-op for file-based stores.",
-              "line": 129
+              "line": 183
             },
             {
               "name": "get",
@@ -50701,7 +52801,7 @@
               ],
               "returnType": "InstructionEntry | null",
               "description": "Get a single instruction by ID.",
-              "line": 138
+              "line": 192
             },
             {
               "name": "write",
@@ -50719,7 +52819,7 @@
               ],
               "returnType": "void",
               "description": "Write (create or update) an instruction.",
-              "line": 144
+              "line": 198
             },
             {
               "name": "remove",
@@ -50732,7 +52832,7 @@
               ],
               "returnType": "void",
               "description": "Remove an instruction by ID. No-op if not found.",
-              "line": 150
+              "line": 204
             },
             {
               "name": "list",
@@ -50745,7 +52845,7 @@
               ],
               "returnType": "InstructionEntry[]",
               "description": "List instructions with optional category/contentType filter.",
-              "line": 159
+              "line": 213
             },
             {
               "name": "query",
@@ -50758,7 +52858,7 @@
               ],
               "returnType": "InstructionEntry[]",
               "description": "Complex multi-filter query with pagination.",
-              "line": 166
+              "line": 220
             },
             {
               "name": "listScoped",
@@ -50771,7 +52871,7 @@
               ],
               "returnType": "InstructionEntry[]",
               "description": "List instructions scoped to a user, workspace, or team.",
-              "line": 173
+              "line": 227
             },
             {
               "name": "search",
@@ -50784,28 +52884,117 @@
               ],
               "returnType": "SearchResult[]",
               "description": "Search instructions by keywords with relevance scoring.",
-              "line": 180
+              "line": 234
             },
             {
               "name": "categories",
               "parameters": [],
               "returnType": "Map<string, number>",
               "description": "Get all unique categories with occurrence counts.",
-              "line": 186
+              "line": 240
             },
             {
               "name": "computeHash",
               "parameters": [],
               "returnType": "string",
               "description": "Compute deterministic governance hash over all entries.\nMust return identical hash for identical entry sets regardless of backend.",
-              "line": 195
+              "line": 249
             },
             {
               "name": "count",
               "parameters": [],
               "returnType": "number",
               "description": "Get the count of loaded instructions.",
-              "line": 200
+              "line": 254
+            },
+            {
+              "name": "archive",
+              "parameters": [
+                {
+                  "name": "id",
+                  "type": "string",
+                  "optional": false
+                },
+                {
+                  "name": "meta",
+                  "type": "ArchiveMeta",
+                  "optional": true
+                }
+              ],
+              "returnType": "InstructionEntry",
+              "description": "Move an active entry to the archive store. Atomic: the entry must vanish\nfrom active storage and appear in archive storage in the same operation,\nor neither.",
+              "line": 269
+            },
+            {
+              "name": "restore",
+              "parameters": [
+                {
+                  "name": "id",
+                  "type": "string",
+                  "optional": false
+                },
+                {
+                  "name": "mode",
+                  "type": "RestoreMode",
+                  "optional": true
+                }
+              ],
+              "returnType": "InstructionEntry",
+              "description": "Move an archived entry back to active storage. Atomic.",
+              "line": 283
+            },
+            {
+              "name": "purge",
+              "parameters": [
+                {
+                  "name": "id",
+                  "type": "string",
+                  "optional": false
+                }
+              ],
+              "returnType": "void",
+              "description": "Permanently delete an archived entry. Irreversible.\nNo-op if the id is not present in the archive store.",
+              "line": 291
+            },
+            {
+              "name": "getArchived",
+              "parameters": [
+                {
+                  "name": "id",
+                  "type": "string",
+                  "optional": false
+                }
+              ],
+              "returnType": "InstructionEntry | null",
+              "description": "Get a single archived entry by id.",
+              "line": 299
+            },
+            {
+              "name": "listArchived",
+              "parameters": [
+                {
+                  "name": "opts",
+                  "type": "ListArchivedOpts",
+                  "optional": true
+                }
+              ],
+              "returnType": "InstructionEntry[]",
+              "description": "List archived entries with optional filters.",
+              "line": 307
+            },
+            {
+              "name": "countArchived",
+              "parameters": [],
+              "returnType": "number",
+              "description": "Count entries in the archive store.",
+              "line": 314
+            },
+            {
+              "name": "computeArchiveHash",
+              "parameters": [],
+              "returnType": "string",
+              "description": "Compute deterministic hash over the archive set.\nMust match across backends for the same archive content (same projection\nordering as {@link computeHash}).",
+              "line": 323
             }
           ]
         },
@@ -50814,32 +53003,32 @@
           "isExported": true,
           "extends": [],
           "description": "Persisted embedding cache format (backwards-compatible: entryHashes is optional).",
-          "line": 208,
+          "line": 331,
           "properties": [
             {
               "name": "indexHash",
               "type": "string",
               "optional": false,
-              "line": 209
+              "line": 332
             },
             {
               "name": "modelName",
               "type": "string",
               "optional": true,
-              "line": 210
+              "line": 333
             },
             {
               "name": "entryHashes",
               "type": "Record<string, string>",
               "optional": true,
               "description": "Per-entry content hashes for incremental invalidation (required for v2+).",
-              "line": 212
+              "line": 335
             },
             {
               "name": "embeddings",
               "type": "Record<string, number[]>",
               "optional": false,
-              "line": 213
+              "line": 336
             }
           ],
           "methods": []
@@ -50849,19 +53038,19 @@
           "isExported": true,
           "extends": [],
           "description": "A single embedding search result with distance score.",
-          "line": 217,
+          "line": 340,
           "properties": [
             {
               "name": "id",
               "type": "string",
               "optional": false,
-              "line": 218
+              "line": 341
             },
             {
               "name": "distance",
               "type": "number",
               "optional": false,
-              "line": 219
+              "line": 342
             }
           ],
           "methods": []
@@ -50871,7 +53060,7 @@
           "isExported": true,
           "extends": [],
           "description": "Storage backend interface for embedding vectors.\n\nImplementations:\n- JsonEmbeddingStore: Flat JSON file (default, current behavior)\n- SqliteEmbeddingStore: sqlite-vec vec0 virtual table",
-          "line": 229,
+          "line": 352,
           "properties": [],
           "methods": [
             {
@@ -50879,7 +53068,7 @@
               "parameters": [],
               "returnType": "EmbeddingCacheData | null",
               "description": "Load cached embedding data from the backing store.",
-              "line": 234
+              "line": 357
             },
             {
               "name": "save",
@@ -50892,7 +53081,7 @@
               ],
               "returnType": "void",
               "description": "Save embedding data to the backing store.",
-              "line": 240
+              "line": 363
             },
             {
               "name": "search",
@@ -50910,19 +53099,53 @@
               ],
               "returnType": "EmbeddingSearchResult[]",
               "description": "Search for the nearest vectors to a query vector (KNN).",
-              "line": 248
+              "line": 371
+            },
+            {
+              "name": "evict",
+              "parameters": [
+                {
+                  "name": "id",
+                  "type": "string",
+                  "optional": false
+                }
+              ],
+              "returnType": "void",
+              "description": "Evict the cached vector and source hash for a single instruction id.\nUsed when an entry is archived or permanently purged so its embedding\ndoes not surface in semantic search results. No-op if the id is not\npresent in the cache.",
+              "line": 381
+            },
+            {
+              "name": "markStale",
+              "parameters": [
+                {
+                  "name": "id",
+                  "type": "string",
+                  "optional": false
+                }
+              ],
+              "returnType": "void",
+              "description": "Mark a single id stale so the next embedding refresh recomputes it.\nClears only the per-entry `entryHashes[id]` mapping; the cached vector\nremains intact. No-op if the id is not present.",
+              "line": 390
             },
             {
               "name": "close",
               "parameters": [],
               "returnType": "void",
               "description": "Close the store and release resources.",
-              "line": 253
+              "line": 395
             }
           ]
         }
       ],
-      "typeAliases": [],
+      "typeAliases": [
+        {
+          "name": "RestoreMode",
+          "isExported": true,
+          "type": "'reject' | 'overwrite'",
+          "description": "Restore conflict-resolution mode.\n- `reject` (default): throw when an active entry with the same id exists.\n- `overwrite`: replace the active entry with the archived payload.",
+          "line": 152
+        }
+      ],
       "enums": [],
       "functions": [],
       "constants": []
@@ -51184,7 +53407,9 @@
             "REQUIREMENTS",
             "STATUSES",
             "PRIORITY_TIERS",
-            "CLASSIFICATIONS"
+            "CLASSIFICATIONS",
+            "ARCHIVE_REASONS",
+            "ARCHIVE_SOURCES"
           ],
           "namespaceImport": null
         },
@@ -51336,13 +53561,13 @@
           "name": "ToolRegistryFilter",
           "isExported": true,
           "extends": [],
-          "line": 457,
+          "line": 505,
           "properties": [
             {
               "name": "tier",
               "type": "ToolTier",
               "optional": true,
-              "line": 458
+              "line": 506
             }
           ],
           "methods": []
@@ -51391,7 +53616,7 @@
           "parameters": [],
           "returnType": "ToolTier",
           "description": "Resolve the maximum visible tier from feature flags.",
-          "line": 462
+          "line": 510
         },
         {
           "name": "getToolRegistry",
@@ -51405,7 +53630,7 @@
             }
           ],
           "returnType": "ToolRegistryEntry[]",
-          "line": 468
+          "line": 516
         },
         {
           "name": "describeTool",
@@ -51419,7 +53644,7 @@
             }
           ],
           "returnType": "string",
-          "line": 498
+          "line": 546
         }
       ],
       "constants": [
@@ -51427,19 +53652,19 @@
           "name": "STABLE",
           "type": null,
           "initializerKind": "NewExpression",
-          "line": 384
+          "line": 426
         },
         {
           "name": "MUTATION",
           "type": null,
           "initializerKind": "NewExpression",
-          "line": 385
+          "line": 427
         },
         {
           "name": "REGISTRY_VERSION",
           "type": null,
           "initializerKind": "StringLiteral",
-          "line": 567
+          "line": 621
         }
       ]
     },

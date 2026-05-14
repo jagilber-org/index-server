@@ -147,7 +147,8 @@
     "schemaVersion": {
       "type": "string",
       "enum": [
-        "6"
+        "6",
+        "7"
       ],
       "x-fieldClass": "server-managed",
       "description": "Internal schema version for migration"
@@ -281,6 +282,36 @@
       "format": "date-time",
       "x-fieldClass": "server-managed",
       "description": "Timestamp when archived (ISO 8601)"
+    },
+    "archivedBy": {
+      "type": "string",
+      "x-fieldClass": "server-managed",
+      "description": "Identifier of the agent / operator that archived this entry (schema v7)"
+    },
+    "archiveReason": {
+      "enum": [
+        "deprecated",
+        "superseded",
+        "duplicate-merge",
+        "manual",
+        "legacy-scope"
+      ],
+      "x-fieldClass": "server-managed",
+      "description": "Closed enum capturing why the entry was archived (schema v7)"
+    },
+    "archiveSource": {
+      "enum": [
+        "groom",
+        "remove",
+        "archive",
+        "import-migration"
+      ],
+      "x-fieldClass": "server-managed",
+      "description": "Which lifecycle pathway produced the archive event (schema v7)"
+    },
+    "restoreEligible": {
+      "type": "boolean",
+      "description": "Whether the entry may be restored to the active set. Defaults to true; mergers may set this to false to prevent reactivation (schema v7)."
     },
     "semanticSummary": {
       "type": "string",

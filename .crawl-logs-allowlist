@@ -83,3 +83,8 @@ src[\\/]tests[\\/]eventBuffer\.spec\.ts
 # Count scales with the number of parallel workers and test duration; not operator-actionable.
 # Note: allowlist tests against the raw msg field (no [ERROR] prefix).
 Heap snapshot taken\. Memory after GC:
+
+# Archive lifecycle embedding-eviction hook failures are best-effort: tests inject a
+# throwing hook to verify archive/restore/purge swallow the error and continue. The
+# logger auto-attaches a call-site stack at WARN (Error Trace Flow); not operator-actionable.
+\[archive\] embedding (evict|markStale)\('[^']*'\) failed:

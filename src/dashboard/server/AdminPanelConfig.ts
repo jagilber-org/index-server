@@ -1,133 +1,57 @@
 /**
- * AdminPanelConfig — Configuration rendering and serialization logic.
+ * AdminPanelConfig — Session timing configuration for the admin panel.
  *
- * Owns the AdminConfig data structure and provides CRUD methods for
- * reading and updating admin panel configuration.
+ * Historical note (#359, plan §2.6 T6 / clean break):
+ *  Pre-1.29 this module owned `serverSettings`, `indexSettings`, and
+ *  `securitySettings` envelopes that mirrored a subset of runtime config.
+ *  Those structures duplicated the flag registry surfaced through
+ *  `/api/admin/config` and `dashboard_config`, so they were removed in
+ *  favor of the single source of truth. The only piece worth preserving
+ *  was `sessionTimeout` (consumed by AdminPanelState for session expiry),
+ *  which now lives on `SessionTimingConfig`.
  *
- * Updates here mutate `process.env.INDEX_SERVER_*` and call `reloadRuntimeConfig()`
- * so the dashboard "Server Configuration" panel reflects (and applies to) the
- * single runtimeConfig source of truth.
+ * For runtime flag CRUD, see:
+ *   - GET/POST /api/admin/config  (src/dashboard/server/routes/admin.routes.ts)
+ *   - src/services/handlers.dashboardConfig.ts (FLAG_REGISTRY)
+ *   - src/services/configValidation.ts (validateFlagUpdate)
+ *   - src/config/runtimeOverrides.ts (overlay persistence)
  */
 
-import { getRuntimeConfig, reloadRuntimeConfig } from '../../config/runtimeConfig';
-
-export interface AdminConfig {
-  serverSettings: {
-    maxConnections: number;
-    requestTimeout: number;
-    enableVerboseLogging: boolean;
-    enableMutation: boolean;
-    rateLimit: {
-      perMinute: number;
-    };
-  };
-  indexSettings: {
-    autoRefreshInterval: number;
-    cacheSize: number;
-    enableVersioning: boolean;
-  };
-  securitySettings: {
-    enableCors: boolean;
-    allowedOrigins: string[];
-    enableAuthentication: boolean;
-    sessionTimeout: number;
-  };
+/**
+ * Session timing knobs consumed by AdminPanelState. Intentionally minimal —
+ * NOT a place to re-introduce duplicate envelopes. Add new fields here only
+ * when they belong to session lifetime, not to general server configuration.
+ */
+export interface SessionTimingConfig {
+  /** Inactivity timeout for admin sessions, in milliseconds. */
+  sessionTimeout: number;
 }
 
+/**
+ * Legacy export retained as an empty alias so type-only consumers that still
+ * import `AdminConfig` do not break the build. The T6 compile-time guard in
+ * adminConfigRoute.spec.ts asserts the legacy keys are gone via
+ * `'indexSettings' extends keyof AdminConfig` style checks; both work on `{}`.
+ *
+ * Marked deprecated to discourage new usage.
+ *
+ * @deprecated Use `SessionTimingConfig` for session knobs, or query
+ *   `/api/admin/config` for runtime flag values.
+ */
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
+export type AdminConfig = {};
+
+const DEFAULT_SESSION_TIMEOUT_MS = 3600000;
+
 export class AdminPanelConfig {
-  private config: AdminConfig;
+  private timing: SessionTimingConfig;
 
   constructor() {
-    this.config = this.loadDefaultConfig();
+    this.timing = { sessionTimeout: DEFAULT_SESSION_TIMEOUT_MS };
   }
 
-  private loadDefaultConfig(): AdminConfig {
-    const runtimeConfig = getRuntimeConfig();
-    const serverHttp = runtimeConfig.dashboard.http;
-    return {
-      serverSettings: {
-        maxConnections: serverHttp?.maxConnections ?? 100,
-        requestTimeout: serverHttp?.requestTimeoutMs ?? 30000,
-        enableVerboseLogging: !!serverHttp?.verboseLogging,
-        enableMutation: runtimeConfig.mutation.enabled,
-        rateLimit: {
-          perMinute: serverHttp?.rateLimitPerMinute ?? 0
-        }
-      },
-      indexSettings: {
-        autoRefreshInterval: 300000,
-        cacheSize: 1000,
-        enableVersioning: true
-      },
-      securitySettings: {
-        enableCors: false,
-        allowedOrigins: ['http://localhost', 'http://127.0.0.1', 'https://localhost', 'https://127.0.0.1'],
-        enableAuthentication: false,
-        sessionTimeout: 3600000
-      }
-    };
-  }
-
-  /** Re-read from runtime config so callers always see the current authoritative values. */
-  getAdminConfig(): AdminConfig {
-    this.config = this.loadDefaultConfig();
-    return JSON.parse(JSON.stringify(this.config));
-  }
-
-  updateAdminConfig(updates: Partial<AdminConfig>): { success: boolean; message: string; appliedFields?: string[] } {
-    try {
-      const applied: string[] = [];
-      this.applyConfigChanges(updates, applied);
-      // Refresh in-memory snapshot from runtime config (post-reload).
-      this.config = this.loadDefaultConfig();
-      return { success: true, message: 'Configuration updated successfully', appliedFields: applied };
-    } catch (error) {
-      return {
-        success: false,
-        message: `Failed to update configuration: ${error instanceof Error ? error.message : String(error)}`
-      };
-    }
-  }
-
-  /**
-   * Apply incoming serverSettings to `process.env.INDEX_SERVER_*` and reload runtime config
-   * so the dashboard form actually drives behavior. Bind every editable field to its env var
-   * (per constitution S-4: "All environment configuration must flow through runtimeConfig.ts").
-   */
-  private applyConfigChanges(updates: Partial<AdminConfig>, applied: string[] = []): void {
-    if (!updates.serverSettings) return;
-    const s = updates.serverSettings;
-    let needsReload = false;
-    if (s.enableVerboseLogging !== undefined) {
-      process.env.INDEX_SERVER_VERBOSE_LOGGING = s.enableVerboseLogging ? '1' : '0';
-      applied.push('verboseLogging');
-      needsReload = true;
-    }
-    if (s.enableMutation !== undefined) {
-      process.env.INDEX_SERVER_MUTATION = s.enableMutation ? '1' : '0';
-      applied.push('mutation');
-      needsReload = true;
-    }
-    if (s.maxConnections !== undefined && Number.isFinite(s.maxConnections) && s.maxConnections > 0) {
-      process.env.INDEX_SERVER_MAX_CONNECTIONS = String(Math.floor(s.maxConnections));
-      applied.push('maxConnections');
-      needsReload = true;
-    }
-    if (s.requestTimeout !== undefined && Number.isFinite(s.requestTimeout) && s.requestTimeout > 0) {
-      process.env.INDEX_SERVER_REQUEST_TIMEOUT = String(Math.floor(s.requestTimeout));
-      applied.push('requestTimeout');
-      needsReload = true;
-    }
-    if (s.rateLimit && s.rateLimit.perMinute !== undefined && Number.isFinite(s.rateLimit.perMinute) && s.rateLimit.perMinute >= 0) {
-      process.env.INDEX_SERVER_RATE_LIMIT = String(Math.floor(s.rateLimit.perMinute));
-      applied.push('rateLimitPerMinute');
-      needsReload = true;
-    }
-    if (needsReload) reloadRuntimeConfig();
-  }
-
-  /** Session timeout in milliseconds — consumed by state management. */
+  /** Session timeout in milliseconds — consumed by AdminPanelState. */
   get sessionTimeout(): number {
-    return this.config.securitySettings.sessionTimeout;
+    return this.timing.sessionTimeout;
   }
 }

@@ -8,7 +8,7 @@ import { buildInstructionSearchFieldsSchema } from '../schemas/instructionSchema
 import { flagEnabled } from './featureFlags';
 import { dangerousDiagnosticsEnabled } from '../utils/envUtils';
 import { getRuntimeConfig } from '../config/runtimeConfig';
-import { CONTENT_TYPES, AUDIENCES, REQUIREMENTS, STATUSES, PRIORITY_TIERS, CLASSIFICATIONS } from '../models/instruction';
+import { CONTENT_TYPES, AUDIENCES, REQUIREMENTS, STATUSES, PRIORITY_TIERS, CLASSIFICATIONS, ARCHIVE_REASONS, ARCHIVE_SOURCES } from '../models/instruction';
 import { FEEDBACK_TYPES, FEEDBACK_SEVERITIES, FEEDBACK_STATUSES } from './feedbackStorage';
 import { USAGE_ACTIONS, USAGE_SIGNALS, SEARCH_MODES } from './protocolEnums';
 export { TOOL_TIERS, ToolTier } from './protocolEnums';
@@ -89,7 +89,7 @@ const INPUT_SCHEMAS: Record<string, object> = {
     includeUsage: { type: 'boolean' }
   } },
   'health_check': { type: 'object', additionalProperties: true }, // no params
-  'index_dispatch': { type: 'object', additionalProperties: true, required: ['action'], properties: {
+  'index_dispatch': { type: 'object', additionalProperties: true, required: ['action'], not: { required: ['includeArchived', 'onlyArchived'] }, properties: {
     action: {
       type: 'string',
       enum: [
@@ -102,7 +102,9 @@ const INPUT_SCHEMAS: Record<string, object> = {
         // Utilities
         'health', 'inspect', 'dir', 'capabilities', 'batch',
         // Manifest
-        'manifestStatus', 'manifestRefresh', 'manifestRepair'
+        'manifestStatus', 'manifestRefresh', 'manifestRepair',
+        // Archive lifecycle (spec 006 Phase D)
+        'archive', 'restore', 'listArchived', 'getArchived', 'purgeArchive'
       ],
       description: 'Action to perform on the instruction index. Use "capabilities" to list all supported actions.'
     },
@@ -149,7 +151,14 @@ const INPUT_SCHEMAS: Record<string, object> = {
     // Remove action params
     missingOk: { type: 'boolean', description: 'Suppress errors for missing IDs (remove action).' },
     force: { type: 'boolean', description: 'Required for remove action when deleting more than INDEX_SERVER_MAX_BULK_DELETE items. A backup is created automatically.' },
-    dryRun: { type: 'boolean', description: 'Preview what would be deleted without actually removing anything (remove action).' }
+    dryRun: { type: 'boolean', description: 'Preview what would be deleted without actually removing anything (remove action).' },
+    // Archive lifecycle dispatcher params (spec 006 Phase D)
+    purge: { type: 'boolean', description: 'Remove action alias for mode:"purge". Forces destructive removal (instead of upcoming archive default).' },
+    reason: { type: 'string', enum: [...ARCHIVE_REASONS], description: 'Archive reason (archive action).' },
+    restoreMode: { type: 'string', enum: ['reject', 'overwrite'], description: 'Restore collision behavior (restore action). Defaults to "reject".' },
+    includeArchived: { type: 'boolean', description: 'Include archived entries in read results (list, query, search, categories, get, export, diff). Mutually exclusive with onlyArchived.' },
+    onlyArchived: { type: 'boolean', description: 'Return ONLY archived entries (read actions). Mutually exclusive with includeArchived.' },
+    includeContent: { type: 'boolean', description: 'Include full entry bodies in listArchived results (defaults to false).' }
   } },
   'index_governanceHash': { type: 'object', additionalProperties: true },
   // status enum intentionally limited to schema-supported states (PROJECT_PRD Governance Hash Integrity Policy)
@@ -188,8 +197,8 @@ const INPUT_SCHEMAS: Record<string, object> = {
   } },
   'index_repair': { type: 'object', additionalProperties: true },
   'index_reload': { type: 'object', additionalProperties: true },
-  'index_remove': { type: 'object', additionalProperties: false, required: ['ids'], properties: { ids: { type: 'array', minItems: 1, items: { type: 'string' } }, missingOk: { type: 'boolean' }, force: { type: 'boolean', description: 'Required when deleting more than INDEX_SERVER_MAX_BULK_DELETE items (default 5). A backup is created first.' }, dryRun: { type: 'boolean', description: 'Preview what would be deleted without actually removing anything.' } } },
-  'index_groom': { type: 'object', additionalProperties: false, properties: { mode: { type: 'object', additionalProperties: false, properties: { dryRun: { type: 'boolean' }, removeDeprecated: { type: 'boolean' }, mergeDuplicates: { type: 'boolean' }, purgeLegacyScopes: { type: 'boolean' }, remapCategories: { type: 'boolean' } } } } },
+  'index_remove': { type: 'object', additionalProperties: false, required: ['ids'], properties: { ids: { type: 'array', minItems: 1, items: { type: 'string' } }, missingOk: { type: 'boolean' }, force: { type: 'boolean', description: 'Required when deleting more than INDEX_SERVER_MAX_BULK_DELETE items (default 5). A backup is created first.' }, dryRun: { type: 'boolean', description: 'Preview what would be deleted without actually removing anything.' }, mode: { type: 'string', enum: ['archive', 'purge'], description: 'Removal mode. "archive" moves entries to the archive store (spec 006). "purge" is the current destructive default. Omitting "mode" preserves the destructive default in this transition release but emits a defaultBehaviorChangeWarning. The default will become "archive" in a future release.' }, purge: { type: 'boolean', description: 'Alias for mode:"purge". Forces destructive removal.' } } },
+  'index_groom': { type: 'object', additionalProperties: false, properties: { mode: { type: 'object', additionalProperties: false, properties: { dryRun: { type: 'boolean' }, removeDeprecated: { type: 'boolean' }, mergeDuplicates: { type: 'boolean' }, purgeLegacyScopes: { type: 'boolean' }, remapCategories: { type: 'boolean' }, purgeArchive: { type: 'boolean', description: 'Permanently delete archived entries (spec 006 Phase D). Cannot be combined with retirement flags (removeDeprecated/mergeDuplicates/purgeLegacyScopes).' } } }, ids: { type: 'array', items: { type: 'string' }, description: 'Optional subset of archive IDs to purge when mode.purgeArchive=true. Omit to purge all archived entries.' }, force: { type: 'boolean', description: 'Required for bulk purgeArchive operations exceeding INDEX_SERVER_MAX_BULK_DELETE.' } } },
   // enrichment tool (no params required)
   'index_enrich': { type: 'object', additionalProperties: true },
   'prompt_review': stringReq('prompt'),
@@ -314,6 +323,39 @@ const INPUT_SCHEMAS: Record<string, object> = {
 (INPUT_SCHEMAS as Record<string, object>)['index_debug'] = { type: 'object', additionalProperties: true };
 (INPUT_SCHEMAS as Record<string, object>)['integrity_manifest'] = { type: 'object', additionalProperties: true };
 
+// Archive lifecycle tools (spec 006-archive-lifecycle Phase D).
+// Surfaced via index_dispatch actions: archive, restore, listArchived, getArchived, purgeArchive.
+(INPUT_SCHEMAS as Record<string, object>)['index_archive'] = { type: 'object', additionalProperties: false, required: ['ids'], properties: {
+  ids: { type: 'array', minItems: 1, items: { type: 'string' }, description: 'Active instruction IDs to archive.' },
+  reason: { type: 'string', enum: [...ARCHIVE_REASONS], description: 'Archive reason (closed taxonomy from REQ-3).' },
+  archivedBy: { type: 'string', description: 'Identity of the agent/operator performing the archive (optional).' },
+  dryRun: { type: 'boolean', description: 'Preview what would be archived without writing.' }
+} };
+(INPUT_SCHEMAS as Record<string, object>)['index_restore'] = { type: 'object', additionalProperties: false, required: ['ids'], properties: {
+  ids: { type: 'array', minItems: 1, items: { type: 'string' }, description: 'Archived instruction IDs to restore.' },
+  restoreMode: { type: 'string', enum: ['reject', 'overwrite'], default: 'reject', description: 'Collision behaviour when an active entry with the same id exists.' },
+  dryRun: { type: 'boolean', description: 'Preview what would be restored without writing.' }
+} };
+(INPUT_SCHEMAS as Record<string, object>)['index_listArchived'] = { type: 'object', additionalProperties: false, properties: {
+  category: { type: 'string', description: 'Filter by category.' },
+  contentType: { type: 'string', enum: [...CONTENT_TYPES], description: 'Filter by content type.' },
+  reason: { type: 'string', enum: [...ARCHIVE_REASONS], description: 'Filter by archive reason.' },
+  source: { type: 'string', enum: [...ARCHIVE_SOURCES], description: 'Filter by archive source.' },
+  archivedBy: { type: 'string', description: 'Filter by archivedBy identity.' },
+  restoreEligible: { type: 'boolean', description: 'Filter by restore eligibility flag.' },
+  includeContent: { type: 'boolean', description: 'Include full body in each entry (default: false).' },
+  limit: { type: 'number', minimum: 1, maximum: 1000 },
+  offset: { type: 'number', minimum: 0 }
+} };
+(INPUT_SCHEMAS as Record<string, object>)['index_getArchived'] = { type: 'object', additionalProperties: false, required: ['id'], properties: {
+  id: { type: 'string', description: 'Archived instruction id.' }
+} };
+(INPUT_SCHEMAS as Record<string, object>)['index_purgeArchive'] = { type: 'object', additionalProperties: false, required: ['ids'], properties: {
+  ids: { type: 'array', minItems: 1, items: { type: 'string' }, description: 'Archived instruction IDs to permanently delete.' },
+  dryRun: { type: 'boolean', description: 'Preview what would be purged without deleting.' },
+  force: { type: 'boolean', description: 'Required when purging more than INDEX_SERVER_MAX_BULK_DELETE items. A backup is created first.' }
+} };
+
 // Messaging tools: inter-agent messaging system (not stored in instruction index)
 (INPUT_SCHEMAS as Record<string, object>)['messaging_send'] = { type: 'object', additionalProperties: false, required: ['channel', 'sender', 'recipients', 'body'], properties: {
   channel: { type: 'string', description: 'Target channel name' },
@@ -381,8 +423,8 @@ const INPUT_SCHEMAS: Record<string, object> = {
 } };
 
 // Stable & mutation classification lists (mirrors usage in toolHandlers; exported to remove duplication there).
-export const STABLE = new Set(['health_check','feedback_submit','graph_export','index_dispatch','index_search','index_governanceHash','prompt_review','integrity_verify','usage_track','usage_hotset','metrics_snapshot','gates_evaluate','meta_tools','help_overview','index_schema','manifest_status','index_diagnostics','meta_activation_guide','meta_check_activation','bootstrap','bootstrap_status','feature_status','index_health','index_inspect','index_debug','integrity_manifest','messaging_read','messaging_list_channels','messaging_stats','messaging_get','messaging_thread','trace_dump']);
-export const MUTATION = new Set(['feedback_manage','index_add','index_import','index_repair','index_reload','index_remove','index_groom','index_enrich','index_governanceUpdate','index_normalize','usage_flush','manifest_refresh','manifest_repair','promote_from_repo','bootstrap_request','bootstrap_confirmFinalize','messaging_send','messaging_ack','messaging_update','messaging_purge','messaging_reply','diagnostics_block','diagnostics_microtaskFlood','diagnostics_memoryPressure']);
+export const STABLE = new Set(['health_check','feedback_submit','graph_export','index_dispatch','index_search','index_governanceHash','prompt_review','integrity_verify','usage_track','usage_hotset','metrics_snapshot','gates_evaluate','meta_tools','help_overview','index_schema','manifest_status','index_diagnostics','meta_activation_guide','meta_check_activation','bootstrap','bootstrap_status','feature_status','index_health','index_inspect','index_debug','integrity_manifest','messaging_read','messaging_list_channels','messaging_stats','messaging_get','messaging_thread','trace_dump','index_listArchived','index_getArchived']);
+export const MUTATION = new Set(['feedback_manage','index_add','index_import','index_repair','index_reload','index_remove','index_groom','index_enrich','index_governanceUpdate','index_normalize','usage_flush','manifest_refresh','manifest_repair','promote_from_repo','bootstrap_request','bootstrap_confirmFinalize','messaging_send','messaging_ack','messaging_update','messaging_purge','messaging_reply','diagnostics_block','diagnostics_microtaskFlood','diagnostics_memoryPressure','index_archive','index_restore','index_purgeArchive']);
 
 // Tool tier classification (002-tool-consolidation spec)
 // core: always visible, essential daily use
@@ -449,6 +491,12 @@ const TOOL_TIERS: Record<string, ToolTier> = {
   'messaging_reply': 'extended',
   'messaging_thread': 'extended',
   'trace_dump': 'admin',
+  // Archive lifecycle tools (spec 006 Phase D)
+  'index_archive': 'admin',
+  'index_restore': 'admin',
+  'index_listArchived': 'admin',
+  'index_getArchived': 'admin',
+  'index_purgeArchive': 'admin',
 };
 
 // Tier ordering for filter comparison
@@ -499,7 +547,7 @@ function describeTool(name: string): string {
   switch(name){
     case 'health_check': return 'Returns server health status & version.';
   case 'graph_export': return 'Export instruction relationship graph (schema v1 minimal or v2 enriched).';
-  case 'index_dispatch': return 'Unified dispatcher for instruction index operations. Required: "action". Key params by action: get/getEnhanced(id), search(q/searchString/keywords/fields, includeCategories, caseSensitive, limit, mode), query(text,categoriesAny,limit,offset), list(category), diff(clientHash), export(ids,metaOnly), remove(id or ids). Use action="capabilities" to discover all supported actions.';
+  case 'index_dispatch': return 'Unified dispatcher for instruction index operations. Required: "action". Key params by action: get/getEnhanced(id), search(q/searchString/keywords/fields, includeCategories, caseSensitive, limit, mode), query(text,categoriesAny,limit,offset), list(category), diff(clientHash), export(ids,metaOnly), remove(id or ids, mode:"archive"|"purge"), archive(ids, reason), restore(ids, restoreMode), listArchived/getArchived/purgeArchive. Read actions accept includeArchived/onlyArchived flags (mutually exclusive). Use action="capabilities" to discover all supported actions.';
   case 'index_search': return '🔍 PRIMARY: Search instructions by keywords, searchString phrase input, and/or structural fields — returns instruction IDs for targeted retrieval. Supports mode: "keyword" (substring match), "regex" (patterns like "deploy|release"), or "semantic" (embedding similarity). Default mode is semantic when INDEX_SERVER_SEMANTIC_ENABLED=1, otherwise keyword. Omit the mode parameter to let the server choose the best default. Use this FIRST to discover relevant instructions, then use index_dispatch get for details.';
   case 'index_governanceHash': return 'Return governance projection & deterministic governance hash.';
   // query & categories now accessed via dispatcher actions.
@@ -508,8 +556,8 @@ function describeTool(name: string): string {
   case 'index_add': return 'Add a single instruction (lax mode fills defaults; overwrite optional).';
     case 'index_repair': return 'Repair out-of-sync sourceHash fields (noop if none drifted).';
   case 'index_reload': return 'Force reload of instruction index from disk.';
-  case 'index_remove': return 'Delete one or more instruction entries by id. Bulk deletes exceeding INDEX_SERVER_MAX_BULK_DELETE (default 5) require force=true and auto-create a backup first. Use dryRun=true to preview.';
-  case 'index_groom': return 'Groom index: normalize, repair hashes, merge duplicates, remove deprecated, remap categories, apply usage signal feedback (outdated/not-relevant/helpful/applied) to instruction priority and requirement.';
+  case 'index_remove': return 'Delete one or more instruction entries by id. Bulk deletes exceeding INDEX_SERVER_MAX_BULK_DELETE (default 5) require force=true and auto-create a backup first. Use dryRun=true to preview. NOTE: spec 006-archive-lifecycle introduces a new mode parameter ("archive" | "purge"). Today the omitted-mode default remains destructive ("purge") for backwards compatibility, but the response includes defaultBehaviorChangeWarning — pass mode:"archive" to opt into the upcoming default (move to archive store, restorable) or mode:"purge" (or purge:true alias) to keep destructive behavior. The default WILL change to "archive" in a future release.';
+  case 'index_groom': return 'Groom index: normalize, repair hashes, merge duplicates, ARCHIVE deprecated (was: remove), remap categories, apply usage signal feedback (outdated/not-relevant/helpful/applied) to instruction priority and requirement. Spec 006 Phase D: retirement paths now archive instead of permanently delete; pass mode.purgeArchive=true (mutually exclusive with retirement flags) to permanently purge archived entries.';
   case 'index_enrich': return 'Persist normalization of placeholder governance fields to disk.';
   case 'index_governanceUpdate': return 'Patch limited governance fields (owner/status/review dates + optional version bump).';
     case 'prompt_review': return 'Static analysis of a prompt returning issues & summary.';
@@ -559,6 +607,12 @@ function describeTool(name: string): string {
   case 'messaging_reply': return 'Reply to a message with auto-populated channel and parentId. Supports reply-all (all original recipients) or reply-to-sender.';
   case 'messaging_thread': return 'Retrieve a full message thread by root parentId. Returns parent + all nested replies sorted chronologically.';
   case 'trace_dump': return 'Write the in-memory trace ring buffer to a file and return a summary (records count, bytes, env). Requires tracing to be enabled.';
+  // Archive lifecycle tools (spec 006 Phase D) — surfaced via index_dispatch actions
+  case 'index_archive': return 'Archive one or more active instructions (move to archive store, atomically). Closed-enum reason taxonomy (deprecated|superseded|duplicate-merge|manual|legacy-scope). Restorable unless restoreEligible:false. Surfaced via index_dispatch action:"archive".';
+  case 'index_restore': return 'Restore archived entries back to the active store. restoreMode:"reject" (default) fails on id collision; restoreMode:"overwrite" replaces the active entry. Entries marked restoreEligible:false cannot be restored. Surfaced via index_dispatch action:"restore".';
+  case 'index_listArchived': return 'List archived entries with optional filters (category, contentType, reason, source, archivedBy, restoreEligible). Set includeContent:true to include bodies. Surfaced via index_dispatch action:"listArchived".';
+  case 'index_getArchived': return 'Read a single archived entry by id. Surfaced via index_dispatch action:"getArchived". Returns null when not present.';
+  case 'index_purgeArchive': return 'Permanently delete archived entries. IRREVERSIBLE. Subject to bootstrap mutation gating, INDEX_SERVER_MAX_BULK_DELETE bulk limit, and auto-backup. Surfaced via index_dispatch action:"purgeArchive".';
     default: return 'Tool description pending.';
   }
 }

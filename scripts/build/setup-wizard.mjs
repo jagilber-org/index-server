@@ -162,7 +162,7 @@ function parseNonInteractiveArgs() {
     generateCerts: false,
     serverName: 'index-server',
     targets: ['vscode'],     // 'vscode', 'copilot-cli', 'claude'
-    scope: 'repo',           // 'global' or 'repo'
+    scope: 'global',         // 'global' or 'repo'
     write: false,            // write to real config files
     preview: true,           // show preview before writing
     deploy: true,            // deploy runtime to root when needed
@@ -295,10 +295,10 @@ async function runInteractiveWizard() {
   const scope = await select({
     message: 'Configuration scope',
     choices: [
-      { name: 'Workspace/repo — .vscode/mcp.json in current directory', value: 'repo' },
       { name: 'Global — user-level config (applies to all workspaces)', value: 'global' },
+      { name: 'Workspace/repo — .vscode/mcp.json in current directory', value: 'repo' },
     ],
-    default: 'repo',
+    default: 'global',
   });
 
   // When certs are generated TLS must be enabled so mcp.json env wires up cert paths.
@@ -363,6 +363,7 @@ function applyConfigTarget(targetInfo, config) {
   const result = mcpConfig.upsertServer({
     target: targetInfo.target,
     scope: targetInfo.format === 'vscode-global' ? 'global' : config.scope,
+    targetInfo,
     root: config.root,
     name: config.serverName,
     profile: config.profile,
@@ -574,6 +575,26 @@ async function deployRuntime(config) {
     console.error('   To deploy manually, run:');
     console.error(`   cd "${config.root}" && npm install ${pkgName}@${sourceVersion}`);
     console.error('   Then create a symlink: dist -> node_modules/@jagilber-org/index-server/dist');
+
+    // Clean up any partial deploy: if dist/server/index-server.js was left in
+    // a half-installed state, the next wizard run's resolveServerLaunch would
+    // pick it as source: 'local' and bake a broken path into mcp.json.
+    // Remove the dist/ tree (and any stray tarballs) so the next run starts
+    // from a clean slate. Best-effort — never throw from cleanup.
+    try {
+      const partialDist = path.join(targetRoot, 'dist');
+      if (fs.existsSync(partialDist)) {
+        fs.rmSync(partialDist, { recursive: true, force: true });
+        console.error(`   🧹 Removed partial dist/ at ${partialDist}`);
+      }
+      // Stray tarballs from a failed pack/install
+      for (const f of fs.readdirSync(targetRoot)) {
+        if (f.startsWith('jagilber-org-index-server-') && f.endsWith('.tgz')) {
+          try { fs.unlinkSync(path.join(targetRoot, f)); } catch { /* ok */ }
+        }
+      }
+    } catch { /* never throw from cleanup */ }
+
     // Exit with error so CI can detect deployment failures
     process.exitCode = 1;
   }
@@ -662,6 +683,12 @@ Non-interactive mode:
     }
   }
 
+  // ── Deploy runtime BEFORE writing config so resolveServerLaunch sees a
+  //    durable dist/ at config.root and emits a non-ephemeral entry path.
+  //    Writing first under npx would bake the _npx/<hash>/ cache path into
+  //    mcp.json — see setup-wizard RCA.
+  await deployRuntime(config);
+
   // Write to real files or sidecar
   if (config.write) {
     console.log('📁 Writing configuration files...\n');
@@ -694,8 +721,8 @@ Non-interactive mode:
     }
   }
 
-  // ── Deploy runtime if target root differs from package root ─────────
-  await deployRuntime(config);
+  // ── Deploy already happened above (before writing configs) so the
+  //    generated entry path is durable. ─────────────────────────────────
 
   // ── Next steps ──────────────────────────────────────────────────────
   const proto = (config.profile === 'enhanced' || config.profile === 'experimental') ? 'https' : 'http';
@@ -760,6 +787,11 @@ Non-interactive mode:
 
   console.log(`  Targets: ${(config.targets || ['vscode']).join(', ')} | Scope: ${config.scope || 'repo'}`);
   console.log(`  Profile: ${config.profile} | Root: ${fwd(config.root)}`);
+  console.log('');
+  console.log('  To re-run this wizard later (change profile, port, TLS, regenerate configs):');
+  console.log('     npx -y @jagilber-org/index-server@latest --setup');
+  console.log('     index-server --setup        # if installed globally');
+  console.log('  The Root path above is the data directory, not the binary location.');
   console.log('');
 }
 

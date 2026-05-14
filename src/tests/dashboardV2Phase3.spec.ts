@@ -183,6 +183,9 @@ describe('Dashboard V2 Phase 3 — CSS/UX modernization', () => {
       '.cfg-stab-experimental { color: #8b5cf6; font-size: 11px; }',
       '.cfg-stab-deprecated { color: #ff9830; font-size: 11px; }',
       '.cfg-stab-reserved { color: #6b7280; font-size: 11px; font-style: italic; }',
+      '.instr-view-toggle .btn-active { background: var(--admin-accent, #3b82f6); color: #fff; }',
+      '.archive-badge { display: inline-block; font-size: 10px; padding: 1px 6px; border-radius: 3px; background: #2c3038; color: #d0d6de; border: 1px solid #404756; margin-right: 4px; }',
+      '.archive-badge.locked { background: #4a1f1f; color: #f2495c; border-color: #6a2c2c; }',
       '.instr-preview-content code { background: rgba(255,255,255,0.08); padding: 1px 5px; border-radius: 3px; font-family: var(--mcp-font-mono); font-size: 0.9em; color: #e8ab6a; }',
       '.instr-preview-content strong { color: #fff; }',
       '.btn-green { background: rgba(115,191,105,0.15); color: #73bf69; border-color: #73bf6944; }',
@@ -192,15 +195,21 @@ describe('Dashboard V2 Phase 3 — CSS/UX modernization', () => {
     ]);
 
     expect(countBy(hexColoursOutsideRoot(css))).toEqual({
-      '#3b82f6': 1,
+      '#2c3038': 1,
+      '#3b82f6': 2,
+      '#404756': 1,
+      '#4a1f1f': 1,
+      '#6a2c2c': 1,
       '#6b7280': 1,
       '#73bf69': 1,
       '#73bf6944': 1,
       '#8b5cf6': 1,
+      '#d0d6de': 1,
       '#e8ab6a': 1,
+      '#f2495c': 1,
       '#ff9830': 1,
       '#ffd54f': 1,
-      '#fff': 4,
+      '#fff': 5,
     });
   });
 
@@ -210,7 +219,7 @@ describe('Dashboard V2 Phase 3 — CSS/UX modernization', () => {
     loadFiles();
 
     const inlineStyles = inlineStyleValues(html);
-    expect(inlineStyles).toHaveLength(40);
+    expect(inlineStyles).toHaveLength(38);
     expect(countBy(inlineStyles)).toEqual({
       'accent-color:var(--admin-accent)': 1,
       'background:#7f1d1d;border-color:#ef4444': 1,
@@ -225,14 +234,12 @@ describe('Dashboard V2 Phase 3 — CSS/UX modernization', () => {
       'font-size:13px;color:var(--admin-text-dim,#94a3b8)': 1,
       'font-weight:400;font-size:12px;color:var(--admin-text-dim)': 1,
       'font-weight:600;font-size:13px;color:var(--admin-text,#e2e8f0);margin-bottom:6px': 1,
-      'margin-top:10px': 1,
       'margin-top:12px': 2,
       'margin-top:16px': 2,
       'margin-top:8px': 2,
       'margin-top:8px;font-size:13px': 3,
       'margin-top:8px;overflow-x:auto': 1,
       'max-width:140px': 1,
-      'opacity:0.5;margin-top:12px;font-size:11px': 1,
       'padding:0 12px 8px;font-size:14px;font-weight:600;color:var(--admin-text)': 1,
       'padding:0;overflow:hidden': 1,
       'padding:8px 0': 1,

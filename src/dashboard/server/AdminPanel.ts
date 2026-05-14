@@ -132,14 +132,9 @@ export class AdminPanel {
 
 
   // ── Config delegation ──────────────────────────────────────────────────────────────
-
-  getAdminConfig(): AdminConfig {
-    return this.panelConfig.getAdminConfig();
-  }
-
-  updateAdminConfig(updates: Partial<AdminConfig>): { success: boolean; message: string } {
-    return this.panelConfig.updateAdminConfig(updates);
-  }
+  // Legacy delegations to AdminPanelConfig.getAdminConfig() / updateAdminConfig()
+  // were removed in #359 (plan §2.6 T6). Flag CRUD now goes through the
+  // /api/admin/config routes driven by the FLAG_REGISTRY single source of truth.
 
   // ── Session state delegation ────────────────────────────────────────────────────────
 

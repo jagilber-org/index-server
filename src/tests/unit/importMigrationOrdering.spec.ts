@@ -198,7 +198,7 @@ describe('Import migration ordering — structural guard (#346)', () => {
 // ---------------------------------------------------------------------------
 describe('Import migration ordering — backward compat (#346)', () => {
   it('SE-08: valid current-schema entry passes migration unchanged', () => {
-    const rec = legacyEntry({ schemaVersion: '6' });
+    const rec = legacyEntry({ schemaVersion: '7' });
     const result = migrateInstructionRecord(rec);
     expect(result.changed).toBe(false);
     // All fields remain valid

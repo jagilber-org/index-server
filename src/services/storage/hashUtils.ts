@@ -30,3 +30,26 @@ export function computeGovernanceHashFromEntries(entries: InstructionEntry[]): s
   const projection = sorted.map(e => JSON.stringify(projectGovernance(e)));
   return crypto.createHash('sha256').update(projection.join('\n')).digest('hex');
 }
+
+/**
+ * @internal Archive projection — governance projection plus the four archive
+ * metadata fields. Must be identical across backends so JSON and SQLite stores
+ * produce byte-stable hashes for the same archive set.
+ */
+export function projectArchive(e: InstructionEntry): Record<string, unknown> {
+  return {
+    ...projectGovernance(e),
+    archivedAt: e.archivedAt ?? '',
+    archivedBy: e.archivedBy ?? '',
+    archiveReason: e.archiveReason ?? '',
+    archiveSource: e.archiveSource ?? '',
+    restoreEligible: e.restoreEligible ?? true,
+  };
+}
+
+/** Compute deterministic archive hash from an array of archived entries. */
+export function computeArchiveHashFromEntries(entries: InstructionEntry[]): string {
+  const sorted = [...entries].sort((a, b) => a.id.localeCompare(b.id));
+  const projection = sorted.map(e => JSON.stringify(projectArchive(e)));
+  return crypto.createHash('sha256').update(projection.join('\n')).digest('hex');
+}

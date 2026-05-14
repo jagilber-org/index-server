@@ -30,6 +30,20 @@ import '../services/mcpLogBridge';
 import '../services/logPrefix';
 // Ensure logger initializes early (file logging environment may auto-resolve)
 import '../services/logger';
+// Apply runtime overrides overlay BEFORE any getRuntimeConfig() call.
+// Overlay > process.env > defaults (plan §2.3, issue #359).
+//
+// Import ordering note (PR #362 quality finding A1): the three imports above
+// (mcpLogBridge, logPrefix, logger) are deliberately ordered BEFORE
+// applyOverlay because they do NOT consume runtimeConfig at module-load
+// time — they install stderr/log interceptors that the overlay's own
+// diagnostic console.warn output must already flow through. Slot #1 in
+// THIS file is therefore "the mcpLogBridge stderr intercept", but slot #1
+// for runtime-config-state purposes is `applyOverlay()` — no
+// `getRuntimeConfig()` reader has run by the time we reach this line.
+// Do NOT move any module that calls getRuntimeConfig() above this line.
+import { applyOverlay } from '../config/runtimeOverrides';
+applyOverlay();
 import { getRuntimeConfig, reloadRuntimeConfig } from '../config/runtimeConfig';
 const __earlyInitChunks: Buffer[] = [];
 let __earlyInitFirstLogged = false;

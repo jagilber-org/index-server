@@ -18,8 +18,10 @@ import { MetricsCollector } from '../MetricsCollector.js';
 import { getAdminPanel } from '../AdminPanel.js';
 import { getWebSocketManager } from '../WebSocketManager.js';
 import { dumpFlags, updateFlags } from '../../../services/featureFlags.js';
-import { getFlagRegistrySnapshot } from '../../../services/handlers.dashboardConfig.js';
+import { getFlagRegistrySnapshot, FLAG_REGISTRY } from '../../../services/handlers.dashboardConfig.js';
 import { reloadRuntimeConfig } from '../../../config/runtimeConfig.js';
+import { writeOverride, clearOverride, shadowedEnv } from '../../../config/runtimeOverrides.js';
+import { validateFlagUpdate, isWriteable } from '../../../services/configValidation.js';
 import { listEvents, eventCounts, clearEvents } from '../../../services/eventBuffer.js';
 import { getLocalHandler } from '../../../server/registry.js';
 import { dashboardAdminAuth } from './adminAuth.js';
@@ -32,22 +34,21 @@ export function createAdminRoutes(metricsCollector: MetricsCollector): Router {
   router.use(dashboardAdminAuth);
 
   /**
-   * GET /api/admin/config - Get admin configuration
+   * GET /api/admin/config - Get admin configuration (flag registry — clean break, #359).
+   *
+   * Response shape: { success, allFlags[], timestamp }.
+   * No legacy `config`/`indexSettings`/`securitySettings`/`featureFlags` envelope.
+   * Each flag carries `overlayShadowsEnv:boolean` (Morpheus revision #4).
    */
   router.get('/admin/config', (_req: Request, res: Response) => {
     try {
-      const config = adminPanel.getAdminConfig();
-      // Surface feature flags (environment + file) for visibility
-      let featureFlags: Record<string, boolean> = {};
-      try { featureFlags = dumpFlags(); } catch { /* ignore */ }
-      // Include full registry snapshot for UI (so dashboard shows ALL flags, not just active)
       let allFlags = [] as ReturnType<typeof getFlagRegistrySnapshot>;
-      try { allFlags = getFlagRegistrySnapshot(); } catch { /* ignore */ }
+      try { allFlags = getFlagRegistrySnapshot(); } catch (err) {
+        logWarn('[API] getFlagRegistrySnapshot failed:', err instanceof Error ? err.message : err);
+      }
       res.json({
         success: true,
-        config,
-        featureFlags, // currently configured / resolved flags
-        allFlags,     // full registry with metadata + parsed values
+        allFlags,
         timestamp: Date.now()
       });
     } catch (error) {
@@ -74,62 +75,163 @@ export function createAdminRoutes(metricsCollector: MetricsCollector): Router {
   });
 
   /**
-   * POST /api/admin/config - Update admin configuration
+   * POST /api/admin/config - Update admin configuration (flag registry, #359).
+   *
+   * Body shape: { updates: { [FLAG_NAME]: value } }.
+   * Legacy `{ serverSettings:{…} }`/`indexSettings`/`securitySettings` payloads
+   * are rejected with 400 USE_FLAG_KEYS — clean break, no compatibility shim.
+   *
+   * Per-field validation runs through validateFlagUpdate(); ok values are
+   * persisted to the overlay via writeOverride() and mirrored into process.env.
+   * On any successful application the runtime config cache is invalidated so
+   * `dynamic` consumers observe the new value on their next read.
    */
   router.post('/admin/config', (req: Request, res: Response) => {
     try {
-      const updates = req.body;
-      const result = adminPanel.updateAdminConfig(updates);
-      // Feature flag persistence: split incoming flags into
-      //  (a) namespace flags (e.g. response_envelope_v1) — persisted to flags.json
-      //  (b) INDEX_SERVER_* boolean toggles — routed to process.env + reloadRuntimeConfig()
-      // so dashboard toggles actually take effect at runtime (issue #282 / fix #4).
-      if (updates.featureFlags && typeof updates.featureFlags === 'object') {
+      const body = (req.body ?? {}) as Record<string, unknown>;
+      // Legacy envelope → 400. Single canonical entry point: `updates`.
+      const legacyKeys = ['serverSettings', 'indexSettings', 'securitySettings'];
+      const hasLegacy = legacyKeys.some(k => Object.prototype.hasOwnProperty.call(body, k));
+      const updates = body.updates;
+      if (hasLegacy || updates === undefined) {
+        res.status(400).json({
+          success: false,
+          error: 'Legacy envelope payloads are no longer accepted; POST { updates: { FLAG_NAME: value } } instead.',
+          code: 'USE_FLAG_KEYS',
+          timestamp: Date.now(),
+        });
+        return;
+      }
+      if (!updates || typeof updates !== 'object' || Array.isArray(updates)) {
+        res.status(400).json({
+          success: false,
+          error: 'Field `updates` must be an object of { FLAG_NAME: value }.',
+          code: 'USE_FLAG_KEYS',
+          timestamp: Date.now(),
+        });
+        return;
+      }
+
+      const registryByName = new Map(FLAG_REGISTRY.map(f => [f.name, f]));
+      const results: Record<string, { applied: boolean; reloadBehavior: string; requiresRestart: boolean; error?: string }> = {};
+      let anyApplied = false;
+
+      for (const [name, raw] of Object.entries(updates as Record<string, unknown>)) {
+        const entry = registryByName.get(name);
+        if (!entry) {
+          results[name] = { applied: false, reloadBehavior: 'restart-required', requiresRestart: true, error: `Unknown flag: ${name}` };
+          continue;
+        }
+        const result = validateFlagUpdate(entry, raw);
+        if (!result.ok) {
+          results[name] = {
+            applied: false,
+            reloadBehavior: entry.reloadBehavior,
+            requiresRestart: entry.reloadBehavior === 'restart-required',
+            error: `[${result.code}] ${result.error}`,
+          };
+          continue;
+        }
         try {
-          const knownEnv = new Set(getFlagRegistrySnapshot().filter(f => f.type === 'boolean').map(f => f.name));
-          const namespaceFlags: Record<string, boolean> = {};
-          let envChanged = 0;
-          const appliedEnv: string[] = [];
-          for (const [k, v] of Object.entries(updates.featureFlags)) {
-            if (typeof v !== 'boolean') continue;
-            const upper = String(k).toUpperCase();
-            if (upper.startsWith('INDEX_SERVER_') && knownEnv.has(upper)) {
-              process.env[upper] = v ? '1' : '0';
-              appliedEnv.push(upper);
-              envChanged++;
-            } else {
-              namespaceFlags[k] = v;
-            }
-          }
-          if (envChanged > 0) {
-            reloadRuntimeConfig();
-            logInfo(`[admin] applied ${envChanged} INDEX_SERVER_* toggle(s): ${appliedEnv.join(', ')}`);
-          }
-          if (Object.keys(namespaceFlags).length > 0) updateFlags(namespaceFlags);
+          const stringified = typeof result.value === 'boolean'
+            ? (result.value ? '1' : '0')
+            : String(result.value);
+          writeOverride(name, stringified);
+          results[name] = {
+            applied: true,
+            reloadBehavior: entry.reloadBehavior,
+            requiresRestart: entry.reloadBehavior === 'restart-required',
+          };
+          anyApplied = true;
         } catch (e) {
-          logWarn('[API] feature flag update failed:', e instanceof Error ? e.message : e);
+          results[name] = {
+            applied: false,
+            reloadBehavior: entry.reloadBehavior,
+            requiresRestart: entry.reloadBehavior === 'restart-required',
+            error: `persist failed: ${e instanceof Error ? e.message : String(e)}`,
+          };
         }
       }
 
-      if (result.success) {
-        res.json({
-          success: true,
-          message: result.message,
-          timestamp: Date.now()
-        });
-      } else {
-        res.status(400).json({
-          success: false,
-          error: result.message,
-          timestamp: Date.now()
-        });
+      if (anyApplied) {
+        try { reloadRuntimeConfig(); } catch (e) {
+          logWarn('[API] reloadRuntimeConfig after admin update failed:', e instanceof Error ? e.message : e);
+        }
+        const appliedNames = Object.entries(results).filter(([, r]) => r.applied).map(([k]) => k);
+        logInfo(`[admin] applied ${appliedNames.length} flag(s) via overlay: ${appliedNames.join(', ')}`);
       }
+
+      const httpStatus = anyApplied
+        ? (Object.values(results).every(r => r.applied) ? 200 : 207)
+        : 400;
+      res.status(httpStatus).json({
+        success: anyApplied,
+        results,
+        timestamp: Date.now(),
+      });
     } catch (error) {
       logError('[API] Update admin config error:', error);
       res.status(500).json({
         success: false,
         error: 'Failed to update admin configuration',
       });
+    }
+  });
+
+  /**
+   * POST /api/admin/config/reset/:flag - Clear a single overlay entry (#359).
+   *
+   * Reset semantics:
+   *  - If the flag's overlay value was shadowing a boot-time ENV value, the
+   *    response message says "revert to ENV value X" and process.env is
+   *    restored to the shadowed value.
+   *  - Otherwise the message mentions reverting to the built-in default.
+   * In both cases the on-disk overlay entry is removed atomically and the
+   * runtime config cache is reloaded.
+   */
+  router.post('/admin/config/reset/:flag', (req: Request, res: Response) => {
+    const name = req.params.flag;
+    try {
+      const entry = FLAG_REGISTRY.find(f => f.name === name);
+      if (!entry) {
+        res.status(404).json({ success: false, error: `Unknown flag: ${name}`, timestamp: Date.now() });
+        return;
+      }
+      // #359 C1 — readonly guard. Resetting a readonly flag (especially
+      // `INDEX_SERVER_ADMIN_API_KEY` with readonlyReason:'sensitive') would
+      // delete the admin bearer token from process.env, leaving the loopback
+      // fallback as the only auth gate. Reject any readonly reset here.
+      if (!isWriteable(entry)) {
+        res.status(409).json({
+          success: false,
+          error: `Flag ${name} is readonly (${entry.editable === false ? entry.readonlyReason : 'reserved'}) and cannot be reset via the dashboard.`,
+          code: 'READONLY',
+          readonlyReason: entry.editable === false ? entry.readonlyReason : undefined,
+          timestamp: Date.now(),
+        });
+        return;
+      }
+      const priorShadow = shadowedEnv()[name];
+      const shadowing = priorShadow !== undefined;
+      // clearOverride() now owns the process.env restore contract (#359
+      // reliability advisory): on success it restores the shadowed value
+      // when present, or deletes the env var otherwise. We still read
+      // shadowedEnv() above to produce the right user-facing message copy.
+      try { clearOverride(name); } catch (e) {
+        res.status(500).json({ success: false, error: `Failed to clear overlay: ${e instanceof Error ? e.message : String(e)}`, timestamp: Date.now() });
+        return;
+      }
+      try { reloadRuntimeConfig(); } catch (e) {
+        logWarn('[API] reloadRuntimeConfig after reset failed:', e instanceof Error ? e.message : e);
+      }
+      const defaultLabel = entry.default ?? '(default)';
+      const message = shadowing
+        ? `Reverted ${name} to ENV value \`${priorShadow}\`.`
+        : `Reverted ${name} to default \`${defaultLabel}\`.`;
+      res.json({ success: true, message, shadowedEnvValue: shadowing ? priorShadow : null, timestamp: Date.now() });
+    } catch (error) {
+      logError('[API] Reset admin config error:', error);
+      res.status(500).json({ success: false, error: 'Failed to reset admin configuration' });
     }
   });
 

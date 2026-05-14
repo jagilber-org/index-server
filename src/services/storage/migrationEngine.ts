@@ -17,11 +17,15 @@ export interface MigrationOptions {
 
 export interface MigrationResult {
   migrated: number;
+  /** Number of archived entries also migrated (Phase B5 / spec 006). */
+  archivedMigrated: number;
   errors: { file: string; error: string }[];
 }
 
 export interface ExportResult {
   exported: number;
+  /** Number of archived entries also exported (Phase B5 / spec 006). */
+  archivedExported: number;
   errors: { id: string; error: string }[];
 }
 
@@ -30,6 +34,10 @@ export interface ExportResult {
  *
  * Idempotent: uses INSERT OR REPLACE so re-running is safe.
  * Atomic: all writes happen via SqliteStore (individual INSERT OR REPLACE).
+ *
+ * Archive parity (spec 006-archive-lifecycle B5): archived entries in
+ * `<jsonDir>/.archive/` are migrated into the `instructions_archive` table.
+ * Archived entries are NEVER reactivated by the migration.
  */
 export function migrateJsonToSqlite(
   jsonDir: string,
@@ -40,7 +48,8 @@ export function migrateJsonToSqlite(
   const loadResult = jsonStore.load();
 
   const entries = loadResult.entries;
-  const total = entries.length;
+  const archived = jsonStore.listArchived();
+  const total = entries.length + archived.length;
   const errors = [...loadResult.errors];
 
   // Ensure DB directory exists
@@ -51,32 +60,72 @@ export function migrateJsonToSqlite(
 
   const sqliteStore = new SqliteStore(dbPath);
   let migrated = 0;
+  let archivedMigrated = 0;
 
   try {
-    for (let i = 0; i < entries.length; i++) {
+    let progress = 0;
+    for (const entry of entries) {
       try {
-        sqliteStore.write(entries[i]);
+        sqliteStore.write(entry);
         migrated++;
       } catch (err) {
         errors.push({
-          file: entries[i].id,
+          file: entry.id,
           error: err instanceof Error ? err.message : 'Write failed',
         });
       }
-      opts?.onProgress?.(i + 1, total);
+      opts?.onProgress?.(++progress, total);
+    }
+
+    // Archive parity: archived entries are migrated into the archive store
+    // via write(active) + archive(meta). archive() is atomic per backend, so
+    // the entry never appears in both tables simultaneously. Original archive
+    // metadata (reason, source, archivedBy, archivedAt, restoreEligible) is
+    // preserved through the ArchiveMeta payload.
+    for (const arc of archived) {
+      try {
+        const meta = {
+          archivedAt: arc.archivedAt,
+          archivedBy: arc.archivedBy,
+          archiveReason: arc.archiveReason,
+          archiveSource: arc.archiveSource,
+          restoreEligible: arc.restoreEligible,
+        };
+        // Strip archive metadata so it's a valid "active" payload, write,
+        // then immediately archive with the original metadata.
+        const activeCopy = { ...arc };
+        delete activeCopy.archivedAt;
+        delete activeCopy.archivedBy;
+        delete activeCopy.archiveReason;
+        delete activeCopy.archiveSource;
+        delete activeCopy.restoreEligible;
+        sqliteStore.write(activeCopy);
+        sqliteStore.archive(arc.id, meta);
+        archivedMigrated++;
+      } catch (err) {
+        errors.push({
+          file: arc.id,
+          error: err instanceof Error ? err.message : 'Archive write failed',
+        });
+      }
+      opts?.onProgress?.(++progress, total);
     }
   } finally {
     sqliteStore.close();
     jsonStore.close();
   }
 
-  return { migrated, errors };
+  return { migrated, archivedMigrated, errors };
 }
 
 /**
  * Export all instructions from a SQLite database to JSON files.
  *
  * Each entry becomes a separate .json file named by ID.
+ *
+ * Archive parity (spec 006-archive-lifecycle B5): archived entries in the
+ * `instructions_archive` table are exported into `<jsonDir>/.archive/<id>.json`.
+ * Archived entries are NEVER reactivated by the migration.
  */
 export function migrateSqliteToJson(
   dbPath: string,
@@ -90,31 +139,64 @@ export function migrateSqliteToJson(
   const sqliteStore = new SqliteStore(dbPath);
   const loadResult = sqliteStore.load();
   const entries = loadResult.entries;
-  const total = entries.length;
+  const archived = sqliteStore.listArchived();
+  const total = entries.length + archived.length;
   const errors: { id: string; error: string }[] = [];
 
   const jsonStore = new JsonFileStore(jsonDir);
   let exported = 0;
+  let archivedExported = 0;
 
   try {
-    for (let i = 0; i < entries.length; i++) {
+    let progress = 0;
+    for (const entry of entries) {
       try {
-        jsonStore.write(entries[i]);
+        jsonStore.write(entry);
         exported++;
       } catch (err) {
         errors.push({
-          id: entries[i].id,
+          id: entry.id,
           error: err instanceof Error ? err.message : 'Write failed',
         });
       }
-      opts?.onProgress?.(i + 1, total);
+      opts?.onProgress?.(++progress, total);
+    }
+
+    // Archive parity: write archived entries into <jsonDir>/.archive/ and
+    // ensure they never appear in active storage. We re-use the JsonFileStore
+    // archive() path so the file lands in `.archive/` with proper atomicity.
+    for (const arc of archived) {
+      try {
+        const meta = {
+          archivedAt: arc.archivedAt,
+          archivedBy: arc.archivedBy,
+          archiveReason: arc.archiveReason,
+          archiveSource: arc.archiveSource,
+          restoreEligible: arc.restoreEligible,
+        };
+        const activeCopy = { ...arc };
+        delete activeCopy.archivedAt;
+        delete activeCopy.archivedBy;
+        delete activeCopy.archiveReason;
+        delete activeCopy.archiveSource;
+        delete activeCopy.restoreEligible;
+        jsonStore.write(activeCopy);
+        jsonStore.archive(arc.id, meta);
+        archivedExported++;
+      } catch (err) {
+        errors.push({
+          id: arc.id,
+          error: err instanceof Error ? err.message : 'Archive export failed',
+        });
+      }
+      opts?.onProgress?.(++progress, total);
     }
   } finally {
     sqliteStore.close();
     jsonStore.close();
   }
 
-  return { exported, errors };
+  return { exported, archivedExported, errors };
 }
 
 export interface EmbeddingMigrationResult {

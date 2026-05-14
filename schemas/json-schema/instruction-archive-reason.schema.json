@@ -1,0 +1,16 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$ref": "#/definitions/ArchiveReason",
+  "definitions": {
+    "ArchiveReason": {
+      "type": "string",
+      "enum": [
+        "deprecated",
+        "superseded",
+        "duplicate-merge",
+        "manual",
+        "legacy-scope"
+      ]
+    }
+  }
+}

@@ -50,6 +50,21 @@ export type PriorityTier = typeof PRIORITY_TIERS[number];
 export const CLASSIFICATIONS = ['public', 'internal', 'restricted'] as const;
 export type Classification = typeof CLASSIFICATIONS[number];
 
+// Archive lifecycle enums (schema v7). These cover the closed `archiveReason`
+// and `archiveSource` taxonomies introduced by spec 006-archive-lifecycle
+// (REQ-3). The runtime values are governed by the JSON schema (single source
+// of truth); the tuples below exist only so consumers get narrow types and so
+// the parity guard below detects drift between TS and JSON.
+export const ARCHIVE_REASONS = [
+  'deprecated', 'superseded', 'duplicate-merge', 'manual', 'legacy-scope',
+] as const;
+export type ArchiveReason = typeof ARCHIVE_REASONS[number];
+
+export const ARCHIVE_SOURCES = [
+  'groom', 'remove', 'archive', 'import-migration',
+] as const;
+export type ArchiveSource = typeof ARCHIVE_SOURCES[number];
+
 // Single parity guard for every schema enum. Adding a new schema enum
 // is a one-line change here — and that addition is also enforced by
 // the enumSourceOfTruth.spec.ts coverage test, which fails if any
@@ -61,6 +76,8 @@ const ENUM_GUARDS: ReadonlyArray<readonly [string, readonly string[]]> = [
   ['status', STATUSES],
   ['priorityTier', PRIORITY_TIERS],
   ['classification', CLASSIFICATIONS],
+  ['archiveReason', ARCHIVE_REASONS],
+  ['archiveSource', ARCHIVE_SOURCES],
 ];
 
 {
@@ -119,6 +136,13 @@ export interface InstructionEntry {
   changeLog?: { version: string; changedAt: string; summary: string }[]; // chronological changes
   supersedes?: string;        // id of instruction this one supersedes
   archivedAt?: string;        // timestamp when archived (schema v2, placeholder)
+  // Archive lifecycle metadata (schema v7 — spec 006-archive-lifecycle, REQ-3).
+  // All four fields are optional; they are populated by the archive workflow
+  // and absent on active entries.
+  archivedBy?: string;          // identifier of the agent / operator that archived this entry
+  archiveReason?: ArchiveReason; // closed enum: why the entry was archived
+  archiveSource?: ArchiveSource; // which lifecycle pathway produced the archive event
+  restoreEligible?: boolean;     // whether the entry may be restored (default true; false locks it)
   // Content intelligence (optional)
   semanticSummary?: string;   // concise summary / first-sentence style abstract of body
   // Attribution (added in 0.8.x): who/where created the instruction

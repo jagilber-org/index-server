@@ -15,6 +15,9 @@ export type {
   UsagePersistRecord,
   UsageTrackOptions,
   LoadResult,
+  ArchiveMeta,
+  ListArchivedOpts,
+  RestoreMode,
 } from './types.js';
 
 export { JsonFileStore } from './jsonFileStore.js';

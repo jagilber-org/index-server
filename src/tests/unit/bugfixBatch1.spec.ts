@@ -57,8 +57,8 @@ describe('#126: groom/normalize error surfacing', () => {
     expect(groomSection).toContain('const errors: { id: string; error: string }[]');
     // Should push write failures to errors
     expect(groomSection).toContain('errors.push({ id, error: `write-failed:');
-    // Should push delete failures to errors
-    expect(groomSection).toContain('errors.push({ id, error: `delete-failed:');
+    // Retirement now archives (instead of deletes); archive errors are surfaced separately
+    expect(groomSection).toContain('archiveErrors.push({ id, error: detail })');
     // Should surface errors in response
     expect(groomSection).toContain("if (errors.length) resp.errors = errors");
   });

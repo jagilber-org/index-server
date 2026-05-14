@@ -824,6 +824,11 @@ table td, table th { border-bottom: 1px solid var(--admin-border); padding: 6px 
    Instruction Section Controls
    ========================================================================== */
 .instr-toolbar { margin-bottom: 15px; display: flex; gap: 10px; flex-wrap: wrap; }
+.instr-view-toggle { display: inline-flex; gap: 0; border-radius: 4px; overflow: hidden; }
+.instr-view-toggle .action-btn { border-radius: 0; }
+.instr-view-toggle .btn-active { background: var(--admin-accent, #3b82f6); color: #fff; }
+.archive-badge { display: inline-block; font-size: 10px; padding: 1px 6px; border-radius: 3px; background: #2c3038; color: #d0d6de; border: 1px solid #404756; margin-right: 4px; }
+.archive-badge.locked { background: #4a1f1f; color: #f2495c; border-color: #6a2c2c; }
 .instr-filter { flex: 1; min-width: 180px; }
 .regex-toggle { display: inline-flex; align-items: center; gap: 3px; cursor: pointer; user-select: none; font-size: 12px; }
 .regex-toggle input[type="checkbox"] { margin: 0; cursor: pointer; }

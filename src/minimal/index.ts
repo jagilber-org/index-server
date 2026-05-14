@@ -4,6 +4,10 @@
 import { createInterface } from 'readline';
 import fs from 'fs';
 import path from 'path';
+// Apply runtime overrides overlay BEFORE any getRuntimeConfig() call.
+// Overlay > process.env > defaults (plan §2.3, issue #359).
+import { applyOverlay } from '../config/runtimeOverrides';
+applyOverlay();
 import { getRuntimeConfig } from '../config/runtimeConfig';
 
 // High resolution timestamp helper for ordering diagnostics

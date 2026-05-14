@@ -49,6 +49,10 @@ describe('setup wizard and mcpConfig CLI shared write path parity', () => {
           sharedRoot,
           '--target',
           target,
+          // Parity compares the workspace-scoped vscode file; default scope is
+          // 'global' so without this flag the wizard writes the global mcp.json
+          // and the read at <sharedRoot>/.vscode/mcp.json fails.
+          ...(target === 'vscode' ? ['--scope', 'repo'] : []),
           '--write',
           '--no-deploy',
           '--no-preview',

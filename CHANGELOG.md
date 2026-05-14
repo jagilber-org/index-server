@@ -6,6 +6,83 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 
 ## [Unreleased]
 
+## [1.28.22] - 2026-05-14
+
+### Added
+
+- **Archive lifecycle for instructions** (spec 006-archive-lifecycle, issue [#313](https://github.com/jagilber-dev/index-server/issues/313)): first-class archive state with a reversible `restore` path that decouples *"retire from the active index"* from *"permanently delete"*. Archived entries preserve payload, provenance, and audit context.
+- **Five new `index_dispatch` actions**: `archive` (move active entries to the archive surface), `restore` (return archived entries to active; `restoreMode`: `reject` (default) | `overwrite`), `purgeArchive` (terminal destructive deletion of archived entries — bulk-gated by `INDEX_SERVER_MAX_BULK_DELETE` with auto pre-mutation zip backup), `listArchived` (enumerate archived entries with archive-metadata filtering + paging), `getArchived` (fetch single archived entry by id).
+- **Archive metadata fields** on `InstructionEntry`: `archivedBy`, `archiveReason` (`deprecated` | `superseded` | `duplicate-merge` | `manual` | `legacy-scope`), `archiveSource` (`groom` | `remove` | `archive` | `import-migration`), `restoreEligible` (boolean, default `true`). `archivedAt` is reused.
+- **Segregated archive storage**: JSON backend uses `<instructionsDir>/.archive/<id>.json` (skipped by the loader's dot-directory convention); SQLite backend uses a new `instructions_archive` table with **no FTS5 projection** by contract (semantic and full-text search remain active-only).
+- **`includeArchived` / `onlyArchived` filters** on read dispatcher actions (`list`, `query`, `search`, `categories`, `get`, `export`, `diff`). Default behavior is unchanged — archived entries are excluded unless an explicit flag is set.
+- **Centralized audit action constants** at `src/services/auditActions.ts` (`AUDIT_ACTIONS`, `ARCHIVE_AUDIT_ACTIONS`, `ArchiveAuditAction` union) covering the new actions: `archive`, `restore`, `purge`, `purge_blocked`, `purge_backup`, `purge_backup_failed`, `remove_default_change_warning`.
+- **Shared `backupInstructionsDir` helper** at `src/services/instructionsBackup.ts` — consolidates the pre-mutation zip-backup logic previously duplicated across `instructions.remove.ts`, `instructions.archive.ts`, and `instructions.groom.ts`.
+
+### Changed
+
+- **Instruction schema version bumped 6 → 7** for the new archive metadata fields. The loader is **lax-accept** on v6/v7 (older records load unchanged); the writer **promotes records to v7 on next write** (opportunistic — no big-bang migration).
+- **`index_groom` retirement paths now archive by default** instead of unlinking. `mode.removeDeprecated`, `mode.mergeDuplicates`, and `mode.purgeLegacyScopes` move targeted entries to the archive surface (audit action `archive`). A new `mode.purgeArchive` flag handles permanent deletion of archived entries and cannot be combined with the retirement flags.
+- **`index_remove` gains a `mode` parameter** (`"archive"` | `"purge"`). **Default behavior is preserved this release**: omitting `mode` continues to destructively purge, but the response now includes a `defaultBehaviorChangeWarning` field and a `remove_default_change_warning` audit entry is written. The default flip to `mode:"archive"` is scheduled for the next major release per spec 006 release-coordination tasks R1/R2 — pass `mode` explicitly today (or `purge: true` as an alias) to insulate callers from the flip.
+
+### Changed (BREAKING)
+
+- **Dashboard `/api/admin/config` envelope** ([#359], PR #362): `GET` no longer
+  returns `serverSettings` / `indexSettings` / `securitySettings` envelopes.
+  The new response shape is `{ success, allFlags: FlagSnapshot[], timestamp }`
+  where every flag is a registry-driven entry with `name`, `value`, `parsed`,
+  `meta` (label, reloadBehavior, editability, validation, surfaces),
+  `overlayShadowsEnv`, and — for `editable:false` + `readonlyReason:'sensitive'`
+  flags — `present: boolean` *in place of* the value/parsed fields (security
+  redaction). Consumers using the old envelope MUST migrate.
+- **Dashboard `POST /api/admin/config` payload** ([#359], PR #362): legacy
+  `{ serverSettings:{…} }` / `indexSettings` / `securitySettings` payloads are
+  rejected with `400 { code: 'USE_FLAG_KEYS' }`. New canonical shape:
+  `{ updates: { FLAG_NAME: value, ... } }`. The response now reflects the true
+  outcome — HTTP `200` when every update applied, `207 Multi-Status` when at
+  least one applied and at least one failed, `400` when every update failed;
+  `success` mirrors `anyApplied`.
+
+### Added (PR #362)
+
+- **Per-flag reset endpoint** `POST /api/admin/config/reset/:flag` ([#359]):
+  removes an entry from the overlay and restores the boot-time shadowed
+  `process.env` value (or unsets it when none was shadowed). Returns
+  `409 { code:'READONLY', readonlyReason }` for `editable:false` flags.
+- **Runtime overrides overlay** at `data/runtime-overrides.json` ([#359]):
+  read once at boot via `applyOverlay()` and merged into `process.env`
+  BEFORE the first `getRuntimeConfig()` call. Precedence: `overlay > env >
+  defaults`. Gated by `INDEX_SERVER_DISABLE_OVERRIDES=1`; path overridable
+  via `INDEX_SERVER_OVERRIDES_FILE`. Atomic temp+rename writes;
+  single-writer-by-convention.
+- **Registry-driven dashboard Configuration tab** ([#359]): every row is
+  rendered from `FLAG_REGISTRY`. Per-row reload-behavior badges
+  (🟢 Dynamic / 🟡 Next-request / 🔴 Restart), a persistent "Pending restart"
+  banner driven by overlay entries whose flag is `restart-required` and
+  whose value differs from the active runtime value, and an `overlayShadowsEnv`
+  pill (with tooltip exposing the shadowed env value to the operator) when an
+  overlay entry masks a different `process.env` value present at boot.
+- **Migration guide** at `docs/migration/dashboard-config-v2.md` ([#359]):
+  before/after request and response examples plus consumer remediation steps.
+- **Local adoption note** at `.instructions/local/dashboard-config-v2.md`
+  ([#359]): `FLAG_REGISTRY` as single source of truth for the dashboard
+  config surface, plus the `readonlyReason` taxonomy (`derived`,
+  `deprecated`, `reserved`, `sensitive`, `legacy`) and the validation
+  `code` taxonomy (`READONLY|TYPE|RANGE|ENUM|PATTERN|FORMAT`). Marked
+  *stable as of #359*.
+
+### Removed
+
+- `AdminConfig.indexSettings` and `AdminConfig.securitySettings` ([#359]):
+  legacy admin-panel config types whose runtime semantics are subsumed by
+  `FLAG_REGISTRY`. `sessionTimeout` retained under a focused
+  `SessionTimingConfig` type. The legacy `serverSettings` branch in
+  `AdminPanelConfig.updateAdminConfig()` is gone.
+- Inline HTML fallback rendering in `admin.html` (lines ~1165–1224 pre-PR)
+  ([#359]): replaced with a hard error when the external dashboard script
+  fails to load, so silent stale UIs are no longer possible.
+
+[#359]: https://github.com/jagilber-dev/index-server/issues/359
+
 ## [1.28.21] - 2026-05-12
 
 ### Features

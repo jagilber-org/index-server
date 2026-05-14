@@ -2,18 +2,21 @@ import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import { registerHandler } from '../../server/registry';
-import { ensureLoaded, getInstructionsDir, invalidate, loadUsageSnapshot, touchIndexVersion, writeEntry, removeEntry } from '../indexContext';
+import { ensureLoaded, getInstructionsDir, invalidate, loadUsageSnapshot, touchIndexVersion, writeEntry, removeEntry, archiveEntry, purgeEntry, listArchivedEntries, getArchivedEntry } from '../indexContext';
 import { logAudit } from '../auditLog';
 import { getRuntimeConfig } from '../../config/runtimeConfig';
 import { attemptManifestUpdate } from '../manifestManager';
+import { mutationGatedReason } from '../bootstrapGating';
 import { migrateInstructionRecord } from '../../versioning/schemaVersion';
 import { deriveCategory, slugifyCategory } from '../categoryRules';
 import { hashBody as canonicalHashBody } from '../canonical';
-import { InstructionEntry, PRIORITY_TIERS } from '../../models/instruction';
+import { InstructionEntry, PRIORITY_TIERS, ArchiveReason } from '../../models/instruction';
 import { guard, computeSourceHash, normalizeCategories } from './instructions.shared';
 import { validateForDisk, getSchemaPropertyNames } from '../loaderSchemaValidator';
 import { sanitizeErrorDetail } from '../instructionRecordValidation';
 import { migrateLegacyInstructionEntry, SchemaMigrationResult } from '../schemaMigrationService';
+import { AUDIT_ACTIONS } from '../auditActions';
+import { backupInstructionsDir } from '../instructionsBackup';
 
 registerHandler('index_enrich', guard('index_enrich', () => {
   const st = ensureLoaded();
@@ -176,8 +179,68 @@ registerHandler('index_repair', guard('index_repair', (_p: unknown) => {
   return resp;
 }));
 
-registerHandler('index_groom', guard('index_groom', (p: { mode?: { dryRun?: boolean; removeDeprecated?: boolean; mergeDuplicates?: boolean; purgeLegacyScopes?: boolean; remapCategories?: boolean } }) => {
-  const mode = p.mode || {}; const dryRun = !!mode.dryRun; const removeDeprecated = !!mode.removeDeprecated; const mergeDuplicates = !!mode.mergeDuplicates; const purgeLegacyScopes = !!mode.purgeLegacyScopes; const remapCategories = !!mode.remapCategories; const stBefore = ensureLoaded(); const previousHash = stBefore.hash; const scanned = stBefore.list.length; let repairedHashes = 0, normalizedCategories = 0, deprecatedRemoved = 0, duplicatesMerged = 0, filesRewritten = 0, purgedScopes = 0, migrated = 0, remappedCategories = 0; const notes: string[] = []; const byId = new Map<string, InstructionEntry>(); stBefore.list.forEach(e => byId.set(e.id, { ...e })); const updated = new Set<string>();
+function groomBackup(): string {
+  return backupInstructionsDir();
+}
+
+function resolveArchiveLocation(): string {
+  const cfg = getRuntimeConfig();
+  const backend = (cfg.storage?.backend as string) || 'json';
+  if (backend === 'sqlite') return 'sqlite:instructions_archive';
+  return `json:${path.join(getInstructionsDir(), '.archive')}`;
+}
+
+registerHandler('index_groom', guard('index_groom', (p: { ids?: string[]; force?: boolean; mode?: { dryRun?: boolean; removeDeprecated?: boolean; mergeDuplicates?: boolean; purgeLegacyScopes?: boolean; remapCategories?: boolean; purgeArchive?: boolean } }) => {
+  const mode = p.mode || {}; const dryRun = !!mode.dryRun; const removeDeprecated = !!mode.removeDeprecated; const mergeDuplicates = !!mode.mergeDuplicates; const purgeLegacyScopes = !!mode.purgeLegacyScopes; const remapCategories = !!mode.remapCategories; const purgeArchive = !!mode.purgeArchive;
+
+  // ────────── mode.purgeArchive path ──────────
+  if (purgeArchive) {
+    if (removeDeprecated || mergeDuplicates || purgeLegacyScopes || remapCategories) {
+      throw new Error('mode.purgeArchive cannot be combined with retirement flags (removeDeprecated, mergeDuplicates, purgeLegacyScopes, remapCategories)');
+    }
+    const gateReason = mutationGatedReason();
+    if (gateReason) throw new Error(`mutation_gated: ${gateReason}`);
+    const cfg = getRuntimeConfig();
+    const maxBulk = cfg.mutation.maxBulkDelete;
+    const targetIds = Array.isArray(p.ids) && p.ids.length > 0
+      ? p.ids
+      : listArchivedEntries().map(a => a.id);
+    if (targetIds.length > maxBulk && !p.force) {
+      throw new Error(`bulk_limit_exceeded: ${targetIds.length} > ${maxBulk}; set force=true to proceed`);
+    }
+    const purgeResp: Record<string, unknown> = { dryRun, mode: 'purgeArchive', purgeArchive: true };
+    if (dryRun) {
+      const validIds = targetIds.filter(id => !!getArchivedEntry(id));
+      purgeResp.wouldPurge = validIds.length;
+      purgeResp.wouldPurgeIds = validIds;
+      return purgeResp;
+    }
+    let backupZip: string | undefined;
+    if (cfg.mutation.backupBeforeBulkDelete && targetIds.length > 0) {
+      try { backupZip = groomBackup(); logAudit(AUDIT_ACTIONS.PURGE_BACKUP, undefined, { backupZip, count: targetIds.length, source: 'groom' }); }
+      catch (err) { logAudit(AUDIT_ACTIONS.PURGE_BACKUP_FAILED, undefined, { error: (err as Error).message, source: 'groom' }); }
+    }
+    const purged: string[] = []; const purgeErrors: { id: string; error: string }[] = [];
+    for (const id of targetIds) {
+      try {
+        const present = !!getArchivedEntry(id);
+        if (!present) { purgeErrors.push({ id, error: 'not_found_in_archive' }); continue; }
+        purgeEntry(id);
+        purged.push(id);
+        logAudit(AUDIT_ACTIONS.PURGE, [id], { source: 'groom' });
+      } catch (err) {
+        purgeErrors.push({ id, error: (err as Error).message || String(err) });
+      }
+    }
+    if (purged.length) { touchIndexVersion(); invalidate(); ensureLoaded(); attemptManifestUpdate(); }
+    purgeResp.purged = purged.length;
+    purgeResp.purgedIds = purged;
+    if (purgeErrors.length) purgeResp.purgeErrors = purgeErrors;
+    if (backupZip) purgeResp.backupZip = backupZip;
+    return purgeResp;
+  }
+
+  const stBefore = ensureLoaded(); const previousHash = stBefore.hash; const scanned = stBefore.list.length; let repairedHashes = 0, normalizedCategories = 0, deprecatedRemoved = 0, duplicatesMerged = 0, filesRewritten = 0, purgedScopes = 0, migrated = 0, remappedCategories = 0; const notes: string[] = []; const byId = new Map<string, InstructionEntry>(); stBefore.list.forEach(e => byId.set(e.id, { ...e })); const updated = new Set<string>();
   for (const e of byId.values()) { const migrationResult = migrateInstructionRecord(e as unknown as Record<string, unknown>); if (migrationResult.changed) { migrated++; updated.add(e.id); } }
   let signalApplied = 0;
   { const usageSnap = loadUsageSnapshot() as Record<string, { lastSignal?: string }>;
@@ -207,12 +270,111 @@ registerHandler('index_groom', guard('index_groom', (p: { mode?: { dryRun?: bool
   }
   const duplicateBodies = new Set<string>();
   if (mergeDuplicates) { const groups = new Map<string, InstructionEntry[]>(); for (const e of byId.values()) { const key = e.sourceHash || computeSourceHash(e.body); const arr = groups.get(key) || []; arr.push(e); groups.set(key, arr); } for (const group of groups.values()) { if (group.length <= 1) continue; let primary = group[0]; for (const candidate of group) { if (candidate.createdAt && primary.createdAt) { if (candidate.createdAt < primary.createdAt) primary = candidate; } else if (!primary.createdAt && candidate.createdAt) { primary = candidate; } else if (candidate.id < primary.id) { primary = candidate; } } for (const dup of group) { if (dup.id === primary.id) continue; if (dup.priority < primary.priority) { primary.priority = dup.priority; updated.add(primary.id); } if (typeof dup.riskScore === 'number') { if (typeof primary.riskScore !== 'number' || dup.riskScore > primary.riskScore) { primary.riskScore = dup.riskScore; updated.add(primary.id); } } const mergedCats = Array.from(new Set([...(primary.categories || []), ...(dup.categories || [])])).sort(); if (JSON.stringify(mergedCats) !== JSON.stringify(primary.categories)) { primary.categories = mergedCats; updated.add(primary.id); } if (removeDeprecated) { duplicateBodies.add(dup.id); } else { if (dup.deprecatedBy !== primary.id) { dup.deprecatedBy = primary.id; dup.requirement = 'deprecated'; dup.updatedAt = new Date().toISOString(); updated.add(dup.id); } } duplicatesMerged++; } } }
-  const toRemove: string[] = []; if (removeDeprecated) { for (const e of byId.values()) { if (e.deprecatedBy && byId.has(e.deprecatedBy)) toRemove.push(e.id); } for (const id of duplicateBodies) { if (!toRemove.includes(id)) toRemove.push(id); } }
-  if (purgeLegacyScopes) { for (const e of byId.values()) { try { const cats = e.categories; if (Array.isArray(cats)) { const legacyTokens = cats.filter(c => typeof c === 'string' && /^scope:(workspace|user|team):/.test(c)); if (legacyTokens.length) { purgedScopes += legacyTokens.length; updated.add(e.id); } } } catch (err) { notes.push(`purgeLegacyScopes-failed:${e.id}:${(err as Error).message || String(err)}`); } } if (dryRun && purgedScopes) notes.push(`would-purge:${purgedScopes}`); }
+  const archiveReasonById = new Map<string, ArchiveReason>();
+  const restoreEligibleById = new Map<string, boolean>();
+  const toRetire: string[] = [];
+  if (removeDeprecated) {
+    for (const e of byId.values()) {
+      if (e.deprecatedBy && byId.has(e.deprecatedBy)) {
+        toRetire.push(e.id);
+        archiveReasonById.set(e.id, 'superseded');
+        restoreEligibleById.set(e.id, true);
+      }
+    }
+    for (const id of duplicateBodies) {
+      if (!toRetire.includes(id)) {
+        toRetire.push(id);
+        archiveReasonById.set(id, 'duplicate-merge');
+        restoreEligibleById.set(id, false);
+      } else {
+        // duplicate also matched deprecatedBy path — prefer duplicate-merge classification
+        archiveReasonById.set(id, 'duplicate-merge');
+        restoreEligibleById.set(id, false);
+      }
+    }
+  }
+  if (purgeLegacyScopes) {
+    for (const e of byId.values()) {
+      try {
+        const cats = e.categories;
+        if (Array.isArray(cats)) {
+          const legacyTokens = cats.filter(c => typeof c === 'string' && /^scope:(workspace|user|team):/.test(c));
+          if (legacyTokens.length) {
+            purgedScopes += legacyTokens.length;
+            updated.add(e.id);
+            if (!toRetire.includes(e.id)) {
+              toRetire.push(e.id);
+              archiveReasonById.set(e.id, 'legacy-scope');
+              restoreEligibleById.set(e.id, true);
+            }
+          }
+        }
+      } catch (err) { notes.push(`purgeLegacyScopes-failed:${e.id}:${(err as Error).message || String(err)}`); }
+    }
+    if (dryRun && purgedScopes) notes.push(`would-purge:${purgedScopes}`);
+  }
   if (remapCategories) { for (const e of byId.values()) { if (e.primaryCategory && e.primaryCategory !== 'uncategorized') continue; const derived = deriveCategory(e.id); if (derived === 'Other') continue; const slug = slugifyCategory(derived); if (!slug) continue; e.primaryCategory = slug; if (!e.categories.includes(slug)) { e.categories = [...e.categories, slug].sort(); } e.updatedAt = new Date().toISOString(); remappedCategories++; updated.add(e.id); } }
   { for (const e of byId.values()) { const storedHash = e.sourceHash || ''; const actualHash = computeSourceHash(e.body); if (storedHash !== actualHash) { e.sourceHash = actualHash; repairedHashes++; e.updatedAt = new Date().toISOString(); updated.add(e.id); } } }
-  deprecatedRemoved = toRemove.length; const errors: { id: string; error: string }[] = []; if (!dryRun) { for (const id of toRemove) { byId.delete(id); } for (const id of updated) { if (!byId.has(id)) continue; const e = byId.get(id)!; try { writeEntry(e); filesRewritten++; } catch (err) { const detail = (err as Error).message || String(err); errors.push({ id, error: `write-failed: ${detail}` }); notes.push(`write-failed:${id}:${detail}`); logAudit('groom_entry_error', id, { error: detail, operation: 'write' }); } } for (const id of toRemove) { try { removeEntry(id); } catch (err) { const detail = (err as Error).message || String(err); errors.push({ id, error: `delete-failed: ${detail}` }); notes.push(`delete-failed:${id}:${detail}`); logAudit('groom_entry_error', id, { error: detail, operation: 'delete' }); } } if (updated.size || toRemove.length) { touchIndexVersion(); invalidate(); ensureLoaded(); } } else { if (updated.size) notes.push(`would-rewrite:${updated.size}`); if (toRemove.length) notes.push(`would-remove:${toRemove.length}`); }
-  const stAfter = ensureLoaded(); const resp: Record<string, unknown> = { previousHash, hash: stAfter.hash, scanned, repairedHashes, normalizedCategories, deprecatedRemoved, duplicatesMerged, signalApplied, filesRewritten, purgedScopes, migrated, remappedCategories, dryRun, notes }; if (errors.length) resp.errors = errors; if (!dryRun && (repairedHashes || normalizedCategories || deprecatedRemoved || duplicatesMerged || signalApplied || filesRewritten || purgedScopes || migrated || remappedCategories)) { logAudit('groom', undefined, { repairedHashes, normalizedCategories, deprecatedRemoved, duplicatesMerged, signalApplied, filesRewritten, purgedScopes, migrated, remappedCategories, errors: errors.length }); attemptManifestUpdate(); } return resp;
+  deprecatedRemoved = toRetire.length;
+  const errors: { id: string; error: string }[] = [];
+  const archiveErrors: { id: string; error: string }[] = [];
+  const archivedIds: string[] = [];
+  const archivedAt = new Date().toISOString();
+  if (!dryRun) {
+    for (const id of toRetire) { byId.delete(id); }
+    for (const id of updated) {
+      if (!byId.has(id)) continue;
+      const e = byId.get(id)!;
+      try { writeEntry(e); filesRewritten++; }
+      catch (err) {
+        const detail = (err as Error).message || String(err);
+        errors.push({ id, error: `write-failed: ${detail}` });
+        notes.push(`write-failed:${id}:${detail}`);
+        logAudit('groom_entry_error', id, { error: detail, operation: 'write' });
+      }
+    }
+    for (const id of toRetire) {
+      try {
+        const reason = archiveReasonById.get(id) || 'deprecated';
+        const restoreEligible = restoreEligibleById.get(id) !== false;
+        archiveEntry(id, {
+          archiveReason: reason,
+          archiveSource: 'groom',
+          archivedBy: 'index_groom',
+          archivedAt,
+          restoreEligible,
+        });
+        archivedIds.push(id);
+        logAudit(AUDIT_ACTIONS.ARCHIVE, [id], { reason, source: 'groom', restoreEligible });
+      } catch (err) {
+        const detail = (err as Error).message || String(err);
+        archiveErrors.push({ id, error: detail });
+        notes.push(`archive-failed:${id}:${detail}`);
+        logAudit('groom_entry_error', id, { error: detail, operation: 'archive' });
+      }
+    }
+    if (updated.size || toRetire.length) { touchIndexVersion(); invalidate(); ensureLoaded(); }
+  } else {
+    if (updated.size) notes.push(`would-rewrite:${updated.size}`);
+    if (toRetire.length) notes.push(`would-archive:${toRetire.length}`);
+  }
+  const stAfter = ensureLoaded();
+  const resp: Record<string, unknown> = { previousHash, hash: stAfter.hash, scanned, repairedHashes, normalizedCategories, deprecatedRemoved, duplicatesMerged, signalApplied, filesRewritten, purgedScopes, migrated, remappedCategories, dryRun, notes };
+  if (errors.length) resp.errors = errors;
+  if (dryRun) {
+    resp.wouldArchive = toRetire.length;
+    resp.wouldArchiveIds = [...toRetire];
+  } else {
+    resp.archived = archivedIds.length;
+    resp.archivedIds = archivedIds;
+    if (archiveErrors.length) resp.archiveErrors = archiveErrors;
+    resp.archiveLocation = resolveArchiveLocation();
+  }
+  if (!dryRun && (repairedHashes || normalizedCategories || deprecatedRemoved || duplicatesMerged || signalApplied || filesRewritten || purgedScopes || migrated || remappedCategories)) {
+    logAudit('groom', undefined, { repairedHashes, normalizedCategories, deprecatedRemoved, duplicatesMerged, signalApplied, filesRewritten, purgedScopes, migrated, remappedCategories, errors: errors.length, archived: archivedIds.length, archiveErrors: archiveErrors.length });
+    attemptManifestUpdate();
+  }
+  return resp;
 }));
 
 registerHandler('index_normalize', guard('index_normalize', (p: { dryRun?: boolean; forceCanonical?: boolean }) => {
