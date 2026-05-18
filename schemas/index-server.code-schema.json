@@ -1,19 +1,19 @@
 {
   "name": "@jagilber-org/index-server",
-  "version": "1.28.22",
-  "generatedAt": "2026-05-14T21:49:52.471Z",
+  "version": "1.28.24",
+  "generatedAt": "2026-05-18T18:49:20.837Z",
   "sourceRoots": [
     "src",
     "scripts"
   ],
   "summary": {
-    "fileCount": 282,
+    "fileCount": 283,
     "exportCount": 1031,
     "classCount": 41,
     "interfaceCount": 325,
     "typeAliasCount": 88,
     "enumCount": 1,
-    "functionCount": 1039
+    "functionCount": 1049
   },
   "files": [
     {
@@ -1074,7 +1074,7 @@
             }
           ],
           "returnType": null,
-          "line": 139
+          "line": 107
         },
         {
           "name": "parseNonInteractiveArgs",
@@ -1082,7 +1082,7 @@
           "isAsync": false,
           "parameters": [],
           "returnType": null,
-          "line": 146
+          "line": 114
         },
         {
           "name": "runInteractiveWizard",
@@ -1090,7 +1090,7 @@
           "isAsync": true,
           "parameters": [],
           "returnType": null,
-          "line": 206
+          "line": 186
         },
         {
           "name": "getEnvCatalog",
@@ -1109,7 +1109,7 @@
             }
           ],
           "returnType": null,
-          "line": 316
+          "line": 309
         },
         {
           "name": "resolveConfigPaths",
@@ -1123,7 +1123,7 @@
             }
           ],
           "returnType": null,
-          "line": 323
+          "line": 316
         },
         {
           "name": "generateConfigForTarget",
@@ -1142,7 +1142,7 @@
             }
           ],
           "returnType": null,
-          "line": 330
+          "line": 323
         },
         {
           "name": "previewConfigs",
@@ -1161,7 +1161,7 @@
             }
           ],
           "returnType": null,
-          "line": 347
+          "line": 343
         },
         {
           "name": "applyConfigTarget",
@@ -1180,7 +1180,7 @@
             }
           ],
           "returnType": null,
-          "line": 362
+          "line": 358
         },
         {
           "name": "generateEnvFile",
@@ -1199,7 +1199,7 @@
             }
           ],
           "returnType": null,
-          "line": 383
+          "line": 382
         },
         {
           "name": "printFolderSummary",
@@ -1218,7 +1218,7 @@
             }
           ],
           "returnType": null,
-          "line": 412
+          "line": 411
         },
         {
           "name": "deployRuntime",
@@ -1232,7 +1232,7 @@
             }
           ],
           "returnType": null,
-          "line": 448
+          "line": 447
         },
         {
           "name": "main",
@@ -1240,7 +1240,191 @@
           "isAsync": true,
           "parameters": [],
           "returnType": null,
-          "line": 606
+          "line": 605
+        }
+      ],
+      "constants": []
+    },
+    {
+      "path": "scripts/build/uninstall-wizard.mjs",
+      "imports": [
+        {
+          "module": "fs",
+          "defaultImport": "fs",
+          "namedImports": [],
+          "namespaceImport": null
+        },
+        {
+          "module": "os",
+          "defaultImport": "os",
+          "namedImports": [],
+          "namespaceImport": null
+        },
+        {
+          "module": "path",
+          "defaultImport": "path",
+          "namedImports": [],
+          "namespaceImport": null
+        },
+        {
+          "module": "child_process",
+          "defaultImport": null,
+          "namedImports": [
+            "execFileSync"
+          ],
+          "namespaceImport": null
+        },
+        {
+          "module": "url",
+          "defaultImport": null,
+          "namedImports": [
+            "fileURLToPath"
+          ],
+          "namespaceImport": null
+        },
+        {
+          "module": "module",
+          "defaultImport": null,
+          "namedImports": [
+            "createRequire"
+          ],
+          "namespaceImport": null
+        },
+        {
+          "module": "@inquirer/prompts",
+          "defaultImport": null,
+          "namedImports": [
+            "input",
+            "confirm",
+            "checkbox"
+          ],
+          "namespaceImport": null
+        },
+        {
+          "module": "./setup-wizard-paths.mjs",
+          "defaultImport": null,
+          "namedImports": [
+            "defaultUserRoot"
+          ],
+          "namespaceImport": null
+        }
+      ],
+      "exports": [],
+      "classes": [],
+      "interfaces": [],
+      "typeAliases": [],
+      "enums": [],
+      "functions": [
+        {
+          "name": "fwd",
+          "isExported": false,
+          "isAsync": false,
+          "parameters": [
+            {
+              "name": "p",
+              "type": null,
+              "optional": false
+            }
+          ],
+          "returnType": null,
+          "line": 37
+        },
+        {
+          "name": "findNpmCli",
+          "isExported": false,
+          "isAsync": false,
+          "parameters": [],
+          "returnType": null,
+          "line": 39
+        },
+        {
+          "name": "runNpm",
+          "isExported": false,
+          "isAsync": false,
+          "parameters": [
+            {
+              "name": "args",
+              "type": null,
+              "optional": false
+            },
+            {
+              "name": "opts",
+              "type": null,
+              "optional": true
+            }
+          ],
+          "returnType": null,
+          "line": 51
+        },
+        {
+          "name": "safeRm",
+          "isExported": false,
+          "isAsync": false,
+          "parameters": [
+            {
+              "name": "target",
+              "type": null,
+              "optional": false
+            },
+            {
+              "name": "label",
+              "type": null,
+              "optional": false
+            },
+            {
+              "name": "removed",
+              "type": null,
+              "optional": false
+            }
+          ],
+          "returnType": null,
+          "line": 58
+        },
+        {
+          "name": "parseNonInteractive",
+          "isExported": false,
+          "isAsync": false,
+          "parameters": [],
+          "returnType": null,
+          "line": 72
+        },
+        {
+          "name": "printBanner",
+          "isExported": false,
+          "isAsync": false,
+          "parameters": [],
+          "returnType": null,
+          "line": 98
+        },
+        {
+          "name": "runInteractive",
+          "isExported": false,
+          "isAsync": true,
+          "parameters": [],
+          "returnType": null,
+          "line": 107
+        },
+        {
+          "name": "execute",
+          "isExported": false,
+          "isAsync": true,
+          "parameters": [
+            {
+              "name": "ctx",
+              "type": null,
+              "optional": false
+            }
+          ],
+          "returnType": null,
+          "line": 188
+        },
+        {
+          "name": "main",
+          "isExported": false,
+          "isAsync": true,
+          "parameters": [],
+          "returnType": null,
+          "line": 286
         }
       ],
       "constants": []
@@ -29699,7 +29883,21 @@
             }
           ],
           "returnType": "never",
-          "line": 327
+          "line": 330
+        },
+        {
+          "name": "launchUninstallWizard",
+          "isExported": false,
+          "isAsync": false,
+          "parameters": [
+            {
+              "name": "argv",
+              "type": "string[]",
+              "optional": false
+            }
+          ],
+          "returnType": "never",
+          "line": 344
         },
         {
           "name": "parseMcpConfigOptions",
@@ -29713,7 +29911,7 @@
             }
           ],
           "returnType": "{ command?: string; options: McpOperationOptions; json: boolean }",
-          "line": 343
+          "line": 360
         },
         {
           "name": "handleMcpConfigCli",
@@ -29727,7 +29925,7 @@
             }
           ],
           "returnType": "void",
-          "line": 373
+          "line": 390
         },
         {
           "name": "printHelpAndExit",
@@ -29735,7 +29933,7 @@
           "isAsync": false,
           "parameters": [],
           "returnType": null,
-          "line": 405
+          "line": 422
         },
         {
           "name": "findPackageVersion",
@@ -29743,7 +29941,7 @@
           "isAsync": false,
           "parameters": [],
           "returnType": "string",
-          "line": 495
+          "line": 515
         },
         {
           "name": "startDashboard",
@@ -29757,7 +29955,7 @@
             }
           ],
           "returnType": "Promise<{ url: string; close: () => void } | null>",
-          "line": 513
+          "line": 533
         },
         {
           "name": "main",
@@ -29765,7 +29963,7 @@
           "isAsync": true,
           "parameters": [],
           "returnType": null,
-          "line": 562
+          "line": 582
         }
       ],
       "constants": [
@@ -45233,6 +45431,27 @@
               "type": "string",
               "optional": false,
               "line": 54
+            },
+            {
+              "name": "storageBackend",
+              "type": "'json' | 'sqlite'",
+              "optional": true,
+              "description": "Explicit storage backend; falls back to profile-derived ('experimental' → sqlite, else json).",
+              "line": 56
+            },
+            {
+              "name": "semanticEnabled",
+              "type": "boolean",
+              "optional": true,
+              "description": "Explicit semantic search toggle; falls back to profile-derived (enhanced/experimental on, default off).",
+              "line": 58
+            },
+            {
+              "name": "backupsDir",
+              "type": "string",
+              "optional": true,
+              "description": "Custom backups directory; when set, INDEX_SERVER_BACKUPS_DIR is emitted as active.",
+              "line": 60
             }
           ],
           "methods": []
@@ -45272,7 +45491,7 @@
             }
           ],
           "returnType": "string",
-          "line": 241
+          "line": 247
         },
         {
           "name": "resolveDataPaths",
@@ -45286,7 +45505,7 @@
             }
           ],
           "returnType": "McpDataPaths",
-          "line": 245
+          "line": 251
         },
         {
           "name": "buildEnvCatalog",
@@ -45305,7 +45524,7 @@
             }
           ],
           "returnType": "McpEnvCatalogEntry[]",
-          "line": 264
+          "line": 270
         },
         {
           "name": "activeEnvFromCatalog",
@@ -45319,7 +45538,7 @@
             }
           ],
           "returnType": "Record<string, string>",
-          "line": 359
+          "line": 370
         }
       ],
       "constants": [
@@ -45334,7 +45553,7 @@
           "name": "DOCUMENTED_INDEX_SERVER_FLAGS",
           "type": null,
           "initializerKind": "AsExpression",
-          "line": 57
+          "line": 63
         }
       ]
     },
@@ -46051,29 +46270,47 @@
               "line": 24
             },
             {
-              "name": "env",
-              "type": "Record<string, string>",
+              "name": "storageBackend",
+              "type": "'json' | 'sqlite'",
               "optional": true,
               "line": 25
             },
             {
-              "name": "dryRun",
+              "name": "semanticEnabled",
               "type": "boolean",
               "optional": true,
               "line": 26
             },
             {
-              "name": "backup",
+              "name": "backupsDir",
               "type": "string",
               "optional": true,
               "line": 27
+            },
+            {
+              "name": "env",
+              "type": "Record<string, string>",
+              "optional": true,
+              "line": 28
+            },
+            {
+              "name": "dryRun",
+              "type": "boolean",
+              "optional": true,
+              "line": 29
+            },
+            {
+              "name": "backup",
+              "type": "string",
+              "optional": true,
+              "line": 30
             },
             {
               "name": "targetInfo",
               "type": "McpTargetInfo",
               "optional": true,
               "description": "Pre-resolved target. When supplied, bypasses target/scope resolution.\nRequired for callers that need to write to a specific flavor (e.g. both\nVS Code stable and Insiders), since `resolveConfigTargets` may return\nmultiple `vscode-global` entries.",
-              "line": 34
+              "line": 37
             }
           ],
           "methods": []
@@ -46082,73 +46319,73 @@
           "name": "McpOperationResult",
           "isExported": true,
           "extends": [],
-          "line": 37,
+          "line": 40,
           "properties": [
             {
               "name": "ok",
               "type": "boolean",
               "optional": false,
-              "line": 38
+              "line": 41
             },
             {
               "name": "action",
               "type": "string",
               "optional": false,
-              "line": 39
+              "line": 42
             },
             {
               "name": "target",
               "type": "McpClientTarget",
               "optional": false,
-              "line": 40
+              "line": 43
             },
             {
               "name": "format",
               "type": "McpConfigFormat",
               "optional": false,
-              "line": 41
+              "line": 44
             },
             {
               "name": "path",
               "type": "string",
               "optional": false,
-              "line": 42
+              "line": 45
             },
             {
               "name": "name",
               "type": "string",
               "optional": true,
-              "line": 43
+              "line": 46
             },
             {
               "name": "server",
               "type": "McpServerEntry | null",
               "optional": true,
-              "line": 44
+              "line": 47
             },
             {
               "name": "servers",
               "type": "string[]",
               "optional": true,
-              "line": 45
+              "line": 48
             },
             {
               "name": "validation",
               "type": "ValidationResult",
               "optional": true,
-              "line": 46
+              "line": 49
             },
             {
               "name": "backupPath",
               "type": "string",
               "optional": true,
-              "line": 47
+              "line": 50
             },
             {
               "name": "dryRun",
               "type": "boolean",
               "optional": true,
-              "line": 48
+              "line": 51
             }
           ],
           "methods": []
@@ -46169,7 +46406,7 @@
             }
           ],
           "returnType": "McpTargetInfo",
-          "line": 51
+          "line": 54
         },
         {
           "name": "defaultName",
@@ -46183,7 +46420,7 @@
             }
           ],
           "returnType": "string",
-          "line": 61
+          "line": 64
         },
         {
           "name": "buildConfig",
@@ -46197,7 +46434,7 @@
             }
           ],
           "returnType": "ServerBuildConfig",
-          "line": 65
+          "line": 68
         },
         {
           "name": "readExistingText",
@@ -46216,7 +46453,7 @@
             }
           ],
           "returnType": "string",
-          "line": 80
+          "line": 86
         },
         {
           "name": "listServers",
@@ -46230,7 +46467,7 @@
             }
           ],
           "returnType": "McpOperationResult",
-          "line": 88
+          "line": 94
         },
         {
           "name": "getServer",
@@ -46244,7 +46481,7 @@
             }
           ],
           "returnType": "McpOperationResult",
-          "line": 95
+          "line": 101
         },
         {
           "name": "upsertServer",
@@ -46258,7 +46495,7 @@
             }
           ],
           "returnType": "McpOperationResult",
-          "line": 102
+          "line": 108
         },
         {
           "name": "removeServer",
@@ -46272,7 +46509,7 @@
             }
           ],
           "returnType": "McpOperationResult",
-          "line": 121
+          "line": 127
         },
         {
           "name": "restoreLatestBackup",
@@ -46286,7 +46523,7 @@
             }
           ],
           "returnType": "McpOperationResult",
-          "line": 137
+          "line": 143
         },
         {
           "name": "restoreServer",
@@ -46300,7 +46537,7 @@
             }
           ],
           "returnType": "McpOperationResult",
-          "line": 144
+          "line": 150
         },
         {
           "name": "validateFile",
@@ -46314,7 +46551,7 @@
             }
           ],
           "returnType": "McpOperationResult",
-          "line": 148
+          "line": 154
         },
         {
           "name": "renderServerConfigForTarget",
@@ -46333,7 +46570,7 @@
             }
           ],
           "returnType": "string",
-          "line": 155
+          "line": 161
         },
         {
           "name": "writeGeneratedConfig",
@@ -46352,7 +46589,7 @@
             }
           ],
           "returnType": "void",
-          "line": 162
+          "line": 168
         }
       ],
       "constants": []

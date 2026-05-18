@@ -78,7 +78,7 @@ graph TD
 
 The admin dashboard features a Grafana-dark enterprise theme with seven navigation tabs:
 
-### Overview
+### Overview Panel
 
 Server health metrics, uptime, and system status at a glance.
 
@@ -208,6 +208,22 @@ Snapshot (example):
 
 ![Instruction List](../tests/playwright/baseline.spec.ts-snapshots/instructions-list-chromium-win32.png)
 
+#### Archived Instructions
+
+The instruction index toolbar includes **Active** and **Archived** views. Active is the default view and shows entries loaded into the live instruction index. Archived shows entries from the archive surface only; archived entries are hidden from the active list and from default instruction reads.
+
+Archived rows show the instruction id, title, category, archive reason, archive source, archived timestamp, archived-by identity, and a `LOCKED` badge when `restoreEligible` is `false`. The Archived view supports the same name, regex, category, and page-size controls as the Active view.
+
+Archive lifecycle actions available in the dashboard:
+
+- **Archive**: In the Active view, select `Archive` on an instruction row. The dashboard prompts for an archive reason and optional `archivedBy` value, then calls `POST /api/instructions/:name/archive`.
+- **Restore**: In the Archived view, select `Restore`. The confirmation chooses restore mode: OK uses `overwrite`; Cancel uses `reject`. The dashboard calls `POST /api/instructions_archived/:name/restore`.
+- **Purge**: In the Archived view, select `Purge`. The dashboard requires typing the instruction id before calling `DELETE /api/instructions_archived/:name?confirm=true`. Purge is irreversible.
+
+Read-only archive APIs are available at `GET /api/instructions_archived` and `GET /api/instructions_archived/:name`. Archive, restore, and purge mutations require dashboard admin authentication.
+
+Archived entries cannot currently be edited in place from the dashboard. To change an archived instruction, restore it to the Active view, edit it with the normal instruction editor, then archive it again if it should return to the archive surface.
+
 ### Instruction Editor
 
 Appears when selecting an instruction for edit or creating a new one (when mutation enabled). Transient validation / load flicker banner intentionally suppressed to reduce noise.
@@ -232,9 +248,9 @@ The instruction editor includes a built-in **Markdown Preview** panel for previe
 
 **Notes:**
 
-* GFM features are supported: tables, fenced code blocks, task lists, strikethrough.
-* Line breaks are not converted to `<br>` tags (standard markdown paragraph rules apply).
-* If the instruction JSON is invalid or has no `body` field, the preview displays an informational message.
+- GFM features are supported: tables, fenced code blocks, task lists, strikethrough.
+- Line breaks are not converted to `<br>` tags (standard markdown paragraph rules apply).
+- If the instruction JSON is invalid or has no `body` field, the preview displays an informational message.
 
 ### Live Log Tail
 
@@ -245,7 +261,7 @@ Provides real-time server log streaming with start/stop controls (buttons styled
 Below is (or will be) a consolidated gallery of dashboard visual regression targets. Two are already captured by the baseline Playwright spec; the remainder can be added following the instructions further below.
 
 | View / Card | Current Snapshot | Expected File Name (chromium / default OS) | Capture Status |
-|-------------|------------------|--------------------------------------------|----------------|
+| --- | --- | --- | --- |
 | System Health Card | ![System Health Card](screenshots/panel-overview.png) | `panel-overview.png` | Captured |
 | Instruction List (Index) | ![Instruction List](screenshots/instructions-list-chromium-win32.png) | `instructions-list-<browser>-<platform>.png` | Captured |
 | Instruction Editor (panel open) | (skipped – no rows in seed run) | `instruction-editor-<browser>-<platform>.png` | Optional / Skipped |
@@ -380,7 +396,7 @@ git commit -m "test: refresh playwright baseline after <reason>"
 ## Maintenance & Operations
 
 | Task | Recommendation |
-|------|----------------|
+| --- | --- |
 | Port conflicts | Set `DASHBOARD_PORT` explicitly |
 | High CPU spikes | Validate they align with indexing / backup tasks |
 | Memory growth | Check large instruction bodies or leak via profiling |
@@ -389,7 +405,7 @@ git commit -m "test: refresh playwright baseline after <reason>"
 ## Troubleshooting
 
 | Symptom | Likely Cause | Action |
-|---------|--------------|--------|
+| --- | --- | --- |
 | Dashboard 404 | Not enabled | Add `INDEX_SERVER_DASHBOARD=1` / `--dashboard` |
 | Empty instruction list | Read path issue or Index filtering | Check server logs & disk `instructions/` |
 | Semantic summaries blank | All fallback fields empty | Add description or first line in body |
@@ -406,7 +422,7 @@ git commit -m "test: refresh playwright baseline after <reason>"
 ### Authentication Behavior Matrix
 
 | `INDEX_SERVER_ADMIN_API_KEY` | Client Location | Mutation Routes | Read-Only Routes |
-|------------------------------|----------------|-----------------|------------------|
+| --- | --- | --- | --- |
 | Not set | Localhost | ✅ Allowed | ✅ Allowed |
 | Not set | Remote | ❌ 403 Forbidden | ✅ Allowed |
 | Set | Any (valid Bearer token) | ✅ Allowed | ✅ Allowed |
@@ -456,7 +472,7 @@ When the server is running (dashboard optional), a new MCP tool `dashboard_confi
 ### Field Semantics
 
 | Field | Meaning |
-|-------|---------|
+| --- | --- |
 | name | Environment variable identifier |
 | category | Logical grouping (core, dashboard, manifest, tracing, instructions, usage, metrics, validation, diagnostics, stress, auth, experimental) |
 | description | Concise human readable purpose |

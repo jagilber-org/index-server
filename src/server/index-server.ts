@@ -317,6 +317,9 @@ function parseArgs(argv: string[]): CliConfig {
   else if(raw === '--setup' || raw === '--configure'){
       launchSetupWizard(argv);
     }
+  else if(raw === '--uninstall' || raw === '--remove' || raw === '--clean'){
+      launchUninstallWizard(argv);
+    }
   else if(raw === '--help' || raw === '-h'){
       printHelpAndExit();
     }
@@ -329,6 +332,20 @@ function launchSetupWizard(argv: string[]): never {
   // Forward all args after --setup/--configure to the wizard
   const setupIdx = argv.findIndex(a => a === '--setup' || a === '--configure');
   const forwardArgs = setupIdx >= 0 ? argv.slice(setupIdx + 1) : [];
+  try {
+    execFileSync(process.execPath, [wizardPath, ...forwardArgs], { stdio: 'inherit' });
+  } catch (e) {
+    const code = (e as { status?: number }).status ?? 1;
+    process.exit(code);
+  }
+  process.exit(0);
+}
+
+function launchUninstallWizard(argv: string[]): never {
+  const wizardPath = path.join(__dirname, '..', '..', 'scripts', 'build', 'uninstall-wizard.mjs');
+  const triggers = new Set(['--uninstall', '--remove', '--clean']);
+  const idx = argv.findIndex(a => triggers.has(a));
+  const forwardArgs = idx >= 0 ? argv.slice(idx + 1) : [];
   try {
     execFileSync(process.execPath, [wizardPath, ...forwardArgs], { stdio: 'inherit' });
   } catch (e) {
@@ -413,6 +430,9 @@ MCP TRANSPORT (Client Communication):
 SETUP:
   --setup                  Launch interactive configuration wizard
   --configure              Alias for --setup
+  --uninstall              Launch interactive uninstall / clean wizard
+  --remove                 Alias for --uninstall
+  --clean                  Alias for --uninstall
 
 MCP CONFIGURATION CRUD:
   --mcp-list               List configured MCP servers for a target

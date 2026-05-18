@@ -22,6 +22,9 @@ export interface McpOperationOptions {
   tls?: boolean;
   mutation?: boolean;
   logLevel?: string;
+  storageBackend?: 'json' | 'sqlite';
+  semanticEnabled?: boolean;
+  backupsDir?: string;
   env?: Record<string, string>;
   dryRun?: boolean;
   backup?: string;
@@ -74,6 +77,9 @@ function buildConfig(options: McpOperationOptions): ServerBuildConfig {
     mutation: options.mutation ?? true,
     logLevel: options.logLevel ?? (profile === 'experimental' ? 'debug' : 'info'),
     serverName: defaultName(options),
+    storageBackend: options.storageBackend,
+    semanticEnabled: options.semanticEnabled,
+    backupsDir: options.backupsDir,
   };
 }
 

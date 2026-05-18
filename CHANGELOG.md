@@ -6,6 +6,19 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 
 ## [Unreleased]
 
+## [1.28.23] - 2026-05-17
+
+### Changed
+
+- **Setup wizard replaces profile prompt with 9 flat questions**: storage backend (json/sqlite), dashboard transport (http/https), semantic search (default yes), base directory, backup directory, port, host, target MCP clients, and config scope. Profile is now an internal-only concept derived from the answers (`sqlite → experimental`, `json + semantic → enhanced`, `json + no semantic → default`) and continues to drive ancillary catalog defaults (file logging, metrics file storage, `FEATURES=usage`). The non-interactive CLI retains `--profile` as a legacy flag.
+
+### Added
+
+- **Wizard-driven uninstall**: new `index-server --uninstall` (aliases: `--remove`, `--clean`) launches an interactive checkbox-based wizard for selectively or fully removing Index Server. Covers data paths (instructions, feedback, state, messaging, audit log, logs, metrics, model cache, embeddings, SQLite DB, certs, `.env`, backups, entire base dir), MCP client config entries (VS Code global, Copilot CLI, Claude Desktop), and package installs (global npm package, stale `$HOME/node_modules/@jagilber-org/index-server`). Each existing target is previewed before any destructive action. Non-interactive mode: `--non-interactive [--root <dir>] [--all | --remove <comma-list>]`.
+- **Off-disk backup warning in setup wizard**: the backup directory prompt now strongly recommends placing backups on a different drive or path than the base directory, since same-disk backups do not protect against drive failure, encryption, or volume loss.
+- **`buildEnvCatalog` honors explicit overrides** for `storageBackend`, `semanticEnabled`, and `backupsDir` on `McpProfileConfig` / `McpOperationOptions`. When provided, these take precedence over profile-derived defaults so the wizard's flat answers reach the generated `mcp.json` directly. `INDEX_SERVER_BACKUPS_DIR` is only emitted as active when the user customizes the backup directory.
+- **Non-interactive wizard flags**: `--storage <json|sqlite>`, `--semantic`, `--no-semantic`, `--backup-dir <path>`.
+
 ## [1.28.22] - 2026-05-14
 
 ### Added
@@ -1788,3 +1801,8 @@ No client changes required. Enable `INDEX_SERVER_MEMOIZE=1` (and optionally `IND
 ### Added
 
 - Test stability + version parity tooling (PR #261)
+## [1.28.24] - 2026-05-18
+
+### Added
+
+- Drop wizard PNG screenshots in favor of terminal-text facsimiles in interactive_setup_walkthrough.md

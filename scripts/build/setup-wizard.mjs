@@ -2,20 +2,20 @@
 /**
  * setup-wizard.mjs — Interactive configuration wizard for Index Server.
  *
- * Guides users through profile selection and initial setup, then generates:
+ * Asks 9 flat questions and generates:
  *   - .env file with all active settings
- *   - .vscode/mcp.json snippet with fully documented env vars (active + commented reference)
+ *   - .vscode/mcp.json (and optionally Copilot CLI / Claude) configs
  *
- * Profiles:
- *   default       — HTTP dashboard, JSON storage, keyword search
- *   enhanced      — HTTPS dashboard, JSON storage, semantic search, mutation, file logging
- *   experimental  — HTTPS dashboard, SQLite storage, semantic search, debug logging
+ * Internal profile (used for ancillary catalog defaults only):
+ *   sqlite                  → experimental
+ *   json + semantic         → enhanced
+ *   json + no semantic      → default
  *
  * Usage:
  *   npx @jagilber-org/index-server --setup
  *   npm run setup
  *   node scripts/build/setup-wizard.mjs
- *   node scripts/build/setup-wizard.mjs --non-interactive --profile enhanced --root C:/.tools/index-server
+ *   node scripts/build/setup-wizard.mjs --non-interactive --storage sqlite --root C:/.tools/index-server
  */
 import fs from 'fs';
 import path from 'path';
@@ -92,46 +92,14 @@ function runNpm(args, opts = {}) {
 }
 
 // --------------------------------------------------------------------------
-// Profile definitions
+// Profile (internal): derived from the interactive answers and passed through
+// to `buildEnvCatalog` to gate ancillary defaults like file logging and
+// metrics-file storage. The wizard no longer exposes profile as a prompt;
+// explicit storage/semantic/TLS choices override profile-derived defaults.
+//   sqlite                  → experimental
+//   json + semantic         → enhanced
+//   json + no semantic      → default
 // --------------------------------------------------------------------------
-const PROFILES = {
-  default: {
-    label: 'Default — HTTP, JSON storage, keyword search',
-    description: [
-      '  Transport : stdio (MCP)',
-      '  Dashboard : HTTP on localhost:8787',
-      '  Storage   : JSON files',
-      '  Search    : keyword only',
-      '  Mutation  : on (read/write)',
-      '  Logging   : info to stderr',
-    ],
-  },
-  enhanced: {
-    label: 'Enhanced — HTTPS, semantic search, mutation enabled',
-    description: [
-      '  Transport : stdio (MCP)',
-      '  Dashboard : HTTPS with self-signed certs',
-      '  Storage   : JSON files',
-      '  Search    : semantic (MiniLM model, ~90MB download)',
-      '  Mutation  : on (read/write)',
-      '  Logging   : info + file log',
-      '  Metrics   : file-based storage',
-    ],
-  },
-  experimental: {
-    label: 'Experimental — HTTPS, SQLite storage, semantic search',
-    description: [
-      '  Transport : stdio (MCP)',
-      '  Dashboard : HTTPS with self-signed certs',
-      '  Storage   : SQLite with WAL mode',
-      '  Search    : semantic (MiniLM model, ~90MB download)',
-      '  Mutation  : on (read/write)',
-      '  Logging   : debug + file log',
-      '  Metrics   : file-based storage',
-      '  ⚠️  SQLite backend is experimental',
-    ],
-  },
-};
 
 // --------------------------------------------------------------------------
 // Resolve all paths for a given root
@@ -166,6 +134,9 @@ function parseNonInteractiveArgs() {
     write: false,            // write to real config files
     preview: true,           // show preview before writing
     deploy: true,            // deploy runtime to root when needed
+    storageBackend: undefined, // 'json' | 'sqlite' — explicit override
+    semanticEnabled: undefined, // boolean — explicit override
+    backupsDir: undefined,   // string — explicit override
   };
 
   for (let i = 0; i < args.length; i++) {
@@ -183,6 +154,10 @@ function parseNonInteractiveArgs() {
     else if (args[i] === '--write') config.write = true;
     else if (args[i] === '--no-preview') config.preview = false;
     else if (args[i] === '--no-deploy') config.deploy = false;
+    else if (args[i] === '--storage' && args[i + 1]) config.storageBackend = args[++i];
+    else if (args[i] === '--semantic') config.semanticEnabled = true;
+    else if (args[i] === '--no-semantic') config.semanticEnabled = false;
+    else if (args[i] === '--backup-dir' && args[i + 1]) config.backupsDir = args[++i];
   }
 
   // Profile overrides
@@ -201,7 +176,12 @@ function parseNonInteractiveArgs() {
 }
 
 // --------------------------------------------------------------------------
-// Interactive wizard
+// Interactive wizard — flat question flow (no profile selection)
+//
+// Asks 9 direct questions and derives an internal `profile` from the answers
+// to drive ancillary catalog defaults (file logging, metrics file storage,
+// features=usage). Explicit user choices (storage, semantic, TLS, port, host,
+// backupsDir) take precedence over profile-derived defaults.
 // --------------------------------------------------------------------------
 async function runInteractiveWizard() {
   console.log('\n╔════════════════════════════════════════════════════════════════╗');
@@ -209,38 +189,62 @@ async function runInteractiveWizard() {
   console.log('║      MCP instruction indexing for AI governance               ║');
   console.log('╚════════════════════════════════════════════════════════════════╝\n');
 
-  // Step 1: Profile
-  const profileKeys = Object.keys(PROFILES);
-  const profile = await select({
-    message: 'Choose a configuration profile',
-    choices: profileKeys.map(k => ({
-      name: PROFILES[k].label,
-      value: k,
-      description: PROFILES[k].description.join('\n'),
-    })),
-    default: 'default',
+  // Q1: Storage backend
+  const storageBackend = await select({
+    message: 'Storage backend',
+    choices: [
+      { name: 'json — file-per-instruction (default, stable)', value: 'json' },
+      { name: 'sqlite — single database file, WAL mode (experimental)', value: 'sqlite' },
+    ],
+    default: 'json',
   });
 
-  // Step 2: Root directory — defaults to per-user data dir (no admin rights, no hardcoded C:\ path)
+  // Q2: Dashboard transport (HTTP vs HTTPS) — HTTPS implies cert generation
+  const transport = await select({
+    message: 'Dashboard transport',
+    choices: [
+      { name: 'http — plain HTTP (localhost only)', value: 'http' },
+      { name: 'https — TLS with self-signed certs (auto-generated)', value: 'https' },
+    ],
+    default: 'http',
+  });
+  const tls = transport === 'https';
+  const generateCerts = tls;
+
+  // Q3: Semantic search (default: yes)
+  // Downloads MiniLM embedding model (~90MB) from Hugging Face on first run,
+  // then enables hybrid keyword + vector search. SEMANTIC_LOCAL_ONLY is set
+  // to 0 when enabled so the model can fetch on first use.
+  const semanticEnabled = await confirm({
+    message: 'Enable semantic search? (downloads ~90MB MiniLM model on first run)',
+    default: true,
+  });
+
+  // Q4: Base directory
   const root = path.resolve(await input({
     message: 'Base directory (all data paths resolve under this root)',
     default: defaultUserRoot(),
   }));
 
-  // Step 3: Server name for mcp.json entry
-  const serverName = await input({
-    message: 'MCP server name (used in mcp.json)',
-    default: 'index-server',
-  });
+  // Q5: Backup directory — default <root>/backups; "none" or empty keeps default
+  console.log('\n  ⚠️  Strongly recommended: place backups on a DIFFERENT drive or path than the base directory.');
+  console.log('     Same-disk backups will not protect against drive failure, encryption, or volume loss.\n');
+  const backupAnswer = (await input({
+    message: 'Backup directory (defaults to <base>/backups; enter a path to override)',
+    default: path.join(root, 'backups').split(path.sep).join('/'),
+  })).trim();
+  const defaultBackup = path.join(root, 'backups').split(path.sep).join('/');
+  const normalizedBackup = backupAnswer.replace(/\\/g, '/');
+  const backupsDir = (!backupAnswer || normalizedBackup === defaultBackup) ? undefined : backupAnswer;
 
-  // Step 4: Dashboard port
+  // Q6: Dashboard port
   const port = parseInt(await input({
     message: 'Dashboard port',
     default: '8787',
     validate: (v) => /^\d+$/.test(v) && +v > 0 && +v < 65536 ? true : 'Enter a valid port (1-65535)',
   }), 10);
 
-  // Step 5: Dashboard host
+  // Q7: Dashboard host
   const host = await select({
     message: 'Dashboard host',
     choices: [
@@ -250,36 +254,7 @@ async function runInteractiveWizard() {
     default: '127.0.0.1',
   });
 
-  // Step 6: TLS certs (Enhanced/Experimental)
-  let generateCerts = false;
-  if (profile === 'enhanced' || profile === 'experimental') {
-    generateCerts = await confirm({
-      message: 'Generate self-signed TLS certificates now?',
-      default: true,
-    });
-  }
-
-  // Step 7: Mutation
-  let mutation = true;
-  if (profile === 'default') {
-    mutation = await confirm({
-      message: 'Enable mutation (write operations)?',
-      default: true,
-    });
-  }
-
-  // Step 8: Log level
-  const defaultLogLevel = profile === 'experimental' ? 'debug' : 'info';
-  const logLevel = await select({
-    message: 'Log level',
-    choices: ['error', 'warn', 'info', 'debug', 'trace'].map(l => ({
-      name: l,
-      value: l,
-    })),
-    default: defaultLogLevel,
-  });
-
-  // Step 9: Target MCP clients
+  // Q8: Target MCP clients
   const targets = await checkbox({
     message: 'Which MCP client configs should be generated?',
     choices: [
@@ -288,22 +263,40 @@ async function runInteractiveWizard() {
       { name: 'Claude Desktop (claude_desktop_config.json)', value: 'claude' },
     ],
   });
-  // Ensure at least one target
   if (targets.length === 0) targets.push('vscode');
 
-  // Step 10: Scope (global vs workspace/repo)
-  const scope = await select({
-    message: 'Configuration scope',
-    choices: [
-      { name: 'Global — user-level config (applies to all workspaces)', value: 'global' },
-      { name: 'Workspace/repo — .vscode/mcp.json in current directory', value: 'repo' },
-    ],
-    default: 'global',
-  });
+  // Q9: Scope (global vs workspace/repo) — only meaningful when VS Code is selected
+  let scope = 'global';
+  if (targets.includes('vscode')) {
+    scope = await select({
+      message: 'Configuration scope',
+      choices: [
+        { name: 'Global — user-level config (applies to all workspaces)', value: 'global' },
+        { name: 'Workspace/repo — .vscode/mcp.json in current directory', value: 'repo' },
+      ],
+      default: 'global',
+    });
+  }
 
-  // When certs are generated TLS must be enabled so mcp.json env wires up cert paths.
-  const tls = generateCerts || profile === 'enhanced' || profile === 'experimental';
-  return { profile, root, serverName, port, host, tls, mutation, logLevel, generateCerts, targets, scope, write: true, preview: true, deploy: true };
+  // Derive internal profile name for ancillary catalog defaults
+  // (file logging, metrics file storage, features=usage):
+  //   sqlite                  → experimental
+  //   json + semantic         → enhanced
+  //   json + no semantic      → default
+  let profile = 'default';
+  if (storageBackend === 'sqlite') profile = 'experimental';
+  else if (semanticEnabled) profile = 'enhanced';
+
+  // Sensible defaults for fields no longer prompted; still overridable via flags.
+  const serverName = 'index-server';
+  const mutation = true;
+  const logLevel = profile === 'experimental' ? 'debug' : 'info';
+
+  return {
+    profile, root, serverName, port, host, tls, mutation, logLevel, generateCerts,
+    targets, scope, storageBackend, semanticEnabled, backupsDir,
+    write: true, preview: true, deploy: true,
+  };
 }
 
 // --------------------------------------------------------------------------
@@ -338,6 +331,9 @@ function generateConfigForTarget(format, config) {
     tls: config.tls,
     mutation: config.mutation,
     logLevel: config.logLevel,
+    storageBackend: config.storageBackend,
+    semanticEnabled: config.semanticEnabled,
+    backupsDir: config.backupsDir,
   });
 }
 
@@ -372,6 +368,9 @@ function applyConfigTarget(targetInfo, config) {
     tls: config.tls,
     mutation: config.mutation,
     logLevel: config.logLevel,
+    storageBackend: config.storageBackend,
+    semanticEnabled: config.semanticEnabled,
+    backupsDir: config.backupsDir,
   });
   if (result.backupPath) console.log(`  📦 Backed up existing: ${result.backupPath}`);
   console.log(`  ✅ Written: ${result.path}`);
@@ -614,20 +613,24 @@ Interactive mode:
 
 Non-interactive mode:
   node scripts/build/setup-wizard.mjs --non-interactive [options]
-    --profile <name>    default | enhanced | experimental
-    --root <dir>        Base directory for all data paths
-    --port <n>          Dashboard port (default: 8787)
-    --host <addr>       Dashboard host (default: 127.0.0.1)
-    --tls               Enable TLS dashboard settings in generated config
-    --mutation          Enable write operations
-    --log-level <lvl>   Log level: error|warn|info|debug|trace
-    --generate-certs    Generate self-signed TLS certificates
-    --server-name <n>   MCP server name in mcp.json (default: index-server)
-    --target <list>     Comma-separated targets: vscode,copilot-cli,claude
-    --scope <s>         global | repo (default: repo)
-    --write             Write directly to real config files (with backup)
-    --no-preview        Skip config preview in non-interactive mode
-    --no-deploy         Skip runtime deployment to target root`);
+    --profile <name>      default | enhanced | experimental (legacy; prefer explicit flags)
+    --storage <backend>   json | sqlite
+    --semantic            Enable semantic search (downloads MiniLM model)
+    --no-semantic         Disable semantic search
+    --backup-dir <dir>    Custom backups directory
+    --root <dir>          Base directory for all data paths
+    --port <n>            Dashboard port (default: 8787)
+    --host <addr>         Dashboard host (default: 127.0.0.1)
+    --tls                 Enable TLS dashboard settings in generated config
+    --mutation            Enable write operations
+    --log-level <lvl>     Log level: error|warn|info|debug|trace
+    --generate-certs      Generate self-signed TLS certificates
+    --server-name <n>     MCP server name in mcp.json (default: index-server)
+    --target <list>       Comma-separated targets: vscode,copilot-cli,claude
+    --scope <s>           global | repo (default: repo)
+    --write               Write directly to real config files (with backup)
+    --no-preview          Skip config preview in non-interactive mode
+    --no-deploy           Skip runtime deployment to target root`);
     process.exit(0);
   }
 

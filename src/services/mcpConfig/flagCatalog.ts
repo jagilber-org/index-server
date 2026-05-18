@@ -52,6 +52,12 @@ export interface McpProfileConfig {
   tls: boolean;
   mutation: boolean;
   logLevel: string;
+  /** Explicit storage backend; falls back to profile-derived ('experimental' → sqlite, else json). */
+  storageBackend?: 'json' | 'sqlite';
+  /** Explicit semantic search toggle; falls back to profile-derived (enhanced/experimental on, default off). */
+  semanticEnabled?: boolean;
+  /** Custom backups directory; when set, INDEX_SERVER_BACKUPS_DIR is emitted as active. */
+  backupsDir?: string;
 }
 
 export const DOCUMENTED_INDEX_SERVER_FLAGS = [
@@ -263,14 +269,19 @@ export function resolveDataPaths(root: string): McpDataPaths {
 
 export function buildEnvCatalog(config: McpProfileConfig, paths: McpDataPaths): McpEnvCatalogEntry[] {
   const isEnhanced = config.profile === 'enhanced' || config.profile === 'experimental';
-  const isSqlite = config.profile === 'experimental';
+  const isSqliteProfile = config.profile === 'experimental';
+  const storageBackend = config.storageBackend ?? (isSqliteProfile ? 'sqlite' : 'json');
+  const isSqlite = storageBackend === 'sqlite';
+  const semanticEnabled = config.semanticEnabled ?? isEnhanced;
+  const backupsDir = config.backupsDir ?? paths.backups;
+  const backupsCustom = config.backupsDir !== undefined && config.backupsDir !== paths.backups;
   const entries: RawMcpEnvCatalogEntry[] = [
     { section: 'Core Paths - where your data lives' },
     { key: 'INDEX_SERVER_PROFILE', desc: 'Configuration profile: default | enhanced | experimental', active: true, value: config.profile },
     { key: 'INDEX_SERVER_ALWAYS_RELOAD', desc: 'Reload index on each read for generated config verification', active: true, value: '1' },
     { key: 'INDEX_SERVER_DIR', desc: 'Instruction catalog directory', active: false, value: paths.instructions },
     { key: 'INDEX_SERVER_FEEDBACK_DIR', desc: 'Feedback entries storage directory', active: false, value: paths.feedback },
-    { key: 'INDEX_SERVER_BACKUPS_DIR', desc: 'Backup snapshots directory', active: false, value: paths.backups },
+    { key: 'INDEX_SERVER_BACKUPS_DIR', desc: 'Backup snapshots directory', active: backupsCustom, value: backupsDir },
     { key: 'INDEX_SERVER_STATE_DIR', desc: 'Runtime state files directory', active: false, value: paths.state },
     { key: 'INDEX_SERVER_MESSAGING_DIR', desc: 'Message queue storage directory', active: false, value: paths.messaging },
     { section: 'Dashboard - HTTP/HTTPS admin interface' },
@@ -286,14 +297,14 @@ export function buildEnvCatalog(config: McpProfileConfig, paths: McpDataPaths): 
     { key: 'INDEX_SERVER_DASHBOARD_TLS_KEY', desc: 'Path to TLS private key file', active: config.tls, value: `${paths.certs}/server.key` },
     { key: 'INDEX_SERVER_DASHBOARD_TLS_CA', desc: 'Path to CA certificate', active: false, value: '' },
     { section: 'Semantic Search - embeddings' },
-    { key: 'INDEX_SERVER_SEMANTIC_ENABLED', desc: 'Enable semantic search', active: isEnhanced, value: isEnhanced ? '1' : '0' },
+    { key: 'INDEX_SERVER_SEMANTIC_ENABLED', desc: 'Enable semantic search', active: semanticEnabled, value: semanticEnabled ? '1' : '0' },
     { key: 'INDEX_SERVER_SEMANTIC_MODEL', desc: 'HuggingFace model name', active: false, value: 'Xenova/all-MiniLM-L6-v2' },
     { key: 'INDEX_SERVER_SEMANTIC_DEVICE', desc: 'Compute device', active: false, value: 'cpu' },
     { key: 'INDEX_SERVER_SEMANTIC_CACHE_DIR', desc: 'Downloaded model cache directory', active: false, value: paths.modelCache },
     { key: 'INDEX_SERVER_EMBEDDING_PATH', desc: 'Cached embeddings file', active: false, value: paths.embeddings },
-    { key: 'INDEX_SERVER_SEMANTIC_LOCAL_ONLY', desc: 'Block remote model downloads', active: false, value: isEnhanced ? '0' : '1' },
+    { key: 'INDEX_SERVER_SEMANTIC_LOCAL_ONLY', desc: 'Block remote model downloads', active: false, value: semanticEnabled ? '0' : '1' },
     { section: 'Storage Backend - JSON or SQLite' },
-    { key: 'INDEX_SERVER_STORAGE_BACKEND', desc: 'Storage engine', active: isSqlite, value: isSqlite ? 'sqlite' : 'json' },
+    { key: 'INDEX_SERVER_STORAGE_BACKEND', desc: 'Storage engine', active: isSqlite, value: storageBackend },
     { key: 'INDEX_SERVER_SQLITE_PATH', desc: 'SQLite database file path', active: false, value: paths.sqliteDb },
     { key: 'INDEX_SERVER_SQLITE_WAL', desc: 'Enable SQLite WAL mode', active: false, value: '1' },
     { key: 'INDEX_SERVER_SQLITE_MIGRATE_ON_START', desc: 'Auto-migrate JSON to SQLite', active: false, value: '1' },

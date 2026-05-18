@@ -192,19 +192,33 @@
     if(sizeSelect) sizeSelect.onchange = () => {
       globals.instructionPageSize = sizeSelect.value === 'All' ? 'All' : parseInt(sizeSelect.value,10);
       globals.instructionPage = 1;
-      renderInstructionList(globals.allInstructions || []);
+      renderCurrentInstructionView();
     };
   }
 
+  function getCurrentInstructionList() {
+    return globals.instructionView === 'archived'
+      ? (globals.allArchivedInstructions || [])
+      : (globals.allInstructions || []);
+  }
+
+  function renderCurrentInstructionView() {
+    if (globals.instructionView === 'archived') {
+      renderArchivedList(globals.allArchivedInstructions || []);
+      return;
+    }
+    renderInstructionList(globals.allInstructions || []);
+  }
+
   function changeInstructionPage(dir) {
-    const totalFiltered = getFilteredInstructions(globals.allInstructions || []).length;
+    const totalFiltered = getFilteredInstructions(getCurrentInstructionList()).length;
     const pageSizeVal = globals.instructionPageSize === 'All' ? totalFiltered : globals.instructionPageSize;
     const totalPages = pageSizeVal === 0 ? 1 : Math.max(1, Math.ceil(totalFiltered / pageSizeVal));
     if (dir === 'first') globals.instructionPage = 1;
     else if (dir === 'prev' && globals.instructionPage > 1) globals.instructionPage--;
     else if (dir === 'next' && globals.instructionPage < totalPages) globals.instructionPage++;
     else if (dir === 'last') globals.instructionPage = totalPages;
-    renderInstructionList(globals.allInstructions || []);
+    renderCurrentInstructionView();
   }
 
   function renderInstructionList(instructions) {
@@ -270,7 +284,7 @@
     try { const dbg = document.getElementById('admin-debug'); if(dbg) dbg.textContent = JSON.stringify({ stage:'renderInstructionList', filtered: totalFiltered, rendered: pageItems.length, page: globals.instructionPage }, null, 2); } catch(e){}
   }
 
-  function filterInstructions(){ globals.instructionPage = 1; renderInstructionList(globals.allInstructions || []); }
+  function filterInstructions(){ globals.instructionPage = 1; renderCurrentInstructionView(); }
 
   function showCreateInstruction(){
     globals.instructionEditing = null;
@@ -559,12 +573,20 @@
   function renderArchivedList(instructions) {
     const listEl = document.getElementById('instructions-list');
     if (!listEl) return;
-    if (!Array.isArray(instructions) || instructions.length === 0) {
-      listEl.innerHTML = '<p>No archived instructions.</p>';
+    const filtered = getFilteredInstructions(instructions || []);
+    if (filtered.length === 0) {
+      listEl.innerHTML = '<p>No archived instructions found.</p>';
       buildInstructionPaginationControls(0);
       return;
     }
-    const rows = instructions.map((instr) => {
+    const totalFiltered = filtered.length;
+    let pageItems = filtered;
+    if (globals.instructionPageSize !== 'All') {
+      const start = (globals.instructionPage - 1) * globals.instructionPageSize;
+      const end = start + globals.instructionPageSize;
+      pageItems = filtered.slice(start, end);
+    }
+    const rows = pageItems.map((instr) => {
       const escapedName = escapeHtml(instr.name);
       const safeTitle = escapeHtml(instr.title || '');
       const safeReason = escapeHtml(instr.archiveReason || '—');
@@ -597,7 +619,7 @@
     }).join('');
     listEl.innerHTML = rows;
     wireInstructionListActions(listEl);
-    buildInstructionPaginationControls(instructions.length);
+    buildInstructionPaginationControls(totalFiltered);
   }
 
   async function loadArchivedInstructions() {

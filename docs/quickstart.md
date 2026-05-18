@@ -210,9 +210,34 @@ npm install -g @jagilber-org/index-server@latest
 index-server --version
 ```
 
-### Clean uninstall (and how to recover from a stale install)
+### Wizard-driven uninstall (recommended)
 
-If `index-server --setup` fails with errors like `env contains unsupported INDEX_SERVER key: …` or `Cannot find module …\node_modules\@jagilber-org\index-server\dist\server\index-server.js`, you almost certainly have a stale non-global install shadowing the upgraded global one. Wipe everything and reinstall:
+The fastest way to clean up — selectively or completely — is the bundled wizard:
+
+```powershell
+# Interactive: three checkbox prompts (data paths, MCP client configs, package installs)
+index-server --uninstall              # aliases: --remove, --clean
+
+# Non-interactive: wipe everything
+index-server --uninstall --non-interactive --all
+
+# Non-interactive: targeted (comma-separated keys)
+index-server --uninstall --non-interactive --remove npm-global,stale-local,mcp-vscode-global
+```
+
+What the wizard can remove (each selectable independently):
+
+| Group | Items |
+|---|---|
+| **Data** | `instructions`, `feedback`, `state`, `messaging`, `audit`, `logs`, `metrics`, `model-cache`, `embeddings`, `sqlite`, `certs`, `env`, `backups`, `base` (entire base directory) |
+| **MCP configs** | `mcp-vscode-global`, `mcp-copilot-cli`, `mcp-claude` — removes the `index-server` entry only, backs up the original file |
+| **Packages** | `npm-global` (runs `npm uninstall -g @jagilber-org/index-server`), `stale-local` (removes `$HOME/node_modules/@jagilber-org/index-server`) |
+
+> `backups` is treated separately from `base` so off-disk backups (recommended in the setup wizard) are not deleted when you wipe the base directory.
+
+### Clean uninstall (manual / fallback)
+
+If `index-server --setup` fails with errors like `env contains unsupported INDEX_SERVER key: …` or `Cannot find module …\node_modules\@jagilber-org\index-server\dist\server\index-server.js`, you almost certainly have a stale non-global install shadowing the upgraded global one. The wizard above handles this with `--remove npm-global,stale-local`. To do it by hand:
 
 ```powershell
 # 1. Remove the global install
