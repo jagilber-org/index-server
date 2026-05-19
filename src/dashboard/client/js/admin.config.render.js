@@ -40,9 +40,21 @@
     };
 
     function reloadBehaviorBadge(behavior) {
-        var def = BADGE_DEFS[behavior] || BADGE_DEFS['restart-required'];
+        // restart-required is the global default communicated by the static banner;
+        // suppress per-row badge to reduce noise (issue: restart-required column).
+        if (!behavior || behavior === 'restart-required') return '';
+        var def = BADGE_DEFS[behavior];
+        if (!def) return '';
         return '<span class="cfg-reload-badge ' + def.klass + '" title="' + escapeHtml(def.title) + '">'
             + def.icon + ' ' + escapeHtml(def.label) + '</span>';
+    }
+
+    function restartInfoBanner() {
+        return '<div class="cfg-restart-info-banner" role="note">'
+            + '<strong>ℹ️ Heads up:</strong> Most settings persist to the overlay file and only take effect after a server restart. '
+            + 'Flags marked <span class="cfg-reload-badge cfg-badge-dynamic">🟢 Dynamic</span> or '
+            + '<span class="cfg-reload-badge cfg-badge-next">🟡 Next request</span> apply sooner.'
+            + '</div>';
     }
 
     function shadowIndicator(flag) {
@@ -77,7 +89,7 @@
                 && String(f.overlayValue) !== String(f.value);
         });
         if (!pending.length) return '';
-        var names = pending.slice(0, 5).map(function(f){ return escapeHtml(f.key); }).join(', ');
+        var names = pending.slice(0, 5).map(function(f){ return escapeHtml(f.name || f.key || ''); }).join(', ');
         var extra = pending.length > 5 ? ' (+' + (pending.length - 5) + ' more)' : '';
         return '<div class="cfg-restart-banner" role="status">'
             + '<strong>🔴 Pending restart:</strong> '
@@ -87,10 +99,12 @@
             + '</div>';
     }
 
+    function flagKey(flag) { return (flag && (flag.name || flag.key)) || ''; }
+
     function controlForBoolean(flag) {
         var current = flag.value === true || flag.value === 'true' || flag.value === 1 || flag.value === '1';
         var disabled = (flag.editable === true) ? '' : ' disabled';
-        return '<select class="form-input cfg-flag-input" data-flag-key="' + escapeHtml(flag.key) + '" data-flag-type="boolean"' + disabled + '>'
+        return '<select class="form-input cfg-flag-input" data-flag-key="' + escapeHtml(flagKey(flag)) + '" data-flag-type="boolean"' + disabled + '>'
             + '<option value="true"'  + (current  ? ' selected' : '') + '>true</option>'
             + '<option value="false"' + (!current ? ' selected' : '') + '>false</option>'
             + '</select>';
@@ -100,7 +114,7 @@
         var disabled = (flag.editable === true) ? '' : ' disabled';
         var opts = (flag.validation && Array.isArray(flag.validation.enum)) ? flag.validation.enum : [];
         var current = flag.value !== undefined && flag.value !== null ? String(flag.value) : '';
-        var html = '<select class="form-input cfg-flag-input" data-flag-key="' + escapeHtml(flag.key) + '" data-flag-type="' + escapeHtml(flag.type || 'string') + '"' + disabled + '>';
+        var html = '<select class="form-input cfg-flag-input" data-flag-key="' + escapeHtml(flagKey(flag)) + '" data-flag-type="' + escapeHtml(flag.type || 'string') + '"' + disabled + '>';
         opts.forEach(function(opt){
             var v = String(opt);
             html += '<option value="' + escapeHtml(v) + '"' + (v === current ? ' selected' : '') + '>' + escapeHtml(v) + '</option>';
@@ -123,7 +137,7 @@
         var current = flag.value !== undefined && flag.value !== null ? String(flag.value) : '';
         var placeholder = flag.default !== undefined && flag.default !== null ? ' placeholder="' + escapeHtml(String(flag.default)) + '"' : '';
         return '<input class="form-input cfg-flag-input" type="' + inputType + '"'
-            + ' data-flag-key="' + escapeHtml(flag.key) + '"'
+            + ' data-flag-key="' + escapeHtml(flagKey(flag)) + '"'
             + ' data-flag-type="' + escapeHtml(flag.type || 'string') + '"'
             + ' value="' + escapeHtml(current) + '"'
             + placeholder + extra + disabled + ' />';
@@ -137,18 +151,25 @@
     }
 
     function buildFlagRow(flag) {
-        var key = escapeHtml(flag.key);
+        // Backend (FLAG_REGISTRY) emits `name`; tolerate legacy `key` for safety.
+        var rawName = (flag && (flag.name || flag.key)) || '';
+        var key = escapeHtml(rawName);
         var desc = escapeHtml(flag.description || '');
         var def  = escapeHtml(flag.default !== undefined && flag.default !== null ? String(flag.default) : '');
         var stab = escapeHtml(flag.stability || 'stable');
         var ro   = (flag.editable !== true);
         var roTip = ro ? ' title="' + escapeHtml(readonlyTooltip(flag)) + '"' : '';
         var roClass = ro ? ' cfg-flag-row--readonly' : '';
+        var badge = reloadBehaviorBadge(flag.reloadBehavior);
+        var shadow = shadowIndicator(flag);
+        var tags = '';
+        if (badge) tags += ' ' + badge;
+        if (shadow) tags += ' ' + shadow;
+        if (ro) tags += ' <span class="cfg-readonly-tag">read-only</span>';
         return '<tr class="cfg-flag-row' + roClass + '" data-flag-key="' + key + '"' + roTip + '>'
-            + '<td class="cfg-flag-name">' + key
-                + ' ' + reloadBehaviorBadge(flag.reloadBehavior)
-                + ' ' + shadowIndicator(flag)
-                + (ro ? ' <span class="cfg-readonly-tag">read-only</span>' : '')
+            + '<td class="cfg-flag-name">'
+                + '<div class="cfg-flag-key">' + key + '</div>'
+                + (tags ? '<div class="cfg-flag-tags">' + tags + '</div>' : '')
             + '</td>'
             + '<td class="cfg-flag-value">' + buildFlagControl(flag) + '</td>'
             + '<td class="cfg-flag-default">' + def + '</td>'
@@ -217,6 +238,7 @@
         var groups = groupBySurface(flags);
         var refreshedAt = opts.timestamp ? new Date(opts.timestamp).toLocaleTimeString() : new Date().toLocaleTimeString();
         return '<div class="cfg-panel">'
+            + restartInfoBanner()
             + pendingRestartBanner(flags)
             + '<div class="cfg-panel-header">'
             + '<div class="cfg-search-row"><input type="text" id="cfg-flag-search" class="form-input" placeholder="Filter flags by name or description..." /></div>'
@@ -237,6 +259,7 @@
         shadowIndicator: shadowIndicator,
         readonlyTooltip: readonlyTooltip,
         pendingRestartBanner: pendingRestartBanner,
+        restartInfoBanner: restartInfoBanner,
         buildFlagControl: buildFlagControl,
         buildFlagRow: buildFlagRow,
         groupBySurface: groupBySurface,

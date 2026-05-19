@@ -1,6 +1,6 @@
 {
   "name": "@jagilber-org/index-server",
-  "version": "1.28.22",
+  "version": "1.28.24",
   "mcpName": "io.github.jagilber-org/index-server",
   "description": "MCP instruction indexing server with search, CRUD, validation, and cross-repo knowledge promotion.",
   "publishConfig": {
@@ -24,6 +24,7 @@
     "scripts/build/generate-certs.mjs",
     "scripts/build/setup-wizard.mjs",
     "scripts/build/setup-wizard-paths.mjs",
+    "scripts/build/uninstall-wizard.mjs",
     "server.json",
     "README.md",
     "LICENSE",
@@ -38,6 +39,7 @@
   },
   "scripts": {
     "setup": "node scripts/build/setup-wizard.mjs",
+    "uninstall:wizard": "node scripts/build/uninstall-wizard.mjs",
     "instructions:normalize": "node scripts/migration/normalize-instructions.js",
     "build": "tsc -p tsconfig.json && node scripts/build/copy-dashboard-assets.mjs && node scripts/build/generate-tools-doc.mjs && node scripts/build/generate-tools-snapshot.mjs && node scripts/build/generate-schemas.mjs",
     "start": "node dist/server/index-server.js",

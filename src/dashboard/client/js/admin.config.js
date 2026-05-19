@@ -24,7 +24,12 @@
 
     function snapshotFlags(allFlags) {
         var byKey = {};
-        (allFlags || []).forEach(function(f){ if (f && f.key) byKey[f.key] = f; });
+        // Backend serializes FLAG_REGISTRY with `name`; tolerate `key` for legacy callers.
+        (allFlags || []).forEach(function(f){
+            if (!f) return;
+            var k = f.name || f.key;
+            if (k) byKey[k] = f;
+        });
         _lastSnapshot = { allFlags: allFlags || [], byKey: byKey };
     }
 

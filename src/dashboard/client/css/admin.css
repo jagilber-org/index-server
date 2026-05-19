@@ -165,6 +165,17 @@ body {
     color: var(--admin-text-dim);
     padding-bottom: 8px;
 }
+.build-meta .build-path {
+    display: block;
+    margin-top: 4px;
+    line-height: 1.5;
+    word-break: break-all;
+}
+.build-meta .build-path code,
+.build-meta .build-path a {
+    color: var(--admin-text);
+}
+.build-meta .build-script a:hover { color: var(--admin-accent); }
 
 .feedback-btn {
     position: absolute;
@@ -728,19 +739,29 @@ table td, table th { border-bottom: 1px solid var(--admin-border); padding: 6px 
 
 /* Flag table inside each category */
 .cfg-flag-table { width: 100%; border-collapse: collapse; font-size: 12px; table-layout: fixed; }
-.cfg-flag-table thead th { text-align: left; padding: 4px 10px; font-size: 11px; opacity: 0.65; font-weight: 600; border-bottom: 1px solid var(--admin-border); }
-.cfg-flag-table thead th:nth-child(1) { width: 30%; }
-.cfg-flag-table thead th:nth-child(2) { width: 70px; }
-.cfg-flag-table thead th:nth-child(3) { width: 70px; }
-.cfg-flag-table thead th:nth-child(4) { width: 90px; }
+.cfg-flag-table thead th { text-align: left; padding: 6px 12px; font-size: 11px; opacity: 0.65; font-weight: 600; border-bottom: 1px solid var(--admin-border); }
+/* Widened columns: prevent overlap between value/default/stability cells.
+   Flag (name + tags stacked), Value (input/select), Default, Stability, Description (auto). */
+.cfg-flag-table thead th:nth-child(1) { width: 240px; }
+.cfg-flag-table thead th:nth-child(2) { width: 180px; }
+.cfg-flag-table thead th:nth-child(3) { width: 140px; }
+.cfg-flag-table thead th:nth-child(4) { width: 110px; }
 .cfg-flag-table thead th:nth-child(5) { width: auto; }
-.cfg-flag-row td { padding: 4px 10px; border-bottom: 1px solid var(--admin-border); vertical-align: middle; }
+.cfg-flag-row td { padding: 6px 12px; border-bottom: 1px solid var(--admin-border); vertical-align: top; }
 .cfg-flag-row:last-child td { border-bottom: none; }
 .cfg-flag-name { font-family: var(--mcp-font-mono, monospace); font-size: 11px; word-break: break-all; }
-.cfg-flag-default { opacity: 0.55; font-size: 11px; }
-.cfg-flag-desc { opacity: 0.85; font-size: 11px; line-height: 1.35; }
+.cfg-flag-key { font-weight: 600; line-height: 1.4; }
+.cfg-flag-tags { margin-top: 4px; display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.cfg-flag-default { opacity: 0.7; font-size: 11px; font-family: var(--mcp-font-mono, monospace); word-break: break-all; }
+.cfg-flag-value .cfg-flag-input { width: 100%; max-width: 100%; box-sizing: border-box; }
+.cfg-flag-desc { opacity: 0.85; font-size: 11px; line-height: 1.4; }
 .cfg-flag-ro { opacity: 0.7; }
-.cfg-flag-select { max-width: 64px; padding: 2px 4px; font-size: 11px; }
+.cfg-flag-select { max-width: 100%; padding: 2px 4px; font-size: 11px; }
+.cfg-readonly-tag { display: inline-block; font-size: 10px; padding: 1px 6px; border-radius: 3px; background: rgba(255,152,48,0.12); color: #ff9830; }
+
+/* Static restart-info banner: shown once at top of config tab. */
+.cfg-restart-info-banner { padding: 8px 12px; border: 1px solid var(--admin-border); border-left: 3px solid #3b82f6; border-radius: 4px; background: rgba(59,130,246,0.06); font-size: 12px; line-height: 1.5; }
+.cfg-restart-info-banner .cfg-reload-badge { font-size: 10px; padding: 1px 5px; }
 
 /* Doc link icon */
 .cfg-doc-link { text-decoration: none; font-size: 12px; margin-left: 4px; opacity: 0.6; }

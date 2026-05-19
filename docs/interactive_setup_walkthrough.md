@@ -1,164 +1,243 @@
 # Index Server — Interactive Setup Walkthrough
 
-End-to-end screenshots of the bundled configuration wizard, from `npx` launch through dashboard verification.
+End-to-end walkthrough of the bundled configuration wizard, from `npx` launch through dashboard verification. The wizard prompts are reproduced inline as terminal facsimiles (no screenshots) so they stay in sync with the actual code.
 
 ```powershell
 npx -y @jagilber-org/index-server@latest --setup
 ```
 
-The wizard is **idempotent** — re-run it any time to change profile, port, TLS, or regenerate MCP client configs. The `--configure` flag is an alias for `--setup`.
+The wizard is **idempotent** — re-run it any time to change storage, transport, ports, or regenerate MCP client configs. The `--configure` flag is an alias for `--setup`. To remove an install, see the companion [`--uninstall` wizard](quickstart.md#wizard-driven-uninstall-recommended).
 
-> **Note:** Screenshots were captured against v1.28.21. The wizard now defaults the **Configuration scope** prompt (Step 9) to **Global** with Global listed first; the screenshot in that step still shows the previous ordering. The choices themselves are unchanged.
+> Since v1.28.23 the wizard asks **9 flat questions** instead of a profile picker. Profile is now an internal-only concept derived from your answers (`sqlite → experimental`, `json + semantic → enhanced`, `json + no semantic → default`).
 
 ---
 
 ## 1. Launch
 
-`npx` resolves the package, runs the server''s startup preflight (logger, metrics, seed bootstrap), then renders the wizard banner.
+`npx` resolves the package, runs the server's startup preflight (logger, metrics, seed bootstrap), then renders the wizard banner.
 
-![Wizard launch banner with startup preflight output](screenshots/setup-wizard/01-launch-banner.png)
-
----
-
-## 2. Choose a configuration profile
-
-Three preset profiles bundle transport, storage, search engine, mutation policy, and dashboard defaults. The right pane shows the resolved settings for the highlighted profile.
-
-![Profile picker — Default / Enhanced / Experimental](screenshots/setup-wizard/02-profile.png)
-
-> Walkthrough selection: **Experimental** — HTTPS, SQLite storage, semantic search.
+```
+╔════════════════════════════════════════════════════════════════╗
+║             Index Server — Configuration Wizard               ║
+║      MCP instruction indexing for AI governance               ║
+╚════════════════════════════════════════════════════════════════╝
+```
 
 ---
 
-## 2a. Base directory
+## 2. Storage backend
 
-Single root under which every data path (instructions, embeddings, SQLite db, TLS certs, metrics) is resolved. Press `Enter` to accept the platform default — `%LocalAppData%\index-server` on Windows, `~/.local/share/index-server` on Linux/macOS.
+Choose how instructions are persisted:
 
-![Base directory prompt](screenshots/setup-wizard/02a-base-directory.png)
+- **`json`** — one file per instruction under `<base>/instructions/` (default; portable, easy to inspect/diff).
+- **`sqlite`** — single `<base>/data/index.db` with FTS5 (faster cold-start and search on large catalogs).
 
-> **Capture command:** `npx -y @jagilber-org/index-server@latest --setup` → select any profile → screenshot the **Base directory** prompt.
+This selection also drives the derived internal profile (`sqlite → experimental`).
+
+```
+? Storage backend (Use arrow keys)
+❯ json — file-per-instruction (default, stable)
+  sqlite — single database file, WAL mode (experimental)
+```
 
 ---
 
-## 3. MCP server name
+## 3. Dashboard transport
 
-The key written into `mcp.json`''s `servers` map. Default `index-server`.
+- **`http`** — plain HTTP on the dashboard port (default; localhost-only is safe).
+- **`https`** — HTTPS; the wizard will offer to generate a self-signed cert chain via OpenSSL in step 11.
 
-![MCP server name prompt](screenshots/setup-wizard/03-server-name.png)
+```
+? Dashboard transport (Use arrow keys)
+❯ http — plain HTTP (localhost only)
+  https — TLS with self-signed certs (auto-generated)
+```
 
 ---
 
-## 4. Dashboard port
+## 4. Semantic search
+
+Defaults to **yes**. Enables embedding-based search; the first semantic query downloads the ~90 MB MiniLM model into `<base>/data/models/`.
+
+```
+? Enable semantic search? (downloads ~90MB MiniLM model on first run) (Y/n)
+```
+
+---
+
+## 5. Base directory
+
+Single root under which every data path (instructions, embeddings, SQLite db, TLS certs, metrics, logs) is resolved. Press `Enter` to accept the platform default — `%LocalAppData%\index-server` on Windows, `~/.local/share/index-server` on Linux/macOS.
+
+```
+? Base directory (all data paths resolve under this root)
+  (C:\Users\<you>\AppData\Local\index-server)
+```
+
+---
+
+## 6. Backup directory
+
+Where pre-mutation zip backups land. Defaults to `<base>/backups`.
+
+> ⚠️ **Strongly recommended:** place backups on a **different drive or path** than the base directory. Same-disk backups will not protect against drive failure, encryption, or volume loss. The wizard prints this warning inline before the prompt.
+
+```
+  ⚠️  Strongly recommended: place backups on a DIFFERENT drive or path than the base directory.
+     Same-disk backups will not protect against drive failure, encryption, or volume loss.
+
+? Backup directory (defaults to <base>/backups; enter a path to override)
+  (C:/Users/<you>/AppData/Local/index-server/backups)
+```
+
+This is the only field that sets `INDEX_SERVER_BACKUPS_DIR` as **active** in the generated `mcp.json` (the env var is omitted when you accept the in-base default, so backups follow `<base>` automatically).
+
+---
+
+## 7. Dashboard port
 
 Port for the admin/dashboard HTTP(S) listener. Default **8787**.
 
-![Dashboard port prompt](screenshots/setup-wizard/04-dashboard-port.png)
+```
+? Dashboard port (8787)
+```
 
 ---
 
-## 5. Dashboard host
+## 8. Dashboard host
 
-Bind address. Localhost-only is recommended unless you intentionally want remote access.
+Bind address. Localhost-only (`127.0.0.1`) is recommended unless you intentionally want remote access (`0.0.0.0`).
 
-![Dashboard host picker — 127.0.0.1 vs 0.0.0.0](screenshots/setup-wizard/05-dashboard-host.png)
-
----
-
-## 6. TLS certificates
-
-Because the **Experimental** profile uses HTTPS, the wizard offers to generate a localhost self-signed cert chain via OpenSSL.
-
-![Generate self-signed TLS certificates prompt](screenshots/setup-wizard/06-tls-prompt.png)
+```
+? Dashboard host (Use arrow keys)
+❯ 127.0.0.1 — localhost only (recommended)
+  0.0.0.0 — all network interfaces
+```
 
 ---
 
-## 6a. Enable mutation (Default profile only)
-
-The **Default** profile is read-only by default and asks whether to enable write operations (index_add, index_remove, archive, etc.). The Enhanced and Experimental profiles enable mutation automatically and skip this prompt.
-
-![Enable mutation prompt](screenshots/setup-wizard/06a-mutation.png)
-
-> **Capture command:** `npx -y @jagilber-org/index-server@latest --setup` → choose **Default** profile → screenshot the **Enable mutation** prompt.
-
----
-
-## 7. Log level
-
-Five levels (`error`, `warn`, `info`, `debug`, `trace`). Default `info`.
-
-![Log level picker](screenshots/setup-wizard/07-log-level.png)
-
----
-
-## 8. MCP client targets
+## 9. MCP client targets
 
 Multi-select — pick every MCP client you want a config written for. `space` toggles, `a` selects all, `i` inverts, `↵` submits.
 
-![MCP client targets multi-select](screenshots/setup-wizard/08-mcp-targets.png)
+```
+? Which MCP client configs should be generated?
+  (Press <space> to select, <a> to toggle all, <i> to invert)
+❯◉ VS Code (.vscode/mcp.json)
+ ◯ Copilot CLI (~/.copilot/mcp-config.json)
+ ◯ Claude Desktop (claude_desktop_config.json)
+```
 
 ---
 
-## 9. Configuration scope
+## 10. Configuration scope
 
-Per-target choice: write to the **user-global** location, or to the workspace/repo (`.vscode/mcp.json`).
+Per-target choice (only shown when VS Code is one of the targets): write to the **user-global** location (default), or to the workspace/repo (`.vscode/mcp.json`).
 
-![Configuration scope picker](screenshots/setup-wizard/09-scope.png)
-
-> Current build orders these as **Global** (default) → **Workspace/repo**. The screenshot reflects the previous ordering.
+```
+? Configuration scope (Use arrow keys)
+❯ Global — user-level config (applies to all workspaces)
+  Workspace/repo — .vscode/mcp.json in current directory
+```
 
 ---
 
-## 10. Index locations & configuration preview
+## 11. TLS certs (only if transport = `https`)
+
+When step 3 selected HTTPS, the wizard offers to generate a localhost self-signed cert chain via OpenSSL.
+
+```
+? Generate self-signed TLS certificates now? (Y/n)
+```
+
+---
+
+## 12. Index locations & configuration preview
 
 The wizard prints all resolved data paths and the exact JSON it is about to write to each target, so you can review before any file is touched.
 
-![Resolved index locations and JSON preview for the vscode target](screenshots/setup-wizard/10-paths-and-preview.png)
+```
+Index locations:
+  base               C:\Users\<you>\AppData\Local\index-server
+  instructions       <base>\instructions
+  data               <base>\data
+  backups            <base>\backups
+  logs               <base>\logs
+  metrics            <base>\metrics
+  certs              <base>\certs
 
-The generated `mcp.json` (user-global, VS Code) sets the standard `INDEX_SERVER_*` env vars on the `index-server` entry — profile, dashboard host/port, TLS cert paths under the chosen base directory, semantic search, SQLite storage, log level, mutation, and metrics-file storage.
+Preview — vscode (global):
+{
+  "servers": {
+    "index-server": {
+      "command": "npx",
+      "args": ["-y", "@jagilber-org/index-server"],
+      "env": {
+        "INDEX_SERVER_PROFILE": "enhanced",
+        "INDEX_SERVER_BASE": "...",
+        "DASHBOARD_HOST": "127.0.0.1",
+        "DASHBOARD_PORT": "8787",
+        "INDEX_SERVER_TLS": "1",
+        "...": "..."
+      }
+    }
+  }
+}
+```
+
+The generated `mcp.json` (user-global, VS Code) sets the standard `INDEX_SERVER_*` env vars on the `index-server` entry — derived profile, dashboard host/port, TLS cert paths under the chosen base directory, semantic search, storage backend, log level, mutation, metrics-file storage, and (only when customized) `INDEX_SERVER_BACKUPS_DIR`.
 
 ---
 
-## 11. TLS generation, config write, runtime confirmation
+## 13. TLS generation, config write, runtime confirmation
 
-Final wizard output: the cert chain (CA + server pair) is generated, the MCP client config is written (existing files are timestamp-backed-up), and the deployed runtime version is confirmed. The `Next Steps` panel ends with a one-liner reminder that you can re-run the wizard at any time.
+Final wizard output: the cert chain (CA + server pair) is generated, the MCP client config is written (existing files are timestamp-backed-up), and the deployed runtime version is confirmed.
 
-![TLS generation, config write, and Next Steps summary](screenshots/setup-wizard/11-tls-and-write.png)
+```
+✓ Generated TLS chain: <base>\certs\{ca.pem, server.pem, server.key}
+✓ Backed up existing config → mcp.json.<timestamp>.bak
+✓ Wrote vscode (global) → <user-config>\mcp.json
+✓ Deployed runtime confirmed: @jagilber-org/index-server@<version>
+
+Next Steps:
+  1. Restart your MCP client to load the new config.
+  2. Open the dashboard at https://127.0.0.1:8787/admin
+  3. Re-run `index-server --setup` any time to reconfigure.
+```
 
 ---
 
-## 12. Enable the tools in VS Code
+## 14. Enable the tools in VS Code
 
 Open VS Code, then **Configure Tools** (chat picker). Check the `index-server` group to expose all of its tools to your AI agent.
 
-![VS Code Configure Tools picker with the index-server group expanded](screenshots/setup-wizard/12-configure-tools.png)
+---
+
+## 15. Open the dashboard
+
+Browse to **https://localhost:8787/admin** (or `http://…` if you chose HTTP) and accept the self-signed certificate (Edge / Chrome will show "Not secure" — expected for the local CA generated in Step 11).
 
 ---
 
-## 13. Open the dashboard
+## Recap (9 flat questions)
 
-Browse to **https://localhost:8787/admin** and accept the self-signed certificate (Edge / Chrome will show "Not secure" — expected for the local CA generated in Step 6).
-
-![Dashboard Overview tab — system stats, health, performance, per-tool metrics](screenshots/setup-wizard/13-dashboard.png)
-
----
-
-## Recap
-
-| # | Step | Selection in this walkthrough |
+| # | Step | Walkthrough selection |
 |---|------|-------------------------------|
 | 1 | Launch | `npx -y @jagilber-org/index-server@latest --setup` |
-| 2 | Profile (+ base directory) | **Experimental** — HTTPS, SQLite, semantic search · default base dir accepted |
-| 3 | MCP server name | `index-server` |
-| 4 | Dashboard port | `8787` |
-| 5 | Dashboard host | `127.0.0.1` (localhost only) |
-| 6 | Generate TLS certs | **Yes** |
-| 7 | Log level | `info` |
-| 8 | MCP client targets | VS Code |
-| 9 | Configuration scope | **Global** (user-level) |
-| 10 | Paths + JSON preview | OK |
-| 11 | Cert generation + write | OK (existing `mcp.json` backed up) |
-| 12 | Enable tools in VS Code | `Configure Tools` → check **index-server** |
-| 13 | Open dashboard | https://localhost:8787/admin |
+| 2 | Storage backend | `sqlite` |
+| 3 | Dashboard transport | `https` |
+| 4 | Semantic search | `yes` (default) |
+| 5 | Base directory | platform default accepted |
+| 6 | Backup directory | **off-disk path** (recommended) |
+| 7 | Dashboard port | `8787` |
+| 8 | Dashboard host | `127.0.0.1` (localhost only) |
+| 9 | MCP client targets | VS Code |
+| 10 | Configuration scope | **Global** (user-level) |
+| 11 | Generate TLS certs | **Yes** (HTTPS path) |
+| 12 | Paths + JSON preview | OK |
+| 13 | Cert generation + write | OK (existing `mcp.json` backed up) |
+| 14 | Enable tools in VS Code | `Configure Tools` → check **index-server** |
+| 15 | Open dashboard | https://localhost:8787/admin |
 
 After restarting the MCP client, the `index-server` tools become available to your AI agent. The first semantic query downloads the ~90 MB MiniLM model into the `data/models` cache.
 
@@ -167,4 +246,11 @@ To re-run this wizard later (idempotent):
 ```powershell
 npx -y @jagilber-org/index-server@latest --setup    # works without a global install
 index-server --setup                                # if installed globally
+```
+
+To uninstall (also wizard-driven):
+
+```powershell
+index-server --uninstall                            # interactive checkbox cleanup
+index-server --uninstall --non-interactive --all    # wipe everything
 ```

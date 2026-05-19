@@ -23,8 +23,9 @@ pipeline. Most are wired to `npm run` tasks or called by `Invoke-ReleaseWorkflow
 | `publish-direct-to-remote.cjs` | Publish build artifacts directly to the remote mirror |
 | `Publish-ToMirror.ps1` | Copy clean-room build to the production mirror path |
 | `set-registry.mjs` | Switch npm registry for publish (scoped packages) |
-| `setup-wizard.mjs` | Interactive first-run setup wizard |
+| `setup-wizard.mjs` | Interactive first-run setup wizard (9 flat questions) |
 | `setup-wizard-paths.mjs` | Path resolution helpers for the setup wizard |
+| `uninstall-wizard.mjs` | Interactive uninstall / clean wizard (data, MCP configs, package) |
 | `sync-constitution.ps1` | Regenerate `constitution.md` from `constitution.json` |
 | `sync-dist.ps1` | Sync `dist/` to production deployment path |
 | `append-agent-provenance.ps1` | Append agent provenance metadata to release artifacts |

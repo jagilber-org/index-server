@@ -77,4 +77,72 @@ describe('mcpConfig flag catalog drift guard', () => {
       expect(record).toHaveProperty('validate');
     }
   });
+
+  it('honors explicit storageBackend / semanticEnabled / backupsDir overrides on the default profile', () => {
+    const paths = resolveDataPaths('C:/repo/index-server');
+    const catalog = buildEnvCatalog({
+      profile: 'default',
+      root: 'C:/repo/index-server',
+      port: 8787,
+      host: '127.0.0.1',
+      tls: false,
+      mutation: true,
+      logLevel: 'info',
+      storageBackend: 'sqlite',
+      semanticEnabled: true,
+      backupsDir: 'D:/backups/index-server',
+    }, paths);
+    const byKey = Object.fromEntries(
+      catalog.flatMap(e => 'key' in e ? [[e.key, e]] : [])
+    ) as Record<string, { value: string; active: boolean }>;
+    expect(byKey.INDEX_SERVER_STORAGE_BACKEND.value).toBe('sqlite');
+    expect(byKey.INDEX_SERVER_STORAGE_BACKEND.active).toBe(true);
+    expect(byKey.INDEX_SERVER_SEMANTIC_ENABLED.value).toBe('1');
+    expect(byKey.INDEX_SERVER_SEMANTIC_ENABLED.active).toBe(true);
+    expect(byKey.INDEX_SERVER_SEMANTIC_LOCAL_ONLY.value).toBe('0');
+    expect(byKey.INDEX_SERVER_BACKUPS_DIR.value).toBe('D:/backups/index-server');
+    expect(byKey.INDEX_SERVER_BACKUPS_DIR.active).toBe(true);
+  });
+
+  it('honors explicit semantic disable on enhanced profile (json + no semantic)', () => {
+    const paths = resolveDataPaths('C:/repo/index-server');
+    const catalog = buildEnvCatalog({
+      profile: 'enhanced',
+      root: 'C:/repo/index-server',
+      port: 8787,
+      host: '127.0.0.1',
+      tls: true,
+      mutation: true,
+      logLevel: 'info',
+      storageBackend: 'json',
+      semanticEnabled: false,
+    }, paths);
+    const byKey = Object.fromEntries(
+      catalog.flatMap(e => 'key' in e ? [[e.key, e]] : [])
+    ) as Record<string, { value: string; active: boolean }>;
+    expect(byKey.INDEX_SERVER_SEMANTIC_ENABLED.value).toBe('0');
+    expect(byKey.INDEX_SERVER_SEMANTIC_ENABLED.active).toBe(false);
+    expect(byKey.INDEX_SERVER_SEMANTIC_LOCAL_ONLY.value).toBe('1');
+    expect(byKey.INDEX_SERVER_STORAGE_BACKEND.value).toBe('json');
+    expect(byKey.INDEX_SERVER_STORAGE_BACKEND.active).toBe(false);
+  });
+
+  it('falls back to profile-derived defaults when overrides are absent', () => {
+    const paths = resolveDataPaths('C:/repo/index-server');
+    const catalog = buildEnvCatalog({
+      profile: 'experimental',
+      root: 'C:/repo/index-server',
+      port: 8787,
+      host: '127.0.0.1',
+      tls: true,
+      mutation: true,
+      logLevel: 'debug',
+    }, paths);
+    const byKey = Object.fromEntries(
+      catalog.flatMap(e => 'key' in e ? [[e.key, e]] : [])
+    ) as Record<string, { value: string; active: boolean }>;
+    expect(byKey.INDEX_SERVER_STORAGE_BACKEND.value).toBe('sqlite');
+    expect(byKey.INDEX_SERVER_SEMANTIC_ENABLED.value).toBe('1');
+    expect(byKey.INDEX_SERVER_BACKUPS_DIR.active).toBe(false);
+  });
 });

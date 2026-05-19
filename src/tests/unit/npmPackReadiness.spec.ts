@@ -106,6 +106,7 @@ describe('npm publish readiness', () => {
         'scripts/build/setup-wizard.mjs',
         // setup-wizard.mjs imports ./setup-wizard-paths.mjs at runtime; both must ship.
         'scripts/build/setup-wizard-paths.mjs',
+        'scripts/build/uninstall-wizard.mjs',
         // Client wrapper scripts shipped for the dashboard /api/scripts/:name route (v1.28.12).
         'scripts/client/',
       ];

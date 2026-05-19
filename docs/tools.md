@@ -503,7 +503,7 @@ invalid, and `fields` must contain at least one predicate.
 }
 ```
 
-Items are sorted by `archivedAt` descending. Set `includeContent: true` to
+Items are sorted by `archivedAt` ascending, then `id` ascending. Set `includeContent: true` to
 include each entry's `body` (default omits it).
 
 #### `getArchived` - Fetch Single Archived Instruction

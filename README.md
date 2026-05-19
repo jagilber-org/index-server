@@ -47,7 +47,7 @@ npx -y @jagilber-org/index-server@latest --dashboard
 
 > **Prefer a stable `index-server` command on `PATH`?** Install globally instead: `npm install -g @jagilber-org/index-server`, then run `index-server --setup` / `index-server --dashboard`. The GitHub Packages mirror requires authentication, so `npx` against `npm.pkg.github.com` needs a per-scope `.npmrc` plus a `GITHUB_TOKEN` with `read:packages`.
 
-> **Upgrading or hitting "unsupported INDEX_SERVER key" / "Cannot find module" errors after install?** See [Upgrading and Uninstalling](docs/quickstart.md#upgrading-and-uninstalling) for the clean-uninstall steps that clear stale non-global installs.
+> **Upgrading or hitting "unsupported INDEX_SERVER key" / "Cannot find module" errors after install?** Run the wizard-driven cleanup: `index-server --uninstall` (aliases: `--remove`, `--clean`). It can selectively remove data paths, MCP client entries, and the global package, or wipe everything with `--non-interactive --all`. See [Upgrading and Uninstalling](docs/quickstart.md#upgrading-and-uninstalling) for the full reference.
 
 #### Bootstrap HTTPS for the dashboard
 

@@ -1728,11 +1728,11 @@
                     el.append(` • Built ${bt}`);
                     if(j.paths){
                         const p = j.paths;
+                        const isSqlite = p.storageBackend === 'sqlite';
                         const addPath = (label, value, key) => {
                             if(!value) return;
-                            const wrap = document.createElement('span');
+                            const wrap = document.createElement('div');
                             wrap.className = 'build-path';
-                            wrap.style.marginLeft = '0.75em';
                             wrap.append(`${label}: `);
                             const code = document.createElement('code');
                             code.textContent = String(value);
@@ -1761,9 +1761,32 @@
                             wrap.appendChild(code);
                             el.appendChild(wrap);
                         };
-                        addPath('Instructions', p.instructionsDir, 'instructions');
-                        if(p.storageBackend === 'sqlite') addPath('SQLite', p.sqlitePath, 'sqlite');
+                        // In SQLite mode the instructions directory is no longer the source of truth
+                        // (everything lives in the SQLite DB), so hide it to avoid operator confusion.
+                        if (!isSqlite) addPath('Instructions', p.instructionsDir, 'instructions');
+                        if (isSqlite) addPath('SQLite', p.sqlitePath, 'sqlite');
                         addPath('Backups', p.backupsDir, 'backups');
+
+                        // Client scripts: show downloadable REST clients with the absolute URL
+                        // so operators can copy/paste into curl, Invoke-WebRequest, etc.
+                        const scripts = [
+                            { label: 'PowerShell client', file: 'index-server-client.ps1' },
+                            { label: 'Bash client',       file: 'index-server-client.sh'  },
+                        ];
+                        scripts.forEach(s => {
+                            const url = `${window.location.origin}/api/scripts/${s.file}`;
+                            const wrap = document.createElement('div');
+                            wrap.className = 'build-path build-script';
+                            wrap.append(`${s.label}: `);
+                            const a = document.createElement('a');
+                            a.href = url;
+                            a.textContent = url;
+                            a.title = `Download ${s.file}`;
+                            a.setAttribute('download', s.file);
+                            a.style.textDecoration = 'underline';
+                            wrap.appendChild(a);
+                            el.appendChild(wrap);
+                        });
                     }
                 }
             } catch { const el = document.getElementById('buildMeta'); if(el) el.textContent='Build metadata unavailable'; }

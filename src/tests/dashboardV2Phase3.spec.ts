@@ -179,6 +179,8 @@ describe('Dashboard V2 Phase 3 — CSS/UX modernization', () => {
     const hexLines = hexDeclarationLinesOutsideRoot(css);
     expect(hexLines).toEqual([
       '.search-highlight { background: rgba(255, 213, 79, 0.35); color: #ffd54f; border-radius: 2px; padding: 0 1px; }',
+      '.cfg-readonly-tag { display: inline-block; font-size: 10px; padding: 1px 6px; border-radius: 3px; background: rgba(255,152,48,0.12); color: #ff9830; }',
+      '.cfg-restart-info-banner { padding: 8px 12px; border: 1px solid var(--admin-border); border-left: 3px solid #3b82f6; border-radius: 4px; background: rgba(59,130,246,0.06); font-size: 12px; line-height: 1.5; }',
       '.cfg-stab-diagnostic { color: #3b82f6; font-size: 11px; }',
       '.cfg-stab-experimental { color: #8b5cf6; font-size: 11px; }',
       '.cfg-stab-deprecated { color: #ff9830; font-size: 11px; }',
@@ -196,7 +198,7 @@ describe('Dashboard V2 Phase 3 — CSS/UX modernization', () => {
 
     expect(countBy(hexColoursOutsideRoot(css))).toEqual({
       '#2c3038': 1,
-      '#3b82f6': 2,
+      '#3b82f6': 3,
       '#404756': 1,
       '#4a1f1f': 1,
       '#6a2c2c': 1,
@@ -207,7 +209,7 @@ describe('Dashboard V2 Phase 3 — CSS/UX modernization', () => {
       '#d0d6de': 1,
       '#e8ab6a': 1,
       '#f2495c': 1,
-      '#ff9830': 1,
+      '#ff9830': 2,
       '#ffd54f': 1,
       '#fff': 5,
     });

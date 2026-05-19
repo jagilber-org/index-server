@@ -56,6 +56,21 @@ describe('Dashboard Client Bug Fixes', () => {
     });
   });
 
+  describe('bug-9: Archived instruction filtering', () => {
+    it('should keep filtering and pagination scoped to the archived list in archived view', () => {
+      const src = fs.readFileSync(path.join(CLIENT_DIR, 'js', 'admin.instructions.js'), 'utf8');
+
+      expect(src).toContain('function renderCurrentInstructionView()');
+      expect(src).toContain("globals.instructionView === 'archived'");
+      expect(src).toContain('renderArchivedList(globals.allArchivedInstructions || [])');
+      expect(src).toContain('renderInstructionList(globals.allInstructions || [])');
+      expect(src).toContain('const totalFiltered = getFilteredInstructions(getCurrentInstructionList()).length;');
+      expect(src).toContain('function filterInstructions(){ globals.instructionPage = 1; renderCurrentInstructionView(); }');
+      expect(src).toContain('const filtered = getFilteredInstructions(instructions || []);');
+      expect(src).toContain('pageItems = filtered.slice(start, end);');
+    });
+  });
+
   describe('bug-5: Category dropdown deduplication', () => {
     it('should clear dropdown before appending fallback categories', () => {
       const src = fs.readFileSync(path.join(CLIENT_DIR, 'js', 'admin.instructions.js'), 'utf8');
