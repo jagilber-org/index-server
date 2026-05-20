@@ -6,6 +6,12 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 
 ## [Unreleased]
 
+## [1.28.26] - 2026-05-20
+
+### Fixed
+
+- **Release workflow**: install `npm@latest` into a sibling prefix (`$RUNNER_TEMP/npm-latest`) and prepend to `PATH` instead of `npm install -g npm@latest`. The global self-upgrade crashed with `MODULE_NOT_FOUND: promise-retry` mid-install on npm 10 → 11, blocking the Trusted Publishing (OIDC) publish of v1.28.25.
+
 ## [1.28.25] - 2026-05-19
 
 ### Changed

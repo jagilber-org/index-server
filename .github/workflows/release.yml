@@ -346,7 +346,15 @@ jobs:
 
       - name: Upgrade npm for Trusted Publishing (OIDC requires >=11.5.1)
         if: steps.targets.outputs.npmjs == 'true'
-        run: npm install -g npm@latest
+        # Self-upgrading npm (npm i -g npm@latest) breaks mid-install with
+        # MODULE_NOT_FOUND: promise-retry on npm 10 -> 11. Install npm@latest
+        # into a sibling prefix and prepend it to PATH instead.
+        run: |
+          NPM_HOME="$RUNNER_TEMP/npm-latest"
+          mkdir -p "$NPM_HOME"
+          npm install --prefix "$NPM_HOME" --no-audit --no-fund --no-save npm@latest
+          echo "$NPM_HOME/node_modules/.bin" >> "$GITHUB_PATH"
+          "$NPM_HOME/node_modules/.bin/npm" --version
 
       - name: Check npmjs version status
         id: npmjs_status
