@@ -13,7 +13,7 @@ import { registerHandler } from '../server/registry';
 import { getToolRegistry } from './toolRegistry';
 import { getIndexState } from './indexContext';
 
-const HELP_VERSION = '2025-09-14';
+const HELP_VERSION = '2026-05-19';
 
 interface OverviewSection {
   id: string; title: string; content: string; bullets?: string[]; nextActions?: string[];
@@ -27,9 +27,26 @@ function buildSections(): OverviewSection[] {
       content: 'This server exposes a governance-aware instruction index and supporting MCP tools. Use this overview to learn discovery, lifecycle tiers, and safe promotion patterns.'
     },
     {
+      id: 'client-activation',
+      title: 'VS Code Client Tool Naming (READ FIRST)',
+      content: 'In VS Code / Copilot Chat, MCP tools are exposed under their full prefixed name: mcp_index-server_<tool>. Short aliases (index_search, index_add, index_dispatch, bootstrap) are NOT callable names in the VS Code tool registry — they are only the underlying MCP tool ids returned by tools/list. Calling tool_search for a short alias will return zero hits even when the full tool is already live; that is NOT evidence the tool is missing.',
+      bullets: [
+        'Callable from VS Code: mcp_index-server_help_overview, mcp_index-server_bootstrap, mcp_index-server_index_search, mcp_index-server_index_add, mcp_index-server_index_dispatch, mcp_index-server_index_schema, mcp_index-server_index_health, mcp_index-server_index_governanceHash, mcp_index-server_index_remove, mcp_index-server_index_reload, mcp_index-server_promote_from_repo, mcp_index-server_usage_track, mcp_index-server_usage_hotset, mcp_index-server_feedback_submit, mcp_index-server_feedback_manage, mcp_index-server_messaging_* (send/get/list_channels/read/ack/purge/reply/stats/thread/update), mcp_index-server_metrics_snapshot, mcp_index-server_health_check, mcp_index-server_gates_evaluate, mcp_index-server_graph_export, mcp_index-server_integrity_verify, mcp_index-server_prompt_review',
+        'tool_search is a discovery aid for the deferred pool; query with descriptions ("instruction index search", "feedback submit"), not bare tool names',
+        'If tool_search returns zero for a shorthand name, FIRST try calling the full mcp_index-server_<name> directly — it is almost certainly already exposed',
+        'The set of currently-exposed tools can change between turns (VS Code rotates the deferred pool); the prefixed name remains the same',
+        'Non-VS-Code clients (raw MCP, claude-cli) see all tools immediately from tools/list with their bare ids (index_search, index_add, etc.)'
+      ],
+      nextActions: [
+        'Try the full prefixed name FIRST (e.g. mcp_index-server_index_search) before concluding a tool is missing',
+        'Only fall back to tool_search with descriptive phrases if the call fails with "tool not found"',
+        'Never report "tool unreachable" without first attempting the full mcp_index-server_* name'
+      ]
+    },
+    {
       id: 'discovery',
       title: 'Tool Discovery Flow',
-      content: 'Initialize (initialize), then enumerate capabilities via meta_tools or tools/list. Call help_overview for structured guidance before attempting mutations.',
+      content: 'After client-side activation (see above), initialize the protocol and enumerate capabilities via meta_tools or tools/list. Call help_overview for structured guidance before attempting mutations.',
       bullets: [
         'initialize → tools/call meta_tools → tools/call help_overview',
         'index_dispatch (action=list) to enumerate index entries',
