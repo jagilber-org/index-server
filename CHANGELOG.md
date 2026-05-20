@@ -6,6 +6,12 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 
 ## [Unreleased]
 
+## [1.28.25] - 2026-05-19
+
+### Changed
+
+- **CI: npmjs publish via Trusted Publishing (OIDC)**. Removed `secrets.NPM_TOKEN` from the npmjs publish step in `.github/workflows/release.yml`; auth now flows via the workflow's `id-token` (Publisher=GitHub Actions, Repo=jagilber-org/index-server, Workflow=`release.yml`). Dropped the `Require NPM_TOKEN` preflight gate and added an `npm install -g npm@latest` step (Trusted Publishing requires `npm >= 11.5.1`; Node 22 ships `npm@10.x`). Motivation: npm bulk-rotated all granular write+bypass-2FA tokens on 2026-05-19 as a *Mini Shai-Hulud* supply-chain precaution, breaking the v1.28.24 publish with `E404`. OIDC removes the long-lived token entirely.
+
 ## [1.28.23] - 2026-05-17
 
 ### Changed

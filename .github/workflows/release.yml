@@ -331,16 +331,11 @@ jobs:
           echo "  HAS_NPM_TOKEN       : ${HAS_NPM_TOKEN}"
 
       # ──────────────────────────────────────────────────────────────────
-      # Publish to public npmjs.org. Required for MCP Registry validation
-      # (the registry queries npmjs to verify the package exists).
+      # Publish to public npmjs.org via npm Trusted Publishing (OIDC).
+      # Auth comes from the workflow's id-token, NOT from secrets.NPM_TOKEN.
+      # Trust is configured at https://www.npmjs.com/package/@jagilber-org/index-server/access
+      # (Publisher=GitHub Actions, Repo=jagilber-org/index-server, Workflow=release.yml).
       # ──────────────────────────────────────────────────────────────────
-      - name: Require NPM_TOKEN when npmjs publish requested
-        if: steps.targets.outputs.npmjs == 'true' && env.HAS_NPM_TOKEN != 'true'
-        run: |
-          echo "PUBLISH_NPMJS is true but secrets.NPM_TOKEN is not configured." >&2
-          echo "Either configure NPM_TOKEN or set PUBLISH_NPMJS=false (or vars.PUBLISH_NPMJS=false)." >&2
-          exit 1
-
       - name: Configure npmjs registry
         if: steps.targets.outputs.npmjs == 'true'
         uses: actions/setup-node@v6
@@ -348,6 +343,10 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           registry-url: "https://registry.npmjs.org"
           scope: "@jagilber-org"
+
+      - name: Upgrade npm for Trusted Publishing (OIDC requires >=11.5.1)
+        if: steps.targets.outputs.npmjs == 'true'
+        run: npm install -g npm@latest
 
       - name: Check npmjs version status
         id: npmjs_status
@@ -372,8 +371,6 @@ jobs:
           else
             npm publish --ignore-scripts --provenance --access public --tag "$DIST_TAG" --registry=https://registry.npmjs.org
           fi
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       # ──────────────────────────────────────────────────────────────────
       # Publish to GitHub Packages npm registry. Auth uses GITHUB_TOKEN.
