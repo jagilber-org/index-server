@@ -114,6 +114,7 @@ function resolvePaths(root) {
 function parseNonInteractiveArgs() {
   const args = process.argv.slice(2);
   if (!args.includes('--non-interactive')) return null;
+  let explicitProfile = false;
 
   const config = {
     profile: 'default',
@@ -140,7 +141,10 @@ function parseNonInteractiveArgs() {
   };
 
   for (let i = 0; i < args.length; i++) {
-    if (args[i] === '--profile' && args[i + 1]) config.profile = args[++i];
+    if (args[i] === '--profile' && args[i + 1]) {
+      config.profile = args[++i];
+      explicitProfile = true;
+    }
     else if (args[i] === '--root' && args[i + 1]) config.root = path.resolve(args[++i]);
     else if (args[i] === '--port' && args[i + 1]) config.port = parseInt(args[++i], 10);
     else if (args[i] === '--host' && args[i + 1]) config.host = args[++i];
@@ -160,8 +164,15 @@ function parseNonInteractiveArgs() {
     else if (args[i] === '--backup-dir' && args[i + 1]) config.backupsDir = args[++i];
   }
 
-  // Profile overrides
-  if (config.profile === 'enhanced' || config.profile === 'experimental') {
+  if (!explicitProfile) {
+    if (config.storageBackend === 'sqlite') config.profile = 'experimental';
+    else if (config.semanticEnabled === true) config.profile = 'enhanced';
+    else config.profile = 'default';
+  }
+
+  // Legacy profile overrides. Flat --storage/--semantic choices derive the same
+  // internal profile names without changing the user's explicit HTTP/TLS choice.
+  if (explicitProfile && (config.profile === 'enhanced' || config.profile === 'experimental')) {
     config.tls = true;
     config.mutation = true;
     config.generateCerts = true;
@@ -374,6 +385,24 @@ function applyConfigTarget(targetInfo, config) {
   });
   if (result.backupPath) console.log(`  📦 Backed up existing: ${result.backupPath}`);
   console.log(`  ✅ Written: ${result.path}`);
+}
+
+function generateTlsCertificates(config) {
+  if (!config.generateCerts) return;
+
+  console.log('\n🔐 Generating TLS certificates...');
+  const certDir = path.join(config.root, 'certs');
+  try {
+    execFileSync(
+      process.execPath,
+      [path.join(ROOT, 'scripts', 'build', 'generate-certs.mjs'), '--hostname', 'localhost', '--output', certDir],
+      { stdio: 'inherit' }
+    );
+  } catch (error) {
+    console.error('❌ Certificate generation failed; setup was not written. Run manually:');
+    console.error(`   node scripts/build/generate-certs.mjs --output "${certDir}"`);
+    throw error;
+  }
 }
 
 // --------------------------------------------------------------------------
@@ -644,6 +673,10 @@ Non-interactive mode:
   // ── Print folder summary ────────────────────────────────────────────
   printFolderSummary(paths, config.profile);
 
+  // ── Generate TLS certs BEFORE writing any config files so a missing OpenSSL
+  //    install cannot leave mcp.json/.env pointing at unusable HTTPS settings.
+  generateTlsCertificates(config);
+
   // ── Generate .env file ──────────────────────────────────────────────
   const envContent = generateEnvFile(config, paths);
   const envPath = path.join(config.root, '.env');
@@ -667,23 +700,6 @@ Non-interactive mode:
   // Preview
   if (config.preview !== false) {
     previewConfigs(configTargets, config);
-  }
-
-  // ── Generate TLS certs BEFORE writing configs so cert paths exist
-  //    and the user sees a consistent flow (certs → config wired to them).
-  if (config.generateCerts) {
-    console.log('\n🔐 Generating TLS certificates...');
-    try {
-      const certDir = path.join(config.root, 'certs');
-      execFileSync(
-        process.execPath,
-        [path.join(ROOT, 'scripts', 'build', 'generate-certs.mjs'), '--hostname', 'localhost', '--output', certDir],
-        { stdio: 'inherit' }
-      );
-    } catch {
-      console.error('❌ Certificate generation failed. Run manually:');
-      console.error(`   node scripts/build/generate-certs.mjs --output "${path.join(config.root, 'certs')}"`);
-    }
   }
 
   // ── Deploy runtime BEFORE writing config so resolveServerLaunch sees a
@@ -728,7 +744,7 @@ Non-interactive mode:
   //    generated entry path is durable. ─────────────────────────────────
 
   // ── Next steps ──────────────────────────────────────────────────────
-  const proto = (config.profile === 'enhanced' || config.profile === 'experimental') ? 'https' : 'http';
+  const proto = config.tls ? 'https' : 'http';
   const launch = resolveServerLaunch(config);
   console.log('\n╔════════════════════════════════════════════════════════════════╗');
   console.log('║                         Next Steps                            ║');

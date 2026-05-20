@@ -189,8 +189,8 @@ describe('runtimeConfig — profile system', () => {
       expect(getRuntimeConfig().mutationEnabled).toBe(true);
     });
 
-    it('should enable dashboard TLS', () => {
-      expect(getRuntimeConfig().dashboard.http.tls.enabled).toBe(true);
+    it('should not imply dashboard TLS', () => {
+      expect(getRuntimeConfig().dashboard.http.tls.enabled).toBe(false);
     });
 
     it('should enable metrics file storage', () => {

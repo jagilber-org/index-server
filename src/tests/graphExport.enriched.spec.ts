@@ -78,6 +78,19 @@ describe('graph_export enriched mode', () => {
     expect(res.edges.every((e:any)=> e.type==='belongs')).toBe(true);
   });
 
+  it('deduplicates pairwise category edges when two instructions share multiple categories', async () => {
+    writeInstruction('multi-a', 'body multi a', ['alpha', 'shared'], 'alpha');
+    writeInstruction('multi-b', 'body multi b', ['alpha', 'shared'], 'alpha');
+    invalidateFn?.();
+    try { const g = await import('../services/handlers.graph.js'); if(typeof g.__resetGraphCache==='function') g.__resetGraphCache(); } catch { /* ignore */ }
+
+    const res = await callTool<any>('graph_export', { includeEdgeTypes:['category'], format:'mermaid' });
+    const matches = res.edges.filter((e: any) => e.type === 'category' && new Set([e.from, e.to]).has('multi-a') && new Set([e.from, e.to]).has('multi-b'));
+    expect(matches).toHaveLength(1);
+    const mermaidLine = /multi-a ---\|category\| multi-b|multi-b ---\|category\| multi-a/g;
+    expect(res.mermaid.match(mermaidLine) ?? []).toHaveLength(1);
+  });
+
   it('includes usageCount placeholder when includeUsage', async () => {
     const res = await callTool<any>('graph_export', { enrich:true, includeUsage:true });
     const node = res.nodes.find((n:any)=> n.id==='a');

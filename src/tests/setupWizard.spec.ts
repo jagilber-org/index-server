@@ -218,6 +218,53 @@ describe('Setup Wizard Multi-Target Config', () => {
     expect(content).toContain('"servers"');
   });
 
+  it('should keep HTTP transport when semantic search derives the enhanced profile', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'wizard-http-semantic-'));
+    try {
+      const result = spawnSync(
+        process.execPath,
+        [
+          WIZARD_SCRIPT,
+          '--non-interactive',
+          '--storage',
+          'json',
+          '--semantic',
+          '--root',
+          root,
+          '--target',
+          'vscode',
+          '--scope',
+          'repo',
+          '--write',
+          '--no-deploy',
+          '--no-preview',
+        ],
+        {
+          cwd: ROOT,
+          encoding: 'utf8',
+          timeout: 60_000,
+          env: { ...process.env, HOME: os.tmpdir(), USERPROFILE: os.tmpdir() },
+        },
+      );
+
+      const combinedOutput = `${result.stdout}\n${result.stderr}`;
+      expect(result.status, combinedOutput).toBe(0);
+
+      const mcpPath = path.join(root, '.vscode', 'mcp.json');
+      const config = parseJsonc(fs.readFileSync(mcpPath, 'utf8')) as {
+        servers?: Record<string, { env?: Record<string, string> }>;
+      };
+      const env = config.servers?.['index-server']?.env ?? {};
+      expect(env.INDEX_SERVER_PROFILE).toBe('enhanced');
+      expect(env.INDEX_SERVER_SEMANTIC_ENABLED).toBe('1');
+      expect(env.INDEX_SERVER_DASHBOARD_TLS).toBeUndefined();
+      expect(combinedOutput).toContain('http://localhost:8787');
+      expect(combinedOutput).not.toContain('https://localhost:8787');
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it('should merge existing VS Code mcp.json JSONC and create a backup', () => {
     fs.mkdirSync(path.join(tmpDir, '.vscode'), { recursive: true });
     const mcpPath = path.join(tmpDir, '.vscode', 'mcp.json');
@@ -394,6 +441,50 @@ describe('Setup Wizard Next Steps — Build Step Skip', () => {
 });
 
 describe('Setup Wizard TLS Certificate Integration', () => {
+  it('should fail without writing config when OpenSSL is unavailable for requested cert generation', () => {
+    const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'wizard-no-openssl-'));
+    try {
+      const missingOpenSsl = path.join(tmpRoot, process.platform === 'win32' ? 'missing-openssl.exe' : 'missing-openssl');
+      const result = spawnSync(
+        process.execPath,
+        [
+          WIZARD_SCRIPT,
+          '--non-interactive',
+          '--generate-certs',
+          '--root',
+          tmpRoot,
+          '--target',
+          'vscode',
+          '--scope',
+          'repo',
+          '--write',
+          '--no-deploy',
+          '--no-preview',
+        ],
+        {
+          cwd: ROOT,
+          encoding: 'utf8',
+          timeout: 60_000,
+          env: {
+            ...process.env,
+            HOME: os.tmpdir(),
+            USERPROFILE: os.tmpdir(),
+            INDEX_SERVER_OPENSSL_BIN: missingOpenSsl,
+          },
+        },
+      );
+
+      const combinedOutput = `${result.stdout}\n${result.stderr}`;
+      expect(result.status, combinedOutput).not.toBe(0);
+      expect(combinedOutput).toContain('OpenSSL is not installed or not in PATH');
+      expect(combinedOutput).toContain('Certificate generation failed; setup was not written');
+      expect(fs.existsSync(path.join(tmpRoot, '.env'))).toBe(false);
+      expect(fs.existsSync(path.join(tmpRoot, '.vscode', 'mcp.json'))).toBe(false);
+    } finally {
+      fs.rmSync(tmpRoot, { recursive: true, force: true });
+    }
+  });
+
   it('should generate certs for enhanced profile using the packaged script path', () => {
     if (!hasOpenSsl()) {
       console.log('OpenSSL not available — skipping enhanced profile cert integration test');

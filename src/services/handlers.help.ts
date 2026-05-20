@@ -13,7 +13,7 @@ import { registerHandler } from '../server/registry';
 import { getToolRegistry } from './toolRegistry';
 import { getIndexState } from './indexContext';
 
-const HELP_VERSION = '2026-05-19';
+const HELP_VERSION = '2026-05-20';
 
 interface OverviewSection {
   id: string; title: string; content: string; bullets?: string[]; nextActions?: string[];
@@ -86,6 +86,18 @@ function buildSections(): OverviewSection[] {
       id: 'mutation-safety',
       title: 'Safe Mutation',
       content: 'Write operations are enabled by default, but bootstrap confirmation and reference mode still gate risky changes. Set INDEX_SERVER_MUTATION=0 when you need an explicit read-only runtime.'
+    },
+    {
+      id: 'feedback',
+      title: 'Feedback Reporting',
+      content: 'Use feedback_submit to report tool failures, documentation gaps, defects, and feature requests. Minimum required fields are type, severity, title, and description.',
+      bullets: [
+        'feedback_submit required: type, severity, title, description',
+        'type examples: issue, bug-report, feature-request, security, status-report',
+        'severity values: low, medium, high, critical',
+        'Use description for the report body; message is not a feedback_submit field'
+      ],
+      nextActions: ['Call feedback_submit with {type,severity,title,description}', 'Use feedback_manage {action:list} to review submitted entries']
     },
     {
       id: 'recursion-safeguards',
