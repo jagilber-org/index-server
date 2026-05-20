@@ -455,14 +455,12 @@ function applyProfileDefaults(profile: ProfileName): void {
     setDefault('INDEX_SERVER_SEMANTIC_ENABLED', '1');
     setDefault('INDEX_SERVER_SEMANTIC_LOCAL_ONLY', '0');
     setDefault('INDEX_SERVER_LOG_FILE', '1');
-    setDefault('INDEX_SERVER_DASHBOARD_TLS', '1');
     setDefault('INDEX_SERVER_METRICS_FILE_STORAGE', '1');
     setDefault('INDEX_SERVER_FEATURES', 'usage');
   } else if (profile === 'experimental') {
     setDefault('INDEX_SERVER_SEMANTIC_ENABLED', '1');
     setDefault('INDEX_SERVER_SEMANTIC_LOCAL_ONLY', '0');
     setDefault('INDEX_SERVER_LOG_FILE', '1');
-    setDefault('INDEX_SERVER_DASHBOARD_TLS', '1');
     setDefault('INDEX_SERVER_METRICS_FILE_STORAGE', '1');
     setDefault('INDEX_SERVER_FEATURES', 'usage');
     setDefault('INDEX_SERVER_STORAGE_BACKEND', 'sqlite');
@@ -560,6 +558,5 @@ export function reloadRuntimeConfig(): RuntimeConfig {
 }
 
 if(require.main === module){
-  // eslint-disable-next-line no-console
   console.log(JSON.stringify(getRuntimeConfig(), null, 2));
 }

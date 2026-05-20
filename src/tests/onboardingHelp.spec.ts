@@ -127,9 +127,15 @@ describe('help_overview onboarding guidance', () => {
     expect(result.version).toBeTruthy();
     expect(Array.isArray(result.sections)).toBe(true);
     const sectionIds = result.sections.map((s: any)=> s.id);
-    for(const required of ['intro','discovery','lifecycle','promotion','mutation-safety','recursion-safeguards','next-steps']){
+    for(const required of ['intro','discovery','lifecycle','promotion','mutation-safety','feedback','recursion-safeguards','next-steps']){
       expect(sectionIds).toContain(required);
     }
+    const feedback = result.sections.find((s: any) => s.id === 'feedback');
+    const feedbackText = JSON.stringify(feedback);
+    for(const required of ['feedback_submit', 'type', 'severity', 'title', 'description']){
+      expect(feedbackText).toContain(required);
+    }
+    expect(feedbackText).toContain('message is not a feedback_submit field');
     expect(result.lifecycleModel?.tiers?.length).toBeGreaterThan(0);
     expect(result.lifecycleModel?.promotionChecklist?.length).toBeGreaterThan(3);
     expect(Array.isArray(result.toolDiscovery.primary)).toBe(true);

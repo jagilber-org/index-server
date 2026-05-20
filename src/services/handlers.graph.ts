@@ -104,7 +104,18 @@ export function buildGraph(params: GraphExportParams, graphCfg: GraphConfigSnaps
   const largeCap = graphCfg.largeCategoryCap;
 
   const edges: GraphEdge[] = [];
+  const edgeKeys = new Set<string>();
   const notes: string[] = [];
+
+  function addEdge(edge: GraphEdge): void {
+    const endpoints = edge.type === 'category'
+      ? [edge.from, edge.to].sort((a, b) => a.localeCompare(b)).join('--')
+      : `${edge.from}->${edge.to}`;
+    const key = `${edge.type}:${endpoints}`;
+    if(edgeKeys.has(key)) return;
+    edgeKeys.add(key);
+    edges.push(edge);
+  }
 
   // Primary edges (instruction -> pseudo-node named primaryCategory).
   // We do not currently add category nodes; tests only assert edge.type membership.
@@ -116,7 +127,7 @@ export function buildGraph(params: GraphExportParams, graphCfg: GraphConfigSnaps
         const toId = (enriched && includeCategoryNodes) ? `category:${primary}` : `${primary}`;
         const edge: GraphEdgeEnriched = { from: inst.id, to: toId, type:'primary' };
         if(enriched) edge.weight = 1;
-        edges.push(edge);
+        addEdge(edge);
       }
     }
   }
@@ -146,7 +157,7 @@ export function buildGraph(params: GraphExportParams, graphCfg: GraphConfigSnaps
       for(let j=i+1;j<ids.length;j++){
         const edge: GraphEdgeEnriched = { from: ids[i], to: ids[j], type:'category' };
         if(enriched) edge.weight = 1;
-        edges.push(edge);
+        addEdge(edge);
       }
     }
   }
@@ -163,7 +174,7 @@ export function buildGraph(params: GraphExportParams, graphCfg: GraphConfigSnaps
       for(const c of cats){
         const edge: GraphEdgeEnriched = { from: inst.id, to: `category:${c}`, type:'belongs' };
         edge.weight = 1;
-        edges.push(edge);
+        addEdge(edge);
       }
     }
   }

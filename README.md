@@ -63,8 +63,15 @@ into normal startup with the generated cert wired into `--dashboard-tls`
 automatically.
 
 **Prerequisite:** `openssl` must be on `PATH`. On Windows, Git for Windows
-typically includes it at `C:\Program Files\Git\usr\bin\openssl.exe`. See
-[`docs/cert_init.md`](docs/cert_init.md) for setup guidance, the full flag
+(`git.exe`) is the recommended TLS prerequisite because it ships an `openssl`
+build, typically at `C:\Program Files\Git\usr\bin\openssl.exe`. If it is
+missing, install Git for Windows from an admin prompt:
+
+```powershell
+winget install --id Git.Git -e --source winget
+```
+
+See [`docs/cert_init.md`](docs/cert_init.md) for setup guidance, the full flag
 reference, security notes, and troubleshooting.
 
 ### Option B: VS Code MCP configuration

@@ -55,7 +55,6 @@ afterEach(() => {
 
 // Clean up cert fixture at end of file (vitest runs describe blocks then afterAll)
 if (certFixture) {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   (globalThis as any).__mcpTlsCertCleanup = certFixture.cleanup;
 }
 
@@ -71,6 +70,14 @@ describe('runtimeConfig – dashboard TLS fields', () => {
       'INDEX_SERVER_DASHBOARD_TLS_KEY',
       'INDEX_SERVER_DASHBOARD_TLS_CA',
       'INDEX_SERVER_DASHBOARD',
+      'INDEX_SERVER_PROFILE',
+      'INDEX_SERVER_SEMANTIC_ENABLED',
+      'INDEX_SERVER_SEMANTIC_LOCAL_ONLY',
+      'INDEX_SERVER_LOG_FILE',
+      'INDEX_SERVER_METRICS_FILE_STORAGE',
+      'INDEX_SERVER_FEATURES',
+      'INDEX_SERVER_STORAGE_BACKEND',
+      'INDEX_SERVER_LOG_LEVEL',
     ]) {
       savedEnv[key] = process.env[key];
     }
@@ -90,6 +97,19 @@ describe('runtimeConfig – dashboard TLS fields', () => {
     const { reloadRuntimeConfig } = await import('../config/runtimeConfig.js');
     const cfg = reloadRuntimeConfig();
     expect(cfg.dashboard.http.tls).toBeDefined();
+    expect(cfg.dashboard.http.tls.enabled).toBe(false);
+  });
+
+  it('should not enable TLS from enhanced profile when transport env is unset', async () => {
+    process.env.INDEX_SERVER_PROFILE = 'enhanced';
+    delete process.env.INDEX_SERVER_DASHBOARD_TLS;
+    delete process.env.INDEX_SERVER_DASHBOARD_TLS_CERT;
+    delete process.env.INDEX_SERVER_DASHBOARD_TLS_KEY;
+
+    const { reloadRuntimeConfig } = await import('../config/runtimeConfig.js');
+    const cfg = reloadRuntimeConfig();
+
+    expect(cfg.semantic.enabled).toBe(true);
     expect(cfg.dashboard.http.tls.enabled).toBe(false);
   });
 
@@ -127,7 +147,6 @@ describe('runtimeConfig – dashboard TLS fields', () => {
 
 // ── 2. DashboardServer TLS integration ─────────────────────────────────
 describe('DashboardServer – TLS support', () => {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let server: any;
 
   afterEach(async () => {
@@ -306,7 +325,6 @@ describe('CLI parseArgs – TLS flags', () => {
 // ── cleanup ────────────────────────────────────────────────────────────
 afterEach(() => {
   // Deferred cert cleanup — guarded by existence check
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const cleanup = (globalThis as any).__mcpTlsCertCleanup;
   if (cleanup && typeof cleanup === 'function') {
     // Only remove after last test — vitest calls afterEach per test,

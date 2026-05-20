@@ -47,7 +47,8 @@ describe('generate-certs.mjs — command injection prevention (PR #70, issue #64
   it('invokes openssl as argv0 (not as part of a shell-quoted command string)', () => {
     const src = readScript();
     // Every openssl invocation should pass arguments via array, not template string
-    expect(src).toMatch(/execFileSync\(\s*'openssl'\s*,\s*\[/);
+    expect(src).toMatch(/const\s+OPENSSL_BIN\s*=\s*process\.env\.INDEX_SERVER_OPENSSL_BIN\s*\|\|\s*'openssl'/);
+    expect(src).toMatch(/execFileSync\(\s*OPENSSL_BIN\s*,\s*\[/);
     // Old vulnerable form used backtick strings like: execSync(`openssl genrsa ...`)
     expect(src).not.toMatch(/exec[A-Za-z]*Sync\s*\(\s*`openssl /);
   });

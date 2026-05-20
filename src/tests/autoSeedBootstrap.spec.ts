@@ -1,12 +1,16 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import fs from 'fs';
 import path from 'path';
+import crypto from 'crypto';
 import Ajv from 'ajv';
 import addFormats from 'ajv-formats';
 import draft7MetaSchema from 'ajv/dist/refs/json-schema-draft-07.json'; // hallucination-allowlist: AJV publishes this draft-07 meta-schema path.
 import { autoSeedBootstrap, _getCanonicalSeeds } from '../services/seedBootstrap';
+import { invalidate } from '../services/indexContext';
+import { getHandler } from '../server/registry';
 import { reloadRuntimeConfig } from '../config/runtimeConfig';
 import schema from '../../schemas/instruction.schema.json';
+import '../services/handlers.integrity';
 
 function makeTempDir(): string {
   const base = path.join(process.cwd(), 'tmp', 'test-runs');
@@ -22,6 +26,7 @@ describe('autoSeedBootstrap', () => {
     delete process.env.INDEX_SERVER_AUTO_SEED;
     delete process.env.INDEX_SERVER_SEED_VERBOSE;
     reloadRuntimeConfig();
+    invalidate();
   });
 
   it('creates both seeds when directory empty', () => {
@@ -97,16 +102,29 @@ describe('autoSeedBootstrap', () => {
     } catch { /* ignore meta-schema registration issues */ }
     const validate = ajv.compile(JSON.parse(JSON.stringify(schema)));
     for(const s of seeds){
-      const data = JSON.parse(fs.readFileSync(path.join(dir, s.file),'utf8')) as { sourceHash?: string };
+      const data = JSON.parse(fs.readFileSync(path.join(dir, s.file),'utf8')) as { body?: string; sourceHash?: string };
       const ok = validate(data);
       if(!ok){
         // Surface ajv errors in the failure message for easy diagnosis.
         throw new Error(`seed ${s.file} failed schema: ${JSON.stringify(validate.errors, null, 2)}`);
       }
-      // Also assert sourceHash is the sha256 of body so integrity_verify is clean
-      // on a fresh install (cold-client stress test "expected hash empty" finding).
-      expect(data.sourceHash).toMatch(/^[a-f0-9]{64}$/);
+      // Also assert sourceHash is the sha256 of the body shape integrity_verify
+      // sees after loader normalization. The loader trims body text in memory,
+      // so matching only a 64-hex shape is not enough to catch boot-time drift.
+      expect(data.sourceHash).toBe(crypto.createHash('sha256').update(String(data.body || '').trim(), 'utf8').digest('hex'));
     }
+  });
+
+  it('freshly bootstrapped seeds pass integrity_verify after loader normalization', async () => {
+    const dir = makeTempDir();
+    process.env.INDEX_SERVER_DIR = dir;
+    autoSeedBootstrap();
+    invalidate();
+    const integrityVerify = getHandler('integrity_verify') as (() => Promise<{ issueCount: number; issues: { id: string }[] }>) | undefined;
+    expect(integrityVerify).toBeDefined();
+    const result = await integrityVerify!();
+    expect(result.issues).toEqual([]);
+    expect(result.issueCount).toBe(0);
   });
 
   // Regression (RCA 2026-05-07): pre-v1.28.10 installs wrote

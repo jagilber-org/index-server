@@ -247,7 +247,7 @@ export function autoSeedBootstrap(): SeedSummary {
     // Used both to bake into freshly written seeds and to detect drift
     // against existing on-disk seeds whose generated body has changed
     // (e.g. 002-content-model after an instruction.schema.json edit).
-    const canonicalBody = typeof seed.json.body === 'string' ? seed.json.body : '';
+    const canonicalBody = typeof seed.json.body === 'string' ? seed.json.body.trim() : '';
     const canonicalSourceHash = crypto.createHash('sha256').update(canonicalBody, 'utf8').digest('hex');
     if(exists){
       // Detect schema-invalid stale seeds from earlier versions and rewrite

@@ -47,12 +47,15 @@ const WELL_KNOWN_OPENSSL_DIRS = [
   'C:\\Program Files\\OpenSSL-Win64\\bin',
   'C:\\Program Files\\OpenSSL\\bin',
 ];
+const OPENSSL_BIN = process.env.INDEX_SERVER_OPENSSL_BIN || 'openssl';
+const OPENSSL_BIN_EXPLICIT = process.env.INDEX_SERVER_OPENSSL_BIN !== undefined;
 
 function checkOpenssl() {
   try {
-    execFileSync('openssl', ['version'], { stdio: 'pipe' });
+    execFileSync(OPENSSL_BIN, ['version'], { stdio: 'pipe' });
     return true;
   } catch {
+    if (OPENSSL_BIN_EXPLICIT) return false;
     // Try well-known paths on Windows
     for (const dir of WELL_KNOWN_OPENSSL_DIRS) {
       const exe = path.join(dir, 'openssl.exe');
@@ -67,7 +70,7 @@ function checkOpenssl() {
 }
 
 function runOpenSsl(args, options = {}) {
-  execFileSync('openssl', args, { stdio: 'pipe', ...options });
+  execFileSync(OPENSSL_BIN, args, { stdio: 'pipe', ...options });
 }
 
 function generateCerts(config) {
@@ -193,7 +196,8 @@ if (!checkOpenssl()) {
   console.error('❌ OpenSSL is not installed or not in PATH.');
   console.error('   Install OpenSSL and try again.');
   console.error('   Options:');
-  console.error('   - Install Git for Windows (includes OpenSSL): https://git-scm.com/download/win');
+  console.error('   - Windows recommended: winget install --id Git.Git -e --source winget');
+  console.error('     Git for Windows installs git.exe and includes OpenSSL.');
   console.error('   - Install OpenSSL directly: https://slproweb.com/products/Win32OpenSSL.html');
   console.error('   - On Linux/macOS: sudo apt install openssl / brew install openssl');
   process.exit(1);
