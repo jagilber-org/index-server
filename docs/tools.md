@@ -139,6 +139,7 @@ sequenceDiagram
 | Variable | Type | Default | Description |
 |----------|------|---------|-------------|
 | `INDEX_SERVER_MUTATION` | Boolean | `true` | Write operations are enabled by default; set `0` for read-only |
+| `INDEX_SERVER_MESSAGING_ENABLED` | Boolean | `true` | Inter-agent messaging subsystem. Set `0` to remove all `messaging_*` MCP tools from `tools/list`, skip the dashboard REST routes, and hide the Messaging tab. See #353. |
 | `INDEX_SERVER_VERBOSE_LOGGING` | Boolean | `false` | Enable detailed logging to stderr |
 | `INDEX_SERVER_LOG_MUTATION` | Boolean | `false` | Log only mutation operations |
 | `INDEX_SERVER_LOG_FILE` | Path | - | Enable file logging to specified path (dual stderr/file output) |
@@ -736,7 +737,7 @@ The dashboard provides:
 * Additional edge type `belongs` only appears when `enrich:true` & `includeCategoryNodes:true` or when filtered explicitly.
 * Future planned additions: weighted edges from real usage metrics (`includeUsage` will switch placeholder to actual counts).
 * Enriched & formatted responses intentionally excluded from current cache to prevent stale metadata propagation while schema evolves.
-* `usageCount` now reflects live Index usage counters (monotonic) when `includeUsage:true`.
+* `usageCount` now reflects live Index usage counters (monotonic) when `includeUsage:true`; enriched nodes also expose `retrievedCount`/`appliedCount` (issue #418).
 
 ### 🔐 Administrative Operations
 
@@ -1403,7 +1404,22 @@ All mutation operations now return enhanced error information:
 }
 ```
 
+**Split counters (issue #418):** usage is tracked as two monotonic sub-counters:
+
+| Field | Meaning |
+| ----- | ------- |
+| `retrievedCount` | Times the entry was surfaced/retrieved (search, get, query, export). |
+| `appliedCount` | Times the entry was actually applied/cited (`action:'applied'` or `signal:'applied'`). |
+| `usageCount` | **Deprecated** derived total = `retrievedCount + appliedCount`. Retained one minor version for backward compatibility. |
+
+`lastRetrievedAt` / `lastAppliedAt` timestamp each sub-counter independently.
+
+**BREAKING (issue #418):** a *signal-only* call (e.g. `signal:'helpful'` with no `action`) now records the signal/comment **without** incrementing either counter. Previously it bumped `usageCount`. Pass `action:'applied'` (or `signal:'applied'`) to count an application.
+
+**Auto-track scope (issue #418):** when `INDEX_SERVER_AUTO_USAGE_TRACK` is on, `index_search` auto-records at most the **top-3** results (was top-10) as retrievals; `index_dispatch` auto-tracks the top-3 `query` results and each explicit-id `export`; `get` auto-tracks the returned entry. `list`/`listScoped` are **not** auto-tracked (browse, not retrieval).
+
 ### 🔍 Diagnostic Operations
+
 
 #### `inspect` - Deep Inspection
 

@@ -237,4 +237,24 @@ describe('bootstrap flow — already confirmed', () => {
     const result = mod.finalizeBootstrapToken('anything');
     expect(result).toHaveProperty('alreadyConfirmed', true);
   });
+
+  // Issue #357: token hint must reference the canonical public action
+  // (`bootstrap action=confirm`), not the misleading `bootstrap_confirmFinalize`
+  // alone — external clients without admin-tier visibility cannot call the
+  // legacy tool, and `bootstrap action=confirmFinalize` is rejected as an
+  // invalid enum value.
+  it('default token hint references the canonical bootstrap action=confirm surface', async () => {
+    const mod = await loadModule();
+    const result = mod.requestBootstrapToken() as { hint: string };
+    expect(result.hint).toContain('bootstrap action=confirm');
+    // Must NOT advertise the misleading `confirmFinalize` action (which is
+    // not in the unified tool's action enum).
+    expect(result.hint).not.toMatch(/action=confirmFinalize\b/);
+  });
+
+  it('explicit rationale overrides the default hint', async () => {
+    const mod = await loadModule();
+    const result = mod.requestBootstrapToken('custom rationale') as { hint: string };
+    expect(result.hint).toBe('custom rationale');
+  });
 });

@@ -540,6 +540,15 @@ Example failure payload:
 
   Once stabilized, remove from `unstable` to reincorporate into regular slow gate.
 
+## CI Cost Routing
+
+Default CI spend is routed by repository owner:
+
+- `jagilber-dev/index-server` keeps leak, secret, static security, and public-mirror protection gates active by default. Expensive non-secret testing and lint/build replay is skipped by default and remains available through `workflow_dispatch`.
+- `jagilber-org/index-server` runs the default PR and merge validation suite for non-secret checks, including build/test, governance, manifest, Docker, DAST/container, setup-wizard, and scheduled health/semantic/concurrency checks.
+
+This preserves the private staging repo as the pre-promotion leak boundary while moving the expensive confidence gates to the public mirror where release and PR readiness are evaluated.
+
 ### Slow Test Environment Flags
 
 | Variable | Purpose | Typical Usage |
@@ -818,7 +827,7 @@ Rationale: a single execution pathway (tools/call) eliminates duplicate validati
 
 | Flag | Default | Scope | Description |
 |------|---------|-------|-------------|
-| `INDEX_SERVER_AUTO_USAGE_TRACK` | on | runtime | Auto-track usage on get/search responses. |
+| `INDEX_SERVER_AUTO_USAGE_TRACK` | on | runtime | Auto-track usage as *retrievals*. Records the returned `get` entry and the **top-3** results of `index_search`/`query` plus explicit-id `export` (issue #418). `list`/`listScoped` are not auto-tracked. |
 | `INDEX_SERVER_RATE_LIMIT` | `0` | runtime | Dashboard HTTP API and usage-tracking rate limit, in requests per minute. `0` (default) disables rate limiting; any positive integer N enforces N requests/minute (fixed 60-second window). Bulk import/export/backup/restore routes are unconditionally exempt — see issue #270. |
 | `INDEX_SERVER_USAGE_FLUSH_MS` | (none) | runtime | Usage data flush interval (ms). |
 | `INDEX_SERVER_DISABLE_USAGE_CLAMP` | off | runtime | Disable usage rate clamping. |

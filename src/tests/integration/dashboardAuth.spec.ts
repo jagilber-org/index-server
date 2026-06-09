@@ -100,7 +100,14 @@ function buildTestApp(): express.Express {
 // ---------------------------------------------------------------------------
 
 describe('Dashboard auth integration (with INDEX_SERVER_ADMIN_API_KEY)', () => {
-  const ADMIN_KEY = ['integration', 'test', 'admin', 'key', '42'].join('-');
+  // SECURITY (#352 alert #46, secret-scanning generic-api-key):
+  // The previous joined-string literal matched the generic-api-key
+  // detector. The replacement value below is a clearly-fake, runtime-
+  // generated test fixture. The "sk-test-FAKE-" prefix is asserted by
+  // the meta-test in src/tests/integration/dashboardAuthFixtureSecret.spec.ts
+  // (regression for #352) so this contract cannot silently drift.
+  // pragma: allowlist secret
+  const ADMIN_KEY = `sk-test-FAKE-${process.pid.toString(16)}-${Date.now().toString(36)}`; // nosec B105 -- ephemeral test fixture, not a real credential
   let server: http.Server;
   let base: string;
 

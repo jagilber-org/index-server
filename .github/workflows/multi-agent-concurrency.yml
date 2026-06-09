@@ -17,8 +17,13 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   concurrent-tests:
+    if: ${{ github.repository_owner == 'jagilber-org' || github.event_name == 'workflow_dispatch' }}
     strategy:
       fail-fast: false
       matrix:

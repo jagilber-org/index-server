@@ -1,6 +1,7 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 import { expect } from 'vitest';
 
@@ -145,6 +146,18 @@ export function assertLaunchSpec(entry: ServerEntry, options: LaunchSpecOptions)
   }
 
   const entryPoint = String(entry.args?.[0] ?? '');
+  // A non-vscode (workspace) format has no `cwd` to anchor a relative entry
+  // path, and real clients (Copilot CLI, Claude Desktop) launch from the user's
+  // home — NOT the repo root. Historically this assertion resolved relative
+  // copilot-cli/claude paths against the test process cwd (the repo root, which
+  // happens to contain dist/), so a production-broken relative-no-cwd entry
+  // passed. Such entries MUST therefore be absolute.
+  if (options.format === 'copilot-cli' || options.format === 'claude') {
+    expect(
+      path.isAbsolute(entryPoint),
+      `${options.format} args[0] must be absolute (no client cwd to anchor a relative path): ${entryPoint}`,
+    ).toBe(true);
+  }
   const resolvedEntryPoint = options.format === 'vscode'
     ? path.resolve(entry.cwd ?? options.root ?? process.cwd(), entryPoint)
     : entryPoint;
@@ -200,10 +213,16 @@ export async function bootFromConfig(options: BootOptions): Promise<void> {
   assertLaunchSpec(entry, { format: options.format });
 
   const stderr: string[] = [];
+  // Spawn from a foreign working directory (NOT the repo root) so a relative
+  // entry path with no explicit `cwd` fails here exactly as it would for a real
+  // MCP client launching from the user's home. Previously the child inherited
+  // the test runner's cwd (the repo root, which contains dist/), masking
+  // unlaunchable relative-no-cwd entries for copilot-cli/claude.
+  const spawnCwd = entry.cwd ?? os.tmpdir();
   const transport = new StdioClientTransport({
     command: entry.command ?? 'node',
     args: entry.args ?? [],
-    cwd: entry.cwd,
+    cwd: spawnCwd,
     env: entry.env,
     stderr: 'pipe',
   });

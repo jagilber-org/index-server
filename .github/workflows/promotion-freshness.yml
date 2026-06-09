@@ -8,8 +8,15 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   check-freshness:
+    # Scheduled runs execute on the public mirror (free minutes); the private
+    # dev repo only runs this on manual dispatch. See issues #426 / #434.
+    if: ${{ github.repository_owner == 'jagilber-org' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6 # pii-allowlist: pinned action SHA

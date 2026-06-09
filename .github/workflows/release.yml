@@ -58,6 +58,10 @@ env:
   IMAGE_NAME: ${{ github.repository_owner }}/index-server-image
   NODE_VERSION: "22"
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   release-scope:
     name: Release Scope

@@ -102,6 +102,7 @@
       if(window.currentSection === 'overview' && typeof window.loadOverviewData === 'function') window.loadOverviewData();
       if(window.currentSection === 'sessions' && typeof window.loadSessions === 'function') window.loadSessions();
       if(window.currentSection === 'maintenance' && typeof window.loadMaintenanceStatus === 'function') window.loadMaintenanceStatus();
+      if(window.currentSection === 'instructions' && typeof window.refreshInstructionsIfVisible === 'function') window.refreshInstructionsIfVisible();
     }, 30000);
   }
 

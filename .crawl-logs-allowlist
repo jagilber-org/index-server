@@ -79,6 +79,12 @@ src[\\/]tests[\\/]eventBuffer\.spec\.ts
 # inputs missing usageCount/firstSeenTs to verify the repair WARN dedup latch.
 \[invariant-repair\] (firstSeenTs repair exhausted|usageCount defaulted)
 
+# #418 split-counter round-trip tests (usageCounters.spec.ts) deliberately reload entries
+# whose on-disk file omits usageCount/lastUsedAt, so the authority/observed/snapshot restore
+# path fires. The logger auto-attaches a call-site stack at WARN; these are expected test
+# fixtures exercising the invariant-repair restore trail, not operator-actionable.
+\[invariant-repair\] (usageCount restored from (authority|observed|snapshot)|lastUsedAt (restored from (authority|snapshot)|approximated from firstSeenTs))
+
 # Heap snapshot messages logged by the memory monitor after GC during long test runs.
 # Count scales with the number of parallel workers and test duration; not operator-actionable.
 # Note: allowlist tests against the raw msg field (no [ERROR] prefix).

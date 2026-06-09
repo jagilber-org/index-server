@@ -10,9 +10,14 @@ on:
     - cron: '0 6 * * 1'  # Weekly Monday 06:00 UTC
   workflow_dispatch: {}
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   semantic-tests:
     name: Semantic Search (Live Model)
+    if: ${{ github.repository_owner == 'jagilber-org' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:

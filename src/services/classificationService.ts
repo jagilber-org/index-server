@@ -55,7 +55,11 @@ export class ClassificationService {
   schemaVersion: SCHEMA_VERSION,
   // Compute hash from canonical (trimmed) body to ensure stability across innocuous whitespace differences
   sourceHash: entry.sourceHash && entry.sourceHash.length === 64 ? entry.sourceHash : this.computeHash(trimmedBody),
-      riskScore: this.computeRisk(entry),
+      // Honor caller-supplied riskScore when provided (#350). Only fall back to
+      // the derived risk when the entry has no explicit value. The schema and
+      // tool registry both advertise riskScore as caller-settable, so silently
+      // overwriting was a docs/behavior contract violation.
+      riskScore: entry.riskScore !== undefined ? entry.riskScore : this.computeRisk(entry),
       workspaceId,
       userId,
       teamIds: teamIds.length ? teamIds : undefined,

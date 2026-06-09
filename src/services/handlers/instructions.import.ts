@@ -138,7 +138,7 @@ registerHandler('index_import', guard('index_import', async (p: { entries?: Impo
       // Carry-forward fields that represent observed usage history rather than
       // server-derived integrity. The server will re-derive sourceHash,
       // schemaVersion, createdAt, updatedAt regardless of input.
-      if (key === 'usageCount' || key === 'firstSeenTs' || key === 'lastUsedAt' || key === 'archivedAt') {
+      if (key === 'usageCount' || key === 'retrievedCount' || key === 'appliedCount' || key === 'firstSeenTs' || key === 'lastUsedAt' || key === 'lastRetrievedAt' || key === 'lastAppliedAt' || key === 'archivedAt') {
         (carryForward as Record<string, unknown>)[key] = (partition.serverManaged as Record<string, unknown>)[key];
       }
     }

@@ -21,7 +21,7 @@ Enriched instruction nodes may include:
 - `contentType`
 - `createdAt`
 - `updatedAt`
-- `usageCount` when `includeUsage:true`
+- `usageCount` (deprecated derived total), plus `retrievedCount` and `appliedCount`, when `includeUsage:true` (issue #418)
 
 The `contentType` field is copied from instruction metadata and uses the
 canonical content-type taxonomy defined by `schemas/instruction.schema.json`

@@ -7,7 +7,7 @@ import path from 'path';
 
 import { getValidationMetrics } from './validationService';
 import { getAuditLogHealth } from './auditLog';
-import { getCounters } from './features';
+import { getCounters, getFeatureFlagMap } from './features';
 registerHandler('metrics_snapshot', () => {
   const raw = getMetricsRaw();
   const methods = Object.entries(raw)
@@ -87,6 +87,7 @@ registerHandler('health_check', async () => {
     index: summary,
     instances,
     audit: getAuditLogHealth(),
+    features: getFeatureFlagMap(),
     ...(Object.keys(repairCounters).length ? { usageRepairs: repairCounters } : {}),
   };
 });

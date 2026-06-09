@@ -130,7 +130,9 @@ export const schemas: Record<string, unknown> = {
       { type: 'object', required: ['notFound'], properties: { notFound: { const: true } }, additionalProperties: true },
   { type: 'object', required: ['featureDisabled'], properties: { featureDisabled: { const: true } }, additionalProperties: true },
       { type: 'object', required: ['id','usageCount','lastUsedAt'], additionalProperties: false, properties: {
-        id: { type: 'string' }, usageCount: { type: 'number' }, firstSeenTs: { type: 'string' }, lastUsedAt: { type: 'string' }
+        id: { type: 'string' }, usageCount: { type: 'number' }, retrievedCount: { type: 'number' }, appliedCount: { type: 'number' },
+        firstSeenTs: { type: 'string' }, lastUsedAt: { type: 'string' }, lastRetrievedAt: { type: 'string' }, lastAppliedAt: { type: 'string' },
+        action: { type: 'string' }, signal: { type: 'string' }, comment: { type: 'string' }
       } }
     ]
   },
@@ -147,7 +149,8 @@ export const schemas: Record<string, unknown> = {
     },
       limit: { type: 'number' },
       items: { type: 'array', items: { type: 'object', required: ['id','usageCount'], additionalProperties: false, properties: {
-        id: { type: 'string' }, usageCount: { type: 'number' }, lastUsedAt: { type: 'string' }
+        id: { type: 'string' }, usageCount: { type: 'number' }, retrievedCount: { type: 'number' }, appliedCount: { type: 'number' },
+        lastUsedAt: { type: 'string' }, lastRetrievedAt: { type: 'string' }, lastAppliedAt: { type: 'string' }, lastSignal: { type: 'string' }, lastComment: { type: 'string' }
       } } }
     }
   },
@@ -210,7 +213,7 @@ export const schemas: Record<string, unknown> = {
       } },
       { type: 'object', required: ['meta','nodes','edges'], additionalProperties: true, properties: {
         meta: { type: 'object', required: ['graphSchemaVersion','nodeCount','edgeCount'], additionalProperties: true, properties: { graphSchemaVersion: { const: 2 }, nodeCount: { type: 'number' }, edgeCount: { type: 'number' } } },
-        nodes: { type: 'array', items: { type: 'object', required: ['id'], additionalProperties: true, properties: { id: { type:'string' }, nodeType: { enum: ['instruction','category'] }, categories: { type:'array', items:{ type:'string' } }, primaryCategory: { type:'string' }, usageCount: { type:'number' } } } },
+        nodes: { type: 'array', items: { type: 'object', required: ['id'], additionalProperties: true, properties: { id: { type:'string' }, nodeType: { enum: ['instruction','category'] }, categories: { type:'array', items:{ type:'string' } }, primaryCategory: { type:'string' }, usageCount: { type:'number' }, retrievedCount: { type:'number' }, appliedCount: { type:'number' } } } },
         edges: { type: 'array', items: { type: 'object', required: ['from','to','type'], additionalProperties: true, properties: { from: { type:'string' }, to: { type:'string' }, type: { enum: ['primary','category','belongs'] } } } },
         mermaid: { type: 'string' }, dot: { type: 'string' }
       } }

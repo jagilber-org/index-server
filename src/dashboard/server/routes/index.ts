@@ -8,7 +8,7 @@ import { Express } from 'express';
 import expressRateLimit from 'express-rate-limit';
 import { createApiRoutes } from '../ApiRoutes.js';
 import { MetricsCollector } from '../MetricsCollector.js';
-import { generateDashboardHtml, stripGraphTab } from '../legacyDashboardHtml.js';
+import { stripGraphTab } from '../adminHtmlTransforms.js';
 import { listRegisteredMethods } from '../../../server/registry.js';
 import { logError } from '../../../services/logger.js';
 import { escapeHtml } from '../utils/escapeHtml.js';
@@ -125,18 +125,6 @@ export function mountDashboardRoutes(app: Express, ctx: DashboardRoutesContext):
   // Redirect root to admin panel (v2 dashboard)
   app.get('/', (_req, res) => {
     res.redirect('/admin');
-  });
-
-  // Legacy v1 dashboard (kept for backward compatibility)
-  app.get('/legacy', (_req, res) => {
-    const nonce = res.locals.cspNonce as string;
-    const snapshot = ctx.metricsCollector.getCurrentSnapshot();
-    const serverInfo = ctx.getServerInfo();
-    const webSocketUrl =
-      ctx.enableWebSockets && serverInfo
-        ? `${ctx.wsProtocol}://${serverInfo.host}:${serverInfo.port}/ws`
-        : null;
-    res.send(generateDashboardHtml(nonce, snapshot, webSocketUrl));
   });
 
   // Admin Panel (v2 dashboard — primary UI)

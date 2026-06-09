@@ -29,7 +29,7 @@ describe('usageTracking', () => {
 		const { incrementUsage, invalidate } = await import('../services/indexContext.js');
 		invalidate();
 		const result = incrementUsage(TEST_ID);
-		expect(result).toEqual({ featureDisabled: true });
+		expect(result).toMatchObject({ featureDisabled: true, gate: 'INDEX_SERVER_FEATURES', required: 'usage' });
 	});
 
 	it('incrementUsage increments count when usage feature is on', async () => {

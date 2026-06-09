@@ -80,7 +80,31 @@ param(
     [int]$Limit = 50,
     [string]$ExpectId,
     [switch]$SkipCertCheck,
-    [string]$AdminKey = $env:INDEX_SERVER_ADMIN_API_KEY
+    [string]$AdminKey = $env:INDEX_SERVER_ADMIN_API_KEY,
+
+    # --- #385: extended search surface ---
+    [string]$SearchString,
+    [hashtable]$Fields,
+    [switch]$IncludeCategories,
+    [switch]$CaseSensitive,
+    [int]$Offset = 0,
+    [string[]]$CategoriesAny,
+    [string[]]$CategoriesAll,
+    [string[]]$CategoriesNone,
+    [string]$IdPrefix,
+    [string]$IdRegex,
+    [string]$ContentType,
+    [string]$Status,
+    [string]$Requirement,
+    [string]$Classification,
+    [string]$PriorityTier,
+    [string]$Owner,
+    [Nullable[int]]$PriorityMin,
+    [Nullable[int]]$PriorityMax,
+    [string]$CreatedAfter,
+    [string]$CreatedBefore,
+    [string]$UpdatedAfter,
+    [string]$UpdatedBefore
 )
 
 $ErrorActionPreference = 'Stop'
@@ -146,10 +170,45 @@ $output = switch ($Action) {
         Invoke-Tool 'health_check' @{}
     }
     'search' {
-        if (-not $Keywords -or $Keywords.Count -eq 0) {
-            @{ success = $false; error = 'Keywords required for search' }
+        # #385: merge convenience predicates into a working fields hashtable.
+        # Explicit -Fields wins on collision.
+        $mergedFields = @{}
+        if ($CategoriesAny)  { $mergedFields.categoriesAny  = $CategoriesAny }
+        if ($CategoriesAll)  { $mergedFields.categoriesAll  = $CategoriesAll }
+        if ($CategoriesNone) { $mergedFields.categoriesNone = $CategoriesNone }
+        if ($IdPrefix)       { $mergedFields.idPrefix       = $IdPrefix }
+        if ($IdRegex)        { $mergedFields.idRegex        = $IdRegex }
+        if ($ContentType)    { $mergedFields.contentType    = $ContentType }
+        if ($Status)         { $mergedFields.status         = $Status }
+        if ($Requirement)    { $mergedFields.requirement    = $Requirement }
+        if ($Classification) { $mergedFields.classification = $Classification }
+        if ($PriorityTier)   { $mergedFields.priorityTier   = $PriorityTier }
+        if ($Owner)          { $mergedFields.owner          = $Owner }
+        if ($null -ne $PriorityMin) { $mergedFields.priorityMin = [int]$PriorityMin }
+        if ($null -ne $PriorityMax) { $mergedFields.priorityMax = [int]$PriorityMax }
+        if ($CreatedAfter)   { $mergedFields.createdAfter   = $CreatedAfter }
+        if ($CreatedBefore)  { $mergedFields.createdBefore  = $CreatedBefore }
+        if ($UpdatedAfter)   { $mergedFields.updatedAfter   = $UpdatedAfter }
+        if ($UpdatedBefore)  { $mergedFields.updatedBefore  = $UpdatedBefore }
+        if ($Fields) {
+            foreach ($k in $Fields.Keys) { $mergedFields[$k] = $Fields[$k] }
+        }
+
+        $hasKeywords     = ($Keywords -and $Keywords.Count -gt 0)
+        $hasSearchString = [bool]$SearchString
+        $hasFields       = ($mergedFields.Count -gt 0)
+
+        if (-not ($hasKeywords -or $hasSearchString -or $hasFields)) {
+            @{ success = $false; error = 'One of -Keywords, -SearchString, or -Fields/convenience predicates required for search' }
         } else {
-            Invoke-Tool 'index_search' @{ keywords = $Keywords; mode = $Mode; limit = $Limit }
+            $p = @{ mode = $Mode; limit = $Limit }
+            if ($hasKeywords)        { $p.keywords          = $Keywords }
+            if ($hasSearchString)    { $p.searchString      = $SearchString }
+            if ($hasFields)          { $p.fields            = $mergedFields }
+            if ($IncludeCategories)  { $p.includeCategories = $true }
+            if ($CaseSensitive)      { $p.caseSensitive     = $true }
+            if ($Offset -gt 0)       { $p.offset            = $Offset }
+            Invoke-Tool 'index_search' $p
         }
     }
     'get' {

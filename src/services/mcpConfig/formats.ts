@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import child_process from 'child_process';
 import { applyJsoncEdit, parseJsonc } from './jsoncEdit';
 import { activeEnvFromCatalog, buildEnvCatalog, McpDataPaths, McpProfileConfig, toForwardSlashes } from './flagCatalog';
 import type { McpConfigFormat } from './paths';
@@ -61,6 +62,30 @@ export function isEphemeralNpxPath(p: string): boolean {
   return /\/_npx\//i.test(normalized);
 }
 
+/**
+ * Probes whether `npx` is reachable from the current environment. Used by
+ * `resolveServerLaunch` (issue #386) to avoid baking a `command: 'npx'` entry
+ * into `mcp.json` when the host cannot actually launch npx (offline machine,
+ * stripped PATH, locked-down CI runner). We spawn `npx --version` rather than
+ * parsing PATH ourselves so that platform-specific resolution (PATHEXT, .cmd
+ * shims, shell builtins) is handled by the OS.
+ */
+export function isNpxReachable(): boolean {
+  try {
+    // Pass the full command as a single shell string to avoid the DEP0190
+    // shell+args concatenation warning. Args are static (`--version`) and
+    // never include user input, so this is safe.
+    const result = child_process.spawnSync('npx --version', {
+      stdio: 'ignore',
+      shell: true,
+      timeout: 5000,
+    });
+    return result.status === 0;
+  } catch {
+    return false;
+  }
+}
+
 export function resolveServerLaunch(config: { root: string }): { command: string; args: string[]; cwd?: string; source: 'local' | 'packaged' | 'npx' } {
   const packageRoot = path.resolve(__dirname, '..', '..', '..');
   const entryRelative = path.join('dist', 'server', 'index-server.js');
@@ -75,7 +100,20 @@ export function resolveServerLaunch(config: { root: string }): { command: string
   if (fs.existsSync(packagedEntry) && !isEphemeralNpxPath(packagedEntry)) {
     return { command: 'node', args: [toForwardSlashes(packagedEntry)], source: 'packaged' };
   }
-  return { command: 'npx', args: ['-y', '@jagilber-org/index-server'], source: 'npx' };
+  // Pre-validation gate (issue #386): only return the npx descriptor when npx
+  // is actually reachable. Otherwise we'd write an unlaunchable mcp.json.
+  if (isNpxReachable()) {
+    return { command: 'npx', args: ['-y', '@jagilber-org/index-server'], source: 'npx' };
+  }
+  throw new Error(
+    `setup-wizard: no viable launch mode for index-server. Tried:\n` +
+      `  - local entry-point:    ${toForwardSlashes(localEntry)} (missing)\n` +
+      `  - packaged entry-point: ${toForwardSlashes(packagedEntry)} (missing)\n` +
+      `  - npx fallback:         not reachable on PATH\n` +
+      `Remediation: run \`npm install\` and \`npm run build\` in the repo root, ` +
+      `reinstall \`@jagilber-org/index-server\`, or pass \`--root <path>\` pointing ` +
+      `at a directory containing \`${toForwardSlashes(entryRelative)}\`.`,
+  );
 }
 
 export function buildServerEntry(format: McpConfigFormat, config: ServerBuildConfig, paths: McpDataPaths, envOverrides: Record<string, string> = {}): McpServerEntry {
@@ -89,16 +127,37 @@ export function buildServerEntry(format: McpConfigFormat, config: ServerBuildCon
   };
   if (format === 'vscode' || format === 'vscode-global') entry.type = 'stdio';
   if (format === 'vscode' && launch.cwd) entry.cwd = toForwardSlashes(launch.cwd);
-  if (format === 'vscode-global' && launch.command === 'node') {
+  // Every non-workspace format must carry an ABSOLUTE node entry path. Only the
+  // repo-scoped `vscode` format has a workspace `cwd` to anchor a relative
+  // `dist/server/index-server.js`; for `vscode-global`, `copilot-cli`, and
+  // `claude` the launching client's working directory is the user's home (or
+  // arbitrary), and Copilot CLI / Claude Desktop do not reliably honor a `cwd`
+  // field. A relative path there is unlaunchable ("Cannot find module
+  // dist/server/index-server.js"). Anchor to config.root (the user-chosen
+  // install root), never to __dirname — under npx __dirname resolves into the
+  // ephemeral `_npx/<hash>/` cache. See setup-wizard RCA.
+  if (
+    (format === 'vscode-global' || format === 'copilot-cli' || format === 'claude') &&
+    launch.command === 'node'
+  ) {
     const firstArg = launch.args[0] ?? '';
-    // For global VS Code configs the entry path must be absolute (no workspace
-    // cwd to anchor it). Anchor to config.root (the user-chosen install root),
-    // never to __dirname — under npx __dirname resolves into the ephemeral
-    // `_npx/<hash>/` cache. See setup-wizard RCA.
     entry.args = [path.isAbsolute(firstArg)
       ? toForwardSlashes(firstArg)
       : toForwardSlashes(path.resolve(launch.cwd ?? config.root, firstArg))];
-    entry.cwd = toForwardSlashes(config.root);
+    // Pin the node binary to an ABSOLUTE path. A bare `node` command is resolved
+    // by the launching client (VS Code, Copilot CLI, Claude Desktop) against the
+    // PATH of ITS OWN process, inherited at launch time — NOT the user's current
+    // shell. A client started before Node was added to PATH, or from a launcher
+    // with a stripped environment, fails with "command 'node' not found" even
+    // though `node` runs fine in a fresh terminal. `process.execPath` is the
+    // absolute path of the Node binary currently running the wizard, so it is
+    // guaranteed to exist and be launchable on this machine. The repo-scoped
+    // `vscode` (workspace) format deliberately keeps bare `node` above so a
+    // committed workspace config stays portable across machines/contributors.
+    entry.command = toForwardSlashes(process.execPath);
+    // vscode-global additionally pins cwd; copilot-cli/claude rely solely on the
+    // absolute args path (self-sufficient regardless of client cwd support).
+    if (format === 'vscode-global') entry.cwd = toForwardSlashes(config.root);
   }
   return entry;
 }

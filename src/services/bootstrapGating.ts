@@ -105,7 +105,7 @@ export function requestBootstrapToken(rationale?: string){
   const raw = crypto.randomBytes(6).toString('hex');
   const hash = crypto.createHash('sha256').update(raw,'utf8').digest('hex');
   const expiresSec = Math.max(1, bootstrapConfig().tokenTtlSec);
-  const rec: PendingRecord = { hash, expiresAt: now + (expiresSec*1000), issuedAt: now, hint: rationale || 'Human operator: review context, then provide token to bootstrap_confirmFinalize.' };
+  const rec: PendingRecord = { hash, expiresAt: now + (expiresSec*1000), issuedAt: now, hint: rationale || 'Human operator: review context, then submit token via bootstrap action=confirm (legacy admin tool: bootstrap_confirmFinalize).' };
   inMemoryPending = rec;
   // Persist (best-effort): do not write the raw token, only its hash
   try {

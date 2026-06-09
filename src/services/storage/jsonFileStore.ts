@@ -421,6 +421,18 @@ export class JsonFileStore implements IInstructionStore {
     }
   }
 
+  updateArchived(entry: InstructionEntry): InstructionEntry {
+    const id = entry.id;
+    if (!id) throw new Error('updateArchived: entry.id is required');
+    const file = this.archiveFilePath(id);
+    if (!fs.existsSync(file)) {
+      throw new Error(`updateArchived: no archived entry with id "${id}"`);
+    }
+    this.ensureArchiveDir();
+    atomicWriteJson(file, entry);
+    return entry;
+  }
+
   getArchived(id: string): InstructionEntry | null {
     return this.readArchiveFile(id);
   }

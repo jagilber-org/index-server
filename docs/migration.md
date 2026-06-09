@@ -142,8 +142,8 @@ Run each tool via JSON-RPC; compare responses against expectations. Example pseu
 | 4 | Invariance | Modify body-only of a test instruction (do NOT touch governance fields) → governance hash unchanged, but sourceHash changes (validate via diff) |
 | 5 | Sensitivity | Change a governance field (e.g., owner) → governance hash changes |
 | 6 | `integrity_verify` | `issueCount` == 0 after enrichment pass |
-| 7 | Usage Tracking | Call `usage_track` twice on same id: `usageCount` increments; `firstSeenTs` stable, `lastUsedAt` advances |
-| 8 | Persistence | Restart process; `usage_track` shows persisted `usageCount` (>= previous value) |
+| 7 | Usage Tracking | Call `usage_track` twice on same id (with an `action`): `retrievedCount`/`appliedCount` increment and `usageCount` (= their sum) advances; `firstSeenTs` stable, `lastUsedAt` advances |
+| 8 | Persistence | Restart process; `usage_track` shows persisted `usageCount`/`retrievedCount`/`appliedCount` (>= previous value). Legacy snapshots (pre-#418) surface as `retrievedCount = usageCount`, `appliedCount = 0` |
 | 9 | Diff Consistency | `index_dispatch` with action `diff` and prior hash returns `upToDate:true` when no changes |
 | 10 | Gates | `gates_evaluate` succeeds (even if zero gates) |
 

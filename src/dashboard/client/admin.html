@@ -53,7 +53,7 @@
                 <button class="nav-btn" data-section="instructions" onclick="window.showSection && window.showSection('instructions')">Instructions</button>
                 <button class="nav-btn" data-section="graph" onclick="window.showSection && window.showSection('graph')">Graph</button>
                 <button class="nav-btn" data-section="embeddings" onclick="window.showSection && window.showSection('embeddings')">Embeddings</button>
-                <button class="nav-btn" data-section="messaging" onclick="window.showSection && window.showSection('messaging')">Messaging</button>
+                <button class="nav-btn" data-section="messaging" data-feature="messaging" onclick="window.showSection && window.showSection('messaging')">Messaging</button>
                 <button class="nav-btn" data-section="feedback" onclick="window.showSection && window.showSection('feedback')">Feedback</button>
                 <button class="nav-btn" data-section="sqlite" id="nav-sqlite" onclick="window.showSection && window.showSection('sqlite')" style="display:none">SQLite</button>
             </div>
@@ -560,7 +560,7 @@
         </div>
 
     <!-- Messaging Section -->
-        <div id="messaging-section" class="admin-section hidden">
+        <div id="messaging-section" class="admin-section hidden" data-feature="messaging">
             <div class="admin-card">
                 <div class="card-header">
                     <div class="card-icon">💬</div>
@@ -1699,6 +1699,8 @@
                     loadSessions();
                 } else if (currentSection === 'maintenance') {
                     loadMaintenanceStatus();
+                } else if (currentSection === 'instructions') {
+                    if (typeof refreshInstructionsIfVisible === 'function') refreshInstructionsIfVisible();
                 }
             }, 30000); // Refresh every 30 seconds
     }
@@ -1790,6 +1792,23 @@
                     }
                 }
             } catch { const el = document.getElementById('buildMeta'); if(el) el.textContent='Build metadata unavailable'; }
+        })();
+
+        // Issue #353: hide UI elements gated by server feature flags.
+        // Currently: messaging tab + section when INDEX_SERVER_MESSAGING_ENABLED=0.
+        (async function applyFeatureFlags(){
+            try {
+                const r = await fetch('/api/status?t=' + Date.now());
+                if (!r.ok) return;
+                const j = await r.json();
+                const features = (j && j.features) || {};
+                if (features.messaging === false) {
+                    document.querySelectorAll('[data-feature="messaging"]').forEach(el => {
+                        el.classList.add('hidden');
+                        el.style.display = 'none';
+                    });
+                }
+            } catch { /* best-effort; tab stays visible on failure */ }
         })();
 
         function showError(message) {

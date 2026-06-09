@@ -7,8 +7,15 @@ on:
     branches: [ main ]
   workflow_dispatch: {}
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build-test:
+    # Default CI/test spend belongs on the public mirror. The private dev repo
+    # keeps leak/security gates in precommit.yml and can still run this manually.
+    if: ${{ github.repository_owner == 'jagilber-org' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -25,6 +32,13 @@ jobs:
       - name: Build (explicit, before tests)
         run: |
           npm run build --if-present
+
+      - name: Validate npm package files (#247)
+        # Drift detector: catches the failure class from PR #240 — a shipped
+        # script dynamically invokes a sibling that is NOT in
+        # `package.json#files`, so npm-installed consumers get ENOENT at
+        # runtime. See scripts/governance/validate-npm-files.mjs.
+        run: npm run validate:npm-files
       - name: Ensure instructions directory
         run: |
           mkdir -p instructions
@@ -69,7 +83,7 @@ jobs:
             --strict
       - name: Upload coverage to Codecov
         if: always()
-        uses: codecov/codecov-action@v6
+        uses: codecov/codecov-action@v7
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: ./coverage/cobertura-coverage.xml,./coverage/lcov.info

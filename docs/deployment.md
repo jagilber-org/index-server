@@ -67,8 +67,8 @@ If you copy `instructions/` from production into a dev directory:
 ### Bootstrap Confirmation Flow Recap
 
 1. Fresh workspace (only seeds) → mutation gated: `bootstrap_confirmation_required`.
-2. Call `bootstrap_request` → get token.
-3. Human approves; call `bootstrap_confirmFinalize`.
+2. Call `bootstrap` with `action=request` (or legacy `bootstrap_request`) → get token.
+3. Human approves; call `bootstrap` with `action=confirm` (or legacy admin `bootstrap_confirmFinalize`) submitting the token.
 4. Confirmation artifact `bootstrap.confirmed.json` persists.
 5. Any additional instruction beyond the seeds implicitly means existing workspace (confirmation optional).
 6. `INDEX_SERVER_REFERENCE_MODE=1` short-circuits everything: Index immutable forever.
@@ -83,6 +83,7 @@ Test harness shortcut: `INDEX_SERVER_BOOTSTRAP_AUTOCONFIRM=1` (never use in prod
 |----------|---------|--------------|-------------|----------------|
 | `INDEX_SERVER_DIR` | Index root | Stable prod path | `devinstructions/` | (Will be normalized to `INDEX_SERVER_DIR` alias internally) |
 | `INDEX_SERVER_MUTATION` | Force read-only override | unset / `1` | unset / `1` | Set `0` when a deployment must be explicitly read-only |
+| `INDEX_SERVER_MESSAGING_ENABLED` | Enable inter-agent messaging subsystem | `1` | `1` | Set `0` to remove all `messaging_*` MCP tools, skip the dashboard REST routes, and hide the Messaging tab. See #353. |
 | `INDEX_SERVER_REFERENCE_MODE` | Force read-only | 0 | 0 or 1 (testing) | Unchanged |
 | `INDEX_SERVER_AUTO_SEED` | Auto-create baseline seeds | 1 | 1 | Unchanged |
 | `INDEX_SERVER_SEED_VERBOSE` | Extra stderr seed log | 0 | 1 | Unchanged |

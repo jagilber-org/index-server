@@ -185,6 +185,8 @@ For full configuration options: see \`docs/mcp_configuration.md\` and \`docs/con
       contentType: 'instruction',
       categories: ['bootstrap','mcp-activation','quick-start','documentation'],
       owner: 'system',
+      status: 'approved',
+      classification: 'public',
       version: '3.0.0',
       schemaVersion: '6',
       semanticSummary: 'Index Server quick start: search-first workflow, knowledge contribution, copilot instructions setup, and MCP client configuration for AI agents'
@@ -204,6 +206,8 @@ For full configuration options: see \`docs/mcp_configuration.md\` and \`docs/con
       contentType: 'instruction',
       categories: ['bootstrap','lifecycle'],
       owner: 'system',
+      status: 'approved',
+      classification: 'public',
       version: '1.0.0',
       schemaVersion: '6',
       semanticSummary: 'Lifecycle and promotion guardrails after bootstrap confirmation',

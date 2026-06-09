@@ -6,9 +6,22 @@ import { buildEnvCatalog, resolveDataPaths, type McpProfile } from './flagCatalo
 import { resolveConfigTargets, type McpClientTarget, type McpConfigFormat, type McpScope, type McpTargetInfo } from './paths';
 import { assertValidConfigObject, validateConfigObject, type ValidationResult } from './validate';
 import { atomicWriteText } from './backup';
+import {
+  assertLaunchEntryExists,
+  checkLaunchEntryPoint,
+  resolveLaunchEntryAbsolute,
+  verifyServerLaunch,
+  type EntryPointCheck,
+  type LaunchSpec,
+  type VerifyServerOptions,
+  type VerifyServerResult,
+} from './launchEntryPoint';
 
 export type { McpClientTarget, McpConfigFormat, McpScope, McpTargetInfo, McpServerEntry, ServerBuildConfig, ValidationResult, McpProfile };
+export type { EntryPointCheck, LaunchSpec, VerifyServerOptions, VerifyServerResult };
 export { buildEnvCatalog, resolveConfigTargets, resolveDataPaths, resolveServerLaunch };
+export { buildServerEntry };
+export { assertLaunchEntryExists, checkLaunchEntryPoint, resolveLaunchEntryAbsolute, verifyServerLaunch };
 
 export interface McpOperationOptions {
   target?: McpClientTarget;

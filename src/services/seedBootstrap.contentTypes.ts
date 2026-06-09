@@ -74,6 +74,8 @@ Default is \`instruction\`.
       categories: ['bootstrap', 'content-types', 'schema'],
       primaryCategory: 'schema',
       owner: 'system',
+      status: 'approved',
+      classification: 'public',
       version: '1.0.0',
       schemaVersion: readSchemaVersion(s),
       semanticSummary: 'Canonical Index Server contentType taxonomy generated from instruction.schema.json.',

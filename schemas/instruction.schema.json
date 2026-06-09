@@ -179,7 +179,19 @@
       "type": "integer",
       "minimum": 0,
       "x-fieldClass": "server-managed",
-      "description": "Number of tracked usage events"
+      "description": "DEPRECATED (issue #418): derived total usage count = retrievedCount + appliedCount"
+    },
+    "retrievedCount": {
+      "type": "integer",
+      "minimum": 0,
+      "x-fieldClass": "server-managed",
+      "description": "Number of retrieval events (search/get/query/export/list)"
+    },
+    "appliedCount": {
+      "type": "integer",
+      "minimum": 0,
+      "x-fieldClass": "server-managed",
+      "description": "Number of explicit applied/cited events"
     },
     "firstSeenTs": {
       "type": "string",
@@ -192,6 +204,18 @@
       "format": "date-time",
       "x-fieldClass": "server-managed",
       "description": "Last usage timestamp (ISO 8601)"
+    },
+    "lastRetrievedAt": {
+      "type": "string",
+      "format": "date-time",
+      "x-fieldClass": "server-managed",
+      "description": "Last retrieval timestamp (ISO 8601)"
+    },
+    "lastAppliedAt": {
+      "type": "string",
+      "format": "date-time",
+      "x-fieldClass": "server-managed",
+      "description": "Last applied timestamp (ISO 8601)"
     },
     "riskScore": {
       "type": "number",

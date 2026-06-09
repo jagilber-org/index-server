@@ -135,6 +135,7 @@ function parseNonInteractiveArgs() {
     write: false,            // write to real config files
     preview: true,           // show preview before writing
     deploy: true,            // deploy runtime to root when needed
+    verify: false,           // post-setup health-check probe (--verify)
     storageBackend: undefined, // 'json' | 'sqlite' — explicit override
     semanticEnabled: undefined, // boolean — explicit override
     backupsDir: undefined,   // string — explicit override
@@ -158,6 +159,8 @@ function parseNonInteractiveArgs() {
     else if (args[i] === '--write') config.write = true;
     else if (args[i] === '--no-preview') config.preview = false;
     else if (args[i] === '--no-deploy') config.deploy = false;
+    else if (args[i] === '--verify') config.verify = true;
+    else if (args[i] === '--no-verify') config.verify = false;
     else if (args[i] === '--storage' && args[i + 1]) config.storageBackend = args[++i];
     else if (args[i] === '--semantic') config.semanticEnabled = true;
     else if (args[i] === '--no-semantic') config.semanticEnabled = false;
@@ -629,6 +632,62 @@ async function deployRuntime(config) {
 }
 
 // --------------------------------------------------------------------------
+// Post-setup verification (--verify, issue #387)
+//
+// Spawns the resolved server entry-point using the same launch spec that was
+// just baked into mcp.json, performs the MCP initialize handshake, and calls
+// the `health_check` tool. Success → one-line confirmation. Failure → multi-
+// line actionable error (entry path, stderr tail) and process.exit(1).
+// --------------------------------------------------------------------------
+async function runPostSetupVerify(config) {
+  console.log('\n🔍 Verifying server launch (--verify)...');
+  let launch;
+  try {
+    launch = resolveServerLaunch(config);
+  } catch (err) {
+    console.error(`\n❌ Verify failed: cannot resolve a launch spec — ${err.message}`);
+    process.exit(1);
+  }
+
+  // Use the same env the wizard would write to mcp.json so the spawned
+  // server resolves the same data paths as the real MCP client will.
+  // buildServerEntry reproduces buildEnvCatalog + active-env flattening
+  // exactly — reusing it keeps verify in sync with what gets persisted.
+  let envOverlay = {};
+  try {
+    const paths = mcpConfig.resolveDataPaths(config.root);
+    const entry = mcpConfig.buildServerEntry
+      ? mcpConfig.buildServerEntry('vscode', { ...config, serverName: config.serverName || 'index-server' }, paths)
+      : null;
+    if (entry && entry.env && typeof entry.env === 'object') {
+      envOverlay = { ...entry.env };
+    }
+  } catch {
+    // Non-fatal — verify can still proceed with just process.env.
+    envOverlay = {};
+  }
+
+  try {
+    const result = await mcpConfig.verifyServerLaunch(launch, {
+      fallbackCwd: config.root,
+      extraEnv: envOverlay,
+      timeoutMs: 30_000,
+    });
+    const entryHint = result.entryPath ? ` (${result.entryPath})` : '';
+    console.log(`✅ Verify passed — health_check status=${result.status}` +
+      `${result.version ? `, version=${result.version}` : ''}` +
+      `, source=${result.source}${entryHint}, ${result.durationMs}ms`);
+  } catch (err) {
+    console.error(`\n❌ ${err.message}`);
+    console.error(`\n   Remediation:`);
+    console.error(`     - Confirm the runtime is deployed at ${config.root} (re-run without --no-deploy).`);
+    console.error(`     - For npx launches, check network reachability and \`npx --version\` on PATH.`);
+    console.error(`     - Re-run with INDEX_SERVER_LOG_LEVEL=debug to see startup logs.`);
+    process.exit(1);
+  }
+}
+
+// --------------------------------------------------------------------------
 // Main
 // --------------------------------------------------------------------------
 async function main() {
@@ -659,13 +718,23 @@ Non-interactive mode:
     --scope <s>           global | repo (default: repo)
     --write               Write directly to real config files (with backup)
     --no-preview          Skip config preview in non-interactive mode
-    --no-deploy           Skip runtime deployment to target root`);
+    --no-deploy           Skip runtime deployment to target root
+    --verify              After writing config, spawn the resolved server
+                          entry-point, perform the MCP initialize handshake,
+                          and call the health_check tool. Exits non-zero with
+                          an actionable error (entry path, exit code, stderr
+                          tail) if any step fails.
+    --no-verify           Explicitly disable post-setup verification (default)`);
     process.exit(0);
   }
 
   let config = parseNonInteractiveArgs();
   if (!config) {
     config = await runInteractiveWizard();
+    // Interactive flow doesn't prompt for --verify, so honor an explicit
+    // CLI flag if the user combined `--setup --verify` from npx.
+    if (process.argv.includes('--verify')) config.verify = true;
+    if (process.argv.includes('--no-verify')) config.verify = false;
   }
 
   const paths = resolvePaths(config.root);
@@ -742,6 +811,13 @@ Non-interactive mode:
 
   // ── Deploy already happened above (before writing configs) so the
   //    generated entry path is durable. ─────────────────────────────────
+
+  // ── Optional post-setup health check (--verify, issue #387) ─────────
+  //    Run before "Next Steps" so failures abort with a clear, actionable
+  //    error and a non-zero exit code (so CI / scripted callers can detect).
+  if (config.verify) {
+    await runPostSetupVerify(config);
+  }
 
   // ── Next steps ──────────────────────────────────────────────────────
   const proto = config.tls ? 'https' : 'http';

@@ -165,6 +165,8 @@ Some agent platforms use terms such as plugin, MCP server, or connector for depl
       categories: ['bootstrap', 'content-model', 'reference', 'schema'],
       primaryCategory: 'reference',
       owner: 'system',
+      status: 'approved',
+      classification: 'public',
       version: '1.0.0',
       schemaVersion: schemaVersionValue,
       semanticSummary:

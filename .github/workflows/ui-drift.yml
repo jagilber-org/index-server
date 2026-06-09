@@ -4,6 +4,10 @@ on:
   # Tier 3: manual-only browser drift checks.
   workflow_dispatch: {}
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   ui-drift:
     runs-on: ubuntu-latest

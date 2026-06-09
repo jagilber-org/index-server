@@ -214,7 +214,9 @@ export function createApiRoutes(options: ApiRoutesOptions = {}): Router {
   router.use(createEmbeddingsRoutes(undefined, embeddingStore));
   router.use(createUsageRoutes());
   router.use(createScriptsRoutes());
-  router.use(createMessagingRoutes());
+  if (getRuntimeConfig().messaging.enabled !== false) {
+    router.use(createMessagingRoutes());
+  }
   router.use(createSqliteRoutes());
   router.use(createAdminFeedbackRoutes());
 

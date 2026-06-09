@@ -1,19 +1,19 @@
 {
   "name": "@jagilber-org/index-server",
-  "version": "1.28.24",
-  "generatedAt": "2026-05-18T18:49:20.837Z",
+  "version": "1.32.0",
+  "generatedAt": "2026-06-09T19:45:53.725Z",
   "sourceRoots": [
     "src",
     "scripts"
   ],
   "summary": {
-    "fileCount": 283,
-    "exportCount": 1031,
+    "fileCount": 287,
+    "exportCount": 1063,
     "classCount": 41,
-    "interfaceCount": 325,
-    "typeAliasCount": 88,
+    "interfaceCount": 331,
+    "typeAliasCount": 90,
     "enumCount": 1,
-    "functionCount": 1049
+    "functionCount": 1083
   },
   "files": [
     {
@@ -310,7 +310,7 @@
           "isAsync": false,
           "parameters": [],
           "returnType": null,
-          "line": 51
+          "line": 53
         },
         {
           "name": "runOpenSsl",
@@ -329,7 +329,7 @@
             }
           ],
           "returnType": null,
-          "line": 69
+          "line": 72
         },
         {
           "name": "generateCerts",
@@ -343,7 +343,7 @@
             }
           ],
           "returnType": null,
-          "line": 73
+          "line": 76
         }
       ],
       "constants": []
@@ -778,12 +778,35 @@
           "namespaceImport": null
         }
       ],
-      "exports": [],
+      "exports": [
+        {
+          "name": "escapeMarkdownTableCell",
+          "kinds": [
+            "FunctionDeclaration"
+          ]
+        }
+      ],
       "classes": [],
       "interfaces": [],
       "typeAliases": [],
       "enums": [],
-      "functions": [],
+      "functions": [
+        {
+          "name": "escapeMarkdownTableCell",
+          "isExported": true,
+          "isAsync": false,
+          "parameters": [
+            {
+              "name": "text",
+              "type": null,
+              "optional": false
+            }
+          ],
+          "returnType": null,
+          "description": "Escape a free-form string for safe rendering inside a single markdown\ntable cell. Addresses CodeQL js/incomplete-sanitization (alert #53,\nissue #352): the previous inline `.replace(/\\|/g,'\\\\|')` covered the\npipe delimiter but left newlines, HTML, and surrounding whitespace\nable to break or escape the cell.\n\nContract (pinned by src/tests/generateToolsDocSanitization.spec.ts):\n  - null / undefined / non-string → ''\n  - trim leading/trailing whitespace\n  - encode HTML angle brackets (so `<script>` renders literally)\n  - collapse CR / LF / CRLF to `<br>` so the row stays one physical line\n  - escape `|` to `\\|` so it does not act as a column separator\n  - idempotent for inputs that contain none of the above meta-chars",
+          "line": 27
+        }
+      ],
       "constants": []
     },
     {
@@ -1090,7 +1113,7 @@
           "isAsync": true,
           "parameters": [],
           "returnType": null,
-          "line": 186
+          "line": 200
         },
         {
           "name": "getEnvCatalog",
@@ -1109,7 +1132,7 @@
             }
           ],
           "returnType": null,
-          "line": 309
+          "line": 323
         },
         {
           "name": "resolveConfigPaths",
@@ -1123,7 +1146,7 @@
             }
           ],
           "returnType": null,
-          "line": 316
+          "line": 330
         },
         {
           "name": "generateConfigForTarget",
@@ -1142,7 +1165,7 @@
             }
           ],
           "returnType": null,
-          "line": 323
+          "line": 337
         },
         {
           "name": "previewConfigs",
@@ -1161,7 +1184,7 @@
             }
           ],
           "returnType": null,
-          "line": 343
+          "line": 357
         },
         {
           "name": "applyConfigTarget",
@@ -1180,7 +1203,21 @@
             }
           ],
           "returnType": null,
-          "line": 358
+          "line": 372
+        },
+        {
+          "name": "generateTlsCertificates",
+          "isExported": false,
+          "isAsync": false,
+          "parameters": [
+            {
+              "name": "config",
+              "type": null,
+              "optional": false
+            }
+          ],
+          "returnType": null,
+          "line": 393
         },
         {
           "name": "generateEnvFile",
@@ -1199,7 +1236,7 @@
             }
           ],
           "returnType": null,
-          "line": 382
+          "line": 414
         },
         {
           "name": "printFolderSummary",
@@ -1218,7 +1255,7 @@
             }
           ],
           "returnType": null,
-          "line": 411
+          "line": 443
         },
         {
           "name": "deployRuntime",
@@ -1232,7 +1269,21 @@
             }
           ],
           "returnType": null,
-          "line": 447
+          "line": 479
+        },
+        {
+          "name": "runPostSetupVerify",
+          "isExported": false,
+          "isAsync": true,
+          "parameters": [
+            {
+              "name": "config",
+              "type": null,
+              "optional": false
+            }
+          ],
+          "returnType": null,
+          "line": 642
         },
         {
           "name": "main",
@@ -1240,7 +1291,7 @@
           "isAsync": true,
           "parameters": [],
           "returnType": null,
-          "line": 605
+          "line": 693
         }
       ],
       "constants": []
@@ -4299,6 +4350,72 @@
       "constants": []
     },
     {
+      "path": "scripts/governance/check-precommit-stages.mjs",
+      "imports": [
+        {
+          "module": "node:fs",
+          "defaultImport": null,
+          "namedImports": [
+            "readFileSync"
+          ],
+          "namespaceImport": null
+        },
+        {
+          "module": "node:path",
+          "defaultImport": null,
+          "namedImports": [
+            "resolve"
+          ],
+          "namespaceImport": null
+        }
+      ],
+      "exports": [],
+      "classes": [],
+      "interfaces": [],
+      "typeAliases": [],
+      "enums": [],
+      "functions": [
+        {
+          "name": "parseArgs",
+          "isExported": false,
+          "isAsync": false,
+          "parameters": [
+            {
+              "name": "argv",
+              "type": null,
+              "optional": false
+            }
+          ],
+          "returnType": null,
+          "line": 31
+        },
+        {
+          "name": "extractHookBlocks",
+          "isExported": false,
+          "isAsync": false,
+          "parameters": [
+            {
+              "name": "text",
+              "type": null,
+              "optional": false
+            }
+          ],
+          "returnType": null,
+          "description": "Walk `.pre-commit-config.yaml` line-by-line and return an array of\n{ id, line, hasStages } records — one per hook block. A hook block starts\nat a line matching `- id: <name>` and ends when we see another sibling\nlist item at the same indent OR a dedent to ≤ the indent of the parent\n`hooks:` key.\n\nComments (`#`) and blank lines inside the block are ignored. `stages:`\ndetection is liberal: any line within the block whose first non-whitespace\ntoken is `stages:` counts.",
+          "line": 56
+        },
+        {
+          "name": "main",
+          "isExported": false,
+          "isAsync": false,
+          "parameters": [],
+          "returnType": null,
+          "line": 117
+        }
+      ],
+      "constants": []
+    },
+    {
       "path": "scripts/governance/check-version-parity.mjs",
       "imports": [
         {
@@ -5037,6 +5154,148 @@
       "constants": []
     },
     {
+      "path": "scripts/governance/validate-npm-files.mjs",
+      "imports": [
+        {
+          "module": "node:fs",
+          "defaultImport": null,
+          "namedImports": [
+            "readFileSync",
+            "readdirSync",
+            "statSync",
+            "existsSync"
+          ],
+          "namespaceImport": null
+        },
+        {
+          "module": "node:path",
+          "defaultImport": null,
+          "namedImports": [
+            "join",
+            "resolve",
+            "dirname",
+            "relative",
+            "sep"
+          ],
+          "namespaceImport": null
+        },
+        {
+          "module": "node:url",
+          "defaultImport": null,
+          "namedImports": [
+            "fileURLToPath"
+          ],
+          "namespaceImport": null
+        }
+      ],
+      "exports": [],
+      "classes": [],
+      "interfaces": [],
+      "typeAliases": [],
+      "enums": [],
+      "functions": [
+        {
+          "name": "toPosix",
+          "isExported": false,
+          "isAsync": false,
+          "parameters": [
+            {
+              "name": "p",
+              "type": null,
+              "optional": false
+            }
+          ],
+          "returnType": null,
+          "line": 52
+        },
+        {
+          "name": "parseArgs",
+          "isExported": false,
+          "isAsync": false,
+          "parameters": [
+            {
+              "name": "argv",
+              "type": null,
+              "optional": false
+            }
+          ],
+          "returnType": null,
+          "line": 56
+        },
+        {
+          "name": "listAllFilesUnder",
+          "isExported": false,
+          "isAsync": false,
+          "parameters": [
+            {
+              "name": "absDir",
+              "type": null,
+              "optional": false
+            }
+          ],
+          "returnType": null,
+          "line": 72
+        },
+        {
+          "name": "buildShippedSet",
+          "isExported": false,
+          "isAsync": false,
+          "parameters": [
+            {
+              "name": "pkg",
+              "type": null,
+              "optional": false
+            }
+          ],
+          "returnType": null,
+          "line": 91
+        },
+        {
+          "name": "extractReferences",
+          "isExported": false,
+          "isAsync": false,
+          "parameters": [
+            {
+              "name": "srcRelPath",
+              "type": null,
+              "optional": false
+            },
+            {
+              "name": "srcText",
+              "type": null,
+              "optional": false
+            }
+          ],
+          "returnType": null,
+          "description": "Return repo-relative paths referenced by `src` (a JS source file). Three\npattern families — see header doc.",
+          "line": 153
+        },
+        {
+          "name": "extname",
+          "isExported": false,
+          "isAsync": false,
+          "parameters": [
+            {
+              "name": "p",
+              "type": null,
+              "optional": false
+            }
+          ],
+          "returnType": null,
+          "line": 209
+        },
+        {
+          "name": "main",
+          "isExported": false,
+          "isAsync": false,
+          "parameters": [],
+          "returnType": null,
+          "line": 219
+        }
+      ],
+      "constants": []
+    },
+    {
       "path": "scripts/governance/validate-security-headers.mjs",
       "imports": [
         {
@@ -5060,6 +5319,12 @@
           ]
         },
         {
+          "name": "httpGet",
+          "kinds": [
+            "FunctionDeclaration"
+          ]
+        },
+        {
           "name": "validateSecurityHeaders",
           "kinds": [
             "FunctionDeclaration"
@@ -5073,7 +5338,7 @@
       "functions": [
         {
           "name": "httpGet",
-          "isExported": false,
+          "isExported": true,
           "isAsync": false,
           "parameters": [
             {
@@ -5082,14 +5347,14 @@
               "optional": false
             },
             {
-              "name": "allowInsecureTls",
+              "name": "options",
               "type": null,
-              "optional": true
+              "optional": false
             }
           ],
           "returnType": null,
-          "description": "Make an HTTP(S) GET request and return headers.",
-          "line": 61
+          "description": "Make an HTTP(S) GET request and return headers.\n\nAddresses CodeQL js/disabling-certificate-validation (alert #54, issue #352)\nand constitution SH-6. TLS verification is ON by default; callers that need\nto trust a self-signed cert MUST do so explicitly by passing the cert as\n`options.ca`. The legacy global `options.allowInsecureTls` toggle is kept\nfor the few dev/test scripts that still depend on it, but it now:\n  - prints a SH-6 warning to stderr every call, and\n  - refuses to run when NODE_ENV === 'production'.",
+          "line": 70
         },
         {
           "name": "validateSecurityHeaders",
@@ -5109,7 +5374,7 @@
           ],
           "returnType": null,
           "description": "Validate security headers against a running server.",
-          "line": 81
+          "line": 119
         }
       ],
       "constants": []
@@ -6467,6 +6732,179 @@
       "constants": []
     },
     {
+      "path": "scripts/validate-configs.mjs",
+      "imports": [
+        {
+          "module": "fs",
+          "defaultImport": "fs",
+          "namedImports": [],
+          "namespaceImport": null
+        },
+        {
+          "module": "path",
+          "defaultImport": "path",
+          "namedImports": [],
+          "namespaceImport": null
+        },
+        {
+          "module": "url",
+          "defaultImport": null,
+          "namedImports": [
+            "fileURLToPath"
+          ],
+          "namespaceImport": null
+        }
+      ],
+      "exports": [
+        {
+          "name": "extractServers",
+          "kinds": [
+            "FunctionDeclaration"
+          ]
+        },
+        {
+          "name": "formatResult",
+          "kinds": [
+            "FunctionDeclaration"
+          ]
+        },
+        {
+          "name": "isNpxCommand",
+          "kinds": [
+            "FunctionDeclaration"
+          ]
+        },
+        {
+          "name": "parseConfigFile",
+          "kinds": [
+            "FunctionDeclaration"
+          ]
+        },
+        {
+          "name": "resolveEntryPoint",
+          "kinds": [
+            "FunctionDeclaration"
+          ]
+        },
+        {
+          "name": "validateConfigFile",
+          "kinds": [
+            "FunctionDeclaration"
+          ]
+        }
+      ],
+      "classes": [],
+      "interfaces": [],
+      "typeAliases": [],
+      "enums": [],
+      "functions": [
+        {
+          "name": "parseConfigFile",
+          "isExported": true,
+          "isAsync": false,
+          "parameters": [
+            {
+              "name": "filePath",
+              "type": null,
+              "optional": false
+            }
+          ],
+          "returnType": null,
+          "description": "Parse a JSON config file. Strict JSON only — the validator runs against\nthe shipped fixtures (plain JSON). VS Code JSONC files are out of scope\nhere; for those use `validateConfigObject()` from `src/services/mcpConfig`\nwhich already understands JSONC.",
+          "line": 50
+        },
+        {
+          "name": "extractServers",
+          "isExported": true,
+          "isAsync": false,
+          "parameters": [
+            {
+              "name": "config",
+              "type": null,
+              "optional": false
+            }
+          ],
+          "returnType": null,
+          "description": "Extract the servers map from a parsed MCP config. Supports both keys used\nacross flavors: `servers` (VS Code) and `mcpServers` (Claude / Copilot CLI).",
+          "line": 63
+        },
+        {
+          "name": "isNpxCommand",
+          "isExported": true,
+          "isAsync": false,
+          "parameters": [
+            {
+              "name": "command",
+              "type": null,
+              "optional": false
+            }
+          ],
+          "returnType": null,
+          "description": "Decide whether `command` is an npx-style invocation. We skip these because\nthere's no on-disk entry to check before launch — npx resolves at runtime.",
+          "line": 75
+        },
+        {
+          "name": "resolveEntryPoint",
+          "isExported": true,
+          "isAsync": false,
+          "parameters": [
+            {
+              "name": "entry",
+              "type": null,
+              "optional": false
+            },
+            {
+              "name": "configFileDir",
+              "type": null,
+              "optional": false
+            }
+          ],
+          "returnType": null,
+          "description": "Resolve the entry-point file an entry will try to execute. Returns:\n  { kind: 'file',  resolvedPath }      for node-style launches\n  { kind: 'npx',   resolvedPath: null } for npx launches (caller should skip)\n  { kind: 'other', resolvedPath: null } for everything else (e.g. python,\n                                         docker) — out of scope today",
+          "line": 92
+        },
+        {
+          "name": "validateConfigFile",
+          "isExported": true,
+          "isAsync": false,
+          "parameters": [
+            {
+              "name": "filePath",
+              "type": null,
+              "optional": false
+            }
+          ],
+          "returnType": null,
+          "description": "Validate one config file. Returns a structured result with one record\nper server entry plus a top-level ok flag.",
+          "line": 127
+        },
+        {
+          "name": "formatResult",
+          "isExported": true,
+          "isAsync": false,
+          "parameters": [
+            {
+              "name": "result",
+              "type": null,
+              "optional": false
+            }
+          ],
+          "returnType": null,
+          "description": "Render a validateConfigFile() result as multi-line human-readable text.",
+          "line": 175
+        },
+        {
+          "name": "main",
+          "isExported": false,
+          "isAsync": true,
+          "parameters": [],
+          "returnType": null,
+          "line": 194
+        }
+      ],
+      "constants": []
+    },
+    {
       "path": "src/config/configUtils.ts",
       "imports": [
         {
@@ -7415,22 +7853,29 @@
           "line": 27,
           "properties": [
             {
+              "name": "enabled",
+              "type": "boolean",
+              "optional": true,
+              "description": "When `false` the messaging subsystem is disabled at boot: messaging_* MCP\ntools are removed from the registry, dashboard REST routes are skipped,\nand the Messaging tab is hidden. Defaults to `true` (enabled). Gated by\nthe `INDEX_SERVER_MESSAGING_ENABLED` env var. Issue #353.\n\nOptional in the interface so test fixtures that construct partial configs\nfor `AgentMailbox` (which only consumes `dir`/`maxMessages`/`sweepIntervalMs`)\nremain compatible. Treat `undefined` as enabled (the default).",
+              "line": 38
+            },
+            {
               "name": "dir",
               "type": "string",
               "optional": false,
-              "line": 28
+              "line": 39
             },
             {
               "name": "maxMessages",
               "type": "number",
               "optional": false,
-              "line": 29
+              "line": 40
             },
             {
               "name": "sweepIntervalMs",
               "type": "number",
               "optional": false,
-              "line": 30
+              "line": 41
             }
           ],
           "methods": []
@@ -7439,43 +7884,43 @@
           "name": "SemanticConfig",
           "isExported": true,
           "extends": [],
-          "line": 35,
+          "line": 46,
           "properties": [
             {
               "name": "enabled",
               "type": "boolean",
               "optional": false,
-              "line": 36
+              "line": 47
             },
             {
               "name": "model",
               "type": "string",
               "optional": false,
-              "line": 37
+              "line": 48
             },
             {
               "name": "cacheDir",
               "type": "string",
               "optional": false,
-              "line": 38
+              "line": 49
             },
             {
               "name": "embeddingPath",
               "type": "string",
               "optional": false,
-              "line": 39
+              "line": 50
             },
             {
               "name": "device",
               "type": "SemanticDevice",
               "optional": false,
-              "line": 40
+              "line": 51
             },
             {
               "name": "localOnly",
               "type": "boolean",
               "optional": false,
-              "line": 41
+              "line": 52
             }
           ],
           "methods": []
@@ -7484,13 +7929,13 @@
           "name": "MinimalConfig",
           "isExported": true,
           "extends": [],
-          "line": 44,
+          "line": 55,
           "properties": [
             {
               "name": "debugOrdering",
               "type": "boolean",
               "optional": false,
-              "line": 45
+              "line": 56
             }
           ],
           "methods": []
@@ -7499,19 +7944,19 @@
           "name": "BootstrapSeedConfig",
           "isExported": true,
           "extends": [],
-          "line": 48,
+          "line": 59,
           "properties": [
             {
               "name": "autoSeed",
               "type": "boolean",
               "optional": false,
-              "line": 49
+              "line": 60
             },
             {
               "name": "verbose",
               "type": "boolean",
               "optional": false,
-              "line": 50
+              "line": 61
             }
           ],
           "methods": []
@@ -7520,13 +7965,13 @@
           "name": "ValidationConfig",
           "isExported": true,
           "extends": [],
-          "line": 53,
+          "line": 64,
           "properties": [
             {
               "name": "mode",
               "type": "string",
               "optional": false,
-              "line": 54
+              "line": 65
             }
           ],
           "methods": []
@@ -7535,19 +7980,19 @@
           "name": "DynamicConfig",
           "isExported": true,
           "extends": [],
-          "line": 57,
+          "line": 68,
           "properties": [
             {
               "name": "dashboardConfig",
               "type": "Record<string, string>",
               "optional": false,
-              "line": 58
+              "line": 69
             },
             {
               "name": "apiIntegration",
               "type": "Record<string, string>",
               "optional": false,
-              "line": 59
+              "line": 70
             }
           ],
           "methods": []
@@ -7556,37 +8001,37 @@
           "name": "GraphConfig",
           "isExported": true,
           "extends": [],
-          "line": 62,
+          "line": 73,
           "properties": [
             {
               "name": "includePrimaryEdges",
               "type": "boolean",
               "optional": false,
-              "line": 63
+              "line": 74
             },
             {
               "name": "largeCategoryCap",
               "type": "number",
               "optional": false,
-              "line": 64
+              "line": 75
             },
             {
               "name": "explicitIncludePrimaryEnv",
               "type": "boolean",
               "optional": false,
-              "line": 65
+              "line": 76
             },
             {
               "name": "explicitLargeCategoryEnv",
               "type": "boolean",
               "optional": false,
-              "line": 66
+              "line": 77
             },
             {
               "name": "signature",
               "type": "string",
               "optional": false,
-              "line": 67
+              "line": 78
             }
           ],
           "methods": []
@@ -7595,43 +8040,43 @@
           "name": "StorageConfig",
           "isExported": true,
           "extends": [],
-          "line": 164,
+          "line": 176,
           "properties": [
             {
               "name": "backend",
               "type": "'json' | 'sqlite'",
               "optional": false,
-              "line": 165
+              "line": 177
             },
             {
               "name": "sqlitePath",
               "type": "string",
               "optional": false,
-              "line": 166
+              "line": 178
             },
             {
               "name": "sqliteWal",
               "type": "boolean",
               "optional": false,
-              "line": 167
+              "line": 179
             },
             {
               "name": "sqliteMigrateOnStart",
               "type": "boolean",
               "optional": false,
-              "line": 168
+              "line": 180
             },
             {
               "name": "sqliteVecEnabled",
               "type": "boolean",
               "optional": false,
-              "line": 169
+              "line": 181
             },
             {
               "name": "sqliteVecPath",
               "type": "string",
               "optional": false,
-              "line": 170
+              "line": 182
             }
           ],
           "methods": []
@@ -7642,7 +8087,7 @@
           "name": "SemanticDevice",
           "isExported": false,
           "type": "'cpu' | 'cuda' | 'dml'",
-          "line": 33
+          "line": 44
         }
       ],
       "enums": [],
@@ -7653,7 +8098,7 @@
           "isAsync": false,
           "parameters": [],
           "returnType": "FeatureFlagsConfig",
-          "line": 70
+          "line": 81
         },
         {
           "name": "parseFeedbackConfig",
@@ -7661,7 +8106,7 @@
           "isAsync": false,
           "parameters": [],
           "returnType": "FeedbackConfig",
-          "line": 84
+          "line": 95
         },
         {
           "name": "parseMessagingConfig",
@@ -7669,7 +8114,7 @@
           "isAsync": false,
           "parameters": [],
           "returnType": "MessagingConfig",
-          "line": 91
+          "line": 102
         },
         {
           "name": "parseSemanticConfig",
@@ -7677,7 +8122,7 @@
           "isAsync": false,
           "parameters": [],
           "returnType": "SemanticConfig",
-          "line": 99
+          "line": 111
         },
         {
           "name": "parseMinimalConfig",
@@ -7685,7 +8130,7 @@
           "isAsync": false,
           "parameters": [],
           "returnType": "MinimalConfig",
-          "line": 113
+          "line": 125
         },
         {
           "name": "parseBootstrapSeedConfig",
@@ -7693,7 +8138,7 @@
           "isAsync": false,
           "parameters": [],
           "returnType": "BootstrapSeedConfig",
-          "line": 119
+          "line": 131
         },
         {
           "name": "parseValidationConfig",
@@ -7701,7 +8146,7 @@
           "isAsync": false,
           "parameters": [],
           "returnType": "ValidationConfig",
-          "line": 126
+          "line": 138
         },
         {
           "name": "parseDynamicConfig",
@@ -7709,7 +8154,7 @@
           "isAsync": false,
           "parameters": [],
           "returnType": "DynamicConfig",
-          "line": 132
+          "line": 144
         },
         {
           "name": "parseGraphConfig",
@@ -7717,7 +8162,7 @@
           "isAsync": false,
           "parameters": [],
           "returnType": "GraphConfig",
-          "line": 139
+          "line": 151
         },
         {
           "name": "parseStorageConfig",
@@ -7725,7 +8170,7 @@
           "isAsync": false,
           "parameters": [],
           "returnType": "StorageConfig",
-          "line": 173
+          "line": 185
         }
       ],
       "constants": []
@@ -8805,7 +9250,7 @@
           "parameters": [],
           "returnType": "RuntimeConfig",
           "description": "Parse all environment variables and construct a fresh {@link RuntimeConfig} object.\nPrefer {@link getRuntimeConfig} for normal use — this function always re-parses.",
-          "line": 479
+          "line": 477
         },
         {
           "name": "getRuntimeConfig",
@@ -8814,7 +9259,7 @@
           "parameters": [],
           "returnType": "RuntimeConfig",
           "description": "Return the cached singleton {@link RuntimeConfig}, loading it on first call.",
-          "line": 548
+          "line": 546
         },
         {
           "name": "reloadRuntimeConfig",
@@ -8823,7 +9268,7 @@
           "parameters": [],
           "returnType": "RuntimeConfig",
           "description": "Force a reload of the runtime configuration by discarding the cache and re-parsing all env vars.",
-          "line": 557
+          "line": 555
         }
       ],
       "constants": []
@@ -13928,6 +14373,40 @@
       "constants": []
     },
     {
+      "path": "src/dashboard/server/adminHtmlTransforms.ts",
+      "imports": [],
+      "exports": [
+        {
+          "name": "stripGraphTab",
+          "kinds": [
+            "FunctionDeclaration"
+          ]
+        }
+      ],
+      "classes": [],
+      "interfaces": [],
+      "typeAliases": [],
+      "enums": [],
+      "functions": [
+        {
+          "name": "stripGraphTab",
+          "isExported": true,
+          "isAsync": false,
+          "parameters": [
+            {
+              "name": "html",
+              "type": "string",
+              "optional": false
+            }
+          ],
+          "returnType": "string",
+          "description": "adminHtmlTransforms — server-side transforms applied to the v2 admin\ndashboard HTML (`src/dashboard/client/admin.html`) at render time.\n\nCurrently exports `stripGraphTab`, which removes graph-tab markup and the\n`admin.graph.js` script include when the graph feature flag is disabled.\n\nExtracted from the now-removed `legacyDashboardHtml.ts` (issue #230) so the\nv2 admin route no longer transitively depends on legacy dashboard modules.\n\nNOTE: These regexes operate on dashboard HTML built from in-repo files and\ntrusted constants — never on user input. The patterns are intentional\ntargeted strips (matching specific data-section attributes, comment markers,\nand the admin.graph.js script src) rather than a general HTML sanitizer.\nCodeQL bad-tag-filter / incomplete-multi-character-sanitization queries are\nsuppressed for this surface via `.github/codeql/codeql-config.yml`.",
+          "line": 19
+        }
+      ],
+      "constants": []
+    },
+    {
       "path": "src/dashboard/server/AdminPanel.ts",
       "imports": [
         {
@@ -14343,7 +14822,7 @@
               "isStatic": false,
               "parameters": [],
               "returnType": "void",
-              "line": 933
+              "line": 963
             },
             {
               "name": "getSessionHistory",
@@ -14357,14 +14836,14 @@
               ],
               "returnType": "AdminSessionHistoryEntry[]",
               "description": "Return immutable copy of session history",
-              "line": 1029
+              "line": 1059
             },
             {
               "name": "clearSessionHistory",
               "isStatic": false,
               "parameters": [],
               "returnType": "Promise<{ success: boolean; message: string; clearedCount: number }>",
-              "line": 1033
+              "line": 1063
             },
             {
               "name": "updateSessionActivity",
@@ -14377,42 +14856,42 @@
                 }
               ],
               "returnType": "boolean",
-              "line": 1037
+              "line": 1067
             },
             {
               "name": "getTotalConnections",
               "isStatic": false,
               "parameters": [],
               "returnType": "number",
-              "line": 1041
+              "line": 1071
             },
             {
               "name": "getTotalRequests",
               "isStatic": false,
               "parameters": [],
               "returnType": "number",
-              "line": 1045
+              "line": 1075
             },
             {
               "name": "getErrorRate",
               "isStatic": false,
               "parameters": [],
               "returnType": "number",
-              "line": 1050
+              "line": 1080
             },
             {
               "name": "getAvgResponseTime",
               "isStatic": false,
               "parameters": [],
               "returnType": "number",
-              "line": 1054
+              "line": 1084
             },
             {
               "name": "getIndexInstructionCount",
               "isStatic": false,
               "parameters": [],
               "returnType": "number",
-              "line": 1058
+              "line": 1088
             },
             {
               "name": "restartServer",
@@ -14426,7 +14905,7 @@
               ],
               "returnType": "Promise<{ success: boolean; message: string }>",
               "description": "Restart server components",
-              "line": 1079
+              "line": 1109
             },
             {
               "name": "clearCaches",
@@ -14434,7 +14913,7 @@
               "parameters": [],
               "returnType": "{ success: boolean; message: string; cleared: string[] }",
               "description": "Clear server caches",
-              "line": 1101
+              "line": 1131
             }
           ],
           "properties": [
@@ -14621,7 +15100,7 @@
           "isAsync": false,
           "parameters": [],
           "returnType": "AdminPanel",
-          "line": 1134
+          "line": 1164
         }
       ],
       "constants": []
@@ -16913,132 +17392,6 @@
       "enums": [],
       "functions": [],
       "constants": []
-    },
-    {
-      "path": "src/dashboard/server/legacyDashboardHtml.ts",
-      "imports": [
-        {
-          "module": "./MetricsCollector.js",
-          "defaultImport": null,
-          "namedImports": [
-            "MetricsSnapshot"
-          ],
-          "namespaceImport": null
-        },
-        {
-          "module": "./legacyDashboardStyles.js",
-          "defaultImport": null,
-          "namedImports": [
-            "LEGACY_DASHBOARD_CSS"
-          ],
-          "namespaceImport": null
-        }
-      ],
-      "exports": [
-        {
-          "name": "formatUptime",
-          "kinds": [
-            "FunctionDeclaration"
-          ]
-        },
-        {
-          "name": "generateDashboardHtml",
-          "kinds": [
-            "FunctionDeclaration"
-          ]
-        },
-        {
-          "name": "stripGraphTab",
-          "kinds": [
-            "FunctionDeclaration"
-          ]
-        }
-      ],
-      "classes": [],
-      "interfaces": [],
-      "typeAliases": [],
-      "enums": [],
-      "functions": [
-        {
-          "name": "stripGraphTab",
-          "isExported": true,
-          "isAsync": false,
-          "parameters": [
-            {
-              "name": "html",
-              "type": "string",
-              "optional": false
-            }
-          ],
-          "returnType": "string",
-          "line": 19
-        },
-        {
-          "name": "formatUptime",
-          "isExported": true,
-          "isAsync": false,
-          "parameters": [
-            {
-              "name": "ms",
-              "type": "number",
-              "optional": false
-            }
-          ],
-          "returnType": "string",
-          "line": 29
-        },
-        {
-          "name": "generateDashboardHtml",
-          "isExported": true,
-          "isAsync": false,
-          "parameters": [
-            {
-              "name": "nonce",
-              "type": "string",
-              "optional": false
-            },
-            {
-              "name": "snapshot",
-              "type": "MetricsSnapshot",
-              "optional": false
-            },
-            {
-              "name": "webSocketUrl",
-              "type": "string | null",
-              "optional": false
-            }
-          ],
-          "returnType": "string",
-          "line": 43
-        }
-      ],
-      "constants": []
-    },
-    {
-      "path": "src/dashboard/server/legacyDashboardStyles.ts",
-      "imports": [],
-      "exports": [
-        {
-          "name": "LEGACY_DASHBOARD_CSS",
-          "kinds": [
-            "VariableDeclaration"
-          ]
-        }
-      ],
-      "classes": [],
-      "interfaces": [],
-      "typeAliases": [],
-      "enums": [],
-      "functions": [],
-      "constants": [
-        {
-          "name": "LEGACY_DASHBOARD_CSS",
-          "type": null,
-          "initializerKind": "NoSubstitutionTemplateLiteral",
-          "description": "legacyDashboardStyles — CSS for the v1 legacy dashboard page.\nKept in a separate module so legacyDashboardHtml.ts stays within line limits.",
-          "line": 6
-        }
-      ]
     },
     {
       "path": "src/dashboard/server/metricsAggregation.ts",
@@ -22512,10 +22865,9 @@
           "namespaceImport": null
         },
         {
-          "module": "../legacyDashboardHtml.js",
+          "module": "../adminHtmlTransforms.js",
           "defaultImport": null,
           "namedImports": [
-            "generateDashboardHtml",
             "stripGraphTab"
           ],
           "namespaceImport": null
@@ -22911,7 +23263,8 @@
             "restoreEntry",
             "purgeEntry",
             "getArchivedEntry",
-            "listArchivedEntries"
+            "listArchivedEntries",
+            "updateArchivedEntry"
           ],
           "namespaceImport": null
         },
@@ -26617,154 +26970,178 @@
               "line": 119
             },
             {
+              "name": "retrievedCount",
+              "type": "number",
+              "optional": true,
+              "line": 120
+            },
+            {
+              "name": "appliedCount",
+              "type": "number",
+              "optional": true,
+              "line": 121
+            },
+            {
               "name": "firstSeenTs",
               "type": "string",
               "optional": true,
-              "line": 120
+              "line": 122
             },
             {
               "name": "lastUsedAt",
               "type": "string",
               "optional": true,
-              "line": 121
+              "line": 123
             },
             {
-              "name": "riskScore",
-              "type": "number",
-              "optional": true,
-              "line": 122
-            },
-            {
-              "name": "workspaceId",
+              "name": "lastRetrievedAt",
               "type": "string",
               "optional": true,
               "line": 124
             },
             {
-              "name": "userId",
+              "name": "lastAppliedAt",
               "type": "string",
               "optional": true,
               "line": 125
             },
             {
-              "name": "teamIds",
-              "type": "string[]",
+              "name": "riskScore",
+              "type": "number",
               "optional": true,
               "line": 126
             },
             {
-              "name": "version",
+              "name": "workspaceId",
               "type": "string",
               "optional": true,
               "line": 128
             },
             {
+              "name": "userId",
+              "type": "string",
+              "optional": true,
+              "line": 129
+            },
+            {
+              "name": "teamIds",
+              "type": "string[]",
+              "optional": true,
+              "line": 130
+            },
+            {
+              "name": "version",
+              "type": "string",
+              "optional": true,
+              "line": 132
+            },
+            {
               "name": "status",
               "type": "GovernanceStatus",
               "optional": true,
-              "line": 129
+              "line": 133
             },
             {
               "name": "owner",
               "type": "string",
               "optional": true,
-              "line": 130
+              "line": 134
             },
             {
               "name": "priorityTier",
               "type": "PriorityTier",
               "optional": true,
-              "line": 131
+              "line": 135
             },
             {
               "name": "classification",
               "type": "Classification",
               "optional": true,
-              "line": 132
+              "line": 136
             },
             {
               "name": "lastReviewedAt",
               "type": "string",
               "optional": true,
-              "line": 133
+              "line": 137
             },
             {
               "name": "nextReviewDue",
               "type": "string",
               "optional": true,
-              "line": 134
+              "line": 138
             },
             {
               "name": "reviewIntervalDays",
               "type": "number",
               "optional": true,
-              "line": 135
+              "line": 139
             },
             {
               "name": "changeLog",
               "type": "{ version: string; changedAt: string; summary: string }[]",
               "optional": true,
-              "line": 136
+              "line": 140
             },
             {
               "name": "supersedes",
               "type": "string",
               "optional": true,
-              "line": 137
+              "line": 141
             },
             {
               "name": "archivedAt",
               "type": "string",
               "optional": true,
-              "line": 138
+              "line": 142
             },
             {
               "name": "archivedBy",
               "type": "string",
               "optional": true,
-              "line": 142
+              "line": 146
             },
             {
               "name": "archiveReason",
               "type": "ArchiveReason",
               "optional": true,
-              "line": 143
+              "line": 147
             },
             {
               "name": "archiveSource",
               "type": "ArchiveSource",
               "optional": true,
-              "line": 144
+              "line": 148
             },
             {
               "name": "restoreEligible",
               "type": "boolean",
               "optional": true,
-              "line": 145
+              "line": 149
             },
             {
               "name": "semanticSummary",
               "type": "string",
               "optional": true,
-              "line": 147
+              "line": 151
             },
             {
               "name": "createdByAgent",
               "type": "string",
               "optional": true,
-              "line": 149
+              "line": 153
             },
             {
               "name": "sourceWorkspace",
               "type": "string",
               "optional": true,
-              "line": 150
+              "line": 154
             },
             {
               "name": "extensions",
               "type": "Record<string, unknown>",
               "optional": true,
-              "line": 151
+              "line": 155
             }
           ],
           "methods": []
@@ -27586,7 +27963,7 @@
           "name": "SchemaMap",
           "isExported": true,
           "type": "typeof schemas",
-          "line": 409
+          "line": 412
         }
       ],
       "enums": [],
@@ -31602,7 +31979,7 @@
           "name": "ArchiveAuditAction",
           "isExported": true,
           "type": "typeof AUDIT_ACTIONS[keyof typeof AUDIT_ACTIONS]",
-          "line": 33
+          "line": 35
         }
       ],
       "enums": [],
@@ -31620,7 +31997,7 @@
           "type": "readonly ArchiveAuditAction[]",
           "initializerKind": "CallExpression",
           "description": "Frozen list of all archive-lifecycle audit action names (for iteration / assertions).",
-          "line": 36
+          "line": 38
         }
       ]
     },
@@ -33159,7 +33536,7 @@
               ],
               "returnType": "string[]",
               "description": "Validate an instruction entry for required fields and logical consistency.",
-              "line": 83
+              "line": 87
             },
             {
               "name": "computeRisk",
@@ -33173,7 +33550,7 @@
               ],
               "returnType": "number",
               "description": "Compute a numeric risk score for an instruction entry (higher = riskier).\nScore is derived from priority and requirement level.",
-              "line": 97
+              "line": 101
             },
             {
               "name": "requirementWeight",
@@ -33186,7 +33563,7 @@
                 }
               ],
               "returnType": "number",
-              "line": 103
+              "line": 107
             },
             {
               "name": "computeHash",
@@ -33200,7 +33577,7 @@
               ],
               "returnType": "string",
               "description": "Compute a SHA-256 hex digest of the given content string.",
-              "line": 119
+              "line": 123
             },
             {
               "name": "computePriorityTier",
@@ -33218,7 +33595,7 @@
                 }
               ],
               "returnType": "PriorityTier",
-              "line": 121
+              "line": 125
             },
             {
               "name": "reviewIntervalDays",
@@ -33236,7 +33613,7 @@
                 }
               ],
               "returnType": "number",
-              "line": 129
+              "line": 133
             },
             {
               "name": "computeReviewIntervalDays",
@@ -33255,7 +33632,7 @@
               ],
               "returnType": "number",
               "description": "Compute the recommended review interval in days for a given priority tier and requirement level.",
-              "line": 144
+              "line": 148
             },
             {
               "name": "deriveSummary",
@@ -33268,7 +33645,7 @@
                 }
               ],
               "returnType": "string",
-              "line": 148
+              "line": 152
             }
           ],
           "properties": []
@@ -34623,6 +35000,12 @@
           ]
         },
         {
+          "name": "FeatureFlagMap",
+          "kinds": [
+            "TypeAliasDeclaration"
+          ]
+        },
+        {
           "name": "featureStatus",
           "kinds": [
             "FunctionDeclaration"
@@ -34630,6 +35013,12 @@
         },
         {
           "name": "getCounters",
+          "kinds": [
+            "FunctionDeclaration"
+          ]
+        },
+        {
+          "name": "getFeatureFlagMap",
           "kinds": [
             "FunctionDeclaration"
           ]
@@ -34645,11 +35034,24 @@
           "kinds": [
             "FunctionDeclaration"
           ]
+        },
+        {
+          "name": "KNOWN_FEATURE_FLAGS",
+          "kinds": [
+            "VariableDeclaration"
+          ]
         }
       ],
       "classes": [],
       "interfaces": [],
-      "typeAliases": [],
+      "typeAliases": [
+        {
+          "name": "FeatureFlagMap",
+          "isExported": true,
+          "type": "Record<(typeof KNOWN_FEATURE_FLAGS)[number], boolean>",
+          "line": 32
+        }
+      ],
       "enums": [],
       "functions": [
         {
@@ -34702,6 +35104,14 @@
           "line": 19
         },
         {
+          "name": "getFeatureFlagMap",
+          "isExported": true,
+          "isAsync": false,
+          "parameters": [],
+          "returnType": "FeatureFlagMap",
+          "line": 34
+        },
+        {
           "name": "enableFeature",
           "isExported": true,
           "isAsync": false,
@@ -34713,10 +35123,17 @@
             }
           ],
           "returnType": null,
-          "line": 28
+          "line": 43
         }
       ],
-      "constants": []
+      "constants": [
+        {
+          "name": "KNOWN_FEATURE_FLAGS",
+          "type": null,
+          "initializerKind": "AsExpression",
+          "line": 30
+        }
+      ]
     },
     {
       "path": "src/services/feedbackStorage.ts",
@@ -35284,6 +35701,14 @@
             "mutationGatedReason"
           ],
           "namespaceImport": null
+        },
+        {
+          "module": "../config/runtimeConfig",
+          "defaultImport": null,
+          "namedImports": [
+            "getRuntimeConfig"
+          ],
+          "namespaceImport": null
         }
       ],
       "exports": [],
@@ -35291,7 +35716,17 @@
       "interfaces": [],
       "typeAliases": [],
       "enums": [],
-      "functions": [],
+      "functions": [
+        {
+          "name": "mutationStatusFields",
+          "isExported": false,
+          "isAsync": false,
+          "parameters": [],
+          "returnType": "{ mutationEnabled: boolean; mutationHint?: string }",
+          "description": "Issue #358: bootstrap-confirm responses must surface the runtime mutation\nflag at the moment operators need it. Without this, an operator that has\nconfirmed bootstrap but left INDEX_SERVER_MUTATION=0 sees no signal that\nwrites will fail; mutation attempts then silently no-op (see\n`instructions.add.ts` visibility-anomaly branch).\n\nReturns `{ mutationEnabled }` always, plus an actionable `mutationHint`\nonly when mutations are disabled.",
+          "line": 15
+        }
+      ],
       "constants": []
     },
     {
@@ -35459,7 +35894,7 @@
             }
           ],
           "returnType": "{ value?:string; enabled?:boolean; parsed?:unknown; present?:boolean }",
-          "line": 301
+          "line": 302
         },
         {
           "name": "getFlagRegistrySnapshot",
@@ -35467,7 +35902,7 @@
           "isAsync": false,
           "parameters": [],
           "returnType": "FlagRuntime[]",
-          "line": 321
+          "line": 322
         }
       ],
       "constants": [
@@ -36370,10 +36805,22 @@
               "line": 47
             },
             {
+              "name": "retrievedCount",
+              "type": "number",
+              "optional": true,
+              "line": 48
+            },
+            {
+              "name": "appliedCount",
+              "type": "number",
+              "optional": true,
+              "line": 49
+            },
+            {
               "name": "nodeType",
               "type": "'instruction'|'category'",
               "optional": true,
-              "line": 48
+              "line": 50
             }
           ],
           "methods": []
@@ -36382,25 +36829,25 @@
           "name": "GraphEdgeBase",
           "isExported": false,
           "extends": [],
-          "line": 52,
+          "line": 54,
           "properties": [
             {
               "name": "from",
               "type": "string",
               "optional": false,
-              "line": 52
+              "line": 54
             },
             {
               "name": "to",
               "type": "string",
               "optional": false,
-              "line": 52
+              "line": 54
             },
             {
               "name": "type",
               "type": "'primary'|'category'|'belongs'",
               "optional": false,
-              "line": 52
+              "line": 54
             }
           ],
           "methods": []
@@ -36411,13 +36858,13 @@
           "extends": [
             "GraphEdgeBase"
           ],
-          "line": 53,
+          "line": 55,
           "properties": [
             {
               "name": "weight",
               "type": "number",
               "optional": true,
-              "line": 53
+              "line": 55
             }
           ],
           "methods": []
@@ -36426,37 +36873,37 @@
           "name": "GraphMeta",
           "isExported": false,
           "extends": [],
-          "line": 56,
+          "line": 58,
           "properties": [
             {
               "name": "graphSchemaVersion",
               "type": "1|2",
               "optional": false,
-              "line": 56
+              "line": 58
             },
             {
               "name": "nodeCount",
               "type": "number",
               "optional": false,
-              "line": 56
+              "line": 58
             },
             {
               "name": "edgeCount",
               "type": "number",
               "optional": false,
-              "line": 56
+              "line": 58
             },
             {
               "name": "truncated",
               "type": "boolean",
               "optional": true,
-              "line": 56
+              "line": 58
             },
             {
               "name": "notes",
               "type": "string[]",
               "optional": true,
-              "line": 56
+              "line": 58
             }
           ],
           "methods": []
@@ -36465,37 +36912,37 @@
           "name": "GraphResult",
           "isExported": false,
           "extends": [],
-          "line": 57,
+          "line": 59,
           "properties": [
             {
               "name": "meta",
               "type": "GraphMeta",
               "optional": false,
-              "line": 57
+              "line": 59
             },
             {
               "name": "nodes",
               "type": "GraphNode[]",
               "optional": false,
-              "line": 57
+              "line": 59
             },
             {
               "name": "edges",
               "type": "GraphEdge[]",
               "optional": false,
-              "line": 57
+              "line": 59
             },
             {
               "name": "dot",
               "type": "string",
               "optional": true,
-              "line": 57
+              "line": 59
             },
             {
               "name": "mermaid",
               "type": "string",
               "optional": true,
-              "line": 57
+              "line": 59
             }
           ],
           "methods": []
@@ -36512,13 +36959,13 @@
           "name": "GraphNode",
           "isExported": false,
           "type": "GraphNodeV1 | GraphNodeV2",
-          "line": 50
+          "line": 52
         },
         {
           "name": "GraphEdge",
           "isExported": false,
           "type": "GraphEdgeBase | GraphEdgeEnriched",
-          "line": 54
+          "line": 56
         }
       ],
       "enums": [],
@@ -36540,7 +36987,7 @@
             }
           ],
           "returnType": "GraphResult",
-          "line": 71
+          "line": 73
         },
         {
           "name": "__resetGraphCache",
@@ -36548,7 +36995,7 @@
           "isAsync": false,
           "parameters": [],
           "returnType": null,
-          "line": 269
+          "line": 286
         }
       ],
       "constants": []
@@ -37088,17 +37535,174 @@
         }
       ],
       "classes": [],
-      "interfaces": [],
+      "interfaces": [
+        {
+          "name": "MessagingManageParams",
+          "isExported": false,
+          "extends": [],
+          "line": 325,
+          "properties": [
+            {
+              "name": "action",
+              "type": "'send' | 'read' | 'list_channels' | 'ack' | 'stats' | 'get' | 'update' | 'purge' | 'reply' | 'thread'",
+              "optional": false,
+              "line": 326
+            },
+            {
+              "name": "channel",
+              "type": "string",
+              "optional": true,
+              "line": 328
+            },
+            {
+              "name": "sender",
+              "type": "string",
+              "optional": true,
+              "line": 329
+            },
+            {
+              "name": "recipients",
+              "type": "string[]",
+              "optional": true,
+              "line": 330
+            },
+            {
+              "name": "body",
+              "type": "string",
+              "optional": true,
+              "line": 331
+            },
+            {
+              "name": "ttlSeconds",
+              "type": "number",
+              "optional": true,
+              "line": 332
+            },
+            {
+              "name": "persistent",
+              "type": "boolean",
+              "optional": true,
+              "line": 333
+            },
+            {
+              "name": "payload",
+              "type": "Record<string, unknown>",
+              "optional": true,
+              "line": 334
+            },
+            {
+              "name": "priority",
+              "type": "string",
+              "optional": true,
+              "line": 335
+            },
+            {
+              "name": "parentId",
+              "type": "string",
+              "optional": true,
+              "line": 336
+            },
+            {
+              "name": "requiresAck",
+              "type": "boolean",
+              "optional": true,
+              "line": 337
+            },
+            {
+              "name": "ackBySeconds",
+              "type": "number",
+              "optional": true,
+              "line": 338
+            },
+            {
+              "name": "tags",
+              "type": "string[]",
+              "optional": true,
+              "line": 339
+            },
+            {
+              "name": "reader",
+              "type": "string",
+              "optional": true,
+              "line": 341
+            },
+            {
+              "name": "unreadOnly",
+              "type": "boolean",
+              "optional": true,
+              "line": 342
+            },
+            {
+              "name": "limit",
+              "type": "number",
+              "optional": true,
+              "line": 343
+            },
+            {
+              "name": "markRead",
+              "type": "boolean",
+              "optional": true,
+              "line": 344
+            },
+            {
+              "name": "messageIds",
+              "type": "string[]",
+              "optional": true,
+              "line": 346
+            },
+            {
+              "name": "messageId",
+              "type": "string",
+              "optional": true,
+              "line": 347
+            },
+            {
+              "name": "all",
+              "type": "boolean",
+              "optional": true,
+              "line": 348
+            },
+            {
+              "name": "replyAll",
+              "type": "boolean",
+              "optional": true,
+              "line": 350
+            }
+          ],
+          "methods": []
+        }
+      ],
       "typeAliases": [],
       "enums": [],
       "functions": [
+        {
+          "name": "registerHandler",
+          "isExported": false,
+          "isAsync": false,
+          "parameters": [
+            {
+              "name": "args",
+              "type": "Parameters<typeof _registerHandler<P>>",
+              "optional": true
+            }
+          ],
+          "returnType": "void",
+          "line": 30,
+          "typeParameters": [
+            {
+              "name": "P",
+              "constraint": null,
+              "default": "unknown"
+            }
+          ]
+        },
         {
           "name": "getMailbox",
           "isExported": false,
           "isAsync": false,
           "parameters": [],
           "returnType": "AgentMailbox",
-          "line": 26
+          "line": 40
         },
         {
           "name": "_resetMailbox",
@@ -37107,7 +37711,7 @@
           "parameters": [],
           "returnType": "void",
           "description": "Reset mailbox (for testing).",
-          "line": 35
+          "line": 49
         }
       ],
       "constants": []
@@ -37180,7 +37784,8 @@
           "module": "./features",
           "defaultImport": null,
           "namedImports": [
-            "getCounters"
+            "getCounters",
+            "getFeatureFlagMap"
           ],
           "namespaceImport": null
         }
@@ -38493,8 +39098,8 @@
             }
           ],
           "returnType": "void",
-          "description": "Fire-and-forget usage tracking for search results.\nTracks top results only to avoid excessive writes.",
-          "line": 912
+          "description": "Fire-and-forget usage tracking for search results.\nTracks only the top-3 results (issue #418) to keep auto-track scope tight and\navoid inflating retrieval counts for low-rank, likely-unused matches.",
+          "line": 913
         },
         {
           "name": "buildAfterRetrievalMeta",
@@ -38503,7 +39108,7 @@
           "parameters": [],
           "returnType": "{ afterRetrieval: string[] }",
           "description": "Build _meta.afterRetrieval hints for MCP clients.\nEncourages callers to record usage and submit feedback.",
-          "line": 924
+          "line": 925
         },
         {
           "name": "buildSearchHints",
@@ -38518,7 +39123,7 @@
           ],
           "returnType": "string[]",
           "description": "Build actionable hints for zero-result searches",
-          "line": 936
+          "line": 937
         }
       ],
       "constants": []
@@ -40250,6 +40855,36 @@
               "type": "InstructionEntry['extensions']",
               "optional": true,
               "line": 44
+            },
+            {
+              "name": "teamIds",
+              "type": "string[]",
+              "optional": true,
+              "line": 49
+            },
+            {
+              "name": "workspaceId",
+              "type": "string",
+              "optional": true,
+              "line": 49
+            },
+            {
+              "name": "userId",
+              "type": "string",
+              "optional": true,
+              "line": 49
+            },
+            {
+              "name": "supersedes",
+              "type": "string",
+              "optional": true,
+              "line": 50
+            },
+            {
+              "name": "reviewIntervalDays",
+              "type": "number",
+              "optional": true,
+              "line": 50
             }
           ],
           "methods": []
@@ -40258,35 +40893,35 @@
           "name": "RepairChangeLogOptions",
           "isExported": true,
           "extends": [],
-          "line": 163,
+          "line": 169,
           "properties": [
             {
               "name": "finalVersion",
               "type": "string",
               "optional": false,
               "description": "Final/expected version that the last entry must end with.",
-              "line": 165
+              "line": 171
             },
             {
               "name": "now",
               "type": "string",
               "optional": false,
               "description": "ISO timestamp to use as `now`.",
-              "line": 167
+              "line": 173
             },
             {
               "name": "fallback",
               "type": "{ version: string; changedAt: string; summary: string }",
               "optional": false,
               "description": "Fallback entry pushed when the supplied changeLog is empty/invalid.",
-              "line": 169
+              "line": 175
             },
             {
               "name": "trailingSummary",
               "type": "string",
               "optional": false,
               "description": "Summary to use when appending a trailing entry to reach finalVersion.",
-              "line": 171
+              "line": 177
             }
           ],
           "methods": []
@@ -40297,7 +40932,7 @@
           "name": "ChangeLogArr",
           "isExported": false,
           "type": "NonNullable<InstructionEntry['changeLog']>",
-          "line": 161
+          "line": 167
         }
       ],
       "enums": [],
@@ -40356,7 +40991,7 @@
             }
           ],
           "returnType": null,
-          "line": 47,
+          "line": 53,
           "typeParameters": [
             {
               "name": "TParams",
@@ -40376,7 +41011,7 @@
           "isAsync": false,
           "parameters": [],
           "returnType": null,
-          "line": 57
+          "line": 63
         },
         {
           "name": "traceInstructionVisibility",
@@ -40400,7 +41035,7 @@
             }
           ],
           "returnType": null,
-          "line": 59
+          "line": 65
         },
         {
           "name": "traceEnvSnapshot",
@@ -40419,7 +41054,7 @@
             }
           ],
           "returnType": null,
-          "line": 79
+          "line": 85
         },
         {
           "name": "isJunkCategory",
@@ -40434,7 +41069,7 @@
           ],
           "returnType": "boolean",
           "description": "Returns true if the category string is considered junk (numeric prefix, single char, case-ticket ID).",
-          "line": 106
+          "line": 112
         },
         {
           "name": "normalizeCategories",
@@ -40449,7 +41084,7 @@
           ],
           "returnType": "string[]",
           "description": "Normalize a categories array: deduplicate, lowercase, remove junk, remove plural duplicates, sort.",
-          "line": 111
+          "line": 117
         },
         {
           "name": "computeSourceHash",
@@ -40464,7 +41099,7 @@
           ],
           "returnType": "string",
           "description": "Compute SHA-256 hash of an instruction body.",
-          "line": 122
+          "line": 128
         },
         {
           "name": "bumpVersion",
@@ -40484,7 +41119,7 @@
           ],
           "returnType": "string",
           "description": "Bump a semver version string. Returns the new version string.",
-          "line": 128
+          "line": 134
         },
         {
           "name": "createChangeLogEntry",
@@ -40504,7 +41139,7 @@
           ],
           "returnType": "{ version: string; changedAt: string; summary: string }",
           "description": "Create a changelog entry object for an instruction version change.",
-          "line": 139
+          "line": 145
         },
         {
           "name": "normalizeInputCategories",
@@ -40519,7 +41154,7 @@
           ],
           "returnType": "string[]",
           "description": "Normalize categories supplied as input to add/import handlers:\nfilter to non-empty strings, lowercase, deduplicate, and sort.\n\nDistinct from {@link normalizeCategories} (used by groom), which also\nstrips junk patterns and plural duplicates.",
-          "line": 151
+          "line": 157
         },
         {
           "name": "repairChangeLog",
@@ -40539,7 +41174,7 @@
           ],
           "returnType": "ChangeLogArr",
           "description": "Repair a changelog array: drop malformed entries, ensure non-empty,\nand ensure the last entry's version matches `finalVersion`.\n\nUsed by the overwrite/merge and new-entry paths in `index_add` plus any\nother handler that needs to normalize a user-supplied changeLog.",
-          "line": 181
+          "line": 187
         },
         {
           "name": "applyGovernanceKeys",
@@ -40564,7 +41199,7 @@
           ],
           "returnType": "void",
           "description": "Copy defined governance fields from `source` into `target` for the given keys.",
-          "line": 222
+          "line": 228
         }
       ],
       "constants": [
@@ -40573,14 +41208,14 @@
           "type": "readonly (keyof ImportEntry)[]",
           "initializerKind": "AsExpression",
           "description": "Governance keys merged from input into the entry by `index_add`.",
-          "line": 206
+          "line": 212
         },
         {
           "name": "IMPORT_GOVERNANCE_KEYS",
           "type": "readonly (keyof ImportEntry)[]",
           "initializerKind": "AsExpression",
           "description": "Governance keys merged from input into the entry by `index_import`.\nDiffers from {@link ADD_GOVERNANCE_KEYS} by also including `changeLog`,\nsince import accepts changeLog directly without invoking repair logic.",
-          "line": 215
+          "line": 221
         }
       ]
     },
@@ -41088,6 +41723,17 @@
           "namespaceImport": null
         },
         {
+          "module": "./usageCounters",
+          "defaultImport": null,
+          "namedImports": [
+            "resolveUsageKind",
+            "deriveUsageCount",
+            "backfillLegacyCounters",
+            "UsageKind"
+          ],
+          "namespaceImport": null
+        },
+        {
           "module": "./tracing",
           "defaultImport": null,
           "namedImports": [
@@ -41100,7 +41746,6 @@
           "module": "./logger.js",
           "defaultImport": null,
           "namedImports": [
-            "logError",
             "logInfo",
             "logWarn",
             "logDebug"
@@ -41332,6 +41977,12 @@
           ]
         },
         {
+          "name": "updateArchivedEntry",
+          "kinds": [
+            "FunctionDeclaration"
+          ]
+        },
+        {
           "name": "UsagePersistRecord",
           "kinds": [
             "InterfaceDeclaration"
@@ -41362,67 +42013,67 @@
           "name": "IndexState",
           "isExported": true,
           "extends": [],
-          "line": 21,
+          "line": 22,
           "properties": [
             {
               "name": "loadedAt",
               "type": "string",
               "optional": false,
-              "line": 21
+              "line": 22
             },
             {
               "name": "hash",
               "type": "string",
               "optional": false,
-              "line": 21
+              "line": 22
             },
             {
               "name": "byId",
               "type": "Map<string, InstructionEntry>",
               "optional": false,
-              "line": 21
+              "line": 22
             },
             {
               "name": "list",
               "type": "InstructionEntry[]",
               "optional": false,
-              "line": 21
+              "line": 22
             },
             {
               "name": "fileCount",
               "type": "number",
               "optional": false,
-              "line": 21
+              "line": 22
             },
             {
               "name": "versionMTime",
               "type": "number",
               "optional": false,
-              "line": 21
+              "line": 22
             },
             {
               "name": "versionToken",
               "type": "string",
               "optional": false,
-              "line": 21
+              "line": 22
             },
             {
               "name": "loadErrors",
               "type": "{ file:string; error:string }[]",
               "optional": true,
-              "line": 21
+              "line": 22
             },
             {
               "name": "loadDebug",
               "type": "{ scanned:number; accepted:number; skipped:number; trace?: { file:string; accepted:boolean; reason?:string }[] }",
               "optional": true,
-              "line": 21
+              "line": 22
             },
             {
               "name": "loadSummary",
               "type": "{ scanned:number; accepted:number; skipped:number; reasons: Record<string,number>; cacheHits?: number; hashHits?: number }",
               "optional": true,
-              "line": 21
+              "line": 22
             }
           ],
           "methods": []
@@ -41431,43 +42082,67 @@
           "name": "UsagePersistRecord",
           "isExported": true,
           "extends": [],
-          "line": 42,
+          "line": 43,
           "properties": [
             {
               "name": "usageCount",
               "type": "number",
               "optional": true,
-              "line": 42
+              "line": 43
+            },
+            {
+              "name": "retrievedCount",
+              "type": "number",
+              "optional": true,
+              "line": 43
+            },
+            {
+              "name": "appliedCount",
+              "type": "number",
+              "optional": true,
+              "line": 43
             },
             {
               "name": "firstSeenTs",
               "type": "string",
               "optional": true,
-              "line": 42
+              "line": 43
             },
             {
               "name": "lastUsedAt",
               "type": "string",
               "optional": true,
-              "line": 42
+              "line": 43
+            },
+            {
+              "name": "lastRetrievedAt",
+              "type": "string",
+              "optional": true,
+              "line": 43
+            },
+            {
+              "name": "lastAppliedAt",
+              "type": "string",
+              "optional": true,
+              "line": 43
             },
             {
               "name": "lastAction",
               "type": "string",
               "optional": true,
-              "line": 42
+              "line": 43
             },
             {
               "name": "lastSignal",
               "type": "string",
               "optional": true,
-              "line": 42
+              "line": 43
             },
             {
               "name": "lastComment",
               "type": "string",
               "optional": true,
-              "line": 42
+              "line": 43
             }
           ],
           "methods": []
@@ -41476,25 +42151,31 @@
           "name": "UsageTrackOptions",
           "isExported": true,
           "extends": [],
-          "line": 43,
+          "line": 44,
           "properties": [
             {
               "name": "action",
               "type": "string",
               "optional": true,
-              "line": 43
+              "line": 44
             },
             {
               "name": "signal",
               "type": "string",
               "optional": true,
-              "line": 43
+              "line": 44
             },
             {
               "name": "comment",
               "type": "string",
               "optional": true,
-              "line": 43
+              "line": 44
+            },
+            {
+              "name": "kind",
+              "type": "'retrieved' | 'applied'",
+              "optional": true,
+              "line": 44
             }
           ],
           "methods": []
@@ -41503,19 +42184,19 @@
           "name": "IndexPollerOptions",
           "isExported": true,
           "extends": [],
-          "line": 576,
+          "line": 659,
           "properties": [
             {
               "name": "intervalMs",
               "type": "number",
               "optional": true,
-              "line": 576
+              "line": 659
             },
             {
               "name": "proactive",
               "type": "boolean",
               "optional": true,
-              "line": 576
+              "line": 659
             }
           ],
           "methods": []
@@ -41524,7 +42205,7 @@
           "name": "EmbeddingEvictionHook",
           "isExported": true,
           "extends": [],
-          "line": 864,
+          "line": 947,
           "properties": [],
           "methods": [
             {
@@ -41537,7 +42218,7 @@
                 }
               ],
               "returnType": "void",
-              "line": 865
+              "line": 948
             },
             {
               "name": "markStale",
@@ -41549,7 +42230,7 @@
                 }
               ],
               "returnType": "void",
-              "line": 866
+              "line": 949
             }
           ]
         }
@@ -41569,7 +42250,7 @@
             }
           ],
           "returnType": "IInstructionStore | null",
-          "line": 28
+          "line": 29
         },
         {
           "name": "getUsageSnapshotPath",
@@ -41577,7 +42258,7 @@
           "isAsync": false,
           "parameters": [],
           "returnType": "string",
-          "line": 38
+          "line": 39
         },
         {
           "name": "trackInvariantRepair",
@@ -41601,7 +42282,7 @@
             }
           ],
           "returnType": null,
-          "line": 73
+          "line": 81
         },
         {
           "name": "_resetIndexContextProcessLatches",
@@ -41610,7 +42291,7 @@
           "parameters": [],
           "returnType": "void",
           "description": "Test-only hook — reset process-scoped latches between vitest specs.",
-          "line": 93
+          "line": 101
         },
         {
           "name": "_resetIndexContextStateForTests",
@@ -41619,7 +42300,7 @@
           "parameters": [],
           "returnType": "void",
           "description": "Test-only hook — reset the module-scoped index state cache.",
-          "line": 102
+          "line": 110
         },
         {
           "name": "getInvariantRepairSummary",
@@ -41628,7 +42309,7 @@
           "parameters": [],
           "returnType": "{ totalRepairs: number; recentRepairs: typeof invariantRepairLog }",
           "description": "Returns a summary of invariant repairs for health check visibility.",
-          "line": 108
+          "line": 116
         },
         {
           "name": "restoreFirstSeenInvariant",
@@ -41642,7 +42323,7 @@
             }
           ],
           "returnType": null,
-          "line": 115
+          "line": 123
         },
         {
           "name": "restoreUsageInvariant",
@@ -41656,7 +42337,7 @@
             }
           ],
           "returnType": null,
-          "line": 155
+          "line": 163
         },
         {
           "name": "restoreLastUsedInvariant",
@@ -41670,7 +42351,7 @@
             }
           ],
           "returnType": null,
-          "line": 190
+          "line": 225
         },
         {
           "name": "checkUsageRateLimit",
@@ -41684,7 +42365,7 @@
             }
           ],
           "returnType": "boolean",
-          "line": 201
+          "line": 236
         },
         {
           "name": "clearUsageRateLimit",
@@ -41698,7 +42379,7 @@
             }
           ],
           "returnType": null,
-          "line": 227
+          "line": 262
         },
         {
           "name": "ensureDataDir",
@@ -41706,7 +42387,7 @@
           "isAsync": false,
           "parameters": [],
           "returnType": null,
-          "line": 235
+          "line": 270
         },
         {
           "name": "loadUsageSnapshot",
@@ -41714,7 +42395,7 @@
           "isAsync": false,
           "parameters": [],
           "returnType": null,
-          "line": 236
+          "line": 271
         },
         {
           "name": "scheduleUsageFlush",
@@ -41722,7 +42403,7 @@
           "isAsync": false,
           "parameters": [],
           "returnType": null,
-          "line": 266
+          "line": 301
         },
         {
           "name": "flushUsageSnapshot",
@@ -41730,7 +42411,7 @@
           "isAsync": false,
           "parameters": [],
           "returnType": null,
-          "line": 272
+          "line": 307
         },
         {
           "name": "getInstructionsDir",
@@ -41738,7 +42419,7 @@
           "isAsync": false,
           "parameters": [],
           "returnType": null,
-          "line": 332
+          "line": 383
         },
         {
           "name": "diagnoseInstructionsDir",
@@ -41746,7 +42427,7 @@
           "isAsync": false,
           "parameters": [],
           "returnType": null,
-          "line": 361
+          "line": 412
         },
         {
           "name": "getVersionFile",
@@ -41754,7 +42435,7 @@
           "isAsync": false,
           "parameters": [],
           "returnType": null,
-          "line": 377
+          "line": 428
         },
         {
           "name": "touchIndexVersion",
@@ -41762,7 +42443,7 @@
           "isAsync": false,
           "parameters": [],
           "returnType": null,
-          "line": 378
+          "line": 429
         },
         {
           "name": "readVersionMTime",
@@ -41770,7 +42451,7 @@
           "isAsync": false,
           "parameters": [],
           "returnType": "number",
-          "line": 386
+          "line": 437
         },
         {
           "name": "readVersionToken",
@@ -41778,7 +42459,7 @@
           "isAsync": false,
           "parameters": [],
           "returnType": "string",
-          "line": 408
+          "line": 459
         },
         {
           "name": "markindexDirty",
@@ -41786,7 +42467,7 @@
           "isAsync": false,
           "parameters": [],
           "returnType": null,
-          "line": 409
+          "line": 460
         },
         {
           "name": "syncTouchedVersionIntoState",
@@ -41794,7 +42475,7 @@
           "isAsync": false,
           "parameters": [],
           "returnType": null,
-          "line": 410
+          "line": 461
         },
         {
           "name": "materializeWrittenEntry",
@@ -41808,7 +42489,7 @@
             }
           ],
           "returnType": null,
-          "line": 422
+          "line": 473
         },
         {
           "name": "ensureLoaded",
@@ -41816,7 +42497,7 @@
           "isAsync": false,
           "parameters": [],
           "returnType": "IndexState",
-          "line": 440
+          "line": 491
         },
         {
           "name": "ensureLoadedAsync",
@@ -41824,7 +42505,21 @@
           "isAsync": true,
           "parameters": [],
           "returnType": "Promise<IndexState>",
-          "line": 514
+          "line": 561
+        },
+        {
+          "name": "applyUsageSnapshotOverlay",
+          "isExported": false,
+          "isAsync": false,
+          "parameters": [
+            {
+              "name": "s",
+              "type": "IndexState",
+              "optional": false
+            }
+          ],
+          "returnType": null,
+          "line": 595
         },
         {
           "name": "startIndexVersionPoller",
@@ -41838,7 +42533,7 @@
             }
           ],
           "returnType": null,
-          "line": 578
+          "line": 661
         },
         {
           "name": "stopIndexVersionPoller",
@@ -41846,7 +42541,7 @@
           "isAsync": false,
           "parameters": [],
           "returnType": null,
-          "line": 619
+          "line": 702
         },
         {
           "name": "invalidate",
@@ -41854,7 +42549,7 @@
           "isAsync": false,
           "parameters": [],
           "returnType": null,
-          "line": 622
+          "line": 705
         },
         {
           "name": "getIndexState",
@@ -41862,7 +42557,7 @@
           "isAsync": false,
           "parameters": [],
           "returnType": null,
-          "line": 623
+          "line": 706
         },
         {
           "name": "getIndexStateAsync",
@@ -41870,7 +42565,7 @@
           "isAsync": true,
           "parameters": [],
           "returnType": null,
-          "line": 634
+          "line": 717
         },
         {
           "name": "getDebugIndexSnapshot",
@@ -41878,7 +42573,7 @@
           "isAsync": false,
           "parameters": [],
           "returnType": null,
-          "line": 645
+          "line": 728
         },
         {
           "name": "getIndexDiagnostics",
@@ -41892,7 +42587,7 @@
             }
           ],
           "returnType": null,
-          "line": 669
+          "line": 752
         },
         {
           "name": "projectGovernance",
@@ -41906,7 +42601,7 @@
             }
           ],
           "returnType": null,
-          "line": 721
+          "line": 804
         },
         {
           "name": "computeGovernanceHash",
@@ -41920,7 +42615,7 @@
             }
           ],
           "returnType": "string",
-          "line": 724
+          "line": 807
         },
         {
           "name": "isDuplicateInstructionWriteError",
@@ -41934,7 +42629,7 @@
             }
           ],
           "returnType": "boolean",
-          "line": 734
+          "line": 817
         },
         {
           "name": "writeEntry",
@@ -41953,7 +42648,7 @@
             }
           ],
           "returnType": null,
-          "line": 742
+          "line": 825
         },
         {
           "name": "writeEntryAsync",
@@ -41972,7 +42667,7 @@
             }
           ],
           "returnType": null,
-          "line": 794
+          "line": 877
         },
         {
           "name": "removeEntry",
@@ -41986,7 +42681,7 @@
             }
           ],
           "returnType": null,
-          "line": 835
+          "line": 918
         },
         {
           "name": "setEmbeddingEvictionHook",
@@ -42001,7 +42696,7 @@
           ],
           "returnType": "void",
           "description": "Register a callback invoked when an entry is archived / purged / restored.\nBest-effort: hook errors are swallowed so archive operations never fail\nbecause of an embedding cache issue.",
-          "line": 874
+          "line": 957
         },
         {
           "name": "_getEmbeddingEvictionHookForTests",
@@ -42010,7 +42705,7 @@
           "parameters": [],
           "returnType": "EmbeddingEvictionHook | null",
           "description": "Test-only accessor for the currently registered hook.",
-          "line": 878
+          "line": 961
         },
         {
           "name": "safeEvictEmbedding",
@@ -42024,7 +42719,7 @@
             }
           ],
           "returnType": "void",
-          "line": 881
+          "line": 964
         },
         {
           "name": "safeMarkStaleEmbedding",
@@ -42038,7 +42733,7 @@
             }
           ],
           "returnType": "void",
-          "line": 888
+          "line": 971
         },
         {
           "name": "archiveDirPath",
@@ -42046,7 +42741,7 @@
           "isAsync": false,
           "parameters": [],
           "returnType": "string",
-          "line": 899
+          "line": 982
         },
         {
           "name": "archiveFilePath",
@@ -42060,7 +42755,7 @@
             }
           ],
           "returnType": "string",
-          "line": 900
+          "line": 983
         },
         {
           "name": "ensureArchiveDirExists",
@@ -42068,7 +42763,7 @@
           "isAsync": false,
           "parameters": [],
           "returnType": "void",
-          "line": 901
+          "line": 984
         },
         {
           "name": "readArchiveFileFallback",
@@ -42082,7 +42777,7 @@
             }
           ],
           "returnType": "InstructionEntry | null",
-          "line": 905
+          "line": 988
         },
         {
           "name": "archiveEntryFallback",
@@ -42101,7 +42796,7 @@
             }
           ],
           "returnType": "InstructionEntry",
-          "line": 918
+          "line": 1001
         },
         {
           "name": "restoreEntryFallback",
@@ -42120,7 +42815,7 @@
             }
           ],
           "returnType": "InstructionEntry",
-          "line": 945
+          "line": 1028
         },
         {
           "name": "purgeEntryFallback",
@@ -42134,7 +42829,7 @@
             }
           ],
           "returnType": "void",
-          "line": 976
+          "line": 1059
         },
         {
           "name": "archiveEntry",
@@ -42154,7 +42849,7 @@
           ],
           "returnType": "InstructionEntry",
           "description": "Archive an active entry. Atomic at the storage layer (the entry never\nappears in both active + archive sets at rest). Invalidates the in-memory\nindex and emits an embedding eviction so the archived id cannot surface\nin semantic search results.",
-          "line": 989
+          "line": 1072
         },
         {
           "name": "restoreEntry",
@@ -42174,7 +42869,7 @@
           ],
           "returnType": "InstructionEntry",
           "description": "Restore an archived entry back to active storage.",
-          "line": 1011
+          "line": 1094
         },
         {
           "name": "purgeEntry",
@@ -42189,7 +42884,22 @@
           ],
           "returnType": "void",
           "description": "Permanently delete an archived entry. Irreversible.\nNo-op if the id is not present in the archive store.",
-          "line": 1025
+          "line": 1108
+        },
+        {
+          "name": "updateArchivedEntry",
+          "isExported": true,
+          "isAsync": false,
+          "parameters": [
+            {
+              "name": "entry",
+              "type": "InstructionEntry",
+              "optional": false
+            }
+          ],
+          "returnType": "InstructionEntry",
+          "description": "Update an archived entry in place without round-tripping through the active\nsurface. The entry must already exist in the archive store; archive\nmetadata fields on `entry` are honored (callers should preserve them from\nthe original archived record).",
+          "line": 1124
         },
         {
           "name": "getArchivedEntry",
@@ -42204,7 +42914,7 @@
           ],
           "returnType": "InstructionEntry | null",
           "description": "Read a single archived entry by id without touching the active cache.",
-          "line": 1039
+          "line": 1154
         },
         {
           "name": "listArchivedEntries",
@@ -42219,7 +42929,7 @@
           ],
           "returnType": "InstructionEntry[]",
           "description": "List archived entries with optional filters. Does not invalidate the cache\nor modify `state`.",
-          "line": 1049
+          "line": 1164
         },
         {
           "name": "computeActiveAndArchiveHashes",
@@ -42228,7 +42938,7 @@
           "parameters": [],
           "returnType": "{ active: string; archive: string }",
           "description": "Return active + archive governance hashes without invalidating the cache.\nActive hash uses the same projection as `computeHash()`; archive hash uses\n`computeArchiveHash()`. Identical sets across backends yield identical\nhashes (REQ-13).",
-          "line": 1090
+          "line": 1205
         },
         {
           "name": "scheduleUsagePersist",
@@ -42236,7 +42946,7 @@
           "isAsync": false,
           "parameters": [],
           "returnType": null,
-          "line": 1106
+          "line": 1221
         },
         {
           "name": "incrementUsage",
@@ -42255,7 +42965,7 @@
             }
           ],
           "returnType": null,
-          "line": 1107
+          "line": 1222
         },
         {
           "name": "__testResetUsageState",
@@ -42263,7 +42973,7 @@
           "isAsync": false,
           "parameters": [],
           "returnType": null,
-          "line": 1277
+          "line": 1408
         }
       ],
       "constants": [
@@ -42272,7 +42982,7 @@
           "type": null,
           "initializerKind": "ObjectLiteralExpression",
           "description": "Internal handles for unit tests only. Not part of the public API.",
-          "line": 148
+          "line": 156
         }
       ]
     },
@@ -43408,25 +44118,25 @@
           "name": "SanitizedLoadError",
           "isExported": true,
           "extends": [],
-          "line": 359,
+          "line": 364,
           "properties": [
             {
               "name": "code",
               "type": "LoadErrorCode",
               "optional": false,
-              "line": 360
+              "line": 365
             },
             {
               "name": "detail",
               "type": "string",
               "optional": false,
-              "line": 361
+              "line": 366
             },
             {
               "name": "raw",
               "type": "string",
               "optional": false,
-              "line": 362
+              "line": 367
             }
           ],
           "methods": []
@@ -43437,7 +44147,7 @@
           "name": "LoadErrorCode",
           "isExported": true,
           "type": "'load_failed' | 'parse_failed' | 'unknown'",
-          "line": 357
+          "line": 362
         }
       ],
       "enums": [],
@@ -43604,7 +44314,7 @@
             }
           ],
           "returnType": "InstructionValidationResult",
-          "line": 285
+          "line": 290
         },
         {
           "name": "validateInstructionRecord",
@@ -43618,7 +44328,7 @@
             }
           ],
           "returnType": "InstructionValidationResult",
-          "line": 306
+          "line": 311
         },
         {
           "name": "assertValidInstructionRecord",
@@ -43632,7 +44342,7 @@
             }
           ],
           "returnType": "InstructionEntry",
-          "line": 340
+          "line": 345
         },
         {
           "name": "isInstructionValidationError",
@@ -43646,7 +44356,7 @@
             }
           ],
           "returnType": "error is InstructionValidationError",
-          "line": 348
+          "line": 353
         },
         {
           "name": "sanitizeErrorDetail",
@@ -43661,7 +44371,7 @@
           ],
           "returnType": "string",
           "description": "Strip absolute paths, Node fs error codes, quoted path arguments, and\nstack traces from a free-form error message. Used to keep client-facing\nerror responses free of filesystem layout or internal details.",
-          "line": 372
+          "line": 377
         },
         {
           "name": "sanitizeLoadError",
@@ -43681,7 +44391,7 @@
           ],
           "returnType": "SanitizedLoadError",
           "description": "Convert an arbitrary error from the existing-entry load path into a\nclient-safe shape. The `raw` field is preserved for internal audit logging\nonly; never echo it directly to clients.",
-          "line": 395
+          "line": 400
         }
       ],
       "constants": [
@@ -45491,7 +46201,7 @@
             }
           ],
           "returnType": "string",
-          "line": 247
+          "line": 248
         },
         {
           "name": "resolveDataPaths",
@@ -45505,7 +46215,7 @@
             }
           ],
           "returnType": "McpDataPaths",
-          "line": 251
+          "line": 252
         },
         {
           "name": "buildEnvCatalog",
@@ -45524,7 +46234,7 @@
             }
           ],
           "returnType": "McpEnvCatalogEntry[]",
-          "line": 270
+          "line": 271
         },
         {
           "name": "activeEnvFromCatalog",
@@ -45538,7 +46248,7 @@
             }
           ],
           "returnType": "Record<string, string>",
-          "line": 370
+          "line": 371
         }
       ],
       "constants": [
@@ -45569,6 +46279,12 @@
         {
           "module": "path",
           "defaultImport": "path",
+          "namedImports": [],
+          "namespaceImport": null
+        },
+        {
+          "module": "child_process",
+          "defaultImport": "child_process",
           "namedImports": [],
           "namespaceImport": null
         },
@@ -45623,6 +46339,12 @@
         },
         {
           "name": "isEphemeralNpxPath",
+          "kinds": [
+            "FunctionDeclaration"
+          ]
+        },
+        {
+          "name": "isNpxReachable",
           "kinds": [
             "FunctionDeclaration"
           ]
@@ -45688,43 +46410,43 @@
           "name": "McpServerEntry",
           "isExported": true,
           "extends": [],
-          "line": 7,
+          "line": 8,
           "properties": [
             {
               "name": "type",
               "type": "string",
               "optional": true,
-              "line": 8
+              "line": 9
             },
             {
               "name": "command",
               "type": "string",
               "optional": false,
-              "line": 9
+              "line": 10
             },
             {
               "name": "args",
               "type": "string[]",
               "optional": false,
-              "line": 10
+              "line": 11
             },
             {
               "name": "cwd",
               "type": "string",
               "optional": true,
-              "line": 11
+              "line": 12
             },
             {
               "name": "env",
               "type": "Record<string, string>",
               "optional": true,
-              "line": 12
+              "line": 13
             },
             {
               "name": "tools",
               "type": "string[]",
               "optional": true,
-              "line": 13
+              "line": 14
             }
           ],
           "methods": []
@@ -45735,13 +46457,13 @@
           "extends": [
             "McpProfileConfig"
           ],
-          "line": 16,
+          "line": 17,
           "properties": [
             {
               "name": "serverName",
               "type": "string",
               "optional": false,
-              "line": 17
+              "line": 18
             }
           ],
           "methods": []
@@ -45762,7 +46484,7 @@
             }
           ],
           "returnType": "'servers' | 'mcpServers'",
-          "line": 20
+          "line": 21
         },
         {
           "name": "emptyConfigForFormat",
@@ -45776,7 +46498,7 @@
             }
           ],
           "returnType": "Record<string, unknown>",
-          "line": 24
+          "line": 25
         },
         {
           "name": "parseConfigText",
@@ -45795,7 +46517,7 @@
             }
           ],
           "returnType": "Record<string, unknown>",
-          "line": 31
+          "line": 32
         },
         {
           "name": "readConfigFile",
@@ -45814,7 +46536,7 @@
             }
           ],
           "returnType": "Record<string, unknown>",
-          "line": 38
+          "line": 39
         },
         {
           "name": "getServerMap",
@@ -45833,7 +46555,7 @@
             }
           ],
           "returnType": "Record<string, McpServerEntry>",
-          "line": 43
+          "line": 44
         },
         {
           "name": "isEphemeralNpxPath",
@@ -45848,7 +46570,16 @@
           ],
           "returnType": "boolean",
           "description": "Returns true when `p` lies under an npx ephemeral cache (e.g.\n`~/.npm/_npx/<hash>/...` on POSIX or `%LocalAppData%\\npm-cache\\_npx\\<hash>\\...`\non Windows). Such paths are not safe to bake into an mcp.json: npx may evict\nthem between wizard run and first MCP-client launch.",
-          "line": 59
+          "line": 60
+        },
+        {
+          "name": "isNpxReachable",
+          "isExported": true,
+          "isAsync": false,
+          "parameters": [],
+          "returnType": "boolean",
+          "description": "Probes whether `npx` is reachable from the current environment. Used by\n`resolveServerLaunch` (issue #386) to avoid baking a `command: 'npx'` entry\ninto `mcp.json` when the host cannot actually launch npx (offline machine,\nstripped PATH, locked-down CI runner). We spawn `npx --version` rather than\nparsing PATH ourselves so that platform-specific resolution (PATHEXT, .cmd\nshims, shell builtins) is handled by the OS.",
+          "line": 73
         },
         {
           "name": "resolveServerLaunch",
@@ -45862,7 +46593,7 @@
             }
           ],
           "returnType": "{ command: string; args: string[]; cwd?: string; source: 'local' | 'packaged' | 'npx' }",
-          "line": 64
+          "line": 89
         },
         {
           "name": "buildServerEntry",
@@ -45891,7 +46622,7 @@
             }
           ],
           "returnType": "McpServerEntry",
-          "line": 81
+          "line": 119
         },
         {
           "name": "renderConfig",
@@ -45915,7 +46646,7 @@
             }
           ],
           "returnType": "string",
-          "line": 106
+          "line": 165
         },
         {
           "name": "upsertConfigText",
@@ -45944,7 +46675,7 @@
             }
           ],
           "returnType": "string",
-          "line": 115
+          "line": 174
         },
         {
           "name": "removeConfigText",
@@ -45968,7 +46699,7 @@
             }
           ],
           "returnType": "string",
-          "line": 128
+          "line": 187
         }
       ],
       "constants": []
@@ -46053,9 +46784,30 @@
             "atomicWriteText"
           ],
           "namespaceImport": null
+        },
+        {
+          "module": "./launchEntryPoint",
+          "defaultImport": null,
+          "namedImports": [
+            "assertLaunchEntryExists",
+            "checkLaunchEntryPoint",
+            "resolveLaunchEntryAbsolute",
+            "verifyServerLaunch",
+            "EntryPointCheck",
+            "LaunchSpec",
+            "VerifyServerOptions",
+            "VerifyServerResult"
+          ],
+          "namespaceImport": null
         }
       ],
       "exports": [
+        {
+          "name": "assertLaunchEntryExists",
+          "kinds": [
+            "FunctionDeclaration"
+          ]
+        },
         {
           "name": "buildEnvCatalog",
           "kinds": [
@@ -46063,9 +46815,33 @@
           ]
         },
         {
+          "name": "buildServerEntry",
+          "kinds": [
+            "FunctionDeclaration"
+          ]
+        },
+        {
+          "name": "checkLaunchEntryPoint",
+          "kinds": [
+            "FunctionDeclaration"
+          ]
+        },
+        {
+          "name": "EntryPointCheck",
+          "kinds": [
+            "InterfaceDeclaration"
+          ]
+        },
+        {
           "name": "getServer",
           "kinds": [
             "FunctionDeclaration"
+          ]
+        },
+        {
+          "name": "LaunchSpec",
+          "kinds": [
+            "InterfaceDeclaration"
           ]
         },
         {
@@ -46147,6 +46923,12 @@
           ]
         },
         {
+          "name": "resolveLaunchEntryAbsolute",
+          "kinds": [
+            "FunctionDeclaration"
+          ]
+        },
+        {
           "name": "resolveServerLaunch",
           "kinds": [
             "FunctionDeclaration"
@@ -46189,6 +46971,24 @@
           ]
         },
         {
+          "name": "verifyServerLaunch",
+          "kinds": [
+            "FunctionDeclaration"
+          ]
+        },
+        {
+          "name": "VerifyServerOptions",
+          "kinds": [
+            "InterfaceDeclaration"
+          ]
+        },
+        {
+          "name": "VerifyServerResult",
+          "kinds": [
+            "InterfaceDeclaration"
+          ]
+        },
+        {
           "name": "writeGeneratedConfig",
           "kinds": [
             "FunctionDeclaration"
@@ -46201,116 +47001,116 @@
           "name": "McpOperationOptions",
           "isExported": true,
           "extends": [],
-          "line": 13,
+          "line": 26,
           "properties": [
             {
               "name": "target",
               "type": "McpClientTarget",
               "optional": true,
-              "line": 14
+              "line": 27
             },
             {
               "name": "targets",
               "type": "McpClientTarget[]",
               "optional": true,
-              "line": 15
+              "line": 28
             },
             {
               "name": "scope",
               "type": "McpScope",
               "optional": true,
-              "line": 16
+              "line": 29
             },
             {
               "name": "root",
               "type": "string",
               "optional": true,
-              "line": 17
+              "line": 30
             },
             {
               "name": "name",
               "type": "string",
               "optional": true,
-              "line": 18
+              "line": 31
             },
             {
               "name": "profile",
               "type": "McpProfile",
               "optional": true,
-              "line": 19
+              "line": 32
             },
             {
               "name": "port",
               "type": "number",
               "optional": true,
-              "line": 20
+              "line": 33
             },
             {
               "name": "host",
               "type": "string",
               "optional": true,
-              "line": 21
+              "line": 34
             },
             {
               "name": "tls",
               "type": "boolean",
               "optional": true,
-              "line": 22
+              "line": 35
             },
             {
               "name": "mutation",
               "type": "boolean",
               "optional": true,
-              "line": 23
+              "line": 36
             },
             {
               "name": "logLevel",
               "type": "string",
               "optional": true,
-              "line": 24
+              "line": 37
             },
             {
               "name": "storageBackend",
               "type": "'json' | 'sqlite'",
               "optional": true,
-              "line": 25
+              "line": 38
             },
             {
               "name": "semanticEnabled",
               "type": "boolean",
               "optional": true,
-              "line": 26
+              "line": 39
             },
             {
               "name": "backupsDir",
               "type": "string",
               "optional": true,
-              "line": 27
+              "line": 40
             },
             {
               "name": "env",
               "type": "Record<string, string>",
               "optional": true,
-              "line": 28
+              "line": 41
             },
             {
               "name": "dryRun",
               "type": "boolean",
               "optional": true,
-              "line": 29
+              "line": 42
             },
             {
               "name": "backup",
               "type": "string",
               "optional": true,
-              "line": 30
+              "line": 43
             },
             {
               "name": "targetInfo",
               "type": "McpTargetInfo",
               "optional": true,
               "description": "Pre-resolved target. When supplied, bypasses target/scope resolution.\nRequired for callers that need to write to a specific flavor (e.g. both\nVS Code stable and Insiders), since `resolveConfigTargets` may return\nmultiple `vscode-global` entries.",
-              "line": 37
+              "line": 50
             }
           ],
           "methods": []
@@ -46319,73 +47119,73 @@
           "name": "McpOperationResult",
           "isExported": true,
           "extends": [],
-          "line": 40,
+          "line": 53,
           "properties": [
             {
               "name": "ok",
               "type": "boolean",
               "optional": false,
-              "line": 41
+              "line": 54
             },
             {
               "name": "action",
               "type": "string",
               "optional": false,
-              "line": 42
+              "line": 55
             },
             {
               "name": "target",
               "type": "McpClientTarget",
               "optional": false,
-              "line": 43
+              "line": 56
             },
             {
               "name": "format",
               "type": "McpConfigFormat",
               "optional": false,
-              "line": 44
+              "line": 57
             },
             {
               "name": "path",
               "type": "string",
               "optional": false,
-              "line": 45
+              "line": 58
             },
             {
               "name": "name",
               "type": "string",
               "optional": true,
-              "line": 46
+              "line": 59
             },
             {
               "name": "server",
               "type": "McpServerEntry | null",
               "optional": true,
-              "line": 47
+              "line": 60
             },
             {
               "name": "servers",
               "type": "string[]",
               "optional": true,
-              "line": 48
+              "line": 61
             },
             {
               "name": "validation",
               "type": "ValidationResult",
               "optional": true,
-              "line": 49
+              "line": 62
             },
             {
               "name": "backupPath",
               "type": "string",
               "optional": true,
-              "line": 50
+              "line": 63
             },
             {
               "name": "dryRun",
               "type": "boolean",
               "optional": true,
-              "line": 51
+              "line": 64
             }
           ],
           "methods": []
@@ -46406,7 +47206,7 @@
             }
           ],
           "returnType": "McpTargetInfo",
-          "line": 54
+          "line": 67
         },
         {
           "name": "defaultName",
@@ -46420,7 +47220,7 @@
             }
           ],
           "returnType": "string",
-          "line": 64
+          "line": 77
         },
         {
           "name": "buildConfig",
@@ -46434,7 +47234,7 @@
             }
           ],
           "returnType": "ServerBuildConfig",
-          "line": 68
+          "line": 81
         },
         {
           "name": "readExistingText",
@@ -46453,7 +47253,7 @@
             }
           ],
           "returnType": "string",
-          "line": 86
+          "line": 99
         },
         {
           "name": "listServers",
@@ -46467,7 +47267,7 @@
             }
           ],
           "returnType": "McpOperationResult",
-          "line": 94
+          "line": 107
         },
         {
           "name": "getServer",
@@ -46481,7 +47281,7 @@
             }
           ],
           "returnType": "McpOperationResult",
-          "line": 101
+          "line": 114
         },
         {
           "name": "upsertServer",
@@ -46495,7 +47295,7 @@
             }
           ],
           "returnType": "McpOperationResult",
-          "line": 108
+          "line": 121
         },
         {
           "name": "removeServer",
@@ -46509,7 +47309,7 @@
             }
           ],
           "returnType": "McpOperationResult",
-          "line": 127
+          "line": 140
         },
         {
           "name": "restoreLatestBackup",
@@ -46523,7 +47323,7 @@
             }
           ],
           "returnType": "McpOperationResult",
-          "line": 143
+          "line": 156
         },
         {
           "name": "restoreServer",
@@ -46537,7 +47337,7 @@
             }
           ],
           "returnType": "McpOperationResult",
-          "line": 150
+          "line": 163
         },
         {
           "name": "validateFile",
@@ -46551,7 +47351,7 @@
             }
           ],
           "returnType": "McpOperationResult",
-          "line": 154
+          "line": 167
         },
         {
           "name": "renderServerConfigForTarget",
@@ -46570,7 +47370,7 @@
             }
           ],
           "returnType": "string",
-          "line": 161
+          "line": 174
         },
         {
           "name": "writeGeneratedConfig",
@@ -46589,7 +47389,7 @@
             }
           ],
           "returnType": "void",
-          "line": 168
+          "line": 181
         }
       ],
       "constants": []
@@ -46679,6 +47479,368 @@
           ],
           "returnType": "string",
           "line": 17
+        }
+      ],
+      "constants": []
+    },
+    {
+      "path": "src/services/mcpConfig/launchEntryPoint.ts",
+      "imports": [
+        {
+          "module": "fs",
+          "defaultImport": "fs",
+          "namedImports": [],
+          "namespaceImport": null
+        },
+        {
+          "module": "path",
+          "defaultImport": "path",
+          "namedImports": [],
+          "namespaceImport": null
+        }
+      ],
+      "exports": [
+        {
+          "name": "assertLaunchEntryExists",
+          "kinds": [
+            "FunctionDeclaration"
+          ]
+        },
+        {
+          "name": "checkLaunchEntryPoint",
+          "kinds": [
+            "FunctionDeclaration"
+          ]
+        },
+        {
+          "name": "EntryPointCheck",
+          "kinds": [
+            "InterfaceDeclaration"
+          ]
+        },
+        {
+          "name": "LaunchSpec",
+          "kinds": [
+            "InterfaceDeclaration"
+          ]
+        },
+        {
+          "name": "resolveLaunchEntryAbsolute",
+          "kinds": [
+            "FunctionDeclaration"
+          ]
+        },
+        {
+          "name": "verifyServerLaunch",
+          "kinds": [
+            "FunctionDeclaration"
+          ]
+        },
+        {
+          "name": "VerifyServerOptions",
+          "kinds": [
+            "InterfaceDeclaration"
+          ]
+        },
+        {
+          "name": "VerifyServerResult",
+          "kinds": [
+            "InterfaceDeclaration"
+          ]
+        }
+      ],
+      "classes": [],
+      "interfaces": [
+        {
+          "name": "LaunchSpec",
+          "isExported": true,
+          "extends": [],
+          "description": "Mirror of `resolveServerLaunch`'s return type. Locally defined to avoid\na structural dependency on `formats.ts` (which doesn't export it as a\nnamed interface today).",
+          "line": 19,
+          "properties": [
+            {
+              "name": "command",
+              "type": "string",
+              "optional": false,
+              "line": 20
+            },
+            {
+              "name": "args",
+              "type": "string[]",
+              "optional": false,
+              "line": 21
+            },
+            {
+              "name": "cwd",
+              "type": "string",
+              "optional": true,
+              "line": 22
+            },
+            {
+              "name": "source",
+              "type": "'local' | 'packaged' | 'npx'",
+              "optional": false,
+              "line": 23
+            },
+            {
+              "name": "env",
+              "type": "Record<string, string>",
+              "optional": true,
+              "description": "Optional env to merge when spawning. Not part of resolveServerLaunch.",
+              "line": 25
+            }
+          ],
+          "methods": []
+        },
+        {
+          "name": "EntryPointCheck",
+          "isExported": true,
+          "extends": [],
+          "line": 45,
+          "properties": [
+            {
+              "name": "ok",
+              "type": "boolean",
+              "optional": false,
+              "line": 46
+            },
+            {
+              "name": "command",
+              "type": "string",
+              "optional": false,
+              "line": 47
+            },
+            {
+              "name": "source",
+              "type": "LaunchSpec['source']",
+              "optional": false,
+              "line": 48
+            },
+            {
+              "name": "resolvedPath",
+              "type": "string | null",
+              "optional": false,
+              "description": "Absolute path checked, or null when launch.command isn't 'node'.",
+              "line": 50
+            },
+            {
+              "name": "reason",
+              "type": "string",
+              "optional": true,
+              "description": "Human-readable reason when ok=false.",
+              "line": 52
+            }
+          ],
+          "methods": []
+        },
+        {
+          "name": "VerifyServerOptions",
+          "isExported": true,
+          "extends": [],
+          "line": 97,
+          "properties": [
+            {
+              "name": "fallbackCwd",
+              "type": "string",
+              "optional": true,
+              "description": "Working directory if launch.cwd is unset. Defaults to process.cwd().",
+              "line": 99
+            },
+            {
+              "name": "timeoutMs",
+              "type": "number",
+              "optional": true,
+              "description": "Per-step timeout for connect + health_check. Defaults to 30s.",
+              "line": 101
+            },
+            {
+              "name": "extraEnv",
+              "type": "Record<string, string>",
+              "optional": true,
+              "description": "Extra env merged on top of process.env when spawning the server.",
+              "line": 103
+            }
+          ],
+          "methods": []
+        },
+        {
+          "name": "VerifyServerResult",
+          "isExported": true,
+          "extends": [],
+          "line": 106,
+          "properties": [
+            {
+              "name": "ok",
+              "type": "true",
+              "optional": false,
+              "line": 107
+            },
+            {
+              "name": "status",
+              "type": "string",
+              "optional": false,
+              "line": 108
+            },
+            {
+              "name": "version",
+              "type": "string",
+              "optional": true,
+              "line": 109
+            },
+            {
+              "name": "durationMs",
+              "type": "number",
+              "optional": false,
+              "line": 110
+            },
+            {
+              "name": "source",
+              "type": "LaunchSpec['source']",
+              "optional": false,
+              "line": 111
+            },
+            {
+              "name": "entryPath",
+              "type": "string | null",
+              "optional": false,
+              "line": 112
+            }
+          ],
+          "methods": []
+        }
+      ],
+      "typeAliases": [],
+      "enums": [],
+      "functions": [
+        {
+          "name": "resolveLaunchEntryAbsolute",
+          "isExported": true,
+          "isAsync": false,
+          "parameters": [
+            {
+              "name": "launch",
+              "type": "LaunchSpec",
+              "optional": false
+            },
+            {
+              "name": "fallbackCwd",
+              "type": "string",
+              "optional": false
+            }
+          ],
+          "returnType": "string | null",
+          "description": "Resolve a launch spec's `args[0]` to an absolute path, anchored on the\nlaunch's `cwd` (or `fallbackCwd` when the launch did not specify one).\nReturns `null` for non-`node` launches (e.g. `npx`) where the entry-point\nis not a local file the caller can `fs.stat`.",
+          "line": 34
+        },
+        {
+          "name": "checkLaunchEntryPoint",
+          "isExported": true,
+          "isAsync": false,
+          "parameters": [
+            {
+              "name": "launch",
+              "type": "LaunchSpec",
+              "optional": false
+            },
+            {
+              "name": "fallbackCwd",
+              "type": "string",
+              "optional": false
+            }
+          ],
+          "returnType": "EntryPointCheck",
+          "description": "Check whether the resolved entry-point for a launch spec exists on disk.\n- `command: 'node'` + missing file  → `{ ok: false, reason: 'missing' }`\n- `command: 'node'` + present file  → `{ ok: true }`\n- `command: 'npx'`  → `{ ok: true, resolvedPath: null }` (existence is\n  re-resolved by npx at launch time; the caller can decide whether to\n  probe further, e.g. via `isNpxReachable()`).",
+          "line": 63
+        },
+        {
+          "name": "assertLaunchEntryExists",
+          "isExported": true,
+          "isAsync": false,
+          "parameters": [
+            {
+              "name": "launch",
+              "type": "LaunchSpec",
+              "optional": false
+            },
+            {
+              "name": "fallbackCwd",
+              "type": "string",
+              "optional": false
+            }
+          ],
+          "returnType": "void",
+          "description": "Throwing variant of `checkLaunchEntryPoint`. Used by wizard `--verify` as\na fast pre-flight before paying the cost of spawning the server.",
+          "line": 87
+        },
+        {
+          "name": "verifyServerLaunch",
+          "isExported": true,
+          "isAsync": true,
+          "parameters": [
+            {
+              "name": "launch",
+              "type": "LaunchSpec",
+              "optional": false
+            },
+            {
+              "name": "options",
+              "type": "VerifyServerOptions",
+              "optional": true
+            }
+          ],
+          "returnType": "Promise<VerifyServerResult>",
+          "description": "Spawn the server described by `launch`, perform the MCP `initialize`\nhandshake, then call the `health_check` tool and assert `status === 'ok'`.\nReturns parsed health payload on success; throws an actionable Error on\nany failure (with stderr tail and resolved entry path when available).\n\nThis is what `setup-wizard --verify` runs after writing `mcp.json`.",
+          "line": 123
+        },
+        {
+          "name": "withTimeout",
+          "isExported": false,
+          "isAsync": false,
+          "parameters": [
+            {
+              "name": "promise",
+              "type": "Promise<T>",
+              "optional": false
+            },
+            {
+              "name": "ms",
+              "type": "number",
+              "optional": false
+            },
+            {
+              "name": "label",
+              "type": "string",
+              "optional": false
+            }
+          ],
+          "returnType": "Promise<T>",
+          "line": 235,
+          "typeParameters": [
+            {
+              "name": "T",
+              "constraint": null,
+              "default": null
+            }
+          ]
+        },
+        {
+          "name": "indent",
+          "isExported": false,
+          "isAsync": false,
+          "parameters": [
+            {
+              "name": "text",
+              "type": "string",
+              "optional": false
+            },
+            {
+              "name": "prefix",
+              "type": "string",
+              "optional": false
+            }
+          ],
+          "returnType": "string",
+          "line": 247
         }
       ],
       "constants": []
@@ -49930,7 +51092,7 @@
           "isAsync": false,
           "parameters": [],
           "returnType": "string",
-          "line": 222
+          "line": 226
         },
         {
           "name": "autoSeedBootstrap",
@@ -49939,7 +51101,7 @@
           "parameters": [],
           "returnType": "SeedSummary",
           "description": "Run automatic bootstrap seeding if enabled. Creates canonical seed files only when they are\nabsent — never overwrites existing content. Safe under concurrent multi-process startup.",
-          "line": 232
+          "line": 236
         },
         {
           "name": "safeInstructionsDir",
@@ -49947,7 +51109,7 @@
           "isAsync": false,
           "parameters": [],
           "returnType": "string",
-          "line": 331
+          "line": 335
         },
         {
           "name": "_getCanonicalSeeds",
@@ -49956,7 +51118,7 @@
           "parameters": [],
           "returnType": null,
           "description": "Return the list of canonical seed file/id pairs (without JSON bodies) for test assertions.",
-          "line": 344
+          "line": 348
         }
       ],
       "constants": []
@@ -50817,6 +51979,19 @@
               "line": 415
             },
             {
+              "name": "updateArchived",
+              "isStatic": false,
+              "parameters": [
+                {
+                  "name": "entry",
+                  "type": "InstructionEntry",
+                  "optional": false
+                }
+              ],
+              "returnType": "InstructionEntry",
+              "line": 424
+            },
+            {
               "name": "getArchived",
               "isStatic": false,
               "parameters": [
@@ -50827,7 +52002,7 @@
                 }
               ],
               "returnType": "InstructionEntry | null",
-              "line": 424
+              "line": 436
             },
             {
               "name": "listArchived",
@@ -50840,28 +52015,28 @@
                 }
               ],
               "returnType": "InstructionEntry[]",
-              "line": 428
+              "line": 440
             },
             {
               "name": "countArchived",
               "isStatic": false,
               "parameters": [],
               "returnType": "number",
-              "line": 465
+              "line": 477
             },
             {
               "name": "computeArchiveHash",
               "isStatic": false,
               "parameters": [],
               "returnType": "string",
-              "line": 471
+              "line": 483
             },
             {
               "name": "ensureLoaded",
               "isStatic": false,
               "parameters": [],
               "returnType": "void",
-              "line": 477
+              "line": 489
             }
           ],
           "properties": [
@@ -52109,6 +53284,19 @@
               "line": 610
             },
             {
+              "name": "updateArchived",
+              "isStatic": false,
+              "parameters": [
+                {
+                  "name": "entry",
+                  "type": "InstructionEntry",
+                  "optional": false
+                }
+              ],
+              "returnType": "InstructionEntry",
+              "line": 614
+            },
+            {
               "name": "getArchived",
               "isStatic": false,
               "parameters": [
@@ -52119,7 +53307,7 @@
                 }
               ],
               "returnType": "InstructionEntry | null",
-              "line": 614
+              "line": 633
             },
             {
               "name": "listArchived",
@@ -52132,21 +53320,21 @@
                 }
               ],
               "returnType": "InstructionEntry[]",
-              "line": 621
+              "line": 640
             },
             {
               "name": "countArchived",
               "isStatic": false,
               "parameters": [],
               "returnType": "number",
-              "line": 650
+              "line": 669
             },
             {
               "name": "computeArchiveHash",
               "isStatic": false,
               "parameters": [],
               "returnType": "string",
-              "line": 656
+              "line": 675
             },
             {
               "name": "writeActiveRowFromEntry",
@@ -52159,14 +53347,14 @@
                 }
               ],
               "returnType": "void",
-              "line": 661
+              "line": 680
             },
             {
               "name": "ensureLoaded",
               "isStatic": false,
               "parameters": [],
               "returnType": "void",
-              "line": 725
+              "line": 744
             }
           ],
           "properties": [
@@ -53194,6 +54382,19 @@
               "line": 291
             },
             {
+              "name": "updateArchived",
+              "parameters": [
+                {
+                  "name": "entry",
+                  "type": "InstructionEntry",
+                  "optional": false
+                }
+              ],
+              "returnType": "InstructionEntry",
+              "description": "Update an archived entry in place without round-tripping through the\nactive surface. The entry must already exist in the archive store. The\narchive metadata fields (archivedAt, archivedBy, archiveReason,\narchiveSource, restoreEligible) on the supplied payload are honored;\ncallers are expected to preserve them from the original archived record.",
+              "line": 304
+            },
+            {
               "name": "getArchived",
               "parameters": [
                 {
@@ -53204,7 +54405,7 @@
               ],
               "returnType": "InstructionEntry | null",
               "description": "Get a single archived entry by id.",
-              "line": 299
+              "line": 312
             },
             {
               "name": "listArchived",
@@ -53217,21 +54418,21 @@
               ],
               "returnType": "InstructionEntry[]",
               "description": "List archived entries with optional filters.",
-              "line": 307
+              "line": 320
             },
             {
               "name": "countArchived",
               "parameters": [],
               "returnType": "number",
               "description": "Count entries in the archive store.",
-              "line": 314
+              "line": 327
             },
             {
               "name": "computeArchiveHash",
               "parameters": [],
               "returnType": "string",
               "description": "Compute deterministic hash over the archive set.\nMust match across backends for the same archive content (same projection\nordering as {@link computeHash}).",
-              "line": 323
+              "line": 336
             }
           ]
         },
@@ -53240,32 +54441,32 @@
           "isExported": true,
           "extends": [],
           "description": "Persisted embedding cache format (backwards-compatible: entryHashes is optional).",
-          "line": 331,
+          "line": 344,
           "properties": [
             {
               "name": "indexHash",
               "type": "string",
               "optional": false,
-              "line": 332
+              "line": 345
             },
             {
               "name": "modelName",
               "type": "string",
               "optional": true,
-              "line": 333
+              "line": 346
             },
             {
               "name": "entryHashes",
               "type": "Record<string, string>",
               "optional": true,
               "description": "Per-entry content hashes for incremental invalidation (required for v2+).",
-              "line": 335
+              "line": 348
             },
             {
               "name": "embeddings",
               "type": "Record<string, number[]>",
               "optional": false,
-              "line": 336
+              "line": 349
             }
           ],
           "methods": []
@@ -53275,19 +54476,19 @@
           "isExported": true,
           "extends": [],
           "description": "A single embedding search result with distance score.",
-          "line": 340,
+          "line": 353,
           "properties": [
             {
               "name": "id",
               "type": "string",
               "optional": false,
-              "line": 341
+              "line": 354
             },
             {
               "name": "distance",
               "type": "number",
               "optional": false,
-              "line": 342
+              "line": 355
             }
           ],
           "methods": []
@@ -53297,7 +54498,7 @@
           "isExported": true,
           "extends": [],
           "description": "Storage backend interface for embedding vectors.\n\nImplementations:\n- JsonEmbeddingStore: Flat JSON file (default, current behavior)\n- SqliteEmbeddingStore: sqlite-vec vec0 virtual table",
-          "line": 352,
+          "line": 365,
           "properties": [],
           "methods": [
             {
@@ -53305,7 +54506,7 @@
               "parameters": [],
               "returnType": "EmbeddingCacheData | null",
               "description": "Load cached embedding data from the backing store.",
-              "line": 357
+              "line": 370
             },
             {
               "name": "save",
@@ -53318,7 +54519,7 @@
               ],
               "returnType": "void",
               "description": "Save embedding data to the backing store.",
-              "line": 363
+              "line": 376
             },
             {
               "name": "search",
@@ -53336,7 +54537,7 @@
               ],
               "returnType": "EmbeddingSearchResult[]",
               "description": "Search for the nearest vectors to a query vector (KNN).",
-              "line": 371
+              "line": 384
             },
             {
               "name": "evict",
@@ -53349,7 +54550,7 @@
               ],
               "returnType": "void",
               "description": "Evict the cached vector and source hash for a single instruction id.\nUsed when an entry is archived or permanently purged so its embedding\ndoes not surface in semantic search results. No-op if the id is not\npresent in the cache.",
-              "line": 381
+              "line": 394
             },
             {
               "name": "markStale",
@@ -53362,14 +54563,14 @@
               ],
               "returnType": "void",
               "description": "Mark a single id stale so the next embedding refresh recomputes it.\nClears only the per-entry `entryHashes[id]` mapping; the cached vector\nremains intact. No-op if the id is not present.",
-              "line": 390
+              "line": 403
             },
             {
               "name": "close",
               "parameters": [],
               "returnType": "void",
               "description": "Close the store and release resources.",
-              "line": 395
+              "line": 408
             }
           ]
         }
@@ -53798,13 +54999,13 @@
           "name": "ToolRegistryFilter",
           "isExported": true,
           "extends": [],
-          "line": 505,
+          "line": 559,
           "properties": [
             {
               "name": "tier",
               "type": "ToolTier",
               "optional": true,
-              "line": 506
+              "line": 560
             }
           ],
           "methods": []
@@ -53813,6 +55014,15 @@
       "typeAliases": [],
       "enums": [],
       "functions": [
+        {
+          "name": "messagingEnabled",
+          "isExported": false,
+          "isAsync": false,
+          "parameters": [],
+          "returnType": "boolean",
+          "description": "True when the messaging subsystem is enabled at runtime.",
+          "line": 59
+        },
         {
           "name": "buildInstructionBodyInputSchema",
           "isExported": false,
@@ -53825,7 +55035,7 @@
             }
           ],
           "returnType": null,
-          "line": 40
+          "line": 65
         },
         {
           "name": "withDynamicInstructionBodyLimits",
@@ -53844,7 +55054,7 @@
             }
           ],
           "returnType": "object",
-          "line": 49
+          "line": 74
         },
         {
           "name": "resolveActiveTier",
@@ -53853,7 +55063,7 @@
           "parameters": [],
           "returnType": "ToolTier",
           "description": "Resolve the maximum visible tier from feature flags.",
-          "line": 510
+          "line": 564
         },
         {
           "name": "getToolRegistry",
@@ -53867,7 +55077,7 @@
             }
           ],
           "returnType": "ToolRegistryEntry[]",
-          "line": 516
+          "line": 570
         },
         {
           "name": "describeTool",
@@ -53881,7 +55091,7 @@
             }
           ],
           "returnType": "string",
-          "line": 546
+          "line": 603
         }
       ],
       "constants": [
@@ -53889,19 +55099,19 @@
           "name": "STABLE",
           "type": null,
           "initializerKind": "NewExpression",
-          "line": 426
+          "line": 479
         },
         {
           "name": "MUTATION",
           "type": null,
           "initializerKind": "NewExpression",
-          "line": 427
+          "line": 480
         },
         {
           "name": "REGISTRY_VERSION",
           "type": null,
           "initializerKind": "StringLiteral",
-          "line": 621
+          "line": 679
         }
       ]
     },
@@ -54010,7 +55220,7 @@
           "name": "ExtractParams",
           "isExported": true,
           "type": "T extends keyof typeof zodMap ? z.infer<(typeof zodMap)[T]> : unknown",
-          "line": 443,
+          "line": 473,
           "typeParameters": [
             {
               "name": "T",
@@ -54067,7 +55277,7 @@
             }
           ],
           "returnType": "z.ZodTypeAny | undefined",
-          "line": 416
+          "line": 446
         },
         {
           "name": "getZodEnhancedRegistry",
@@ -54075,7 +55285,7 @@
           "isAsync": false,
           "parameters": [],
           "returnType": "ToolRegistryEntry[]",
-          "line": 422
+          "line": 452
         },
         {
           "name": "getZodSchema",
@@ -54090,7 +55300,7 @@
           ],
           "returnType": "z.ZodTypeAny | undefined",
           "description": "Get the Zod schema for a specific tool by name",
-          "line": 434
+          "line": 464
         },
         {
           "name": "hasZodSchema",
@@ -54105,7 +55315,7 @@
           ],
           "returnType": "boolean",
           "description": "Check if a tool has a Zod schema registered",
-          "line": 439
+          "line": 469
         }
       ],
       "constants": []
@@ -55060,6 +56270,154 @@
           "returnType": "Promise<void>",
           "description": "Record usage for the global instance",
           "line": 477
+        }
+      ],
+      "constants": []
+    },
+    {
+      "path": "src/services/usageCounters.ts",
+      "imports": [
+        {
+          "module": "./protocolEnums.js",
+          "defaultImport": null,
+          "namedImports": [
+            "USAGE_ACTIONS",
+            "USAGE_SIGNALS",
+            "UsageAction",
+            "UsageSignal"
+          ],
+          "namespaceImport": null
+        }
+      ],
+      "exports": [
+        {
+          "name": "backfillLegacyCounters",
+          "kinds": [
+            "FunctionDeclaration"
+          ]
+        },
+        {
+          "name": "deriveUsageCount",
+          "kinds": [
+            "FunctionDeclaration"
+          ]
+        },
+        {
+          "name": "resolveUsageKind",
+          "kinds": [
+            "FunctionDeclaration"
+          ]
+        },
+        {
+          "name": "UsageCounters",
+          "kinds": [
+            "InterfaceDeclaration"
+          ]
+        },
+        {
+          "name": "UsageKind",
+          "kinds": [
+            "TypeAliasDeclaration"
+          ]
+        }
+      ],
+      "classes": [],
+      "interfaces": [
+        {
+          "name": "UsageCounters",
+          "isExported": true,
+          "extends": [],
+          "description": "Shape carrying the split usage counters (subset of InstructionEntry / snapshot record).",
+          "line": 64,
+          "properties": [
+            {
+              "name": "retrievedCount",
+              "type": "number",
+              "optional": true,
+              "line": 65
+            },
+            {
+              "name": "appliedCount",
+              "type": "number",
+              "optional": true,
+              "line": 66
+            },
+            {
+              "name": "usageCount",
+              "type": "number",
+              "optional": true,
+              "line": 67
+            }
+          ],
+          "methods": []
+        }
+      ],
+      "typeAliases": [
+        {
+          "name": "UsageKind",
+          "isExported": true,
+          "type": "'retrieved' | 'applied' | 'none'",
+          "line": 14
+        }
+      ],
+      "enums": [],
+      "functions": [
+        {
+          "name": "resolveUsageKind",
+          "isExported": true,
+          "isAsync": false,
+          "parameters": [
+            {
+              "name": "action",
+              "type": "string",
+              "optional": true
+            },
+            {
+              "name": "signal",
+              "type": "string",
+              "optional": true
+            }
+          ],
+          "returnType": "UsageKind",
+          "description": "Resolve which usage counter (if any) an action/signal pair should advance.\n\nPrecedence (first match wins):\n 1. An applied usage action, or the applied signal, advances the applied\n    counter — even when combined with a feedback signal.\n 2. A pure feedback signal (no applied/retrieved action) advances NOTHING\n    (records the signal only).\n 3. Everything else (retrieval actions, comment-only, or missing\n    action+signal) advances the retrieved counter (safe default).",
+          "line": 53
+        },
+        {
+          "name": "deriveUsageCount",
+          "isExported": true,
+          "isAsync": false,
+          "parameters": [
+            {
+              "name": "c",
+              "type": "UsageCounters",
+              "optional": false
+            }
+          ],
+          "returnType": "number",
+          "description": "Derive the deprecated total usageCount = retrievedCount + appliedCount.",
+          "line": 71
+        },
+        {
+          "name": "backfillLegacyCounters",
+          "isExported": true,
+          "isAsync": false,
+          "parameters": [
+            {
+              "name": "c",
+              "type": "T",
+              "optional": false
+            }
+          ],
+          "returnType": "T & { retrievedCount: number; appliedCount: number; usageCount: number }",
+          "description": "Backfill split counters for a legacy record that only carries usageCount.\nLegacy single-counter usage is interpreted as retrievals (appliedCount=0).\nMutates and returns the same object for convenience. Idempotent: if either\nsplit field is already present it is left untouched.",
+          "line": 81,
+          "typeParameters": [
+            {
+              "name": "T",
+              "constraint": "UsageCounters",
+              "default": null
+            }
+          ]
         }
       ],
       "constants": []

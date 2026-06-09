@@ -354,7 +354,7 @@ Use this profile when production must remain explicitly read-only. Governed prod
 
 | Variable | Type | Default | Description | Privacy Impact |
 |----------|------|---------|-------------|----------------|
-| `INDEX_SERVER_AUTO_USAGE_TRACK` | Boolean | `true` | Auto-track usage on get/search responses | Medium |
+| `INDEX_SERVER_AUTO_USAGE_TRACK` | Boolean | `true` | Auto-track retrievals: returned `get` entry + top-3 search/query results + explicit-id export (issue #418) | Medium |
 | `INDEX_SERVER_FEATURES` | String | `""` | Enable feature flags (e.g., "usage") | Medium - Usage tracking |
 | `USAGE_ANALYTICS_DIR` | Path | `./data` | Directory for usage analytics storage | Medium - Analytics data |
 

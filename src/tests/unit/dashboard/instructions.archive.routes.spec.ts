@@ -254,4 +254,89 @@ describe('dashboard archive routes', () => {
     expect(actions).toContain(AUDIT_ACTIONS.RESTORE);
     expect(actions).toContain(AUDIT_ACTIONS.PURGE);
   });
+
+  // ── PUT /api/instructions_archived/:name — in-place archive edit (issue #390) ──
+
+  it('PUT /instructions_archived/:name updates archived entry in place and emits archive_edit audit', async () => {
+    await httpRequest('POST', `${baseUrl}/api/instructions/alpha-active/archive`, {
+      reason: 'manual',
+      archivedBy: 'tester@example.com',
+    });
+
+    const before = await httpRequest('GET', `${baseUrl}/api/instructions_archived/alpha-active`);
+    const beforeJson = JSON.parse(before.body) as { entry: Record<string, unknown> };
+    const editedBody = 'Updated archived body for alpha.';
+    const editedTitle = 'Alpha Updated In Place';
+    const putBody = {
+      content: {
+        ...beforeJson.entry,
+        title: editedTitle,
+        body: editedBody,
+        // Caller attempts to clear restoreEligible — server must ignore.
+        restoreEligible: false,
+        archivedBy: 'attacker@example.com',
+      },
+    };
+    const res = await httpRequest('PUT', `${baseUrl}/api/instructions_archived/alpha-active`, putBody);
+    expect(res.status).toBe(200);
+    const json = JSON.parse(res.body) as { success: boolean; verified: boolean };
+    expect(json.success).toBe(true);
+    expect(json.verified).toBe(true);
+
+    // Read-back: content updated, archive metadata preserved.
+    const after = await httpRequest('GET', `${baseUrl}/api/instructions_archived/alpha-active`);
+    const afterJson = JSON.parse(after.body) as { entry: Record<string, unknown> };
+    expect(afterJson.entry.title).toBe(editedTitle);
+    expect(afterJson.entry.body).toBe(editedBody);
+    expect(afterJson.entry.archiveReason).toBe('manual');
+    expect(afterJson.entry.archivedBy).toBe('tester@example.com');
+    // restoreEligible was true; PUT body tried to set false → server must preserve original.
+    expect(afterJson.entry.restoreEligible).toBe(true);
+
+    // Active surface still does not contain the entry.
+    const activeRes = await httpRequest('GET', `${baseUrl}/api/instructions/alpha-active`);
+    expect(activeRes.status).toBe(404);
+
+    expect(readAuditActions()).toContain(AUDIT_ACTIONS.ARCHIVE_EDIT);
+  });
+
+  it('PUT /instructions_archived/:name returns 404 for unknown archived id', async () => {
+    const res = await httpRequest('PUT', `${baseUrl}/api/instructions_archived/does-not-exist`, {
+      content: { id: 'does-not-exist', title: 'X', body: 'Y' },
+    });
+    expect(res.status).toBe(404);
+  });
+
+  it('PUT /instructions_archived/:name rejects 400 on missing content', async () => {
+    await httpRequest('POST', `${baseUrl}/api/instructions/alpha-active/archive`, { reason: 'manual' });
+    const res = await httpRequest('PUT', `${baseUrl}/api/instructions_archived/alpha-active`, {});
+    expect(res.status).toBe(400);
+  });
+
+  it('PUT /instructions_archived/:name rejects 409 when restoreEligible=false', async () => {
+    // Archive then write a locked file directly (the dashboard API does not
+    // expose restoreEligible toggling).
+    await httpRequest('POST', `${baseUrl}/api/instructions/alpha-active/archive`, { reason: 'manual' });
+    const archivePath = path.join(tmpDir, '.archive', 'alpha-active.json');
+    const raw = fs.readFileSync(archivePath, 'utf-8');
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    parsed.restoreEligible = false;
+    fs.writeFileSync(archivePath, JSON.stringify(parsed, null, 2));
+    invalidate();
+
+    const res = await httpRequest('PUT', `${baseUrl}/api/instructions_archived/alpha-active`, {
+      content: { ...parsed, title: 'Should not stick', body: 'nope' },
+    });
+    expect(res.status).toBe(409);
+    const json = JSON.parse(res.body) as { error: string };
+    expect(json.error).toBe('archive_locked');
+
+    // Content unchanged.
+    const after = await httpRequest('GET', `${baseUrl}/api/instructions_archived/alpha-active`);
+    const afterJson = JSON.parse(after.body) as { entry: { title: string } };
+    expect(afterJson.entry.title).toBe('Title alpha-active');
+
+    // No ARCHIVE_EDIT audit recorded.
+    expect(readAuditActions().filter(a => a === AUDIT_ACTIONS.ARCHIVE_EDIT)).toHaveLength(0);
+  });
 });

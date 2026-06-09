@@ -245,6 +245,11 @@ function validateTypedInputShape(entry: Record<string, unknown>): string[] {
   } else if (typeof entry.priority === 'number' && (!Number.isInteger(entry.priority) || entry.priority < 1 || entry.priority > 100)) {
     errs.push('/priority: must be an integer from 1 to 100');
   }
+  if (entry.reviewIntervalDays !== undefined && typeof entry.reviewIntervalDays !== 'number') {
+    errs.push(`/reviewIntervalDays: must be a number, received ${typeof entry.reviewIntervalDays}`);
+  } else if (typeof entry.reviewIntervalDays === 'number' && (!Number.isInteger(entry.reviewIntervalDays) || entry.reviewIntervalDays < 1 || entry.reviewIntervalDays > 365)) {
+    errs.push('/reviewIntervalDays: must be an integer from 1 to 365');
+  }
   if (entry.categories !== undefined && !Array.isArray(entry.categories)) {
     errs.push(`/categories: must be an array of strings, received ${typeof entry.categories}`);
   } else if (Array.isArray(entry.categories)) {

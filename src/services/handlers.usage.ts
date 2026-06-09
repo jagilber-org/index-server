@@ -31,9 +31,13 @@ registerHandler('usage_hotset', (p: { limit?: number }) => {
   const items = [...st.list]
     .filter(e => (e.usageCount ?? 0) > 0)
     .sort((a, b) => {
-      const ua = a.usageCount ?? 0;
-      const ub = b.usageCount ?? 0;
-      if (ub !== ua) return ub - ua;
+      // Issue #418: rank by applied (strongest signal) then retrieved, then recency.
+      const aa = a.appliedCount ?? 0;
+      const ba = b.appliedCount ?? 0;
+      if (ba !== aa) return ba - aa;
+      const ar = a.retrievedCount ?? 0;
+      const br = b.retrievedCount ?? 0;
+      if (br !== ar) return br - ar;
       return (b.lastUsedAt || '').localeCompare(a.lastUsedAt || '');
     })
     .slice(0, limit)
@@ -41,9 +45,13 @@ registerHandler('usage_hotset', (p: { limit?: number }) => {
       const rec = snap[e.id] || {};
       const item: Record<string, unknown> = {
         id: e.id,
-        usageCount: e.usageCount,
+        usageCount: e.usageCount, // deprecated: retained as retrievedCount + appliedCount
+        retrievedCount: e.retrievedCount ?? 0,
+        appliedCount: e.appliedCount ?? 0,
         lastUsedAt: e.lastUsedAt,
       };
+      if (e.lastRetrievedAt) item.lastRetrievedAt = e.lastRetrievedAt;
+      if (e.lastAppliedAt) item.lastAppliedAt = e.lastAppliedAt;
       if (rec.lastSignal) item.lastSignal = rec.lastSignal;
       if (rec.lastComment) item.lastComment = rec.lastComment;
       return item;

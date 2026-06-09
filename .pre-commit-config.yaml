@@ -9,9 +9,10 @@ repos:
     rev: v5.0.0
     hooks:
       - id: trailing-whitespace
-        exclude: '\.(md|txt)$'
+        exclude: '\.(md|txt)$|^\.squad/templates/|^\.squad-templates/'
         stages: [pre-commit]
       - id: end-of-file-fixer
+        exclude: '^\.squad/templates/|^\.squad-templates/'
         stages: [pre-commit]
       - id: check-yaml
         exclude: '^(.vscode/|config/|\.github/workflows/)'
@@ -149,11 +150,15 @@ repos:
     hooks:
       - id: detect-secrets
         args: ['--baseline', '.secrets.baseline']
+        stages: [pre-commit]
         # Skill / template documentation files contain illustrative example
         # credentials (e.g. Basic Auth examples in secret-handling guides).
         # These are vetted teaching content, not real secrets, and are also
-        # excluded from gitleaks (line 25). Keep both excludes in sync.
-        exclude: '^(__tests__/|test/|stress/|perf-|kusto-|debug-|.*\.mjs$|package-lock\.json|\.secrets\.baseline|\.publish-manifest\.json|snapshots/|\.copilot/skills/secret-handling/SKILL\.md$|\.squad/templates/skills/secret-handling/SKILL\.md$|\.squad/templates/skills/gh-auth-isolation/SKILL\.md$)'
+        # excluded from gitleaks. Keep both excludes in sync.
+        # test-artifacts/ holds dated MCP sweep repro/RCA dumps whose payloads
+        # are SHA-256 governance/integrity hashes (high-entropy hex) — vetted
+        # non-secret test evidence, same category as test/ and debug- content.
+        exclude: '^(__tests__/|test/|test-artifacts/|stress/|perf-|kusto-|debug-|.*\.mjs$|package-lock\.json|\.secrets\.baseline|\.publish-manifest\.json|snapshots/|\.copilot/skills/secret-handling/SKILL\.md$|\.squad/templates/skills/secret-handling/SKILL\.md$|\.squad/templates/skills/gh-auth-isolation/SKILL\.md$)'
 
 # Configuration
 default_install_hook_types: [pre-commit, commit-msg, pre-push]
@@ -164,3 +169,30 @@ minimum_pre_commit_version: '3.6.0'
 # scripts/hooks/pre-commit.ps1 and is exposed through hooks/check-dotenv-leaks.ps1,
 # with ggshield and detect-secrets layered on top for standard secret scanning
 # coverage and pre-push replay using gitleaks and semgrep.
+
+# ---------------------------------------------------------------------------
+# Stage contract (enforced by scripts/governance/check-precommit-stages.mjs)
+# ---------------------------------------------------------------------------
+# Every hook above MUST declare its own `stages:` list. We do not rely on
+# `default_stages:` because relying on a default caused 3 remediation PRs
+# during v1.26.4 (#241, #243, #244): hygiene hooks fired at unintended stages
+# and behavior diverged between local `pre-commit run` and the CI replay.
+#
+# Stage assignment policy:
+#   - `stages: [pre-commit]` — fast local validation (hygiene, syntax, JSON
+#     well-formedness, format-only PII/dotenv scan, prompt-injection scan).
+#     These run before the commit object is created.
+#   - `stages: [pre-push]`   — slow security gates and CI-parity replays
+#     (gitleaks, semgrep, CodeQL, ESLint, slow test suite, integrity probes,
+#     log hygiene, public-repo guard, ggshield). These run before refs reach
+#     the remote.
+#   - `stages: [commit-msg]` — operates on the commit-message buffer
+#     (agent attestation trailer validation).
+#   - `stages: [pre-commit, pre-push]` — gate must run at both stages
+#     (currently only version-parity, because both authoring AND publishing
+#     must catch a desync).
+#
+# CI enforces parity by running `pre-commit run` once per stage
+# (.github/workflows/precommit.yml) and by failing if any hook omits
+# `stages:` (.github/workflows/precommit.yml → "Validate pre-commit stage
+# markers" step).

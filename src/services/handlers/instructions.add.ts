@@ -426,7 +426,7 @@ registerHandler('index_add', guard('index_add', async (p: AddParams) => {
       trailingSummary: bodyChanged ? 'body update (repaired)' : 'metadata update (repaired)'
     });
   } else {
-    base = { id: e.id, title: e.title, body: bodyTrimmed, rationale: e.rationale, priority: e.priority, audience: e.audience, requirement: e.requirement, categories, primaryCategory, sourceHash, schemaVersion: SCHEMA_VERSION, deprecatedBy: e.deprecatedBy, createdAt: now, updatedAt: now, riskScore: e.riskScore, createdByAgent: instructionsCfg.agentId, sourceWorkspace: instructionsCfg.workspaceId, extensions: e.extensions } as InstructionEntry;
+    base = { id: e.id, title: e.title, body: bodyTrimmed, rationale: e.rationale, priority: e.priority, audience: e.audience, requirement: e.requirement, categories, primaryCategory, sourceHash, schemaVersion: SCHEMA_VERSION, deprecatedBy: e.deprecatedBy, createdAt: now, updatedAt: now, riskScore: e.riskScore, createdByAgent: instructionsCfg.agentId, sourceWorkspace: instructionsCfg.workspaceId, extensions: e.extensions, teamIds: e.teamIds, workspaceId: e.workspaceId, userId: e.userId, supersedes: e.supersedes, reviewIntervalDays: e.reviewIntervalDays } as InstructionEntry;
     if (e.version !== undefined) {
       if (!SEMVER_REGEX.test(e.version)) return fail('invalid_semver', { id: e.id });
       base.version = e.version;
@@ -489,7 +489,7 @@ registerHandler('index_add', guard('index_add', async (p: AddParams) => {
       if (!visible) {
         const existingLoadError = st0.loadErrors?.find((issue) => {
           const fileName = path.basename(issue.file);
-          return issue.file === `${e.id}.json` || fileName === `${e.id}.json` || issue.file.endsWith(`\\${e.id}.json`);
+          return issue.file === `${e.id}.json` || fileName === `${e.id}.json` || issue.file.endsWith(`\\${e.id}.json`) || issue.file.endsWith(`/${e.id}.json`);
         });
         if (existingLoadError) {
           return {
@@ -503,7 +503,43 @@ registerHandler('index_add', guard('index_add', async (p: AddParams) => {
             validationErrors: [sanitizeErrorDetail(existingLoadError.error) || 'existing entry could not be parsed'],
           };
         }
-        return { id: e.id, success: true, skipped: true, created: false, overwritten: false, hash: st0.hash, visibilityWarning: 'skipped_file_not_in_index' };
+        // Issue #358: previously returned `success:true, skipped:true,
+        // visibilityWarning:'skipped_file_not_in_index'` here, masking a
+        // real write-path failure as a benign skip. The write succeeded on
+        // disk (the duplicate-write error is proof a file is there) but
+        // the loader did NOT surface the entry through `byId` after
+        // invalidate+reload AND did not report a load error for it.
+        //
+        // That combination is a true persistence anomaly — the mutation
+        // did not become visible. We now return a structured `success:false`
+        // envelope so callers see a real failure (and an actionable hint
+        // naming the env var that operators most often need to set).
+        const persistMessage = `index_add for "${e.id}": file is present on disk after a duplicate-write conflict, but the entry is not visible in the index and no load error was reported. Mutation may have been silently dropped.`;
+        const persistHint = 'Verify INDEX_SERVER_MUTATION is set to "1" (or left unset, which defaults to enabled) in the server environment; if it was changed, restart the server. Then call index_dispatch action=health to inspect load errors and index_dispatch action=reload to force a fresh load.';
+        try {
+          logError('[add] mutation_persist_failed (post-write visibility anomaly)', {
+            id: e.id,
+            duplicateAtWrite: true,
+            postReloadVisible: visible,
+            repaired,
+            loadErrorMatched: !!existingLoadError,
+          });
+        } catch { /* ignore */ }
+        try {
+          logAudit('add', e.id, { mutation_persist_failed: true, postReloadVisible: visible, repaired });
+        } catch { /* ignore */ }
+        return {
+          id: e.id,
+          success: false,
+          skipped: false,
+          created: false,
+          overwritten: false,
+          hash: st0.hash,
+          error: 'mutation_persist_failed',
+          message: persistMessage,
+          hint: persistHint,
+          visibilityWarning: 'skipped_file_not_in_index',
+        };
       }
       return { id: e.id, success: true, skipped: true, created: false, overwritten: false, hash: st0.hash, repaired: repaired ? true : undefined };
     }

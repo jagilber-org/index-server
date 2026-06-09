@@ -17,7 +17,7 @@ export function createGraphRoutes(): Router {
    * Query params:
    *   enrich=1        -> include enriched schema (v2) data generation path
    *   categories=1    -> include explicit category nodes
-   *   usage=1         -> include usageCount when available
+   *   usage=1         -> include usageCount (+ retrievedCount/appliedCount) when available
    *   edgeTypes=a,b   -> restrict edge types (comma separated)
    */
   router.get('/graph/mermaid', (req: Request, res: Response) => {

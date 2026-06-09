@@ -8,7 +8,7 @@
 import path from 'node:path';
 import { Router, Request, Response } from 'express';
 import { getLocalHandler } from '../../../server/registry.js';
-import { ensureLoadedAsync, invalidate, touchIndexVersion, writeEntryAsync, removeEntry, getInstructionsDir, isDuplicateInstructionWriteError, archiveEntry, restoreEntry, purgeEntry, getArchivedEntry, listArchivedEntries } from '../../../services/indexContext.js';
+import { ensureLoadedAsync, invalidate, touchIndexVersion, writeEntryAsync, removeEntry, getInstructionsDir, isDuplicateInstructionWriteError, archiveEntry, restoreEntry, purgeEntry, getArchivedEntry, listArchivedEntries, updateArchivedEntry } from '../../../services/indexContext.js';
 import { dashboardAdminAuth } from './adminAuth.js';
 import { handleInstructionsSearch } from '../../../services/handlers.search.js';
 import { ARCHIVE_REASONS, CONTENT_TYPES, InstructionEntry, type ArchiveReason, type ArchiveSource } from '../../../models/instruction.js';
@@ -471,6 +471,68 @@ export function createInstructionsRoutes(): Router {
       if (isInstructionValidationError(error)) return validationErrorResponse(res, error);
       logError('[API] Failed to load archived instruction:', error);
       res.status(500).json({ success: false, error: 'Failed to load archived instruction' });
+    }
+  });
+
+  /**
+   * PUT /api/instructions_archived/:name - edit an archived entry in place.
+   * Writes directly to the archive store without a restore round-trip
+   * (issue #390). Archive metadata fields (archivedAt, archivedBy,
+   * archiveReason, archiveSource, restoreEligible) are preserved from the
+   * existing record and cannot be overwritten via this endpoint.
+   *
+   * Locked entries (`restoreEligible: false`) are rejected with 409 to keep
+   * the policy lock authoritative; operators must purge + recreate instead.
+   */
+  router.put('/instructions_archived/:name', dashboardAdminAuth, async (req: Request, res: Response) => { // lgtm[js/missing-rate-limiting] — parent router applies rate-limit
+    try {
+      const id = safeName(req.params.name);
+      const { content } = req.body || {};
+      if (!content) return res.status(400).json({ success: false, error: 'Missing content' });
+      const contentObj = requireInstructionContentObject(content);
+      assertValidDashboardInstructionEnums(contentObj);
+      assertValidDashboardInstructionShape(contentObj);
+      assertDashboardBodyWithinLimit(contentObj);
+      const existing = getArchivedEntry(id);
+      if (!existing) return res.status(404).json({ success: false, error: 'Not found' });
+      if (existing.restoreEligible === false) {
+        return res.status(409).json({
+          success: false,
+          error: 'archive_locked',
+          message: `Archived entry "${id}" is marked restoreEligible=false and cannot be edited in place. Purge and recreate to change locked content.`,
+        });
+      }
+      // Preserve archive metadata; ignore any attempt to overwrite it via PUT body.
+      const updated: InstructionEntry = {
+        ...existing,
+        ...contentObj,
+        id, // preserve id
+        archivedAt: existing.archivedAt,
+        archivedBy: existing.archivedBy,
+        archiveReason: existing.archiveReason,
+        archiveSource: existing.archiveSource,
+        restoreEligible: existing.restoreEligible,
+        updatedAt: new Date().toISOString(),
+      };
+      updateArchivedEntry(updated);
+      logAudit(AUDIT_ACTIONS.ARCHIVE_EDIT, [id], {
+        via: 'dashboard',
+        archiveReason: existing.archiveReason,
+        archiveSource: existing.archiveSource,
+      });
+      // Read-back verification: ensure the change is persisted before responding.
+      const verified = getArchivedEntry(id);
+      const ok = verified !== null;
+      res.json({
+        success: true,
+        message: 'Archived instruction updated',
+        verified: ok,
+        timestamp: Date.now(),
+      });
+    } catch (error) {
+      if (isInstructionValidationError(error)) return validationErrorResponse(res, error);
+      logError('[API] Failed to update archived instruction:', error);
+      res.status(500).json({ success: false, error: 'Failed to update archived instruction' });
     }
   });
 

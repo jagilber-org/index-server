@@ -19,6 +19,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   # This job is intentionally empty. npm package publishing now happens via
   # Release.yml → GitHub Packages registry only.

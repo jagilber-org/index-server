@@ -308,6 +308,50 @@ describe('instruction CRUD: varied negative inputs', () => {
     expect(resp?.error || resp?.validationErrors).toBeTruthy();
   });
 
+  it('rejects add with reviewIntervalDays below minimum (0)', async () => {
+    const resp = await client.callToolJSON('index_add', {
+      entry: { id: 'bad-rid-zero-' + Date.now(), title: 'Bad RID Zero', body: 'Valid body.', reviewIntervalDays: 0 },
+      lax: true,
+    });
+    expect(resp?.error || resp?.validationErrors).toBeTruthy();
+  });
+
+  it('rejects add with reviewIntervalDays above maximum (366)', async () => {
+    const resp = await client.callToolJSON('index_add', {
+      entry: { id: 'bad-rid-high-' + Date.now(), title: 'Bad RID High', body: 'Valid body.', reviewIntervalDays: 366 },
+      lax: true,
+    });
+    expect(resp?.error || resp?.validationErrors).toBeTruthy();
+  });
+
+  it('rejects add with non-integer reviewIntervalDays', async () => {
+    const resp = await client.callToolJSON('index_add', {
+      entry: { id: 'bad-rid-float-' + Date.now(), title: 'Bad RID Float', body: 'Valid body.', reviewIntervalDays: 1.5 },
+      lax: true,
+    });
+    expect(resp?.error || resp?.validationErrors).toBeTruthy();
+  });
+
+  it('accepts add with reviewIntervalDays at boundary 1', async () => {
+    const id = 'good-rid-min-' + Date.now();
+    const resp = await client.callToolJSON('index_add', {
+      entry: { id, title: 'Good RID Min', body: 'Valid body.', reviewIntervalDays: 1 },
+      lax: true,
+    });
+    expect(resp?.error).toBeFalsy();
+    expect(resp?.validationErrors).toBeFalsy();
+  });
+
+  it('accepts add with reviewIntervalDays at boundary 365', async () => {
+    const id = 'good-rid-max-' + Date.now();
+    const resp = await client.callToolJSON('index_add', {
+      entry: { id, title: 'Good RID Max', body: 'Valid body.', reviewIntervalDays: 365 },
+      lax: true,
+    });
+    expect(resp?.error).toBeFalsy();
+    expect(resp?.validationErrors).toBeFalsy();
+  });
+
   it('add with valid changeLog nested structure passes', async () => {
     const id = 'nested-changelog-' + Date.now();
     const resp = await client.callToolJSON('index_add', { // lgtm[js/unused-local-variable] — test asserts on disk side-effects, not response payload

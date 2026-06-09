@@ -54,21 +54,59 @@ const HEADER_CHECKS = [
 
 /**
  * Make an HTTP(S) GET request and return headers.
+ *
+ * Addresses CodeQL js/disabling-certificate-validation (alert #54, issue #352)
+ * and constitution SH-6. TLS verification is ON by default; callers that need
+ * to trust a self-signed cert MUST do so explicitly by passing the cert as
+ * `options.ca`. The legacy global `options.allowInsecureTls` toggle is kept
+ * for the few dev/test scripts that still depend on it, but it now:
+ *   - prints a SH-6 warning to stderr every call, and
+ *   - refuses to run when NODE_ENV === 'production'.
+ *
  * @param {string} url
- * @param {boolean} allowInsecureTls
+ * @param {{ ca?: string|Buffer|Array<string|Buffer>, allowInsecureTls?: boolean }} [options]
  * @returns {Promise<{status: number, headers: Record<string, string>}>}
  */
-function httpGet(url, allowInsecureTls = false) {
-  const mod = url.startsWith('https') ? https : http;
+export function httpGet(url, options) {
+  const opts = options || {};
+  const isHttps = url.startsWith('https');
+  const mod = isHttps ? https : http;
+
+  // Build request options. Default = standard verification.
+  /** @type {Record<string, unknown> | undefined} */
+  let requestOptions;
+  if (isHttps && opts.ca !== undefined) {
+    // SH-6-compliant path: trust a specific cert explicitly. Global verify
+    // stays ON; only this CA is added to the trust set for this request.
+    requestOptions = { ca: opts.ca };
+  } else if (isHttps && opts.allowInsecureTls === true) {
+    // Legacy escape hatch — gated to non-production environments and made
+    // audible. Production callers must migrate to the `ca` option above.
+    if (process.env.NODE_ENV === 'production') {
+      return Promise.reject(new Error(
+        'SH-6: allowInsecureTls is forbidden when NODE_ENV=production. ' +
+        'Pass an explicit `ca` option instead of bypassing certificate validation.'
+      ));
+    }
+    process.stderr.write(
+      `[SH-6 WARNING] httpGet: TLS certificate verification BYPASSED for ${url} ` +
+      `via allowInsecureTls. This is for dev/test only — pass { ca: <pem> } in production.\n`
+    );
+    // eslint-disable-next-line -- gated SH-6 escape hatch; see source-level test in validateSecurityHeadersTls.spec.ts
+    requestOptions = { rejectUnauthorized: false }; // allowInsecureTls gated bypass
+  }
+
   return new Promise((resolve, reject) => {
-    const requestOptions = url.startsWith('https') && allowInsecureTls
-      ? { rejectUnauthorized: false } // nosemgrep: semgrep.tree-scan.reject-unauthorized-false, problem-based-packs.insecure-transport.js-node.bypass-tls-verification.bypass-tls-verification -- opt-in flag for validating self-signed cert servers // lgtm[js/disabling-certificate-validation]
-      : undefined;
-    mod.get(url, requestOptions, (res) => {
+    const req = requestOptions
+      ? mod.get(url, requestOptions, handleResponse)
+      : mod.get(url, handleResponse);
+    req.on('error', reject);
+
+    function handleResponse(res) {
       res.on('data', () => { /* drain response */ });
       res.on('end', () => resolve({ status: res.statusCode ?? 0, headers: res.headers }));
       res.on('error', reject);
-    }).on('error', reject);
+    }
   });
 }
 
@@ -90,7 +128,7 @@ export async function validateSecurityHeaders(baseUrl, options = {}) {
     if (!checkedRoutes.has(check.route)) {
       checkedRoutes.add(check.route);
       try {
-        const res = await httpGet(`${baseUrl}${check.route}`, allowInsecureTls);
+        const res = await httpGet(`${baseUrl}${check.route}`, { allowInsecureTls });
         responses.set(check.route, res);
       } catch (e) {
         failures.push(`[${check.severity}] Failed to reach ${check.route}: ${e.message}`);

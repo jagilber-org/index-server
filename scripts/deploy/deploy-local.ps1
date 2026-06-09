@@ -339,6 +339,27 @@ foreach($sub in @('panels','screenshots')){
   }
 }
 
+# Copy scripts/client/ so dashboard GET /api/scripts/:name can serve the REST
+# client wrappers (index-server-client.ps1, index-server-client.sh). The route
+# resolves them from <pkg-root>/scripts/client (see scripts.routes.ts). npm
+# packaging includes scripts/client/ via the "files" array, but this local
+# deploy path synthesizes a minimal package.json and would otherwise leave the
+# scripts directory empty, producing 404 "Script file not found on disk".
+if(Test-Path 'scripts/client'){
+  $destScripts = Join-Path $Destination 'scripts/client'
+  if((Test-Path $destScripts) -and -not (Get-Item $destScripts).PSIsContainer){ Remove-Item -Force $destScripts }
+  if(-not (Test-Path $destScripts)){ New-Item -ItemType Directory -Force -Path $destScripts | Out-Null }
+  Write-Host '[deploy] Copying scripts/client/ (dashboard /api/scripts assets)...'
+  Copy-Item -Force (Join-Path 'scripts/client' '*.ps1') $destScripts -ErrorAction SilentlyContinue
+  Copy-Item -Force (Join-Path 'scripts/client' '*.sh')  $destScripts -ErrorAction SilentlyContinue
+  Copy-Item -Force (Join-Path 'scripts/client' 'README.md') $destScripts -ErrorAction SilentlyContinue
+  if(-not (Test-Path (Join-Path $destScripts 'index-server-client.ps1'))){
+    Write-Host '[deploy] WARNING: index-server-client.ps1 missing after scripts/client copy; dashboard /api/scripts endpoint will 404.' -ForegroundColor Yellow
+  }
+} else {
+  Write-Host '[deploy] WARNING: scripts/client/ not found in source; dashboard /api/scripts endpoint will 404.' -ForegroundColor Yellow
+}
+
 # Detect and warn about mixed new/legacy build artifacts. Offer auto-clean of legacy tree when safe.
 $newServer = Join-Path $Destination 'dist/server/index-server.js'
 $legacyServer = Join-Path $Destination 'dist/src/server/index-server.js'

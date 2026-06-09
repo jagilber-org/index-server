@@ -89,6 +89,9 @@ export function createStatusRoutes(metricsCollector: MetricsCollector): Router {
           sqlitePath: cfg.storage.backend === 'sqlite' ? cfg.storage.sqlitePath : undefined,
           backupsDir: cfg.dashboard.admin.backupsDir,
         },
+        features: {
+          messaging: cfg.messaging.enabled !== false,
+        },
         timestamp: Date.now(),
       });
     } catch (error) {

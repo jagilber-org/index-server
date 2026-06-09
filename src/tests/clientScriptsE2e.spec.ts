@@ -356,7 +356,11 @@ describe('Client Scripts E2E', () => {
       );
       const result = JSON.parse(output);
       expect(result.success).toBe(false);
-      expect(result.error).toContain('Keywords required');
+      // Stable substring of the client's "search requires a selector" error.
+      // The full message enumerates the accepted predicates
+      // ("One of -Keywords, -SearchString, or -Fields/...") which may evolve;
+      // assert only on the invariant tail to avoid brittle wording coupling.
+      expect(result.error).toContain('required for search');
     }, 60_000);
 
     it.skipIf(!hasPwsh)('hotset action should return results', async () => {

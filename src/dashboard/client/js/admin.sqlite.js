@@ -210,7 +210,68 @@
   }
 
   // ── Migration / Reset ───────────────────────────────────────────────────
-  async function runMigration(action) {
+
+  // Resolve instructions dir + SQLite path from the registry-driven
+  // /api/admin/config surface so overlay-shadowed env values are respected
+  // (see #354). Falls back to '?' so the UI can still render a label on error.
+  async function getResolvedSqlitePaths() {
+    try {
+      const res = await adminAuth.adminFetch('/api/admin/config');
+      if (!res.ok) throw new Error('config fetch failed: ' + res.status);
+      const data = await res.json();
+      const flags = Array.isArray(data.allFlags) ? data.allFlags : [];
+      function read(name) {
+        const f = flags.find(function (x) { return x && x.name === name; });
+        if (!f) return null;
+        if (f.parsed != null && f.parsed !== '') return String(f.parsed);
+        if (f.value != null && f.value !== '') return String(f.value);
+        return null;
+      }
+      return {
+        instructionsDir: read('INDEX_SERVER_DIR') || '(default ./instructions)',
+        sqlitePath: read('INDEX_SERVER_SQLITE_PATH') || '(default ./data/index.db)',
+      };
+    } catch (err) {
+      return {
+        instructionsDir: '?',
+        sqlitePath: '?',
+        error: err && err.message ? err.message : String(err),
+      };
+    }
+  }
+
+  function formatPathBlock(action, paths) {
+    const isImport = action === 'migrate';
+    const fromLabel = isImport ? '📥 Read from (JSON)' : '📥 Read from (SQLite)';
+    const toLabel = isImport ? '📤 Wrote to (SQLite)' : '📤 Wrote to (JSON)';
+    const fromPath = isImport ? paths.instructionsDir : paths.sqlitePath;
+    const toPath = isImport ? paths.sqlitePath : paths.instructionsDir;
+    return ''
+      + '<div class="sqlite-migration-paths" style="margin-top:6px;padding:6px 8px;background:var(--admin-card-bg,#1e293b);'
+      + 'border:1px solid var(--admin-border,#334155);border-radius:6px;font-size:12px">'
+      + '<div><span style="color:var(--admin-text-dim,#94a3b8)">' + fromLabel + ':</span> '
+      + '<span style="font-family:monospace">' + esc(fromPath) + '</span></div>'
+      + '<div><span style="color:var(--admin-text-dim,#94a3b8)">' + toLabel + ':</span> '
+      + '<span style="font-family:monospace">' + esc(toPath) + '</span></div>'
+      + '</div>';
+  }
+
+  // Native confirm dialog that lists source + destination paths so the operator
+  // sees exactly what will be read/written before the action runs (#354).
+  async function confirmSqliteIo(action, paths) {
+    const isImport = action === 'migrate';
+    const verb = isImport ? 'Import JSON → SQLite' : 'Export SQLite → JSON';
+    const fromPath = isImport ? paths.instructionsDir : paths.sqlitePath;
+    const toPath = isImport ? paths.sqlitePath : paths.instructionsDir;
+    const msg = verb + '?\n\n'
+      + 'Reads from: ' + fromPath + '\n'
+      + 'Writes to:  ' + toPath + '\n\n'
+      + (paths.error ? '⚠️ Could not resolve paths from /api/admin/config: ' + paths.error + '\n\n' : '')
+      + 'Continue?';
+    return confirm(msg);
+  }
+
+  async function runMigration(action, paths) {
     const resultEl = document.getElementById('sqlite-migration-result');
     if (resultEl) resultEl.innerHTML = '<span style="color:var(--admin-text-dim)">Running…</span>';
     try {
@@ -222,6 +283,9 @@
           msg += '<br><span style="color:#f59e0b">⚠️ ' + data.errors.length + ' error(s):</span>';
           msg += '<pre style="font-size:11px;max-height:150px;overflow:auto">' + esc(JSON.stringify(data.errors, null, 2)) + '</pre>';
         }
+        if (paths && (action === 'migrate' || action === 'export')) {
+          msg += formatPathBlock(action, paths);
+        }
         resultEl.innerHTML = '<span style="color:#22c55e">' + msg + '</span>';
       } else {
         resultEl.innerHTML = '<span style="color:#ef4444">Error: ' + esc(data.error) + '</span>';
@@ -230,6 +294,15 @@
       if (resultEl) resultEl.innerHTML = '<span style="color:#ef4444">' + esc(err.message) + '</span>';
     }
     loadSqliteInfo();
+  }
+
+  // Wrap import/export with a path-aware confirm modal so the operator sees the
+  // resolved instructions dir + SQLite path before running (#354).
+  async function runMigrationWithPathPrompt(action) {
+    const paths = await getResolvedSqlitePaths();
+    const ok = await confirmSqliteIo(action, paths);
+    if (!ok) return;
+    runMigration(action, paths);
   }
 
   async function resetDatabase() {
@@ -314,8 +387,8 @@
       case 'backup': createBackup(); break;
       case 'wal-checkpoint': walCheckpoint(); break;
       case 'restore': restoreBackup(btn.getAttribute('data-backup-name')); break;
-      case 'migrate': runMigration('migrate'); break;
-      case 'export': runMigration('export'); break;
+      case 'migrate': runMigrationWithPathPrompt('migrate'); break;
+      case 'export': runMigrationWithPathPrompt('export'); break;
       case 'reset': resetDatabase(); break;
     }
   });

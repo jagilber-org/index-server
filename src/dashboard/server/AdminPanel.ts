@@ -815,15 +815,21 @@ export class AdminPanel {
     let totalRequests = 0;
     Object.values(snapshot.tools).forEach(t => { totalRequests += t.callCount; });
 
-    // Get index validation summary for accurate accepted vs raw counts
+    // Get index validation summary for accurate accepted vs raw counts.
+    // CRITICAL (#356): all three counters MUST derive from the same snapshot
+    // so the invariant `rawFileCount === acceptedInstructions + skippedInstructions`
+    // holds. Mixing a current `list.length` with stale loadSummary fields produces
+    // user-visible inconsistencies (e.g. accepted=687, files=689, skipped=9).
     let accepted = 0, scanned = 0, skipped = 0;
     interface LoadSummaryLike { scanned:number; accepted:number; skipped:number }
+    let usedLoadSummary = false;
     try {
       const st = getIndexState() as { list: unknown[]; loadSummary?: LoadSummaryLike; loadDebug?: { scanned:number; accepted:number } };
       if (st.loadSummary) {
         accepted = st.loadSummary.accepted;
         scanned = st.loadSummary.scanned;
         skipped = st.loadSummary.skipped;
+        usedLoadSummary = true;
       } else {
         accepted = st.list.length;
         scanned = st.loadDebug?.scanned ?? accepted;
@@ -833,20 +839,44 @@ export class AdminPanel {
       process.stderr.write(`[admin] getAdminStats: failed to read index state: ${err instanceof Error ? err.message : String(err)}\n`);
     }
 
-    // Count instructions from the store (raw count uses store, with disk fallback for transparency)
+    // Reconcile the invariant. If the loadSummary itself violates
+    // `scanned === accepted + skipped`, prefer the derived skipped value so the
+    // dashboard never shows arithmetically-inconsistent numbers, and warn so
+    // the upstream loader bug is visible.
+    if (accepted + skipped !== scanned) {
+      if (usedLoadSummary) {
+        warnStruct('admin.getAdminStats.indexCountInvariantViolated', {
+          accepted, scanned, reportedSkipped: skipped, derivedSkipped: Math.max(0, scanned - accepted)
+        });
+      }
+      skipped = Math.max(0, scanned - accepted);
+    }
+
+    // rawFileCount tracks files scanned during the last index load. Do NOT
+    // overwrite this with the current in-memory `list.length`: that breaks the
+    // accepted + skipped === files invariant whenever the in-memory list has
+    // changed since load (e.g. after mutations).
     const indexDir = this.instructionsRoot;
-    let rawFileCount = scanned; // default to scanned
-    try {
-      const st = ensureLoaded();
-      rawFileCount = st.list.length;
-    } catch {
+    let rawFileCount = scanned;
+    if (!usedLoadSummary) {
       try {
         if (fs.existsSync(indexDir)) {
           rawFileCount = fs.readdirSync(indexDir).filter(f => f.toLowerCase().endsWith('.json')).length;
+          // Re-reconcile after refreshing rawFileCount from disk
+          skipped = Math.max(0, rawFileCount - accepted);
         }
       } catch (err) {
         process.stderr.write(`[admin] getAdminStats: failed to count instruction files on disk: ${err instanceof Error ? err.message : String(err)}\n`);
       }
+    }
+    // Final invariant enforcement: accepted + skipped MUST equal rawFileCount.
+    // When the in-memory accepted count exceeds the on-disk file count (e.g.
+    // tests injecting a synthetic list, or a transient state where the loader
+    // has more entries than the directory because files are being rewritten),
+    // the in-memory accepted value is authoritative — bump rawFileCount up to
+    // preserve the invariant rather than letting it desync.
+    if (accepted + skipped !== rawFileCount) {
+      rawFileCount = accepted + skipped;
     }
 
     // Recompute schema version snapshot only when any of these counts change

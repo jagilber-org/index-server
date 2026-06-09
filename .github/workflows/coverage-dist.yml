@@ -1,14 +1,20 @@
 name: Coverage & Dist Freshness
 on:
-  # Coverage on push to main only — PRs use ci.yml's fast suite (test:fast)
-  # to conserve Actions minutes. Trigger manually via workflow_dispatch for
-  # PR coverage when needed.
+  # Runs on org PRs by default; the job owner gate keeps this skipped in
+  # jagilber-dev unless manually dispatched.
+  pull_request:
+    branches: [ main ]
   push:
     branches: [ main ]
   workflow_dispatch: {}
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   verify:
+    if: ${{ github.repository_owner == 'jagilber-org' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -27,7 +33,7 @@ jobs:
         continue-on-error: true
       - name: Upload coverage to Codecov
         if: always()
-        uses: codecov/codecov-action@v6
+        uses: codecov/codecov-action@v7
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: ./coverage/cobertura-coverage.xml,./coverage/lcov.info

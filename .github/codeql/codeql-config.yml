@@ -42,8 +42,8 @@ paths-ignore:
   - "**/*.map"
 
 # False positives on trusted/controlled inputs (documented in the source):
-#   - legacyDashboardHtml.stripGraphTab uses targeted regex on HTML built
-#     from trusted in-module constants, not on user input.
+#   - adminHtmlTransforms.stripGraphTab uses targeted regex on the v2 admin
+#     HTML loaded from src/dashboard/client/admin.html, not on user input.
 #   - graph.routes mermaid edge-token regex (`-->|===|~~>|\|-`) detects
 #     mermaid syntax in server-generated graph source, not HTML.
 query-filters:

@@ -291,6 +291,19 @@ export interface IInstructionStore {
   purge(id: string): void;
 
   /**
+   * Update an archived entry in place without round-tripping through the
+   * active surface. The entry must already exist in the archive store. The
+   * archive metadata fields (archivedAt, archivedBy, archiveReason,
+   * archiveSource, restoreEligible) on the supplied payload are honored;
+   * callers are expected to preserve them from the original archived record.
+   *
+   * @param entry - The full archived entry to persist.
+   * @returns The persisted archived entry.
+   * @throws If no archived entry exists with `entry.id`.
+   */
+  updateArchived(entry: InstructionEntry): InstructionEntry;
+
+  /**
    * Get a single archived entry by id.
    *
    * @param id - Archived instruction id.
