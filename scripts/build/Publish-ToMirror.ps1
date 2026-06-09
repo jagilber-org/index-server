@@ -115,6 +115,20 @@ param(
     [Parameter(ParameterSetName = 'CreatePR')]
     [int]$WaitForMergeTimeoutMinutes = 60,
 
+    # ── #269: post-tag Release workflow polling ──────────────────────────────
+    # When CreatePR + WaitForMerge succeeds and a tag is created, optionally
+    # poll the resulting tag-triggered Release workflow run and surface its
+    # conclusion. If the workflow fails or times out, the script exits non-zero
+    # so release pipelines can fail fast on broken publishes.
+    [Parameter(ParameterSetName = 'CreatePR')]
+    [switch]$WaitForRelease,
+
+    [Parameter(ParameterSetName = 'CreatePR')]
+    [int]$ReleaseWorkflowTimeoutMinutes = 30,
+
+    [Parameter(ParameterSetName = 'CreatePR')]
+    [string]$ReleaseWorkflowName = 'Release',
+
     [switch]$Force,
 
     [switch]$DryRun,
@@ -461,6 +475,186 @@ function Write-ReleaseWorkflowHandoff {
     Write-Host "       `$runId = gh run list --repo $Repo --workflow Release --limit 1 --json databaseId --jq '.[0].databaseId'" -ForegroundColor Yellow
     Write-Host "       gh run watch `$runId --repo $Repo" -ForegroundColor Yellow
     Write-Host '------------------------------------------------------------' -ForegroundColor Cyan
+}
+
+# ── #269: poll the tag-triggered Release workflow and report conclusion ─────
+function Wait-ReleaseWorkflowRun {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$Repo,
+
+        [Parameter(Mandatory)]
+        [string]$Tag,
+
+        [Parameter(Mandatory)]
+        [string]$WorkflowName,
+
+        [Parameter(Mandatory)]
+        [int]$TimeoutMinutes,
+
+        # Carved-out budget for Phase 1 (locating the run). Keeps a slow
+        # runner-registration from starving Phase 2 (completion polling).
+        # Default: min(3, half of TimeoutMinutes), floor 1.
+        # See PR #411 squad review (Reliability blocker #1).
+        [int]$DiscoveryTimeoutMinutes = 0,
+
+        # Test-only seconds overrides. When > 0 they replace the per-minute
+        # budgets, allowing the unit tests to drive timeouts in the
+        # sub-second to a-few-seconds range without sleeping for minutes.
+        # Production callers must leave these at 0.
+        [int]$TimeoutSeconds = 0,
+        [int]$DiscoveryTimeoutSeconds = 0,
+
+        # Test-injection seam: a scriptblock invoked instead of the real
+        # `gh` binary. It receives a string[] of args and must return a
+        # two-element @($exitCode, $stdoutString) tuple. When unset, the
+        # real `gh` CLI is used. See publishMirrorReleaseWaitBehavior.spec.ts.
+        [scriptblock]$GhInvoker,
+
+        # Pacing knobs (also for tests).
+        [int]$DiscoveryPollSeconds = 5,
+        [int]$CompletionPollSeconds = 10
+    )
+
+    if ($DiscoveryTimeoutMinutes -le 0) {
+        $DiscoveryTimeoutMinutes = [Math]::Max(1, [Math]::Min(3, [int]($TimeoutMinutes / 2)))
+    }
+
+    if (-not $GhInvoker) {
+        $GhInvoker = {
+            param([string[]]$GhArgs)
+            $out = & gh @GhArgs 2>$null
+            return @($LASTEXITCODE, ($out | Out-String))
+        }
+    }
+
+    Write-Host "[publish] Polling for Release workflow run triggered by tag '$Tag' on $Repo (total timeout: $TimeoutMinutes min; discovery window: $DiscoveryTimeoutMinutes min)..." -ForegroundColor Cyan
+
+    $startTime = Get-Date
+    if ($TimeoutSeconds -gt 0) {
+        $deadline = $startTime.AddSeconds($TimeoutSeconds)
+    } else {
+        $deadline = $startTime.AddMinutes($TimeoutMinutes)
+    }
+    if ($DiscoveryTimeoutSeconds -gt 0) {
+        $discoveryDeadline = $startTime.AddSeconds($DiscoveryTimeoutSeconds)
+    } else {
+        $discoveryDeadline = $startTime.AddMinutes($DiscoveryTimeoutMinutes)
+    }
+    $runId = $null
+    $consecutiveErrors = 0
+    $sustainedErrorLogged = $false
+
+    # Phase 1: locate the run created for this tag (event=push, head_branch=Tag).
+    while ((Get-Date) -lt $discoveryDeadline) {
+        $invokeArgs = @('run','list','--repo',$Repo,'--workflow',$WorkflowName,'--event','push','--branch',$Tag,'--limit','5','--json','databaseId,headBranch,status,conclusion,event')
+        $result = & $GhInvoker $invokeArgs
+        $exitCode = [int]$result[0]
+        $listJson = [string]$result[1]
+        if ($exitCode -eq 0 -and $listJson) {
+            try {
+                $runs = $listJson | ConvertFrom-Json
+                $match = $runs | Where-Object { $_.headBranch -eq $Tag } | Select-Object -First 1
+                if ($match -and $match.databaseId) {
+                    $runId = $match.databaseId
+                    if ($consecutiveErrors -gt 0) {
+                        Write-Host "[publish] Discovery recovered after $consecutiveErrors transient gh failure(s)." -ForegroundColor DarkGray
+                    }
+                    break
+                }
+                # JSON OK but no matching run yet — not an error.
+                $consecutiveErrors = 0
+            } catch {
+                $consecutiveErrors++
+                if ($consecutiveErrors -eq 1) {
+                    Write-Host "[publish] Discovery: transient JSON parse error from gh (will keep polling)." -ForegroundColor DarkGray
+                } elseif ($consecutiveErrors -ge 6 -and -not $sustainedErrorLogged) {
+                    Write-Warning "Discovery has hit $consecutiveErrors consecutive gh JSON-parse errors; output may be malformed."
+                    $sustainedErrorLogged = $true
+                }
+            }
+        } else {
+            $consecutiveErrors++
+            if ($consecutiveErrors -eq 1) {
+                Write-Host "[publish] Discovery: gh call returned exit=$exitCode (transient — will keep polling)." -ForegroundColor DarkGray
+            } elseif ($consecutiveErrors -ge 6 -and -not $sustainedErrorLogged) {
+                Write-Warning "Discovery has hit $consecutiveErrors consecutive gh failures; check gh auth / network."
+                $sustainedErrorLogged = $true
+            }
+        }
+        Start-Sleep -Seconds $DiscoveryPollSeconds
+    }
+
+    if (-not $runId) {
+        Write-Warning "Release workflow run for tag '$Tag' not found within discovery window ($DiscoveryTimeoutMinutes min)."
+        return [pscustomobject]@{
+            Found              = $false
+            Status             = $null
+            Conclusion         = $null
+            RunId              = $null
+            Url                = $null
+            DiscoveryTimedOut  = $true
+            CompletionTimedOut = $false
+        }
+    }
+
+    $remainingMin = [int](($deadline - (Get-Date)).TotalMinutes)
+    Write-Host "[publish] Release workflow run #$runId found; waiting for completion (up to $remainingMin min remaining)..." -ForegroundColor Cyan
+
+    # Phase 2: poll status until completed or deadline.
+    $status = $null
+    $conclusion = $null
+    $url = $null
+    $consecutiveErrors = 0
+    $sustainedErrorLogged = $false
+    while ((Get-Date) -lt $deadline) {
+        $invokeArgs = @('run','view',[string]$runId,'--repo',$Repo,'--json','status,conclusion,url')
+        $result = & $GhInvoker $invokeArgs
+        $exitCode = [int]$result[0]
+        $runJson = [string]$result[1]
+        if ($exitCode -eq 0 -and $runJson) {
+            try {
+                $run = $runJson | ConvertFrom-Json
+                $status = $run.status
+                $conclusion = $run.conclusion
+                $url = $run.url
+                if ($consecutiveErrors -gt 0) {
+                    Write-Host "[publish] Completion polling recovered after $consecutiveErrors transient gh failure(s)." -ForegroundColor DarkGray
+                    $consecutiveErrors = 0
+                    $sustainedErrorLogged = $false
+                }
+                if ($status -eq 'completed') { break }
+            } catch {
+                $consecutiveErrors++
+                if ($consecutiveErrors -eq 1) {
+                    Write-Host "[publish] Completion: transient JSON parse error from gh (will keep polling)." -ForegroundColor DarkGray
+                } elseif ($consecutiveErrors -ge 6 -and -not $sustainedErrorLogged) {
+                    Write-Warning "Completion polling has hit $consecutiveErrors consecutive gh JSON-parse errors."
+                    $sustainedErrorLogged = $true
+                }
+            }
+        } else {
+            $consecutiveErrors++
+            if ($consecutiveErrors -eq 1) {
+                Write-Host "[publish] Completion: gh call returned exit=$exitCode (transient — will keep polling)." -ForegroundColor DarkGray
+            } elseif ($consecutiveErrors -ge 6 -and -not $sustainedErrorLogged) {
+                Write-Warning "Completion polling has hit $consecutiveErrors consecutive gh failures."
+                $sustainedErrorLogged = $true
+            }
+        }
+        Start-Sleep -Seconds $CompletionPollSeconds
+    }
+
+    return [pscustomobject]@{
+        Found              = $true
+        Status             = $status
+        Conclusion         = $conclusion
+        RunId              = $runId
+        Url                = $url
+        DiscoveryTimedOut  = $false
+        CompletionTimedOut = ($status -ne 'completed')
+    }
 }
 
 # --- Default review org from RemoteUrl ---
@@ -825,6 +1019,31 @@ try {
                             else {
                                 Write-Host "[publish] Tag '$Tag' -> $mergeCommitSha created on $prRepo." -ForegroundColor Green
                                 Write-ReleaseWorkflowHandoff -Repo $prRepo -Tag $Tag
+
+                                # #269: optionally poll the resulting Release workflow run.
+                                if ($WaitForRelease) {
+                                    $runResult = Wait-ReleaseWorkflowRun `
+                                        -Repo $prRepo `
+                                        -Tag $Tag `
+                                        -WorkflowName $ReleaseWorkflowName `
+                                        -TimeoutMinutes $ReleaseWorkflowTimeoutMinutes
+
+                                    if (-not $runResult.Found) {
+                                        Write-Warning "Release workflow run was not located in time; treating as failure."
+                                        $script:ReleaseWorkflowFailed = $true
+                                    }
+                                    elseif ($runResult.Status -ne 'completed') {
+                                        Write-Warning "Release workflow run #$($runResult.RunId) did not complete within $ReleaseWorkflowTimeoutMinutes min (status=$($runResult.Status))."
+                                        $script:ReleaseWorkflowFailed = $true
+                                    }
+                                    elseif ($runResult.Conclusion -ne 'success') {
+                                        Write-Warning "Release workflow run #$($runResult.RunId) concluded '$($runResult.Conclusion)'. See $($runResult.Url)"
+                                        $script:ReleaseWorkflowFailed = $true
+                                    }
+                                    else {
+                                        Write-Host "[publish] Release workflow run #$($runResult.RunId) succeeded: $($runResult.Url)" -ForegroundColor Green
+                                    }
+                                }
                             }
                         }
                     }
@@ -908,4 +1127,11 @@ try {
 }
 finally {
     Remove-Item $publishWorkspace -Recurse -Force -ErrorAction SilentlyContinue
+}
+
+# #269: surface Release-workflow failure as a non-zero exit code so release
+# pipelines fail fast on a broken publish.
+if ($script:ReleaseWorkflowFailed) {
+    Write-Error 'Release workflow did not complete successfully; see warnings above.'
+    exit 1
 }

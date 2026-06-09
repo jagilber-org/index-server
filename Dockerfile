@@ -2,13 +2,17 @@
 # Stage 1: Build — compile TypeScript and install production dependencies
 #
 # Build arg: BASE_IMAGE controls musl vs glibc.
-#   Default: node:22-alpine (smaller image, no sqlite-vec support)
-#   For sqlite-vec: docker build --build-arg BASE_IMAGE=node:22-slim ...
+#   Default: node:22.22.3-alpine3.22 (smaller image, no sqlite-vec support)
+#   For sqlite-vec: docker build --build-arg BASE_IMAGE=node:22.22.3-bookworm-slim ...
 #
 # sqlite-vec ships pre-built glibc binaries that do not load under musl/Alpine.
-# Use node:22-slim (Debian/glibc) when INDEX_SERVER_SQLITE_VEC_ENABLED=1.
+# Use node:22.22.3-bookworm-slim (Debian/glibc) when INDEX_SERVER_SQLITE_VEC_ENABLED=1.
+#
+# Tags pinned to the most recent Node 22 LTS patch (22.22.3, released 2026-05-13)
+# to give scanners a deterministic SBOM. See CODE_SECURITY_REVIEW.md §7 for the
+# bundled-npm CVE tracking note (alerts #26/#27/#28/#56 on issue #352).
 ###############################################################################
-ARG BASE_IMAGE=node:22-alpine
+ARG BASE_IMAGE=node:22.22.3-alpine3.22
 FROM ${BASE_IMAGE} AS build
 
 WORKDIR /app
@@ -39,7 +43,7 @@ RUN npm prune --omit=dev && \
 ###############################################################################
 # Stage 2: Runtime — minimal, hardened production image
 ###############################################################################
-ARG BASE_IMAGE=node:22-alpine
+ARG BASE_IMAGE=node:22.22.3-alpine3.22
 FROM ${BASE_IMAGE} AS runtime
 
 # Security: tini for PID 1 signal handling, openssl for TLS cert generation

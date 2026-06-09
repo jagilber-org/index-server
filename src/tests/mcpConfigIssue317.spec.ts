@@ -338,6 +338,12 @@ describe('Issue #317 CLI, docs, workflow, and parity', () => {
         sharedRoot,
         '--target',
         'vscode',
+        // Repo scope writes <root>/.vscode/mcp.json (the workspace config the
+        // CLI --mcp-upsert --target vscode also targets). Without this the
+        // wizard defaults to global scope and writes to the user home dir,
+        // so the byte-identical parity read below would ENOENT.
+        '--scope',
+        'repo',
         '--write',
         '--no-deploy',
         '--no-preview',

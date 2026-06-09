@@ -16,6 +16,7 @@ describe('auditActions — archive lifecycle constants', () => {
   it('exposes each new audit action with the expected literal value', () => {
     expect(AUDIT_ACTIONS.ARCHIVE).toBe('archive');
     expect(AUDIT_ACTIONS.RESTORE).toBe('restore');
+    expect(AUDIT_ACTIONS.ARCHIVE_EDIT).toBe('archive_edit');
     expect(AUDIT_ACTIONS.PURGE).toBe('purge');
     expect(AUDIT_ACTIONS.PURGE_BLOCKED).toBe('purge_blocked');
     expect(AUDIT_ACTIONS.PURGE_BACKUP).toBe('purge_backup');
@@ -26,6 +27,7 @@ describe('auditActions — archive lifecycle constants', () => {
   it('ARCHIVE_AUDIT_ACTIONS lists every constant exactly once', () => {
     expect([...ARCHIVE_AUDIT_ACTIONS].sort()).toEqual([
       'archive',
+      'archive_edit',
       'purge',
       'purge_backup',
       'purge_backup_failed',

@@ -18,6 +18,8 @@ export const AUDIT_ACTIONS = {
   ARCHIVE: 'archive',
   /** Archived entry restored to the active surface (`index_restore`). */
   RESTORE: 'restore',
+  /** Archived entry edited in place without restore round-trip (dashboard PUT /api/instructions_archived/:name). */
+  ARCHIVE_EDIT: 'archive_edit',
   /** Archived entry permanently purged (`index_purgeArchive`, `index_groom` mode.purgeArchive, `index_remove` mode='purge'). */
   PURGE: 'purge',
   /** Bootstrap mutation-gate or bulk-limit denied a purge attempt. */
@@ -36,6 +38,7 @@ export type ArchiveAuditAction = typeof AUDIT_ACTIONS[keyof typeof AUDIT_ACTIONS
 export const ARCHIVE_AUDIT_ACTIONS: readonly ArchiveAuditAction[] = Object.freeze([
   AUDIT_ACTIONS.ARCHIVE,
   AUDIT_ACTIONS.RESTORE,
+  AUDIT_ACTIONS.ARCHIVE_EDIT,
   AUDIT_ACTIONS.PURGE,
   AUDIT_ACTIONS.PURGE_BLOCKED,
   AUDIT_ACTIONS.PURGE_BACKUP,

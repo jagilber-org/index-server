@@ -105,7 +105,7 @@ graph LR
 4. index hash (id:sourceHash) and governance hash (projection set) computed.
 5. Entries cached (map + sorted list); enrichment persistence pass rewrites placeholders once.
 6. Tools served: diff / list / governanceHash / integrity / gates / prompt review / usage / metrics.
-7. usage_track increments counts; first increment forces immediate flush; subsequent increments debounced.
+7. usage_track increments a sub-counter (retrieved/applied); first increment forces immediate flush; subsequent increments debounced.
 8. metrics_snapshot reflects cumulative method invocation stats + feature counters.
 9. gates_evaluate and integrity_verify provide governance & integrity control loops.
 
@@ -225,7 +225,7 @@ The `ensureLoadedMiddleware` (mounted in `ApiRoutes.ts`) calls `ensureLoaded()` 
 
 ## Usage Persistence Flow
 
-1. usage_track increments: sets firstSeenTs if absent, updates lastUsedAt, increments count.
+1. usage_track resolves a usage *kind* (retrieved vs applied) from the action/signal, sets firstSeenTs if absent, updates lastUsedAt, and increments the matching sub-counter (`retrievedCount` or `appliedCount`). `usageCount` is the derived total `retrievedCount + appliedCount` (deprecated, kept one minor version per issue #418). Signal-only calls (e.g. `signal:'helpful'`) record the signal without incrementing either counter.
 2. First usage forces immediate flush to `data/usage-snapshot.json`.
 3. Subsequent usages debounced (500ms) unless process exits (beforeExit/SIGINT/SIGTERM flush).
 4. On startup, snapshot merged into in-memory entries.

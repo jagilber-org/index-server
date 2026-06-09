@@ -43,14 +43,17 @@ describe('usage_track signal/comment/action fields', () => {
     expect(r.action).toBe('applied');
   });
 
-  it('returns signal field when provided', () => {
+  it('returns signal field when provided (signal-only does not increment — issue #418)', () => {
     const id = 'unit_signal_signal_' + Date.now();
     const filePath = path.join(INSTR_DIR, id + '.json');
     created.push(filePath);
     writeEntry(makeEntry(id));
 
     const r = incrementUsage(id, { signal: 'helpful' }) as any;
-    expect(r.usageCount).toBe(1);
+    // Breaking change (#418): a pure feedback signal records lastSignal but advances no counter.
+    expect(r.usageCount).toBe(0);
+    expect(r.retrievedCount).toBe(0);
+    expect(r.appliedCount).toBe(0);
     expect(r.signal).toBe('helpful');
   });
 

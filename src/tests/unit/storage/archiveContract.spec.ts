@@ -312,6 +312,49 @@ for (const backend of backends) {
       });
     });
 
+    // ── updateArchived() (issue #390) ─────────────────────────────────
+
+    describe('updateArchived()', () => {
+      it('rewrites an archived entry in place without touching the active surface', () => {
+        store.write(makeEntry({ id: 'upd-1' }));
+        store.archive('upd-1', { archiveReason: 'manual', archiveSource: 'archive', archivedBy: 'a@b' });
+        const original = store.getArchived('upd-1');
+        expect(original).not.toBeNull();
+        const edited: InstructionEntry = { ...(original as InstructionEntry), title: 'Edited Title', body: 'Edited body content.' };
+
+        const result = store.updateArchived(edited);
+        expect(result.title).toBe('Edited Title');
+        expect(result.body).toBe('Edited body content.');
+
+        const reread = store.getArchived('upd-1');
+        expect(reread).not.toBeNull();
+        expect(reread!.title).toBe('Edited Title');
+        expect(reread!.body).toBe('Edited body content.');
+        expect(reread!.archiveReason).toBe('manual');
+        expect(reread!.archivedBy).toBe('a@b');
+
+        // Active surface untouched
+        expect(store.get('upd-1')).toBeNull();
+        expect(store.list()).toHaveLength(0);
+      });
+
+      it('throws when the id is not in the archive store', () => {
+        const entry = makeEntry({ id: 'never-archived' });
+        expect(() => store.updateArchived(entry)).toThrow();
+      });
+
+      it('does not change countArchived', () => {
+        store.write(makeEntry({ id: 'upd-c1' }));
+        store.write(makeEntry({ id: 'upd-c2' }));
+        store.archive('upd-c1', { archiveReason: 'manual', archiveSource: 'archive' });
+        store.archive('upd-c2', { archiveReason: 'manual', archiveSource: 'archive' });
+        const before = store.countArchived();
+        const original = store.getArchived('upd-c1')!;
+        store.updateArchived({ ...original, body: 'changed' });
+        expect(store.countArchived()).toBe(before);
+      });
+    });
+
     // ── Cross-cutting invariants ─────────────────────────────────────
 
     describe('invariants', () => {

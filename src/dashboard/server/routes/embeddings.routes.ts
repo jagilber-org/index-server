@@ -295,8 +295,25 @@ export function createEmbeddingsRoutes(embeddingPathOverride?: string, embedding
       } catch { /* tolerate parse / read failures — surface as not present */ }
 
       // State machine for the dashboard banner.
+      //
+      // Empirical override (#318): if we have a non-empty embeddings file whose
+      // recorded modelName matches the configured semantic model, embeddings
+      // demonstrably work — regardless of whether `checkModelReadiness` could
+      // locate the model on disk. `checkModelReadiness` only inspects a single
+      // HuggingFace cache layout (`models--<owner>--<name>` under `cacheDir`),
+      // so caches that live in a sibling directory (e.g. via custom resolvers,
+      // packaged caches, or non-default `@xenova/transformers` versions) get a
+      // false-positive `missing` / `will-download` banner. Prefer the
+      // empirical signal — the user can already produce embeddings.
+      const empiricallyReady =
+        embeddingsFileExists &&
+        embeddingsCount > 0 &&
+        (!embeddingsModelName || embeddingsModelName === sem.model);
+
       let state: 'ready' | 'will-download' | 'missing' | 'no-embeddings';
-      if (!readiness.ready) {
+      if (empiricallyReady) {
+        state = 'ready';
+      } else if (!readiness.ready) {
         state = 'missing'; // localOnly=true and model not cached
       } else if (!readiness.cached) {
         state = 'will-download';
@@ -309,19 +326,19 @@ export function createEmbeddingsRoutes(embeddingPathOverride?: string, embedding
       return res.json({
         success: true,
         enabled: true,
-        ready: readiness.ready && embeddingsFileExists && embeddingsCount > 0,
+        ready: state === 'ready',
         state,
         model: sem.model,
         device: sem.device,
         cacheDir: sem.cacheDir,
         localOnly: sem.localOnly,
-        modelCached: readiness.cached,
+        modelCached: readiness.cached || empiricallyReady,
         modelPath: readiness.modelPath,
         embeddingPath: sem.embeddingPath,
         embeddingsFileExists,
         embeddingsCount,
         embeddingsModelName,
-        message: readiness.message,
+        message: state === 'ready' ? undefined : readiness.message,
       });
     } catch (err) {
       return res.status(500).json({

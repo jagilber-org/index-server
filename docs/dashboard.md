@@ -220,9 +220,9 @@ Archive lifecycle actions available in the dashboard:
 - **Restore**: In the Archived view, select `Restore`. The confirmation chooses restore mode: OK uses `overwrite`; Cancel uses `reject`. The dashboard calls `POST /api/instructions_archived/:name/restore`.
 - **Purge**: In the Archived view, select `Purge`. The dashboard requires typing the instruction id before calling `DELETE /api/instructions_archived/:name?confirm=true`. Purge is irreversible.
 
-Read-only archive APIs are available at `GET /api/instructions_archived` and `GET /api/instructions_archived/:name`. Archive, restore, and purge mutations require dashboard admin authentication.
+Read-only archive APIs are available at `GET /api/instructions_archived` and `GET /api/instructions_archived/:name`. Archive, restore, edit, and purge mutations require dashboard admin authentication.
 
-Archived entries cannot currently be edited in place from the dashboard. To change an archived instruction, restore it to the Active view, edit it with the normal instruction editor, then archive it again if it should return to the archive surface.
+Archived entries are editable in place from the archived view via `PUT /api/instructions_archived/:name` (issue #390); the dashboard exposes an Edit button on every archived row. Edits write directly to the archive store — no restore/re-archive round trip — and emit a distinct `archive_edit` audit action. Entries marked `restoreEligible: false` are policy-locked: their Edit button is disabled and the endpoint rejects edits with HTTP 409 (`archive_locked`). To change locked content, purge the entry and recreate it.
 
 ### Instruction Editor
 

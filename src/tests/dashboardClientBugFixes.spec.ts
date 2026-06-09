@@ -71,6 +71,32 @@ describe('Dashboard Client Bug Fixes', () => {
     });
   });
 
+  describe('bug-10: Instructions tab auto-refresh', () => {
+    it('should include the instructions section in the dashboard auto-refresh loop', () => {
+      const bootSrc = fs.readFileSync(path.join(CLIENT_DIR, 'js', 'admin.boot.js'), 'utf8');
+      const html = fs.readFileSync(path.join(CLIENT_DIR, 'admin.html'), 'utf8');
+
+      expect(bootSrc).toContain("window.currentSection === 'instructions'");
+      expect(bootSrc).toContain('window.refreshInstructionsIfVisible()');
+      expect(html).toContain("currentSection === 'instructions'");
+      expect(html).toContain('refreshInstructionsIfVisible()');
+    });
+
+    it('should refresh instructions silently without resetting pagination state', () => {
+      const src = fs.readFileSync(path.join(CLIENT_DIR, 'js', 'admin.instructions.js'), 'utf8');
+
+      expect(src).toContain('function refreshInstructionsIfVisible()');
+      expect(src).toContain("document.getElementById('instructions-section')");
+      expect(src).toContain("globals.currentSection !== 'instructions' && !visibleByDom");
+      expect(src).toContain('loadInstructions({ silent: true, preservePage: true })');
+      expect(src).toContain('async function loadInstructions(options = {})');
+      expect(src).toContain('const silent = !!options.silent;');
+      expect(src).toContain('const preservePage = !!options.preservePage;');
+      expect(src).toContain("if(listEl && !silent) listEl.innerHTML = 'Loading...';");
+      expect(src).toContain('globals.instructionPage = preservePage ? requestedPage : 1;');
+    });
+  });
+
   describe('bug-5: Category dropdown deduplication', () => {
     it('should clear dropdown before appending fallback categories', () => {
       const src = fs.readFileSync(path.join(CLIENT_DIR, 'js', 'admin.instructions.js'), 'utf8');
@@ -115,6 +141,29 @@ describe('Dashboard Client Bug Fixes', () => {
         !!cssContent.match(/\.graph-meta2[^{]*\{[^}]*display:\s*none/);
 
       expect(hasHiddenMeta || hasHiddenMetaCSS).toBeTruthy();
+    });
+  });
+  describe('bug-11 (#354): SQLite import/export surfaces resolved paths', () => {
+    it('prompts the operator with resolved instructions and sqlite paths before running the action', () => {
+      const src = fs.readFileSync(path.join(CLIENT_DIR, 'js', 'admin.sqlite.js'), 'utf8');
+      expect(src).toContain("'/api/admin/config'");
+      expect(src).toContain("'INDEX_SERVER_DIR'");
+      expect(src).toContain("'INDEX_SERVER_SQLITE_PATH'");
+      expect(src).toContain('async function confirmSqliteIo');
+      expect(src).toContain('Reads from:');
+      expect(src).toContain('Writes to:');
+      expect(src).toContain("case 'migrate': runMigrationWithPathPrompt('migrate')");
+      expect(src).toContain("case 'export': runMigrationWithPathPrompt('export')");
+    });
+
+    it('renders the resolved paths in the post-action result banner', () => {
+      const src = fs.readFileSync(path.join(CLIENT_DIR, 'js', 'admin.sqlite.js'), 'utf8');
+      expect(src).toContain('formatPathBlock');
+      expect(src).toContain('sqlite-migration-paths');
+      expect(src).toMatch(/Read from \(JSON\)/);
+      expect(src).toMatch(/Read from \(SQLite\)/);
+      expect(src).toMatch(/Wrote to \(SQLite\)/);
+      expect(src).toMatch(/Wrote to \(JSON\)/);
     });
   });
 });

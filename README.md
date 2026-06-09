@@ -291,7 +291,7 @@ See [dashboard.md](docs/dashboard.md) for full details. REST client scripts (`sc
 
 ## Security
 
-Index Server makes **zero telemetry calls** and sends **no data to external services** during normal operation. The dashboard binds to **localhost only** by default. Mutations are audit-logged, can be forced read-only with `INDEX_SERVER_MUTATION=0`, and fresh installations gate writes until human confirmation via the bootstrap workflow.
+Index Server makes **zero telemetry calls** and sends **no data to external services** during normal operation. The dashboard binds to **localhost only** by default. Mutations are audit-logged, can be forced read-only with `INDEX_SERVER_MUTATION=0`, and fresh installations gate writes until human confirmation via the bootstrap workflow. Optional subsystems can be disabled at boot (e.g. `INDEX_SERVER_MESSAGING_ENABLED=0` to remove all `messaging_*` MCP tools and the dashboard Messaging tab).
 
 See [SECURITY.md](SECURITY.md) for vulnerability reporting, [PRIVACY.md](PRIVACY.md) for data collection policy and optional outbound connections, and [Network Privacy Guide](docs/network-privacy.md) for offline deployment and verification.
 

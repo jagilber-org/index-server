@@ -4,6 +4,10 @@ on:
   # Tier 3: manual-only due to cross-platform E2E cost.
   workflow_dispatch: {}
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   client-scripts-e2e:
     runs-on: ubuntu-latest

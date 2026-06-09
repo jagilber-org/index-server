@@ -31,14 +31,19 @@ env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository_owner }}/index-server-image
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     name: Build Docker Image (${{ matrix.base-image }})
+    if: ${{ github.repository_owner == 'jagilber-org' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        base-image: ['node:22-alpine', 'node:22-slim']
+        base-image: ['node:22.22.3-alpine3.22', 'node:22.22.3-bookworm-slim']
     outputs:
       image-tag: ${{ steps.meta.outputs.tags }}
     steps:
@@ -53,7 +58,7 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           flavor: |
-            suffix=${{ matrix.base-image == 'node:22-slim' && '-slim' || '' }}
+            suffix=${{ contains(matrix.base-image, 'slim') && '-slim' || '' }}
           tags: |
             type=sha,prefix=
             type=ref,event=branch
@@ -170,6 +175,7 @@ jobs:
 
   scan:
     name: Container Security Scan
+    if: ${{ github.repository_owner == 'jagilber-org' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     needs: build
     steps:

@@ -419,6 +419,12 @@ const PROTOCOL_ALLOWLIST = new Set<string>([
   // Tests for these enums.
   'src/tests/contentTypeSourceOfTruth.spec.ts',
   'src/tests/contentTypeMatrix.spec.ts',
+  // Usage-counter classification test enumerates each usage action/signal to
+  // assert resolveUsageKind() maps them to the correct counter (issue #418).
+  // The production classifier (src/services/usageCounters.ts) derives its sets
+  // from the USAGE_ACTIONS/USAGE_SIGNALS tuples; this test intentionally states
+  // the literals to assert canonical behavior.
+  'src/tests/usageCounters.spec.ts',
   // Test mocks the feedbackStorage SOT module and must re-declare the
   // tuple values in vi.doMock factories (Vitest hoists the factory before
   // imports resolve, so it cannot reference the real exports).

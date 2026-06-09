@@ -6,6 +6,10 @@ on:
     branches:
       - main
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   pre-commit:
     runs-on: ubuntu-latest
@@ -26,13 +30,21 @@ jobs:
           node-version: '20'
           cache: 'npm'
 
+      - name: Validate pre-commit stage markers (#246)
+        # Enforces local/CI parity by failing if any hook in
+        # .pre-commit-config.yaml omits an explicit `stages:` declaration.
+        # See scripts/governance/check-precommit-stages.mjs for rationale.
+        run: node scripts/governance/check-precommit-stages.mjs
+
       - name: Install JS dependencies
+        if: ${{ github.repository_owner == 'jagilber-org' || github.event_name == 'workflow_dispatch' }}
         # Required so the eslint-pre-push hook (template v1.25.0) can
         # invoke `npm run lint` against locally installed eslint during
         # the pre-push policy replay below.
         run: npm ci --no-audit --no-fund
 
       - name: TypeScript strict mode check
+        if: ${{ github.repository_owner == 'jagilber-org' || github.event_name == 'workflow_dispatch' }}
         run: npm run typecheck
 
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6 # pii-allowlist: pinned action SHA
@@ -68,9 +80,19 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
+          # jagilber-dev remains the private leak/security staging repo. Keep
+          # secret, static-analysis, and public-mirror guards active there, but
+          # relocate default non-secret test/lint spend to jagilber-org PRs.
+          DEV_NON_SECRET_SKIPS="repo-slow-pre-push-suite,log-hygiene-pre-push,integrity-pre-push,eslint-pre-push"
+          if [ "${{ github.repository_owner }}" = "jagilber-dev" ]; then
+            export SKIP="${SKIP:+$SKIP,}$DEV_NON_SECRET_SKIPS"
+            echo "jagilber-dev: skipping relocated non-secret pre-push hooks: $DEV_NON_SECRET_SKIPS"
+          fi
+
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             pre-commit run --from-ref "$BASE_SHA" --to-ref "$HEAD_SHA" --hook-stage pre-push
           else
+            export SKIP="${SKIP:+$SKIP,}no-commit-to-branch"
             pre-commit run --all-files --hook-stage pre-push
           fi
 

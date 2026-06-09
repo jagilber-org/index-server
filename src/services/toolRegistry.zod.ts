@@ -275,6 +275,35 @@ const zFeedbackManage = z.object({
   since: z.string().optional()
 }).strict();
 
+// ── Messaging dispatcher (#373) ──────────────────────────────────────────────
+// Mirrors the 10 messaging_<action> tools 1:1. Field validation is intentionally
+// permissive at the dispatcher boundary; the underlying handlers (already in
+// handlers.messaging.ts) perform action-specific validation via their existing
+// Zod schemas (SendMessageOptionsSchema, ReadMessagesOptionsSchema, etc.).
+const zMessagingManage = z.object({
+  action: z.enum(['send','read','list_channels','ack','stats','get','update','purge','reply','thread']),
+  channel: z.string().optional(),
+  sender: z.string().optional(),
+  recipients: z.array(z.string()).optional(),
+  body: z.string().optional(),
+  ttlSeconds: z.number().optional(),
+  persistent: z.boolean().optional(),
+  payload: z.record(z.string(), z.unknown()).optional(),
+  priority: z.string().optional(),
+  parentId: z.string().optional(),
+  requiresAck: z.boolean().optional(),
+  ackBySeconds: z.number().optional(),
+  tags: z.array(z.string()).optional(),
+  reader: z.string().optional(),
+  unreadOnly: z.boolean().optional(),
+  limit: z.number().optional(),
+  markRead: z.boolean().optional(),
+  messageIds: z.array(z.string()).optional(),
+  messageId: z.string().optional(),
+  all: z.boolean().optional(),
+  replyAll: z.boolean().optional(),
+}).strict();
+
 // ── Usage ────────────────────────────────────────────────────────────────────
 const zUsageTrack = z.object({
   id: z.string().min(1),
@@ -388,6 +417,7 @@ const zodMap: Record<string, z.ZodTypeAny> = {
   // Admin tools
   'feedback_submit': zFeedbackSubmit,
   'feedback_manage': zFeedbackManage,
+  'messaging_manage': zMessagingManage,
   'meta_tools': zEmpty,
   'meta_activation_guide': zEmpty,
   'meta_check_activation': zMetaCheckActivation,

@@ -6,6 +6,32 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 
 ## [Unreleased]
 
+## [1.32.0] - 2026-06-08
+
+### Added
+
+- **Split usage counters (`retrievedCount` / `appliedCount`)**: usage is now tracked as two monotonic sub-counters — `retrievedCount` (entry surfaced via search/get/query/export) and `appliedCount` (entry actually applied/cited via `action:'applied'` or `signal:'applied'`). Each has its own timestamp (`lastRetrievedAt` / `lastAppliedAt`). `usage_hotset` ranks by `appliedCount`, then `retrievedCount`, then recency, and surfaces all four fields. `graph_export` nodes expose `retrievedCount`/`appliedCount` when `includeUsage:true`. Legacy snapshots migrate automatically: existing `usageCount` becomes `retrievedCount` with `appliedCount = 0`, preserving `firstSeenTs`/`lastUsedAt` with no count regression. ([#418](https://github.com/jagilber-dev/index-server/issues/418))
+- **Publish-ToMirror polls the tag-triggered Release workflow**: new opt-in flags `-WaitForRelease`, `-ReleaseWorkflowTimeoutMinutes` (default 30), `-ReleaseWorkflowName` (default `Release`) on `scripts/Publish-ToMirror.ps1`. After the mirror tag is created, the script polls the resulting workflow run and exits non-zero if its conclusion is anything other than `success`. ([#269](https://github.com/jagilber-dev/index-server/issues/269))
+  - Discovery (Phase 1) and completion (Phase 2) now have **separate time budgets** so a slow runner-registration cannot starve completion polling; the discovery cap defaults to `min(3, TimeoutMinutes/2)` minutes.
+  - Transient `gh` failures (non-zero exit or JSON parse error) are logged on the first occurrence and again on sustained-N to make timeouts debuggable instead of silent.
+  - `Wait-ReleaseWorkflowRun` accepts an injectable `-GhInvoker` scriptblock (test-only seam) plus internal `-TimeoutSeconds` / `-DiscoveryTimeoutSeconds` overrides so unit tests can drive discovery-timeout / completion-timeout / `failure` / `cancelled` / transient-recovery branches without sleeping for minutes.
+- **Phase 0 release preflight script** (`scripts/release-preflight.ps1`, npm alias `npm run release:preflight`): standalone, fail-aggregating validator that runs every release gate (clean tree, version parity, npm pack inventory, whitespace, typecheck, lint, full test suite, instruction schema, pre-commit) in a single pass without publishing or tagging. Surfaces all release blockers at once so a multi-PR release fix-chain collapses to 1–2 PRs. Supports `-FailFast`, `-SkipTests`, `-SkipPreCommit`. Each gate resets `$LASTEXITCODE` per call and parses `npm pack --dry-run --json` defensively against npm warning leakage. ([#250](https://github.com/jagilber-dev/index-server/issues/250))
+- **`INDEX_SERVER_MESSAGING_ENABLED` kill-switch** (default `1`): opt-in disable for the entire messaging subsystem. When set to `0` / `false`, all 10 `messaging_*` MCP tools are filtered from `tools/list`, their handlers no-op registration, the dashboard Messaging tab is hidden, and `/api/messaging/*` REST routes return 404. Surfaced as `features.messaging` on `/api/status`. ([#353](https://github.com/jagilber-dev/index-server/issues/353))
+
+### Changed
+
+- **BREAKING (usage tracking)**: a *signal-only* `usage_track` call — e.g. `signal:'helpful'` with no `action` — now records the signal/comment **without** incrementing any usage counter. Previously it incremented `usageCount`. To count an application, pass `action:'applied'` (or `signal:'applied'`). Auto-tracking scope is also tightened: `index_search`/`query` auto-record only the **top-3** results (was top-10), explicit-id `export` is auto-tracked, and `list`/`listScoped` are no longer auto-tracked. The derived `usageCount` field is **deprecated** (kept one minor version) in favor of `retrievedCount` + `appliedCount`. ([#418](https://github.com/jagilber-dev/index-server/issues/418))
+
+### Removed
+
+- **BREAKING (dashboard HTTP surface)**: removed the v1 `/legacy` dashboard route and its supporting modules (`legacyDashboardHtml.ts`, `legacyDashboardStyles.ts`). The v2 admin panel at `/admin` is the canonical UI; the root path `/` already redirects there. The still-used `stripGraphTab` helper was relocated to `src/dashboard/server/adminHtmlTransforms.ts`. ([#230](https://github.com/jagilber-dev/index-server/issues/230))
+
+### Fixed
+
+- **MCP config absolute node binary**: `buildServerEntry` now pins the `command` (the node binary) to an **absolute path** (`process.execPath`) for the user-machine-local client formats (`vscode-global`, `copilot-cli`, `claude`) instead of a bare `node`. A bare `node` is resolved by the launching client (VS Code, Copilot CLI, Claude Desktop) against the PATH of its own process — inherited at launch time, not the user's current shell — so a client started before Node was on PATH (or from a launcher with a stripped environment) failed with "The command 'node' needed to run index-server was not found" even though `node` worked in a fresh terminal. The repo-scoped `vscode` (workspace) format deliberately keeps bare `node` so a committed workspace config stays portable across machines/contributors. Adds regression coverage pinning the absolute-command-per-format contract.
+- **MCP config generation for Copilot CLI and Claude Desktop**: `buildServerEntry` now emits an **absolute** node entry path for the `copilot-cli` and `claude` formats (previously only `vscode-global` was absolutized). Those clients launch from the user's home directory and do not reliably honor a `cwd` field, so the generated config carried a relative `dist/server/index-server.js` with no `cwd` and was unlaunchable ("Cannot find module"). Hardened the test helpers to spawn from a foreign cwd and require absolute paths, plus a new regression test pinning the absolute-per-format contract.
+- **Instruction governance linter** (`scripts/governance/lint-instructions.mjs`): skip non-instruction meta/state files (`_manifest.json`, `_skipped.json`, `bootstrap.confirmed.json`) that have no instruction body, and demote `priorityTier` mismatch from ERROR to WARN (it is not a schema-required field and catalog priority semantics are not uniformly applied). Seeded canonical bootstrap entries now carry explicit `status: 'approved'` and `classification: 'public'`.
+
 ## [1.28.26] - 2026-05-20
 
 ### Fixed

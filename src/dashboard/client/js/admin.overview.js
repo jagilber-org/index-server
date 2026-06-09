@@ -67,11 +67,11 @@
                 <span class="stat-label" style="opacity:.8">index Accepted</span>
                 <span class="stat-value">${stats.indexStats?.acceptedInstructions ?? stats.indexStats?.totalInstructions ?? '—'}</span>
             </div>
-            <div class="stat-row" title="Physical *.json files discovered (raw). May exceed accepted due to validation skips">
+            <div class="stat-row" title="Files scanned on disk during last index load (equals accepted + skipped)">
                 <span class="stat-label" style="opacity:.8">index Files</span>
                 <span class="stat-value">${stats.indexStats?.rawFileCount ?? '—'}</span>
             </div>
-            <div class="stat-row" title="Rejected/skipped after validation/normalization">
+            <div class="stat-row" title="Files that failed validation/normalization during last index load (scanned - accepted)">
                 <span class="stat-label" style="opacity:.8">index Skipped</span>
                 <span class="stat-value">${stats.indexStats?.skippedInstructions ?? '—'}</span>
             </div>

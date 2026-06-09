@@ -180,7 +180,32 @@ registerHandler('index_dispatch', async (params: DispatchParams) => {
         finalR = { ...robj, includeArchived: true };
       }
     }
-    if(shouldAddMeta && finalR && typeof finalR === 'object' && !(finalR as { notFound?: boolean }).notFound && !(finalR as { error?: unknown }).error) return { ...(finalR as Record<string,unknown>), _meta: buildAfterRetrievalMeta() };
+    // Auto-track scope (issue #418): record retrievals for query (top-3 results)
+    // and explicit-id export. Search auto-tracks in handlers.search.ts; get is
+    // handled above. List/listScoped remain untracked (browse, not retrieval).
+    if(autoTrack && finalR && typeof finalR === 'object' && !(finalR as { error?: unknown }).error){
+      try {
+        if(action === 'query'){
+          const items = (finalR as { items?: Array<{ id?: unknown }> }).items;
+          if(Array.isArray(items)){
+            for(const it of items.slice(0, 3)){
+              const id = it?.id;
+              if(typeof id === 'string' && id) { try { incrementUsage(id, { action: 'query', kind: 'retrieved' }); } catch { /* fire-and-forget */ } }
+            }
+          }
+        } else if(action === 'export'){
+          const exportIds = (params as { ids?: unknown }).ids;
+          if(Array.isArray(exportIds)){
+            for(const id of exportIds){
+              if(typeof id === 'string' && id) { try { incrementUsage(id, { action: 'export', kind: 'retrieved' }); } catch { /* fire-and-forget */ } }
+            }
+          }
+        }
+      } catch { /* fire-and-forget */ }
+    }
+    if(shouldAddMeta && finalR && typeof finalR === 'object' && !(finalR as { notFound?: boolean }).notFound && !(finalR as { error?: unknown }).error) {
+      return { ...(finalR as Record<string,unknown>), _meta: buildAfterRetrievalMeta() };
+    }
     return finalR;
   }
 
@@ -204,17 +229,30 @@ registerHandler('index_dispatch', async (params: DispatchParams) => {
     archive: 'index_archive', restore: 'index_restore', purgeArchive: 'index_purgeArchive', listArchived: 'index_listArchived', getArchived: 'index_getArchived'
   };
   const target = methodMap[action];
+  let mutationDisabledAnnotation: { mutationEnabled: false; mutationHint: string } | null = null;
   if(!target) {
     try { if(getRuntimeConfig().logging.verbose) process.stderr.write(`[dispatcher] semantic_error code=-32601 reason=unknown_action action=${action}\n`); } catch { /* ignore */ }
     const validActions = ['list', 'get', 'search', 'query', 'categories', 'diff', 'export', 'add', 'import', 'remove', 'reload', 'groom', 'repair', 'enrich', 'governanceHash', 'governanceUpdate', 'health', 'inspect', 'dir', 'capabilities', 'batch', 'manifestStatus', 'manifestRefresh', 'manifestRepair', 'archive', 'restore', 'listArchived', 'getArchived', 'purgeArchive'];
     semanticError(-32601,`Unknown action: ${action}. Call with action="capabilities" to list all valid actions.`,{ action, reason:'unknown_action', hint: 'Use action="capabilities" for full list. Common actions: list, get, search, add, query, categories.', validActions, schema: { required: ['action'], properties: { action: { type: 'string', enum: validActions } } }, examples: { list: { action: 'list' }, get: { action: 'get', id: 'instruction-id' }, search: { action: 'search', q: 'keyword' } } });
   }
   if(mutationMethods.has(target) && !isMutationEnabled()) {
-    // Dispatcher design intent: allow mutation-style actions even when direct mutation tools
-    // are disabled. The previous logic incorrectly blocked these calls, causing silent timeouts
-    // in tests expecting dispatcher add to succeed even when direct mutation calls were forced off.
-    // We now log (if verbose) and proceed instead of throwing a semantic error.
+    // Dispatcher design intent (issue #358): the dispatcher remains the safe
+    // path for mutations even when direct mutation tools are disabled via
+    // INDEX_SERVER_MUTATION=0. Previously this branch logged silently and
+    // proceeded — leaving callers with no signal that the runtime flag was
+    // off and that downstream visibility anomalies may follow.
+    //
+    // The fix: we DO still proceed (preserving the design intent so existing
+    // dispatcher mutation tests continue to pass), but we annotate the
+    // outbound response with `mutationEnabled:false` and an actionable
+    // `mutationHint` naming the env var. Combined with the new structured
+    // error in `instructions.add` for the post-write visibility anomaly,
+    // this eliminates the silent-skip class of bug.
     try { if(getRuntimeConfig().logging.verbose) process.stderr.write(`[dispatcher] mutation_allowed_via_dispatcher action=${action} target=${target} (direct mutation override disabled)\n`); } catch { /* ignore */ }
+    mutationDisabledAnnotation = {
+      mutationEnabled: false,
+      mutationHint: 'INDEX_SERVER_MUTATION is disabled — direct mutation tools are off and write-path persistence may silently fail. Set INDEX_SERVER_MUTATION=1 (or leave it unset, which defaults to enabled) in the server environment, then restart the server.',
+    };
   }
   const handler = getHandler(target);
   if(!handler) {
@@ -248,7 +286,7 @@ registerHandler('index_dispatch', async (params: DispatchParams) => {
   if(mutationMethods.has(target)){
     const gated = mutationGatedReason();
     if(gated){
-      return { error:'mutation_blocked', reason: gated, target: action, bootstrap: true };
+      return { error:'mutation_blocked', reason: gated, target: action, bootstrap: true, ...(mutationDisabledAnnotation || {}) };
     }
   }
   const out = await Promise.resolve(handler(rest));
@@ -261,12 +299,19 @@ registerHandler('index_dispatch', async (params: DispatchParams) => {
     const archiveParams2 = params as { includeArchived?: unknown; onlyArchived?: unknown };
     if(archiveParams2.onlyArchived === true){
       const { archive } = computeActiveAndArchiveHashes();
-      return { archiveHash: archive, onlyArchived: true };
+      return { archiveHash: archive, onlyArchived: true, ...(mutationDisabledAnnotation || {}) };
     }
     if(archiveParams2.includeArchived === true){
       const { archive } = computeActiveAndArchiveHashes();
-      return { ...(out as Record<string, unknown>), archiveHash: archive, includeArchived: true };
+      return { ...(out as Record<string, unknown>), archiveHash: archive, includeArchived: true, ...(mutationDisabledAnnotation || {}) };
     }
+  }
+  // Issue #358: when mutation is disabled, annotate every dispatcher response
+  // for a mutation action with `mutationEnabled:false` + `mutationHint`. This
+  // gives callers an actionable signal at the point of use instead of leaving
+  // them to interpret a `skipped:true` envelope as success.
+  if(mutationDisabledAnnotation && out && typeof out === 'object' && !Array.isArray(out)){
+    return { ...(out as Record<string, unknown>), ...mutationDisabledAnnotation };
   }
   return out;
 });

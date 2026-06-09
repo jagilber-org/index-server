@@ -18,11 +18,16 @@ on:
       - 'scripts/ci/**'
   workflow_dispatch: {}
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   # ── Config generation & structural validation ─────────────────────────
   # Tests all target × profile combinations, merge behavior, multi-target,
   # and VS Code global scope. Linux-only for cost.
   config-validation:
+    if: ${{ github.repository_owner == 'jagilber-org' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -43,6 +48,7 @@ jobs:
   # Validates Windows-specific path handling (USERPROFILE, APPDATA, backslash
   # normalization) on a single target × profile to keep cost minimal.
   windows-smoke:
+    if: ${{ github.repository_owner == 'jagilber-org' || github.event_name == 'workflow_dispatch' }}
     runs-on: windows-latest
     # Windows runners need ~7m for `npm ci && npm run build && npm test`; 10m grazes the
     # limit and intermittently times out. Bump to 15m to match deploy-verify headroom.
@@ -64,6 +70,7 @@ jobs:
   # Tests the full deploy flow: wizard deploys to an external root, then
   # verifies the server starts and completes an MCP handshake.
   deploy-verify:
+    if: ${{ github.repository_owner == 'jagilber-org' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:

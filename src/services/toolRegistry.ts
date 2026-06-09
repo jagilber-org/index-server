@@ -37,6 +37,31 @@ const DANGEROUS_DIAGNOSTIC_TOOLS = new Set([
   'diagnostics_memoryPressure',
 ]);
 
+// Issue #353: messaging_* tools are filtered out of the registry when the
+// messaging subsystem is disabled via INDEX_SERVER_MESSAGING_ENABLED=0.
+// Kept here (rather than removing the tools from STABLE/MUTATION/TOOL_TIERS)
+// so the static metadata remains canonical and the gate is enforced in one
+// place — getToolRegistry().
+const MESSAGING_TOOLS = new Set([
+  'messaging_send',
+  'messaging_read',
+  'messaging_list_channels',
+  'messaging_ack',
+  'messaging_stats',
+  'messaging_get',
+  'messaging_update',
+  'messaging_purge',
+  'messaging_reply',
+  'messaging_thread',
+]);
+
+/** True when the messaging subsystem is enabled at runtime. */
+function messagingEnabled(): boolean {
+  // `enabled` is optional on MessagingConfig (legacy partial test fixtures);
+  // treat `undefined` as enabled — only an explicit `false` disables.
+  return getRuntimeConfig().messaging.enabled !== false;
+}
+
 function buildInstructionBodyInputSchema(baseDescription: string) {
   const maxLength = getRuntimeConfig().index.bodyWarnLength;
   return {
@@ -418,13 +443,41 @@ const INPUT_SCHEMAS: Record<string, object> = {
 (INPUT_SCHEMAS as Record<string, object>)['messaging_thread'] = { type: 'object', additionalProperties: false, required: ['parentId'], properties: {
   parentId: { type: 'string', description: 'Root message ID to retrieve the thread for' }
 } };
+// ── messaging_manage (dispatcher consolidating the 10 messaging_* tools, #373) ─
+(INPUT_SCHEMAS as Record<string, object>)['messaging_manage'] = { type: 'object', additionalProperties: false, required: ['action'], properties: {
+  action: { type: 'string', enum: ['send','read','list_channels','ack','stats','get','update','purge','reply','thread'], description: 'Messaging action to dispatch. Mirrors the legacy messaging_<action> tools 1:1.' },
+  // send / reply common fields
+  channel: { type: 'string', description: 'Channel name (send/read/stats/purge).' },
+  sender: { type: 'string', description: 'Sender id (send/reply).' },
+  recipients: { type: 'array', items: { type: 'string' }, description: 'Recipient ids (send/reply/update).' },
+  body: { type: 'string', description: 'Message body (send/reply/update).' },
+  ttlSeconds: { type: 'number' },
+  persistent: { type: 'boolean' },
+  payload: { type: 'object', additionalProperties: true },
+  priority: { type: 'string' },
+  parentId: { type: 'string', description: 'Parent message id (reply/thread).' },
+  requiresAck: { type: 'boolean' },
+  ackBySeconds: { type: 'number' },
+  tags: { type: 'array', items: { type: 'string' } },
+  // read fields
+  reader: { type: 'string' },
+  unreadOnly: { type: 'boolean' },
+  limit: { type: 'number' },
+  markRead: { type: 'boolean' },
+  // ack / update / get / purge
+  messageIds: { type: 'array', items: { type: 'string' } },
+  messageId: { type: 'string' },
+  all: { type: 'boolean', description: 'Purge all messages.' },
+  // reply
+  replyAll: { type: 'boolean' }
+} };
 (INPUT_SCHEMAS as Record<string, object>)['trace_dump'] = { type: 'object', additionalProperties: false, properties: {
   file: { type: 'string', description: 'Optional path to write the trace buffer JSON file' }
 } };
 
 // Stable & mutation classification lists (mirrors usage in toolHandlers; exported to remove duplication there).
 export const STABLE = new Set(['health_check','feedback_submit','graph_export','index_dispatch','index_search','index_governanceHash','prompt_review','integrity_verify','usage_track','usage_hotset','metrics_snapshot','gates_evaluate','meta_tools','help_overview','index_schema','manifest_status','index_diagnostics','meta_activation_guide','meta_check_activation','bootstrap','bootstrap_status','feature_status','index_health','index_inspect','index_debug','integrity_manifest','messaging_read','messaging_list_channels','messaging_stats','messaging_get','messaging_thread','trace_dump','index_listArchived','index_getArchived']);
-export const MUTATION = new Set(['feedback_manage','index_add','index_import','index_repair','index_reload','index_remove','index_groom','index_enrich','index_governanceUpdate','index_normalize','usage_flush','manifest_refresh','manifest_repair','promote_from_repo','bootstrap_request','bootstrap_confirmFinalize','messaging_send','messaging_ack','messaging_update','messaging_purge','messaging_reply','diagnostics_block','diagnostics_microtaskFlood','diagnostics_memoryPressure','index_archive','index_restore','index_purgeArchive']);
+export const MUTATION = new Set(['feedback_manage','index_add','index_import','index_repair','index_reload','index_remove','index_groom','index_enrich','index_governanceUpdate','index_normalize','usage_flush','manifest_refresh','manifest_repair','promote_from_repo','bootstrap_request','bootstrap_confirmFinalize','messaging_send','messaging_ack','messaging_update','messaging_purge','messaging_reply','messaging_manage','diagnostics_block','diagnostics_microtaskFlood','diagnostics_memoryPressure','index_archive','index_restore','index_purgeArchive']);
 
 // Tool tier classification (002-tool-consolidation spec)
 // core: always visible, essential daily use
@@ -490,6 +543,7 @@ const TOOL_TIERS: Record<string, ToolTier> = {
   'messaging_purge': 'extended',
   'messaging_reply': 'extended',
   'messaging_thread': 'extended',
+  'messaging_manage': 'extended',
   'trace_dump': 'admin',
   // Archive lifecycle tools (spec 006 Phase D)
   'index_archive': 'admin',
@@ -517,15 +571,18 @@ export function getToolRegistry(filter?: ToolRegistryFilter): ToolRegistryEntry[
   const maxTier = filter?.tier ?? resolveActiveTier();
   const maxLevel = TIER_LEVEL[maxTier];
   const diagnosticsEnabled = dangerousDiagnosticsEnabled();
+  const messagingOn = messagingEnabled();
   const entries: ToolRegistryEntry[] = [];
   const names = new Set<string>([...STABLE, ...MUTATION]);
   // Ensure we also expose any tools that have schemas even if not in STABLE/MUTATION lists.
   for(const k of Object.keys(INPUT_SCHEMAS)) {
     if (!diagnosticsEnabled && DANGEROUS_DIAGNOSTIC_TOOLS.has(k)) continue;
+    if (!messagingOn && MESSAGING_TOOLS.has(k)) continue;
     names.add(k);
   }
   for(const name of Array.from(names).sort()){
     if (!diagnosticsEnabled && DANGEROUS_DIAGNOSTIC_TOOLS.has(name)) continue;
+    if (!messagingOn && MESSAGING_TOOLS.has(name)) continue;
     const tier = TOOL_TIERS[name] || 'admin';
     if (TIER_LEVEL[tier] > maxLevel) continue;
     const outputSchema = (outputSchemas as Record<string, object>)[name];
@@ -606,6 +663,7 @@ function describeTool(name: string): string {
   case 'messaging_purge': return 'Delete messages: all, by channel, or by specific IDs.';
   case 'messaging_reply': return 'Reply to a message with auto-populated channel and parentId. Supports reply-all (all original recipients) or reply-to-sender.';
   case 'messaging_thread': return 'Retrieve a full message thread by root parentId. Returns parent + all nested replies sorted chronologically.';
+  case 'messaging_manage': return 'Dispatcher consolidating all 10 messaging_<action> tools into a single MCP surface. Pick the underlying operation with action= (send/read/list_channels/ack/stats/get/update/purge/reply/thread). Mirrors the individual tools 1:1; the standalone messaging_<action> tools remain available but messaging_manage is the recommended entry-point (#373).';
   case 'trace_dump': return 'Write the in-memory trace ring buffer to a file and return a summary (records count, bytes, env). Requires tracing to be enabled.';
   // Archive lifecycle tools (spec 006 Phase D) — surfaced via index_dispatch actions
   case 'index_archive': return 'Archive one or more active instructions (move to archive store, atomically). Closed-enum reason taxonomy (deprecated|superseded|duplicate-merge|manual|legacy-scope). Restorable unless restoreEligible:false. Surfaced via index_dispatch action:"archive".';
@@ -618,4 +676,4 @@ function describeTool(name: string): string {
 }
 
 // Registry version bumped to align with dispatcher consolidation docs regeneration (TOOLS-GENERATED.md)
-export const REGISTRY_VERSION = '2026-03-29';
+export const REGISTRY_VERSION = '2026-06-01';

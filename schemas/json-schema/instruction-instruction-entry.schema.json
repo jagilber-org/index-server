@@ -56,10 +56,22 @@
         "usageCount": {
           "type": "number"
         },
+        "retrievedCount": {
+          "type": "number"
+        },
+        "appliedCount": {
+          "type": "number"
+        },
         "firstSeenTs": {
           "type": "string"
         },
         "lastUsedAt": {
+          "type": "string"
+        },
+        "lastRetrievedAt": {
+          "type": "string"
+        },
+        "lastAppliedAt": {
           "type": "string"
         },
         "riskScore": {

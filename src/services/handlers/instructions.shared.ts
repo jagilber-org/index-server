@@ -41,7 +41,13 @@ export interface ImportEntry {
   priorityTier?: InstructionEntry['priorityTier']; classification?: InstructionEntry['classification'];
   lastReviewedAt?: string; nextReviewDue?: string; changeLog?: InstructionEntry['changeLog'];
   semanticSummary?: string; contentType?: InstructionEntry['contentType'];
-  extensions?: InstructionEntry['extensions']
+  extensions?: InstructionEntry['extensions'];
+  // Caller-settable scoping / governance fields (#350). Previously absent
+  // from this DTO so they were silently dropped between the input-surface
+  // validator and the persisted record. Listing them keeps the type honest
+  // about what the public schema accepts.
+  teamIds?: string[]; workspaceId?: string; userId?: string;
+  supersedes?: string; reviewIntervalDays?: number;
 }
 
 export function guard<TParams, TResult>(name: string, fn: (p: TParams) => TResult) {

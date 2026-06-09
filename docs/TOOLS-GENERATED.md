@@ -1,6 +1,6 @@
 # Generated Tool Registry
 
-Registry Version: 2026-03-29
+Registry Version: 2026-06-01
 
 | Method | Stable | Mutation | Description |
 |--------|--------|----------|-------------|
@@ -9,11 +9,11 @@ Registry Version: 2026-03-29
 | feedback_submit | yes |  | Submit feedback entry (issue, status report, security alert, feature request, etc.). |
 | gates_evaluate | yes |  | Evaluate configured gating criteria over current index. |
 | graph_export | yes |  | Export instruction relationship graph (schema v1 minimal or v2 enriched). |
-| health_check | yes |  | Returns server health status & version. |
+| health_check | yes |  | Returns server health status &amp; version. |
 | help_overview | yes |  | Structured onboarding guidance for new agents (tool discovery, index lifecycle, promotion workflow). |
 | index_add |  | yes | Add a single instruction (lax mode fills defaults; overwrite optional). |
 | index_dispatch | yes |  | Unified dispatcher for instruction index operations. Required: "action". Key params by action: get/getEnhanced(id), search(q/searchString/keywords/fields, includeCategories, caseSensitive, limit, mode), query(text,categoriesAny,limit,offset), list(category), diff(clientHash), export(ids,metaOnly), remove(id or ids, mode:"archive"\|"purge"), archive(ids, reason), restore(ids, restoreMode), listArchived/getArchived/purgeArchive. Read actions accept includeArchived/onlyArchived flags (mutually exclusive). Use action="capabilities" to discover all supported actions. |
-| index_governanceHash | yes |  | Return governance projection & deterministic governance hash. |
+| index_governanceHash | yes |  | Return governance projection &amp; deterministic governance hash. |
 | index_governanceUpdate |  | yes | Patch limited governance fields (owner/status/review dates + optional version bump). |
 | index_import |  | yes | Import instruction entries from: inline array (entries), stringified JSON array, file path to JSON array (entries as string), or directory of .json files (source). |
 | index_reload |  | yes | Force reload of instruction index from disk. |
@@ -24,6 +24,7 @@ Registry Version: 2026-03-29
 | messaging_ack |  | yes | Acknowledge (mark as read) one or more messages by ID. |
 | messaging_get | yes |  | Get a single message by ID with full details. |
 | messaging_list_channels | yes |  | List all active messaging channels with message counts and latest timestamps. |
+| messaging_manage |  | yes | Dispatcher consolidating all 10 messaging_&lt;action&gt; tools into a single MCP surface. Pick the underlying operation with action= (send/read/list_channels/ack/stats/get/update/purge/reply/thread). Mirrors the individual tools 1:1; the standalone messaging_&lt;action&gt; tools remain available but messaging_manage is the recommended entry-point (#373). |
 | messaging_purge |  | yes | Delete messages: all, by channel, or by specific IDs. |
 | messaging_read | yes |  | Read messages from a channel with visibility filtering. Supports unread-only, limit, mark-as-read, tag filtering, and sender filtering. |
 | messaging_reply |  | yes | Reply to a message with auto-populated channel and parentId. Supports reply-all (all original recipients) or reply-to-sender. |
@@ -33,7 +34,7 @@ Registry Version: 2026-03-29
 | messaging_update |  | yes | Update mutable fields of a message (body, recipients, payload, persistent flag). |
 | metrics_snapshot | yes |  | Performance metrics summary for handled methods. |
 | promote_from_repo |  | yes | Scan a local Git repository and promote its knowledge content (constitutions, docs, instructions, specs) into the instruction index. Reads .specify/config/promotion-map.json and instructions/*.json from the target repo. |
-| prompt_review | yes |  | Static analysis of a prompt returning issues & summary. |
+| prompt_review | yes |  | Static analysis of a prompt returning issues &amp; summary. |
 | usage_hotset | yes |  | Return the most-used instruction entries (hot set). |
 | usage_track | yes |  | Track instruction usage with optional qualitative signal. Params: id (required), action (retrieved\|applied\|cited), signal (helpful\|not-relevant\|outdated\|applied), comment (short text, max 256 chars). |
 
@@ -577,6 +578,12 @@ Registry Version: 2026-03-29
                 "type": "string"
               },
               "usageCount": {
+                "type": "number"
+              },
+              "retrievedCount": {
+                "type": "number"
+              },
+              "appliedCount": {
                 "type": "number"
               }
             }
@@ -1522,7 +1529,7 @@ Registry Version: 2026-03-29
               "type": "integer",
               "minimum": 0,
               "x-fieldClass": "server-managed",
-              "description": "Number of tracked usage events"
+              "description": "DEPRECATED (issue #418): derived total usage count = retrievedCount + appliedCount"
             },
             {
               "type": "array",
@@ -1531,7 +1538,47 @@ Registry Version: 2026-03-29
                 "type": "integer",
                 "minimum": 0,
                 "x-fieldClass": "server-managed",
-                "description": "Number of tracked usage events"
+                "description": "DEPRECATED (issue #418): derived total usage count = retrievedCount + appliedCount"
+              }
+            }
+          ]
+        },
+        "retrievedCount": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "x-fieldClass": "server-managed",
+              "description": "Number of retrieval events (search/get/query/export/list)"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "integer",
+                "minimum": 0,
+                "x-fieldClass": "server-managed",
+                "description": "Number of retrieval events (search/get/query/export/list)"
+              }
+            }
+          ]
+        },
+        "appliedCount": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "x-fieldClass": "server-managed",
+              "description": "Number of explicit applied/cited events"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "integer",
+                "minimum": 0,
+                "x-fieldClass": "server-managed",
+                "description": "Number of explicit applied/cited events"
               }
             }
           ]
@@ -1572,6 +1619,46 @@ Registry Version: 2026-03-29
                 "format": "date-time",
                 "x-fieldClass": "server-managed",
                 "description": "Last usage timestamp (ISO 8601)"
+              }
+            }
+          ]
+        },
+        "lastRetrievedAt": {
+          "oneOf": [
+            {
+              "type": "string",
+              "format": "date-time",
+              "x-fieldClass": "server-managed",
+              "description": "Last retrieval timestamp (ISO 8601)"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "format": "date-time",
+                "x-fieldClass": "server-managed",
+                "description": "Last retrieval timestamp (ISO 8601)"
+              }
+            }
+          ]
+        },
+        "lastAppliedAt": {
+          "oneOf": [
+            {
+              "type": "string",
+              "format": "date-time",
+              "x-fieldClass": "server-managed",
+              "description": "Last applied timestamp (ISO 8601)"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "format": "date-time",
+                "x-fieldClass": "server-managed",
+                "description": "Last applied timestamp (ISO 8601)"
               }
             }
           ]
@@ -3643,7 +3730,7 @@ Registry Version: 2026-03-29
               "type": "integer",
               "minimum": 0,
               "x-fieldClass": "server-managed",
-              "description": "Number of tracked usage events"
+              "description": "DEPRECATED (issue #418): derived total usage count = retrievedCount + appliedCount"
             },
             {
               "type": "array",
@@ -3652,7 +3739,47 @@ Registry Version: 2026-03-29
                 "type": "integer",
                 "minimum": 0,
                 "x-fieldClass": "server-managed",
-                "description": "Number of tracked usage events"
+                "description": "DEPRECATED (issue #418): derived total usage count = retrievedCount + appliedCount"
+              }
+            }
+          ]
+        },
+        "retrievedCount": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "x-fieldClass": "server-managed",
+              "description": "Number of retrieval events (search/get/query/export/list)"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "integer",
+                "minimum": 0,
+                "x-fieldClass": "server-managed",
+                "description": "Number of retrieval events (search/get/query/export/list)"
+              }
+            }
+          ]
+        },
+        "appliedCount": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "x-fieldClass": "server-managed",
+              "description": "Number of explicit applied/cited events"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "integer",
+                "minimum": 0,
+                "x-fieldClass": "server-managed",
+                "description": "Number of explicit applied/cited events"
               }
             }
           ]
@@ -3693,6 +3820,46 @@ Registry Version: 2026-03-29
                 "format": "date-time",
                 "x-fieldClass": "server-managed",
                 "description": "Last usage timestamp (ISO 8601)"
+              }
+            }
+          ]
+        },
+        "lastRetrievedAt": {
+          "oneOf": [
+            {
+              "type": "string",
+              "format": "date-time",
+              "x-fieldClass": "server-managed",
+              "description": "Last retrieval timestamp (ISO 8601)"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "format": "date-time",
+                "x-fieldClass": "server-managed",
+                "description": "Last retrieval timestamp (ISO 8601)"
+              }
+            }
+          ]
+        },
+        "lastAppliedAt": {
+          "oneOf": [
+            {
+              "type": "string",
+              "format": "date-time",
+              "x-fieldClass": "server-managed",
+              "description": "Last applied timestamp (ISO 8601)"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "format": "date-time",
+                "x-fieldClass": "server-managed",
+                "description": "Last applied timestamp (ISO 8601)"
               }
             }
           ]
@@ -4485,6 +4652,112 @@ Registry Version: 2026-03-29
 }
 ```
 
+### messaging_manage
+**Input Schema**
+```json
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "action"
+  ],
+  "properties": {
+    "action": {
+      "type": "string",
+      "enum": [
+        "send",
+        "read",
+        "list_channels",
+        "ack",
+        "stats",
+        "get",
+        "update",
+        "purge",
+        "reply",
+        "thread"
+      ],
+      "description": "Messaging action to dispatch. Mirrors the legacy messaging_<action> tools 1:1."
+    },
+    "channel": {
+      "type": "string",
+      "description": "Channel name (send/read/stats/purge)."
+    },
+    "sender": {
+      "type": "string",
+      "description": "Sender id (send/reply)."
+    },
+    "recipients": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Recipient ids (send/reply/update)."
+    },
+    "body": {
+      "type": "string",
+      "description": "Message body (send/reply/update)."
+    },
+    "ttlSeconds": {
+      "type": "number"
+    },
+    "persistent": {
+      "type": "boolean"
+    },
+    "payload": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "priority": {
+      "type": "string"
+    },
+    "parentId": {
+      "type": "string",
+      "description": "Parent message id (reply/thread)."
+    },
+    "requiresAck": {
+      "type": "boolean"
+    },
+    "ackBySeconds": {
+      "type": "number"
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "reader": {
+      "type": "string"
+    },
+    "unreadOnly": {
+      "type": "boolean"
+    },
+    "limit": {
+      "type": "number"
+    },
+    "markRead": {
+      "type": "boolean"
+    },
+    "messageIds": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "messageId": {
+      "type": "string"
+    },
+    "all": {
+      "type": "boolean",
+      "description": "Purge all messages."
+    },
+    "replyAll": {
+      "type": "boolean"
+    }
+  }
+}
+```
+
 ### messaging_purge
 **Input Schema**
 ```json
@@ -5003,7 +5276,25 @@ Registry Version: 2026-03-29
           "usageCount": {
             "type": "number"
           },
+          "retrievedCount": {
+            "type": "number"
+          },
+          "appliedCount": {
+            "type": "number"
+          },
           "lastUsedAt": {
+            "type": "string"
+          },
+          "lastRetrievedAt": {
+            "type": "string"
+          },
+          "lastAppliedAt": {
+            "type": "string"
+          },
+          "lastSignal": {
+            "type": "string"
+          },
+          "lastComment": {
             "type": "string"
           }
         }
@@ -5108,10 +5399,31 @@ Registry Version: 2026-03-29
         "usageCount": {
           "type": "number"
         },
+        "retrievedCount": {
+          "type": "number"
+        },
+        "appliedCount": {
+          "type": "number"
+        },
         "firstSeenTs": {
           "type": "string"
         },
         "lastUsedAt": {
+          "type": "string"
+        },
+        "lastRetrievedAt": {
+          "type": "string"
+        },
+        "lastAppliedAt": {
+          "type": "string"
+        },
+        "action": {
+          "type": "string"
+        },
+        "signal": {
+          "type": "string"
+        },
+        "comment": {
           "type": "string"
         }
       }

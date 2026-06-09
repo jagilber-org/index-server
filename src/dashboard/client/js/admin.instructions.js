@@ -38,6 +38,7 @@
 
   // Usage snapshot cache (loaded once per loadInstructions call)
   let usageSnapshot = {};
+  let instructionLoadInFlight = null;
   async function fetchUsageSnapshot() {
     try {
       const res = await adminAuth.adminFetch('/api/usage/snapshot');
@@ -62,6 +63,7 @@
         const action = button.getAttribute('data-instruction-action');
         const instructionName = button.getAttribute('data-instruction-name') || '';
         if (action === 'edit') editInstruction(instructionName);
+        if (action === 'edit-archived') editArchivedInstruction(instructionName);
         if (action === 'delete') deleteInstruction(instructionName);
         if (action === 'archive') promptArchiveInstruction(instructionName);
         if (action === 'restore') promptRestoreInstruction(instructionName);
@@ -83,6 +85,7 @@
       if(!Array.isArray(cats)) cats = [];
       const select = document.getElementById('instruction-category-filter');
       if(select){
+        const selected = select.value;
         select.innerHTML = '<option value="">All Categories</option>';
         cats.forEach(cat => {
           if(!cat || !cat.name) return;
@@ -91,6 +94,7 @@
           option.textContent = cat.count != null ? `${cat.name} (${cat.count})` : cat.name;
           select.appendChild(option);
         });
+        if (selected && cats.some(cat => cat && cat.name === selected)) select.value = selected;
       }
       return cats.map(c=>c.name);
     } catch (e) {
@@ -234,6 +238,9 @@
     const totalFiltered = filtered.length;
     let pageItems = filtered;
     if (globals.instructionPageSize !== 'All') {
+      const totalPages = Math.max(1, Math.ceil(totalFiltered / globals.instructionPageSize));
+      if (globals.instructionPage > totalPages) globals.instructionPage = totalPages;
+      if (globals.instructionPage < 1) globals.instructionPage = 1;
       const start = (globals.instructionPage - 1) * globals.instructionPageSize;
       const end = start + globals.instructionPageSize;
       pageItems = filtered.slice(start, end);
@@ -288,6 +295,7 @@
 
   function showCreateInstruction(){
     globals.instructionEditing = null;
+    globals.instructionEditingArchived = false;
     const title = document.getElementById('instruction-editor-title'); if(title) title.textContent = 'New Instruction';
     const filename = document.getElementById('instruction-filename'); if(filename){ filename.value=''; filename.disabled=false; }
     const content = document.getElementById('instruction-content'); if(content) content.value = '';
@@ -304,6 +312,7 @@
     const editor = document.getElementById('instruction-editor');
     const filenameEl = document.getElementById('instruction-filename');
     const contentEl = document.getElementById('instruction-content');
+    globals.instructionEditingArchived = false;
     let attempts = 0; const maxAttempts = 2; let lastError;
     while(attempts < maxAttempts){
       try{
@@ -332,7 +341,44 @@
     globals.showError && globals.showError('Failed to load instruction');
   }
 
-  function cancelEditInstruction(){ const ed = document.getElementById('instruction-editor'); if(ed) ed.classList.add('hidden'); const diff = document.getElementById('instruction-diff-container'); if(diff) diff.classList.add('hidden'); const preview = document.getElementById('instruction-preview-container'); if(preview) preview.classList.add('hidden'); globals.instructionOriginalContent=''; globals.instructionPreviewVisible = false; const btn = document.getElementById('instruction-preview-btn'); if(btn) btn.textContent = '📖 Preview'; }
+  function cancelEditInstruction(){ const ed = document.getElementById('instruction-editor'); if(ed) ed.classList.add('hidden'); const diff = document.getElementById('instruction-diff-container'); if(diff) diff.classList.add('hidden'); const preview = document.getElementById('instruction-preview-container'); if(preview) preview.classList.add('hidden'); globals.instructionOriginalContent=''; globals.instructionPreviewVisible = false; globals.instructionEditingArchived = false; const btn = document.getElementById('instruction-preview-btn'); if(btn) btn.textContent = '📖 Preview'; }
+
+  // Open the standard instruction editor against an archived row (#390).
+  // Save routes to PUT /api/instructions_archived/:name via the
+  // instructionEditingArchived flag (see saveInstruction).
+  async function editArchivedInstruction(name){
+    if(!name) return;
+    const editor = document.getElementById('instruction-editor');
+    const filenameEl = document.getElementById('instruction-filename');
+    const contentEl = document.getElementById('instruction-content');
+    try {
+      if(contentEl) contentEl.value = '// Loading archived ' + name + '...';
+      const res = await adminAuth.adminFetch('/api/instructions_archived/' + encodeURIComponent(name));
+      if(!res.ok) throw new Error('http ' + Number(res.status));
+      const data = await res.json();
+      const entry = data.entry || data.data?.entry;
+      if(!entry) throw new Error('missing archived entry');
+      if(entry.restoreEligible === false){
+        globals.showError && globals.showError('Cannot edit: archived entry is locked (restoreEligible=false).');
+        if(contentEl) contentEl.value = '';
+        return;
+      }
+      globals.instructionEditing = name;
+      globals.instructionEditingArchived = true;
+      const title = document.getElementById('instruction-editor-title'); if(title) title.textContent = 'Edit Archived Instruction: ' + name;
+      if(filenameEl){ filenameEl.value = name; filenameEl.disabled = true; }
+      const pretty = JSON.stringify(entry, null, 2);
+      if(contentEl) contentEl.value = pretty;
+      globals.ensureInstructionEditorAtTop && globals.ensureInstructionEditorAtTop();
+      if(editor) editor.classList.remove('hidden');
+      try { editor.scrollIntoView({ behavior:'smooth', block:'start' }); } catch {}
+      globals.instructionOriginalContent = pretty;
+      updateInstructionEditorDiagnostics();
+    } catch(e){
+      console.warn('editArchivedInstruction failed', e);
+      globals.showError && globals.showError('Failed to load archived instruction');
+    }
+  }
 
   function safeParseInstruction(raw){ try { return JSON.parse(raw); } catch { return null; } }
 
@@ -424,47 +470,72 @@
     if(parsed && parsed.schemaVersion && /^1(\.|$)/.test(String(parsed.schemaVersion))){ parsed.schemaVersion = '2'; }
     const body = { content: parsed };
     let url = '/api/instructions'; let method = 'POST';
-    if(globals.instructionEditing){ url += '/' + encodeURIComponent(globals.instructionEditing); method = 'PUT'; }
+    if(globals.instructionEditing){
+      if(globals.instructionEditingArchived){
+        url = '/api/instructions_archived/' + encodeURIComponent(globals.instructionEditing);
+        method = 'PUT';
+      } else {
+        url += '/' + encodeURIComponent(globals.instructionEditing); method = 'PUT';
+      }
+    }
     else { body.name = nameEl.value.trim(); if(!body.name){ globals.showError && globals.showError('Provide file name'); return; } }
     try{
       const res = await adminAuth.adminFetch(url, { method, headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
       const data = await res.json();
       if(!res.ok || !data.success){ throw new Error(data.error || data.message || 'Save failed'); }
-      globals.showSuccess && globals.showSuccess(globals.instructionEditing? 'Instruction updated':'Instruction created');
+      const successMsg = globals.instructionEditingArchived
+        ? 'Archived instruction updated'
+        : (globals.instructionEditing ? 'Instruction updated' : 'Instruction created');
+      globals.showSuccess && globals.showSuccess(successMsg);
       globals.instructionOriginalContent = JSON.stringify(parsed, null, 2);
       ta.value = globals.instructionOriginalContent;
       if(!globals.instructionEditing) globals.instructionEditing = body.name;
       updateInstructionEditorDiagnostics();
-      loadInstructions();
+      if(globals.instructionEditingArchived){ loadArchivedInstructions(); } else { loadInstructions(); }
     } catch(e){ globals.showError && globals.showError(e.message || 'Save failed'); }
   }
 
-  async function loadInstructions() {
+  async function loadInstructions(options = {}) {
+    if (instructionLoadInFlight) return instructionLoadInFlight;
+    const silent = !!options.silent;
+    const preservePage = !!options.preservePage;
+    const requestedPage = globals.instructionPage;
     if (globals.instructionView === 'archived') {
       return loadArchivedInstructions();
     }
-    const listEl = document.getElementById('instructions-list'); if(listEl) listEl.innerHTML = 'Loading...';
-    // create hidden debug sink so Playwright can read client diagnostics from DOM
-    try {
-      let dbg = document.getElementById('admin-debug');
-      if(!dbg){ dbg = document.createElement('div'); dbg.id = 'admin-debug'; dbg.style.display='none'; dbg.style.whiteSpace='pre'; document.body.appendChild(dbg); }
-    } catch(e){}
-    try{
-      try { console.debug('[admin.instructions] loadInstructions: start'); } catch(e){}
-      const [catNames, snapData] = await Promise.all([loadInstructionCategories(), fetchUsageSnapshot()]);
-      usageSnapshot = snapData;
-      const res = await adminAuth.adminFetch('/api/instructions'); if(!res.ok) throw new Error('http '+res.status);
-      const data = await res.json();
-      if (!('success' in data) && !('data' in data) && !('instructions' in data)) throw new Error('unrecognized instructions payload');
-      const rawList = data.instructions || data.data?.instructions || [];
-      globals.allInstructions = Array.isArray(rawList) ? rawList : [];
-      try { console.log('[admin.instructions] fetched instructions:', globals.allInstructions.length); } catch {}
-  try { console.debug('[admin.instructions] loadInstructions: sampleNames=', (globals.allInstructions||[]).slice(0,6).map(i=>i.name)); } catch(e){}
-  try { const dbg = document.getElementById('admin-debug'); if(dbg) dbg.textContent = JSON.stringify({ stage:'loadInstructions', count: (globals.allInstructions||[]).length, sample: (globals.allInstructions||[]).slice(0,6).map(i=>i.name) }, null, 2); } catch(e){}
-      if(!catNames.length){ try { const select = document.getElementById('instruction-category-filter'); if(select){ select.innerHTML = '<option value="">All Categories</option>'; const derived = Array.from(new Set(globals.allInstructions.flatMap(i=> [i.category, ...(Array.isArray(i.categories)? i.categories: [])]).filter(Boolean))).sort(); derived.forEach(n=>{ const opt = document.createElement('option'); opt.value = n; opt.textContent = n; select.appendChild(opt); }); } } catch(_){} }
-      globals.instructionPage = 1;
-      renderInstructionList(globals.allInstructions || []);
-    } catch(e){ console.warn('loadInstructions error', e); if(listEl) listEl.innerHTML = '<div class="error">Failed to load instructions</div>'; }
+    const run = (async () => {
+      const listEl = document.getElementById('instructions-list'); if(listEl && !silent) listEl.innerHTML = 'Loading...';
+      // create hidden debug sink so Playwright can read client diagnostics from DOM
+      try {
+        let dbg = document.getElementById('admin-debug');
+        if(!dbg){ dbg = document.createElement('div'); dbg.id = 'admin-debug'; dbg.style.display='none'; dbg.style.whiteSpace='pre'; document.body.appendChild(dbg); }
+      } catch(e){}
+      try{
+        try { console.debug('[admin.instructions] loadInstructions: start'); } catch(e){}
+        const [catNames, snapData] = await Promise.all([loadInstructionCategories(), fetchUsageSnapshot()]);
+        usageSnapshot = snapData;
+        const res = await adminAuth.adminFetch('/api/instructions'); if(!res.ok) throw new Error('http '+res.status);
+        const data = await res.json();
+        if (!('success' in data) && !('data' in data) && !('instructions' in data)) throw new Error('unrecognized instructions payload');
+        const rawList = data.instructions || data.data?.instructions || [];
+        globals.allInstructions = Array.isArray(rawList) ? rawList : [];
+        try { console.log('[admin.instructions] fetched instructions:', globals.allInstructions.length); } catch {}
+    try { console.debug('[admin.instructions] loadInstructions: sampleNames=', (globals.allInstructions||[]).slice(0,6).map(i=>i.name)); } catch(e){}
+    try { const dbg = document.getElementById('admin-debug'); if(dbg) dbg.textContent = JSON.stringify({ stage:'loadInstructions', count: (globals.allInstructions||[]).length, sample: (globals.allInstructions||[]).slice(0,6).map(i=>i.name) }, null, 2); } catch(e){}
+        if(!catNames.length){ try { const select = document.getElementById('instruction-category-filter'); if(select){ const selected = select.value; select.innerHTML = '<option value="">All Categories</option>'; const derived = Array.from(new Set(globals.allInstructions.flatMap(i=> [i.category, ...(Array.isArray(i.categories)? i.categories: [])]).filter(Boolean))).sort(); derived.forEach(n=>{ const opt = document.createElement('option'); opt.value = n; opt.textContent = n; select.appendChild(opt); }); if (selected && derived.includes(selected)) select.value = selected; } } catch(_){} }
+        globals.instructionPage = preservePage ? requestedPage : 1;
+        renderInstructionList(globals.allInstructions || []);
+      } catch(e){ console.warn('loadInstructions error', e); if(listEl && !silent) listEl.innerHTML = '<div class="error">Failed to load instructions</div>'; }
+    })();
+    instructionLoadInFlight = run.finally(() => { instructionLoadInFlight = null; });
+    return instructionLoadInFlight;
+  }
+
+  function refreshInstructionsIfVisible() {
+    const instructionSection = document.getElementById('instructions-section');
+    const visibleByDom = !!instructionSection && !instructionSection.classList.contains('hidden');
+    if (globals.currentSection !== 'instructions' && !visibleByDom) return;
+    return loadInstructions({ silent: true, preservePage: true });
   }
 
   function formatInstructionJson(){ const ta = document.getElementById('instruction-content'); if(!ta) return; try{ const parsed = JSON.parse(ta.value); ta.value = JSON.stringify(parsed, null, 2); updateInstructionEditorDiagnostics(); } catch { globals.showError && globals.showError('Cannot format: invalid JSON'); } }
@@ -604,6 +675,7 @@
           <div class="instruction-item-header">
             <div class="instruction-name">${lockedBadge}${escapedName} <span style="opacity:.6;font-weight:400;">${safeTitle}</span></div>
             <div class="instruction-actions">
+              <button class="action-btn" data-instruction-action="edit-archived" data-instruction-name="${escapedName}" ${restoreEligible ? '' : 'disabled title="restoreEligible=false (locked)"'}>✏ Edit</button>
               <button class="action-btn" data-instruction-action="restore" data-instruction-name="${escapedName}" ${restoreEligible ? '' : 'disabled title="restoreEligible=false"'}>♻ Restore</button>
               <button class="action-btn danger" data-instruction-action="purge" data-instruction-name="${escapedName}">🗑 Purge</button>
             </div>
@@ -755,6 +827,7 @@
       showCreateInstruction,
       changeInstructionPage,
       loadInstructions, // optional manual trigger
+      refreshInstructionsIfVisible,
       saveInstruction,
       formatInstructionJson,
       toggleInstructionDiff,
@@ -764,6 +837,7 @@
       updateInstructionEditorDiagnostics,
       setInstructionView,
       loadArchivedInstructions,
+      editArchivedInstruction,
       promptArchiveInstruction,
       promptRestoreInstruction,
       promptPurgeArchivedInstruction

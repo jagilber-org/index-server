@@ -4,9 +4,18 @@ updates:
     directory: /
     schedule:
       interval: weekly
-    open-pull-requests-limit: 10
+    # Grouping collapses all eligible npm updates into a single PR per week so
+    # Dependabot stops opening up to 10 PRs that each re-trigger the full
+    # workflow fan-out (precommit + mirror CI). See issues #426 / #434.
+    open-pull-requests-limit: 5
     labels:
       - dependencies
+    groups:
+      npm-minor-patch:
+        applies-to: version-updates
+        update-types:
+          - minor
+          - patch
     ignore:
       - dependency-name: '*'
         update-types: ['version-update:semver-major']
@@ -14,5 +23,12 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    # One grouped PR per week for all GitHub Actions version bumps.
+    open-pull-requests-limit: 5
     labels:
       - dependencies
+    groups:
+      github-actions:
+        applies-to: version-updates
+        patterns:
+          - '*'

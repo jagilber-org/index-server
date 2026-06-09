@@ -95,6 +95,9 @@ describe('graph_export enriched mode', () => {
     const res = await callTool<any>('graph_export', { enrich:true, includeUsage:true });
     const node = res.nodes.find((n:any)=> n.id==='a');
     expect(node.usageCount).toBe(0);
+    // Issue #418: split counters surfaced alongside the derived total.
+    expect(node.retrievedCount).toBe(0);
+    expect(node.appliedCount).toBe(0);
   });
 
   describe('contentType field on enriched nodes (P2 RED)', () => {

@@ -116,9 +116,13 @@ export interface InstructionEntry {
   deprecatedBy?: string;
   createdAt: string;
   updatedAt: string;
-  usageCount?: number;
+  usageCount?: number; // DEPRECATED (issue #418): derived total = retrievedCount + appliedCount. Kept one minor version for compat.
+  retrievedCount?: number; // times the instruction was surfaced/retrieved (search/get/query/export/list)
+  appliedCount?: number;   // times the instruction was explicitly applied/cited
   firstSeenTs?: string; // timestamp when usage first observed (Phase 1 index property)
   lastUsedAt?: string;
+  lastRetrievedAt?: string; // last retrieval timestamp (ISO 8601)
+  lastAppliedAt?: string;   // last applied timestamp (ISO 8601)
   riskScore?: number; // derived metric
   // Structured scoping fields (optional)
   workspaceId?: string; // originating workspace / project identifier

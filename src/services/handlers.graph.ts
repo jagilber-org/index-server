@@ -44,7 +44,9 @@ interface GraphNodeV2 extends GraphNodeV1 {
   contentType?: string;
   createdAt?: string;
   updatedAt?: string;
-  usageCount?: number; // present only when includeUsage requested
+  usageCount?: number; // present only when includeUsage requested (deprecated: = retrievedCount + appliedCount)
+  retrievedCount?: number; // present only when includeUsage requested
+  appliedCount?: number;   // present only when includeUsage requested
   nodeType?: 'instruction'|'category';
 }
 type GraphNode = GraphNodeV1 | GraphNodeV2;
@@ -94,8 +96,12 @@ export function buildGraph(params: GraphExportParams, graphCfg: GraphConfigSnaps
       updatedAt: inst.updatedAt,
     };
     if(includeUsage) {
-      const usageVal = (i as InstructionEntry & { usageCount?: number }).usageCount;
-      n.usageCount = usageVal != null ? usageVal : 0; // real value or 0 fallback
+      const inst2 = i as InstructionEntry & { usageCount?: number; retrievedCount?: number; appliedCount?: number };
+      const retrieved = inst2.retrievedCount != null ? inst2.retrievedCount : 0;
+      const applied = inst2.appliedCount != null ? inst2.appliedCount : 0;
+      n.retrievedCount = retrieved;
+      n.appliedCount = applied;
+      n.usageCount = inst2.usageCount != null ? inst2.usageCount : retrieved + applied; // real value or derived fallback
     }
     return n;
   });

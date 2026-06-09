@@ -24,6 +24,21 @@ export function featureStatus(){
   };
 }
 
+// Canonical set of feature-flag names recognised by the server. Surfacing a
+// dense boolean map (rather than a sparse list of active names) lets operators
+// see at a glance which flags are off vs unknown — see #384 obs 1.
+export const KNOWN_FEATURE_FLAGS = ['usage', 'window', 'hotness', 'drift', 'risk'] as const;
+
+export type FeatureFlagMap = Record<(typeof KNOWN_FEATURE_FLAGS)[number], boolean>;
+
+export function getFeatureFlagMap(): FeatureFlagMap {
+  const map = {} as FeatureFlagMap;
+  for (const flag of KNOWN_FEATURE_FLAGS) {
+    map[flag] = SET.has(flag);
+  }
+  return map;
+}
+
 // Test helper / dynamic enable (used in tests to activate features post-initial load)
 export function enableFeature(name: string){
   if(!SET.has(name)){

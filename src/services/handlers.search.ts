@@ -907,13 +907,14 @@ export async function handleInstructionsSearch(params: SearchParams): Promise<Se
 
 /**
  * Fire-and-forget usage tracking for search results.
- * Tracks top results only to avoid excessive writes.
+ * Tracks only the top-3 results (issue #418) to keep auto-track scope tight and
+ * avoid inflating retrieval counts for low-rank, likely-unused matches.
  */
 function autoTrackSearchResults(results: SearchResult[]): void {
   if (!getRuntimeConfig().index?.autoUsageTrack) return;
-  const top = results.slice(0, 10);
+  const top = results.slice(0, 3);
   for (const r of top) {
-    try { incrementUsage(r.instructionId, { action: 'search' }); } catch { /* fire-and-forget */ }
+    try { incrementUsage(r.instructionId, { action: 'search', kind: 'retrieved' }); } catch { /* fire-and-forget */ }
   }
 }
 

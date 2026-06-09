@@ -25,6 +25,17 @@ export interface FeedbackConfig {
 }
 
 export interface MessagingConfig {
+  /**
+   * When `false` the messaging subsystem is disabled at boot: messaging_* MCP
+   * tools are removed from the registry, dashboard REST routes are skipped,
+   * and the Messaging tab is hidden. Defaults to `true` (enabled). Gated by
+   * the `INDEX_SERVER_MESSAGING_ENABLED` env var. Issue #353.
+   *
+   * Optional in the interface so test fixtures that construct partial configs
+   * for `AgentMailbox` (which only consumes `dir`/`maxMessages`/`sweepIntervalMs`)
+   * remain compatible. Treat `undefined` as enabled (the default).
+   */
+  enabled?: boolean;
   dir: string;
   maxMessages: number;
   sweepIntervalMs: number;
@@ -90,6 +101,7 @@ export function parseFeedbackConfig(): FeedbackConfig {
 
 export function parseMessagingConfig(): MessagingConfig {
   return {
+    enabled: parseBooleanEnv(process.env.INDEX_SERVER_MESSAGING_ENABLED, true),
     dir: toAbsolute(process.env.INDEX_SERVER_MESSAGING_DIR, path.join(CWD, DIR.DATA_MESSAGING)),
     maxMessages: numberFromEnv('INDEX_SERVER_MESSAGING_MAX', DEFAULT_LIMITS.MAX_MESSAGES),
     sweepIntervalMs: numberFromEnv('INDEX_SERVER_MESSAGING_SWEEP_MS', DEFAULT_TIMEOUTS_MS.MESSAGING_SWEEP),

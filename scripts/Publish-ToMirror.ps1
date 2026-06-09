@@ -37,6 +37,15 @@ param(
     [Parameter(ParameterSetName = 'CreatePR')]
     [int]$WaitForMergeTimeoutMinutes = 60,
 
+    [Parameter(ParameterSetName = 'CreatePR')]
+    [switch]$WaitForRelease,
+
+    [Parameter(ParameterSetName = 'CreatePR')]
+    [int]$ReleaseWorkflowTimeoutMinutes = 30,
+
+    [Parameter(ParameterSetName = 'CreatePR')]
+    [string]$ReleaseWorkflowName = 'Release',
+
     [switch]$Force,
 
     [switch]$DryRun,

@@ -14,9 +14,14 @@ permissions:
   contents: read
   issues: write  # for auto-creating issues on failure
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   dast-scan:
     name: DAST — ZAP Baseline + Header Validation
+    if: ${{ github.repository_owner == 'jagilber-org' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     env:
       DASHBOARD_PORT: 8787
@@ -107,6 +112,7 @@ jobs:
 
   container-scan:
     name: Container Image Scan
+    if: ${{ github.repository_owner == 'jagilber-org' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6

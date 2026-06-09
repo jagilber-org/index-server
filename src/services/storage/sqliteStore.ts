@@ -611,6 +611,25 @@ export class SqliteStore implements IInstructionStore {
     this.db.prepare('DELETE FROM instructions_archive WHERE id = ?').run(id);
   }
 
+  updateArchived(entry: InstructionEntry): InstructionEntry {
+    const id = entry.id;
+    if (!id) throw new Error('updateArchived: entry.id is required');
+    const existing = this.db.prepare('SELECT 1 FROM instructions_archive WHERE id = ?').get(id);
+    if (!existing) {
+      throw new Error(`updateArchived: no archived entry with id "${id}"`);
+    }
+    this.db.exec('BEGIN IMMEDIATE');
+    try {
+      this.db.prepare('DELETE FROM instructions_archive WHERE id = ?').run(id);
+      this.insertArchiveRow(entry);
+      this.db.exec('COMMIT');
+    } catch (err) {
+      try { this.db.exec('ROLLBACK'); } catch { /* swallow */ }
+      throw err;
+    }
+    return entry;
+  }
+
   getArchived(id: string): InstructionEntry | null {
     const row = this.db.prepare('SELECT * FROM instructions_archive WHERE id = ?').get(id) as
       | Record<string, unknown> | undefined;
