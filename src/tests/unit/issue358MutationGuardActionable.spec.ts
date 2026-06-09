@@ -45,6 +45,10 @@ describe('issue #358: mutation guard returns actionable error (not silent skip)'
   const originalDir = process.env.INDEX_SERVER_DIR;
 
   beforeAll(async () => {
+    // mkdtempSync requires the parent dir to exist. On a fresh checkout
+    // <cwd>/tmp is not present (gitignored), so create it before any beforeEach
+    // calls mkdtempSync(TMP_BASE + '-*-'). Without this every case fails ENOENT.
+    fs.mkdirSync(path.dirname(TMP_BASE), { recursive: true });
     await loadAllHandlers();
   });
 
