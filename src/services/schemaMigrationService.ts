@@ -45,17 +45,31 @@ function recordChange(changes: SchemaMigrationChange[], field: string, from: unk
   changes.push({ field, from, to, reason });
 }
 
+// Strip leading/trailing characters that are not lowercase alphanumerics using a
+// linear index scan. This deliberately avoids `$`-anchored `+`-quantified regexes
+// (e.g. /[^a-z0-9]+$/), which an unanchored search evaluates in O(n^2) time and
+// which CodeQL flags as js/polynomial-redos (#94) regardless of any upstream
+// length bound. An index loop is unconditionally linear and ReDoS-proof.
+function trimNonAlphanumericEdges(value: string): string {
+  let start = 0;
+  let end = value.length;
+  const isAlnum = (ch: string): boolean => (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9');
+  while (start < end && !isAlnum(value[start])) start++;
+  while (end > start && !isAlnum(value[end - 1])) end--;
+  return value.slice(start, end);
+}
+
 function normalizeLegacyId(id: string): string | undefined {
   if (PATH_TRAVERSAL_OR_SEPARATOR.test(id)) return undefined;
-  const normalized = id
+  // Each remaining regex is a single-class global replace (linear). Bound the
+  // length first so the id is capped, then trim edges with a non-regex scan.
+  const collapsed = id
     .trim()
     .toLowerCase()
+    .slice(0, 200)
     .replace(/[^a-z0-9_-]+/g, '-')
-    .replace(/[-_]{2,}/g, '-')
-    .replace(/^[^a-z0-9]+/, '')
-    .replace(/[^a-z0-9]+$/, '')
-    .slice(0, 120)
-    .replace(/[^a-z0-9]+$/, '');
+    .replace(/[-_]{2,}/g, '-');
+  const normalized = trimNonAlphanumericEdges(trimNonAlphanumericEdges(collapsed).slice(0, 120));
   return normalized || undefined;
 }
 

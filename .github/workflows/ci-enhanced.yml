@@ -4,6 +4,9 @@ on:
   # Tier 2: manual deep CI only. Baseline CI remains in ci.yml.
   workflow_dispatch: {}
 
+permissions:
+  contents: read
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true

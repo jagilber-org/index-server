@@ -4,6 +4,10 @@ on:
   # Manual-only stress suite to conserve action minutes.
   workflow_dispatch: {}
 
+permissions:
+  contents: read
+  issues: write
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true

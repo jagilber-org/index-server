@@ -1,7 +1,7 @@
 {
   "name": "@jagilber-org/index-server",
   "version": "1.32.0",
-  "generatedAt": "2026-06-09T21:01:09.080Z",
+  "generatedAt": "2026-06-17T17:31:36.912Z",
   "sourceRoots": [
     "src",
     "scripts"
@@ -13,7 +13,7 @@
     "interfaceCount": 331,
     "typeAliasCount": 90,
     "enumCount": 1,
-    "functionCount": 1083
+    "functionCount": 1084
   },
   "files": [
     {
@@ -50470,6 +50470,20 @@
           "line": 43
         },
         {
+          "name": "trimNonAlphanumericEdges",
+          "isExported": false,
+          "isAsync": false,
+          "parameters": [
+            {
+              "name": "value",
+              "type": "string",
+              "optional": false
+            }
+          ],
+          "returnType": "string",
+          "line": 53
+        },
+        {
           "name": "normalizeLegacyId",
           "isExported": false,
           "isAsync": false,
@@ -50481,7 +50495,7 @@
             }
           ],
           "returnType": "string | undefined",
-          "line": 48
+          "line": 62
         },
         {
           "name": "migrateAudience",
@@ -50500,7 +50514,7 @@
             }
           ],
           "returnType": "void",
-          "line": 62
+          "line": 76
         },
         {
           "name": "migrateRequirement",
@@ -50519,7 +50533,7 @@
             }
           ],
           "returnType": "void",
-          "line": 78
+          "line": 92
         },
         {
           "name": "migrateContentType",
@@ -50538,7 +50552,7 @@
             }
           ],
           "returnType": "void",
-          "line": 99
+          "line": 113
         },
         {
           "name": "migrateId",
@@ -50557,7 +50571,7 @@
             }
           ],
           "returnType": "void",
-          "line": 111
+          "line": 125
         },
         {
           "name": "migrateVersionSpecific",
@@ -50576,7 +50590,7 @@
             }
           ],
           "returnType": "void",
-          "line": 119
+          "line": 133
         },
         {
           "name": "migrateLegacyInstructionEntry",
@@ -50595,7 +50609,7 @@
             }
           ],
           "returnType": "SchemaMigrationResult",
-          "line": 134
+          "line": 148
         }
       ],
       "constants": []

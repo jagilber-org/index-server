@@ -126,4 +126,59 @@ describe('schema migration service (#346)', () => {
       contentType: 'knowledge',
     });
   });
+
+  // Regression coverage for the CodeQL js/polynomial-redos fix in
+  // normalizeLegacyId (#444, re-flagged as #94): the edge-trim no longer uses a
+  // `$`-anchored `+` regex — leading/trailing non-alphanumerics are stripped by a
+  // linear index scan, so pathological ids can never cause polynomial-time blowup.
+  // Exercised through the public migration entrypoint.
+  describe('legacy id normalization is ReDoS-safe (#444, #94)', () => {
+    const baseEntry = {
+      title: 'ReDoS regression',
+      body: 'ReDoS regression body',
+      audience: 'agents',
+      requirement: 'mandatory',
+      contentType: 'knowledge',
+    };
+
+    it('preserves a normal (<200 char) legacy id when normalizing', () => {
+      const migrated = migrateLegacyInstructionEntry(
+        { ...baseEntry, id: 'Legacy Reference!' },
+        { source: 'index_import', log: false },
+      );
+      expect(migrated.entry.id).toBe('legacy-reference');
+    });
+
+    it('bounds an over-length legacy id to the 120-char ceiling', () => {
+      const longId = 'Legacy-Section-'.repeat(20); // 300 chars, exceeds VALID_ID max (120)
+      const migrated = migrateLegacyInstructionEntry(
+        { ...baseEntry, id: longId },
+        { source: 'index_import', log: false },
+      );
+      const id = migrated.entry.id as string;
+      expect(typeof id).toBe('string');
+      expect(id.length).toBeLessThanOrEqual(120);
+      // Result is a valid, hyphen-collapsed id anchored on alphanumerics.
+      expect(id).toMatch(/^[a-z0-9](?:[a-z0-9-_]*[a-z0-9])?$/);
+      expect(id.startsWith('legacy-section')).toBe(true);
+    });
+
+    it('normalizes a pathological ReDoS-style id quickly without hanging', () => {
+      // Repeated `-_` alternation is the worst case for the chained
+      // `/[-_]{2,}/g` and `/[^a-z0-9-_]+/g` replaces. Pre-fix the `$`-anchored
+      // edge-trim scaled polynomially with input length; the linear index-scan
+      // trim plus the .slice(0, 200) bound now cap it.
+      const adversarialId = `a${'-_'.repeat(60_000)}b!`; // ~120k chars
+      const start = performance.now();
+      const migrated = migrateLegacyInstructionEntry(
+        { ...baseEntry, id: adversarialId },
+        { source: 'index_import', log: false },
+      );
+      const elapsedMs = performance.now() - start;
+      // Generous ceiling: the bounded path completes in single-digit ms.
+      // A regression to unbounded processing would blow well past this.
+      expect(elapsedMs).toBeLessThan(500);
+      expect(migrated.entry).toBeDefined();
+    });
+  });
 });
