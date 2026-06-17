@@ -4,6 +4,9 @@ on:
   # Tier 3: manual-only due to cross-platform E2E cost.
   workflow_dispatch: {}
 
+permissions:
+  contents: read
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true

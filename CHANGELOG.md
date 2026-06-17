@@ -6,6 +6,10 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 
 ## [Unreleased]
 
+### Security
+
+- **CodeQL alert remediation (workflow permissions + ReDoS)**: added least-privilege top-level `permissions:` blocks to all 15 GitHub Actions workflows that lacked one (`actions/missing-workflow-permissions`) — 13× `contents: read`, `instruction-snapshot` `contents: write` (commits snapshots), `stress-nightly` `contents: read` + `issues: write` (opens failure issues). Hardened `normalizeLegacyId` (`schemaMigrationService`) against `js/polynomial-redos` by bounding input to 200 chars before the chained `+`-quantified regex replaces run (final id still capped at 120; behavior preserved for all valid ids), with boundary/adversarial regression coverage. ([#444](https://github.com/jagilber-dev/index-server/issues/444))
+
 ## [1.32.0] - 2026-06-08
 
 ### Added

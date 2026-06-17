@@ -9,6 +9,9 @@ on:
         type: boolean
         default: false
 
+permissions:
+  contents: read
+
 concurrency:
   group: multi-instance-${{ github.ref }}
   cancel-in-progress: true
