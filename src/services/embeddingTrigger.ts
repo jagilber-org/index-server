@@ -15,9 +15,9 @@
 
 import { getRuntimeConfig } from '../config/runtimeConfig';
 import { ensureLoaded, getIndexState } from './indexContext';
+import { getEmbeddingStore } from './storage/factory.js';
 import { getInstructionEmbeddings } from './embeddingService';
 import { logInfo, logWarn } from './logger';
-import { getBooleanEnv } from '../utils/envUtils';
 
 let lastTriggerAt = 0;
 
@@ -25,10 +25,9 @@ let lastTriggerAt = 0;
 export function autoEmbedEnabled(): boolean {
   const cfg = getRuntimeConfig();
   if (!cfg.semantic.enabled) return false;
-  const raw = process.env.INDEX_SERVER_AUTO_EMBED_ON_IMPORT;
   // Default ON when semantic is enabled; explicit '0' / 'false' opts out.
-  if (raw === undefined) return true;
-  return getBooleanEnv('INDEX_SERVER_AUTO_EMBED_ON_IMPORT', true);
+  // Parsed centrally via runtimeConfig (S-4): semantic.autoEmbedOnImport.
+  return cfg.semantic.autoEmbedOnImport;
 }
 
 /**
@@ -67,6 +66,12 @@ export async function triggerEmbeddingComputeAfterImport(reason: string): Promis
       sem.cacheDir,
       sem.device,
       sem.localOnly,
+      undefined,
+      // Issue #572: this is the ONLY automatic regeneration path. Omitting the
+      // store here made every auto-recompute write embeddings.json even under
+      // INDEX_SERVER_STORAGE_BACKEND=sqlite, so embeddings.db went stale the
+      // moment someone stopped clicking the dashboard's Compute button.
+      getEmbeddingStore(),
     );
     const ms = Date.now() - start;
     logInfo(`[embedding-trigger] Auto-compute complete reason=${reason} entries=${state.list.length} ms=${ms}`);

@@ -163,6 +163,21 @@
         "sourceWorkspace": {
           "type": "string"
         },
+        "links": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/InstructionLink"
+          }
+        },
+        "signalHistory": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/SignalHistoryItem"
+          }
+        },
+        "lastSignaledAt": {
+          "type": "string"
+        },
         "extensions": {
           "type": "object",
           "additionalProperties": {}
@@ -259,6 +274,53 @@
         "archive",
         "import-migration"
       ]
+    },
+    "InstructionLink": {
+      "type": "object",
+      "properties": {
+        "target": {
+          "type": "string"
+        },
+        "rel": {
+          "$ref": "#/definitions/LinkRel"
+        },
+        "label": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "target"
+      ],
+      "additionalProperties": false
+    },
+    "LinkRel": {
+      "type": "string",
+      "enum": [
+        "related",
+        "prerequisite",
+        "sequel",
+        "part-of",
+        "see-also"
+      ]
+    },
+    "SignalHistoryItem": {
+      "type": "object",
+      "properties": {
+        "signal": {
+          "type": "string"
+        },
+        "ts": {
+          "type": "string"
+        },
+        "comment": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "signal",
+        "ts"
+      ],
+      "additionalProperties": false
     }
   }
 }

@@ -151,11 +151,12 @@ export class WebSocketManager {
           callback(isLoopbackHost(addr), 403, 'WebSocket access restricted to localhost');
           return;
         }
-        const url = new URL(info.req.url || '', 'http://localhost');
-        const token = url.searchParams.get('token') || '';
+        // SH-7: bearer credentials MUST NOT be accepted via URL query parameters —
+        // they leak into access logs, proxies, and browser history. The admin key is
+        // accepted only through the Authorization header (Bearer scheme).
         const authHeader = info.req.headers['authorization'] || '';
         const bearerToken = authHeader.replace(/^Bearer\s+/i, '');
-        callback(constantTimeKeyMatch(token, adminKey) || constantTimeKeyMatch(bearerToken, adminKey), 401, 'WebSocket authentication required');
+        callback(constantTimeKeyMatch(bearerToken, adminKey), 401, 'WebSocket authentication required');
       },
     });
 

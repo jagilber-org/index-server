@@ -168,7 +168,7 @@ describe('autoSeedBootstrap', () => {
     const summary = autoSeedBootstrap();
     expect(summary.upgraded).toContain('001-lifecycle-bootstrap.json');
     const upgraded = JSON.parse(fs.readFileSync(stalePath,'utf8'));
-    expect(upgraded.priorityTier).toBe('P1');
+    expect(upgraded.priorityTier).toBe('P4');
   });
 
   it('does NOT upgrade an already-valid existing seed file', () => {

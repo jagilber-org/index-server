@@ -202,7 +202,7 @@ For full configuration options: see \`docs/mcp_configuration.md\` and \`docs/con
       audience: 'all',
       requirement: 'recommended',
       priority: 99,
-      priorityTier: 'P1',
+      priorityTier: 'P4',
       contentType: 'instruction',
       categories: ['bootstrap','lifecycle'],
       owner: 'system',
@@ -292,6 +292,9 @@ export function autoSeedBootstrap(): SeedSummary {
           // body. RCA 2026-05-08 (PR #324 reliability advisory).
           stale = true;
           staleReason = 'missing sourceHash (legacy pre-sourceHash install)';
+        } else if(typeof existing.status !== 'string' || typeof existing.classification !== 'string'){
+          stale = true;
+          staleReason = 'missing status/classification (pre-v1.42 seed)';
         }
       } catch (e) {
         stale = true; staleReason = `unparseable_json: ${(e instanceof Error)? e.message : String(e)}`;

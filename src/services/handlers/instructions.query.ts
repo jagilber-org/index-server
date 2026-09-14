@@ -10,12 +10,12 @@ import { incrementCounter } from '../features';
 import { getRuntimeConfig } from '../../config/runtimeConfig';
 import { emitTrace } from '../tracing';
 import { handleInstructionsSearch } from '../handlers.search';
-import { limitResponseSize, traceEnvSnapshot, traceInstructionVisibility, traceVisibility } from './instructions.shared';
+import { applyBodyPagination, lightenItems, limitResponseSize, traceEnvSnapshot, traceInstructionVisibility, traceVisibility } from './instructions.shared';
 
 // Legacy individual instruction handlers removed in favor of unified dispatcher (index_dispatch).
 // Internal implementation functions retained below for dispatcher direct invocation.
 export const instructionActions = {
-  list: (p: { category?: string; expectId?: string; contentType?: string; limit?: number; offset?: number }) => {
+  list: (p: { category?: string; expectId?: string; contentType?: string; limit?: number; offset?: number; includeBody?: boolean }) => {
     let st = ensureLoaded(); const originalHash = st.hash; let items = st.list;
     if (p?.category) { const c = p.category.toLowerCase(); items = items.filter(i => i.categories.includes(c)); }
     if (p?.contentType) { const ct = p.contentType; items = items.filter(i => (i.contentType || 'instruction') === ct); }
@@ -40,24 +40,38 @@ export const instructionActions = {
     }
     if (traceVisibility()) { try { const idsSample = items.slice(0, 5).map(i => i.id); const expectId = p?.expectId; const expectinIndex = expectId ? st.byId.has(expectId) : undefined; emitTrace('[trace:list]', { total: st.list.length, filtered: items.length, sample: idsSample, expectId, expectinIndex, attemptedReload, attemptedLate, originalHash, finalHash: st.hash }); } catch { /* ignore */ } }
     const totalCount = items.length;
-    // Apply offset/limit pagination when provided via REST bridge callers
+    // Apply offset/limit pagination. When `limit` is omitted, fall back to the
+    // configured default page size (INDEX_SERVER_DEFAULT_PAGE_SIZE, default 50)
+    // so large categories stay within MCP client tool-result budgets. Pass
+    // `limit: 0` to retrieve the full set (explicit opt-out).
     const offset = typeof p?.offset === 'number' && p.offset > 0 ? p.offset : 0;
     if (offset > 0) { items = items.slice(offset); }
-    if (typeof p?.limit === 'number' && p.limit > 0) { items = items.slice(0, p.limit); }
-    const resp = limitResponseSize({ hash: st.hash, count: totalCount, items });
+    const effectiveLimit = typeof p?.limit === 'number' ? p.limit : getRuntimeConfig().instructions.defaultPageSize;
+    if (effectiveLimit > 0) { items = items.slice(0, effectiveLimit); }
+    const returnedCount = items.length;
+    const includeBody = p?.includeBody === true;
+    const outItems = lightenItems(items, includeBody);
+    const hasMore = offset + returnedCount < totalCount;
+    const resp = limitResponseSize({
+      hash: st.hash,
+      count: totalCount,
+      items: outItems,
+      ...(includeBody ? {} : { bodyLight: true }),
+      ...(hasMore ? { truncated: true, nextOffset: offset + returnedCount } : {}),
+    });
     return resp;
   },
   listScoped: (p: { userId?: string; workspaceId?: string; teamIds?: string[] }) => {
     const st = ensureLoaded(); const userId = p.userId?.toLowerCase(); const workspaceId = p.workspaceId?.toLowerCase(); const teamIds = (p.teamIds || []).map(t => t.toLowerCase()); const all = st.list; const matchUser = userId ? all.filter(e => (e.userId || '').toLowerCase() === userId) : []; if (matchUser.length) return { hash: st.hash, count: matchUser.length, scope: 'user', items: matchUser }; const matchWorkspace = workspaceId ? all.filter(e => (e.workspaceId || '').toLowerCase() === workspaceId) : []; if (matchWorkspace.length) return { hash: st.hash, count: matchWorkspace.length, scope: 'workspace', items: matchWorkspace }; const teamSet = new Set(teamIds); const matchTeams = teamIds.length ? all.filter(e => Array.isArray(e.teamIds) && e.teamIds.some(t => teamSet.has(t.toLowerCase()))) : []; if (matchTeams.length) return { hash: st.hash, count: matchTeams.length, scope: 'team', items: matchTeams }; const audienceAll = all.filter(e => e.audience === 'all'); return { hash: st.hash, count: audienceAll.length, scope: 'all', items: audienceAll };
   },
-  get: (p: { id: string }) => {
+  get: (p: { id: string; bodyOffset?: number; bodyLimit?: number }) => {
     const st = ensureLoaded(); const item = st.byId.get(p.id);
     if (!item && getRuntimeConfig().instructions.strictVisibility) {
       const enhanced = (instructionActions as unknown as { getEnhanced: (p: { id: string }) => unknown }).getEnhanced({ id: p.id }) as { hash?: string; item?: InstructionEntry; notFound?: boolean };
-      if (enhanced.item) return { hash: enhanced.hash || st.hash, item: enhanced.item };
+      if (enhanced.item) return applyBodyPagination({ hash: enhanced.hash || st.hash, item: enhanced.item }, p);
     }
     if (traceVisibility()) { const dir = getInstructionsDir(); emitTrace('[trace:get]', { dir, id: p.id, found: !!item, total: st.list.length, strict: getRuntimeConfig().instructions.strictVisibility }); traceInstructionVisibility(p.id, item ? 'get-found' : 'get-not-found'); if (!item) traceEnvSnapshot('get-not-found'); }
-    return item ? { hash: st.hash, item } : { notFound: true, id: p.id, hint: `No instruction found with id "${p.id}". Use action="search" with q="<keyword>" to find valid ids, or action="list" to see all.`, example: { action: 'get', id: 'valid-instruction-id' } };
+    return item ? applyBodyPagination({ hash: st.hash, item }, p) : { notFound: true, id: p.id, hint: `No instruction found with id "${p.id}". Use action="search" with q="<keyword>" to find valid ids, or action="list" to see all.`, example: { action: 'get', id: 'valid-instruction-id' } };
   },
   getEnhanced: (p: { id: string }) => {
     let st = ensureLoaded(); let item = st.byId.get(p.id); if (item) return { hash: st.hash, item } as const;
@@ -74,7 +88,7 @@ export const instructionActions = {
     traceInstructionVisibility(p.id, 'getEnhanced-end', { repaired, finalFound: !!item });
     return item ? { hash: st.hash, item } : { notFound: true };
   },
-  search: async (p: { q?: string; keywords?: string[]; searchString?: string; fields?: Record<string, unknown>; mode?: SearchMode; limit?: number; includeCategories?: boolean; caseSensitive?: boolean; contentType?: string }) => {
+  search: async (p: { q?: string; keywords?: string[]; searchString?: string; fields?: Record<string, unknown>; mode?: SearchMode; limit?: number; includeCategories?: boolean; caseSensitive?: boolean; contentType?: string; includeBody?: boolean }) => {
     const providedKeywords = Array.isArray(p.keywords)
       ? p.keywords.filter((keyword): keyword is string => typeof keyword === 'string' && keyword.trim().length > 0)
       : [];
@@ -100,11 +114,13 @@ export const instructionActions = {
       const sample = items.slice(0, 5).map(i => i.id);
       emitTrace('[trace:search]', { dir, q: keywords.join(' '), matches: items.length, sample });
     }
+    const includeBody = p?.includeBody === true;
     return {
       hash: st.hash,
       count: items.length,
       totalMatches: searchResult.totalMatches,
-      items,
+      items: lightenItems(items, includeBody),
+      ...(includeBody ? {} : { bodyLight: true }),
       results: searchResult.results,
       query: searchResult.query,
       autoTokenized: searchResult.autoTokenized,

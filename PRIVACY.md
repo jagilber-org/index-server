@@ -36,13 +36,15 @@ All Index operations — instruction CRUD, search, governance hashing, integrity
 
 ## Optional Network Connections
 
-Index has exactly **three** code paths that make outbound network connections. **All three are disabled by default.**
+Index has exactly **three** code paths that make outbound network connections. **Which are active depends on the configuration profile**, and only one of the three ever leaves the machine.
 
-| Connection | Destination | When | How to Disable |
-|------------|-------------|------|----------------|
-| Semantic search model download | `huggingface.co` (HTTPS, port 443) | One-time download on first semantic search request | `INDEX_SERVER_SEMANTIC_ENABLED=0` (default) or `INDEX_SERVER_SEMANTIC_LOCAL_ONLY=1` (default) |
-| Leader/follower RPC | `127.0.0.1` (localhost only) | Multi-instance mode only | `INDEX_SERVER_MODE=standalone` (default) |
-| Instance health ping | `127.0.0.1` (localhost only) | Dashboard clustering only | `INDEX_SERVER_DASHBOARD=0` (default) |
+| Connection | Destination | When | Default | How to Disable |
+|------------|-------------|------|---------|----------------|
+| Semantic search model download | `huggingface.co` (HTTPS, port 443) | One-time download on first semantic search request | **Off on `default`; ON for `enhanced` and `experimental`** | `INDEX_SERVER_SEMANTIC_ENABLED=0` or `INDEX_SERVER_SEMANTIC_LOCAL_ONLY=1` |
+| Leader/follower RPC | `127.0.0.1` (localhost only) | Multi-instance mode only | Off (`INDEX_SERVER_MODE=standalone`) | `INDEX_SERVER_MODE=standalone` |
+| Instance health ping | `127.0.0.1` (localhost only) | Dashboard clustering only | **ON for every profile** (loopback-bound) | `INDEX_SERVER_DASHBOARD=0` |
+
+> **The profile the setup wizard gives most users is `enhanced`.** It prompts for semantic search with "yes" preselected, and answering yes selects `enhanced` — which permits the one-time model download. If you want the fully-offline posture described below, choose the `default` profile or set `INDEX_SERVER_SEMANTIC_LOCAL_ONLY=1` explicitly.
 
 **No user data is included in any outbound connection.** The only external download is a pre-trained open-source ML model from HuggingFace.
 
@@ -54,7 +56,9 @@ For detailed technical verification procedures (including Process Monitor and ne
 
 ## Fully Offline Operation
 
-The default configuration (`INDEX_SERVER_SEMANTIC_ENABLED=0`, `INDEX_SERVER_MODE=standalone`, `INDEX_SERVER_DASHBOARD=0`) makes **zero outbound network connections of any kind**. The server operates as a pure stdio process with no network listeners and no outbound connections.
+Set `INDEX_SERVER_SEMANTIC_ENABLED=0`, `INDEX_SERVER_MODE=standalone` and `INDEX_SERVER_DASHBOARD=0`, and the server makes **zero outbound network connections of any kind** and opens no network listener, operating as a pure stdio process.
+
+Two of those three are already the case on the `default` profile. **`INDEX_SERVER_DASHBOARD` is not** — every profile enables the dashboard, so a default install *does* open a listener. That listener binds to `127.0.0.1` only (`INDEX_SERVER_DASHBOARD_HOST` defaults to loopback), so it is not reachable from another machine, but it is a listener and `netstat` will show it. Set `INDEX_SERVER_DASHBOARD=0` for the no-listener posture.
 
 See [Network Privacy & Verification Guide](docs/network-privacy.md) for air-gapped deployment instructions.
 

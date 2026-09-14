@@ -162,6 +162,7 @@ describe('Search Mode: semantic', () => {
     // Mock runtimeConfig — semantic enabled
     vi.doMock('../config/runtimeConfig', () => ({
       getRuntimeConfig: () => ({
+        instructions: { defaultPageSize: 50 },
         logging: MOCK_LOGGING,
         semantic: {
           enabled: true,
@@ -248,6 +249,7 @@ describe('Search Mode: semantic (disabled)', () => {
     // Mock runtimeConfig — semantic DISABLED
     vi.doMock('../config/runtimeConfig', () => ({
       getRuntimeConfig: () => ({
+        instructions: { defaultPageSize: 50 },
         logging: MOCK_LOGGING,
         semantic: { enabled: false, model: '', cacheDir: '', embeddingPath: '', device: 'cpu', localOnly: false },
       }),
@@ -331,6 +333,7 @@ describe('Search Mode: semantic (model failure)', () => {
     // Mock runtimeConfig — semantic enabled
     vi.doMock('../config/runtimeConfig', () => ({
       getRuntimeConfig: () => ({
+        instructions: { defaultPageSize: 50 },
         logging: MOCK_LOGGING,
         semantic: { enabled: true, model: 'Xenova/all-MiniLM-L6-v2', cacheDir: '/tmp/models', embeddingPath: '/tmp/embeddings.json', device: 'cpu', localOnly: false },
       }),
@@ -406,6 +409,7 @@ describe('Search Mode: semantic (device/localOnly config)', () => {
 
     vi.doMock('../config/runtimeConfig', () => ({
       getRuntimeConfig: () => ({
+        instructions: { defaultPageSize: 50 },
         logging: MOCK_LOGGING,
         semantic: semanticConfig,
       }),
@@ -440,7 +444,7 @@ describe('Search Mode: semantic (device/localOnly config)', () => {
 
     // Verify device='cuda' was passed through
     expect(mockEmbedText).toHaveBeenCalledWith(expect.any(String), 'Xenova/all-MiniLM-L6-v2', '/tmp/models', 'cuda', false);
-    expect(mockGetEmbeddings).toHaveBeenCalledWith(expect.any(Array), expect.any(String), '/tmp/embeddings.json', 'Xenova/all-MiniLM-L6-v2', '/tmp/models', 'cuda', false);
+    expect(mockGetEmbeddings).toHaveBeenCalledWith(expect.any(Array), expect.any(String), '/tmp/embeddings.json', 'Xenova/all-MiniLM-L6-v2', '/tmp/models', 'cuda', false, undefined, expect.objectContaining({ load: expect.any(Function), save: expect.any(Function) }));
   });
 
   it('should pass device=dml to embedding functions', async () => {
@@ -461,6 +465,6 @@ describe('Search Mode: semantic (device/localOnly config)', () => {
     await handleInstructionsSearch({ keywords: ['deploy'], mode: 'semantic' });
 
     expect(mockEmbedText).toHaveBeenCalledWith(expect.any(String), 'Xenova/all-MiniLM-L6-v2', '/tmp/models', 'cpu', true);
-    expect(mockGetEmbeddings).toHaveBeenCalledWith(expect.any(Array), expect.any(String), '/tmp/embeddings.json', 'Xenova/all-MiniLM-L6-v2', '/tmp/models', 'cpu', true);
+    expect(mockGetEmbeddings).toHaveBeenCalledWith(expect.any(Array), expect.any(String), '/tmp/embeddings.json', 'Xenova/all-MiniLM-L6-v2', '/tmp/models', 'cpu', true, undefined, expect.objectContaining({ load: expect.any(Function), save: expect.any(Function) }));
   });
 });

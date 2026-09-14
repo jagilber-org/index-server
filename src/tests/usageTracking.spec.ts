@@ -11,6 +11,7 @@ const TEST_ID = 'usage-tracking-test-entry';
 describe('usageTracking', () => {
 	beforeEach(() => {
 		vi.resetModules();
+		delete process.env.INDEX_SERVER_USAGE_ENABLED;
 	});
 
 	afterAll(() => {
@@ -19,6 +20,8 @@ describe('usageTracking', () => {
 
 	it('incrementUsage returns featureDisabled when usage feature is off', async () => {
 		delete process.env.INDEX_SERVER_FEATURES;
+		// usage is on by default (#495); opt out explicitly to exercise the gated path.
+		process.env.INDEX_SERVER_USAGE_ENABLED = '0';
 		process.env.INDEX_SERVER_DIR = TEST_DIR;
 		fs.mkdirSync(TEST_DIR, { recursive: true });
 		fs.writeFileSync(path.join(TEST_DIR, TEST_ID + '.json'), JSON.stringify({

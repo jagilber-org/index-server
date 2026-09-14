@@ -114,3 +114,37 @@ export function createEmbeddingStore(backend?: StorageBackend, embeddingPath?: s
     }
   }
 }
+
+/**
+ * Process-scoped embedding store, resolved once from config.
+ *
+ * WHY THIS EXISTS (issue #572): `getInstructionEmbeddings` takes the store as a
+ * parameter, and previously each call site decided for itself which store to
+ * use. Two of the three production call sites simply omitted it, so automatic
+ * regeneration silently persisted to `data/embeddings.json` no matter what
+ * `INDEX_SERVER_STORAGE_BACKEND` said, while the dashboard read
+ * `data/embeddings.db` through an independently hardcoded `'sqlite'`. Writer
+ * and reader ended up on different files: 284 entries in the JSON store, 78 in
+ * the SQLite one, frozen for two weeks. Nothing errored, because both stores
+ * worked perfectly — they were just different stores.
+ *
+ * One resolution point means the backend cannot disagree with itself.
+ */
+let cachedEmbeddingStore: IEmbeddingStore | null = null;
+
+/**
+ * Resolve the embedding store for this process, honouring `storage.backend`
+ * (and the sqlite-vec fallbacks already implemented by `createEmbeddingStore`).
+ *
+ * Every production read and write of embeddings must go through this, so that
+ * "which backend am I using" has exactly one answer.
+ */
+export function getEmbeddingStore(): IEmbeddingStore {
+  if (!cachedEmbeddingStore) cachedEmbeddingStore = createEmbeddingStore();
+  return cachedEmbeddingStore;
+}
+
+/** Test-only: drop the cached store so the next call re-resolves from config. */
+export function resetEmbeddingStore(): void {
+  cachedEmbeddingStore = null;
+}

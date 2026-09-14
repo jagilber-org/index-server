@@ -18,7 +18,10 @@ import { getWebSocketManager } from './WebSocketManager.js';
 import { buildHttpServer, bindToPort, closeHttpServer, TlsOptions } from './httpLifecycle.js';
 import { initWebSocket, startMetricsBroadcast } from './wsInit.js';
 import { mountDashboardRoutes } from './routes/index.js';
-import { logInfo } from '../../services/logger.js';
+import { logInfo, logWarn } from '../../services/logger.js';
+import { CatalogSampler, setCatalogSampler } from './CatalogSampler.js';
+import { getRawIndexState } from '../../services/indexContext.js';
+import { loadUsageSnapshot } from '../../services/indexUsage.js';
 import { applyOverlay } from '../../config/runtimeOverrides.js';
 import { reloadRuntimeConfig } from '../../config/runtimeConfig.js';
 
@@ -48,6 +51,7 @@ export class DashboardServer {
   private metricsCollector = getMetricsCollector();
   private webSocketManager = getWebSocketManager();
   private metricsBroadcastTimer: NodeJS.Timeout | null = null;
+  private catalogSampler: CatalogSampler | null = null;
 
   private options: Required<Omit<DashboardServerOptions, 'tls'>> & { tls?: TlsOptions };
 
@@ -114,6 +118,17 @@ export class DashboardServer {
           );
         }
 
+        // Sample history persists to SQLite (metrics/activity.db) via the
+        // activity log — no JSONL persistPath.
+        this.catalogSampler = new CatalogSampler({
+          getRawIndexState,
+          loadUsageSnapshot,
+          onLogWarn: (msg) => logWarn(msg),
+          onTrace: (msg) => logInfo(msg),
+        });
+        setCatalogSampler(this.catalogSampler);
+        this.catalogSampler.start();
+
         return {
           url: `${this.httpProtocol}://${this.options.host}:${actualPort}/`,
           port: actualPort,
@@ -132,7 +147,9 @@ export class DashboardServer {
   }
 
   async stop(): Promise<void> {
-    if (this.server) {
+    const server = this.server;
+    this.server = null;
+    if (server) {
       if (this.options.enableWebSockets) {
         this.webSocketManager.close();
         if (this.metricsBroadcastTimer) {
@@ -140,7 +157,12 @@ export class DashboardServer {
           this.metricsBroadcastTimer = null;
         }
       }
-      await closeHttpServer(this.server);
+      if (this.catalogSampler) {
+        this.catalogSampler.stop();
+        setCatalogSampler(null);
+        this.catalogSampler = null;
+      }
+      await closeHttpServer(server);
     }
   }
 
@@ -195,6 +217,11 @@ export class DashboardServer {
       res.header('X-Frame-Options', 'DENY');
       res.header('X-XSS-Protection', '1; mode=block');
       res.header('Referrer-Policy', 'strict-origin-when-cross-origin');
+      // SH-8 exception (documented, narrow): script-src is nonce-based, but
+      // style-src keeps 'unsafe-inline' because the dashboard templates still
+      // rely on inline `style=` attributes, for which CSP nonces do not apply.
+      // Migration path: move inline styles into the nonce'd/external stylesheet
+      // and then drop 'unsafe-inline' from style-src. Tracked under #461 (F-005).
       res.header(
         'Content-Security-Policy',
         `default-src 'self'; script-src 'self' 'nonce-${nonce}'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:; connect-src 'self' ${this.tlsEnabled ? 'wss:' : 'ws:'}; frame-ancestors 'none'; form-action 'self'`,

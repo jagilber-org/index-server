@@ -1,12 +1,14 @@
 /**
  * Post-Install UX Regression Tests
  *
- * Covers: profile-aware defaults, auto-backup fix, DATA_MESSAGING isolation,
+ * Covers: profile-aware defaults, auto-backup fix, messaging dir isolation,
  * and walkthrough media file paths.
  *
  * Red/green: all tests written to fail before the fix, pass after.
  */
 import { describe, it, expect, afterEach, beforeEach } from 'vitest';
+import os from 'os';
+import path from 'path';
 import { reloadRuntimeConfig, getRuntimeConfig, VALID_PROFILES } from '../../config/runtimeConfig';
 import { DIR } from '../../config/dirConstants';
 
@@ -39,22 +41,19 @@ function restoreEnv() {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// 1. DIR Constants — DATA_MESSAGING exists
+// 1. DIR Constants — messaging is a catalog sibling
 // ══════════════════════════════════════════════════════════════════════════════
-describe('dirConstants — DATA_MESSAGING', () => {
-  it('should define DATA_MESSAGING under data/', () => {
-    expect(DIR.DATA_MESSAGING).toBeDefined();
-    expect(DIR.DATA_MESSAGING).toContain('data');
-    expect(DIR.DATA_MESSAGING).toContain('messaging');
-  });
-
-  it('should NOT be equal to DATA (isolated from root data/)', () => {
-    expect(DIR.DATA_MESSAGING).not.toBe(DIR.DATA);
+describe('dirConstants — MESSAGING', () => {
+  it('should define MESSAGING as a bare sibling segment, not under data/', () => {
+    expect(DIR.MESSAGING).toBeDefined();
+    expect(DIR.MESSAGING).toBe('index-messaging');
+    expect(DIR.MESSAGING).not.toContain('data');
+    expect(DIR.MESSAGING).not.toContain(path.sep);
   });
 });
 
 // ══════════════════════════════════════════════════════════════════════════════
-// 2. featureConfig — Messaging dir uses DATA_MESSAGING
+// 2. featureConfig — messaging dir derives from INDEX_SERVER_DIR, not cwd
 // ══════════════════════════════════════════════════════════════════════════════
 describe('featureConfig — messaging dir isolation', () => {
   afterEach(() => {
@@ -62,12 +61,28 @@ describe('featureConfig — messaging dir isolation', () => {
     reloadRuntimeConfig();
   });
 
-  it('default messaging dir should end with data/messaging, not just data/', () => {
+  it('default messaging dir is anchored outside the working directory', () => {
+    // Retargeted from "is the sibling of the instruction catalog" when the
+    // default moved to STATE_ROOT (#577). The sibling layout was a MEANS to an
+    // end — one store shared by every client — and it achieved that only when
+    // INDEX_SERVER_DIR was set identically everywhere; unset, it fell back to
+    // `<cwd>/index-messaging` and siloed again. STATE_ROOT is per-user and has
+    // no cwd fallback, so it reaches the same end unconditionally.
+    //
+    // The old assertion also forbade `/data/messaging$/` because at the time
+    // that shape meant cwd-anchored. Under STATE_ROOT the shape is identical
+    // and correct, so the path shape is no longer a usable proxy. Assert the
+    // property directly instead: not under CWD.
     clearEnv('INDEX_SERVER_MESSAGING_DIR', 'INDEX_SERVER_PROFILE');
+    setEnv({ INDEX_SERVER_DIR: path.join(os.tmpdir(), 'idxsrv-ux', 'index-server') });
     reloadRuntimeConfig();
     const cfg = getRuntimeConfig();
-    const normalized = cfg.messaging.dir.replace(/\\/g, '/');
-    expect(normalized).toMatch(/data\/messaging$/);
+
+    expect(path.isAbsolute(cfg.messaging.dir)).toBe(true);
+    expect(
+      cfg.messaging.dir.startsWith(process.cwd()),
+      `messaging store resolved under cwd (${cfg.messaging.dir}) — each client would get a private store`,
+    ).toBe(false);
   });
 
   it('explicit INDEX_SERVER_MESSAGING_DIR overrides the default', () => {

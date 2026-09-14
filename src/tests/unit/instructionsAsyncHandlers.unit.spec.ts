@@ -48,6 +48,9 @@ async function loadHandler(method: 'index_add' | 'index_import') {
 
   vi.doMock('../../services/indexContext', () => ({
     ensureLoaded,
+    // No-op guard seam — see instructions.import.ts bulk-mutation scope.
+    beginBulkMutation: () => undefined,
+    endBulkMutation: () => undefined,
     ensureLoadedAsync,
     writeEntry,
     writeEntryAsync,

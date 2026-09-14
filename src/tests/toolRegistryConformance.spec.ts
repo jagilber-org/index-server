@@ -26,10 +26,14 @@ describe('Tool Registry Conformance', () => {
   });
 
   it('every registered handler has a registry entry', () => {
-    // Exclude test-only primitives (echo/ping, diagnostics_handshake, etc.)
-    const testPrimitives = new Set(['echo/ping', 'diagnostics_handshake', 'test_primitive']);
+    // Issue #592: this allowlist used to also carry 'diagnostics_handshake' and
+    // 'test_primitive'. Both were production registrations, not test
+    // primitives, and the exemption is what let them stay callable while
+    // declared nowhere (A-2). test_primitive is deleted; diagnostics_handshake
+    // is now declared and registration-gated. tools/call enforces this same
+    // invariant at runtime (sdkServer.ts, isDeclaredTool).
     const missing = methods
-      .filter(name => !registryNames.has(name) && !testPrimitives.has(name));
+      .filter(name => !registryNames.has(name));
     expect(missing, `Handlers without registry entries: ${missing.join(', ')}`).toHaveLength(0);
   });
 

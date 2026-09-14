@@ -167,7 +167,7 @@ describe('DashboardServer – TLS support', () => {
     expect(server).toBeDefined();
   });
 
-  it.skipIf(!opensslAvailable)('should create HTTPS server when tls option provided', async () => {
+  it.skipIf(!opensslAvailable)('should create HTTPS server when tls option provided', async () => { // SKIP_OK: environment-gated: requires openssl on PATH
     const { createDashboardServer } = await import('../dashboard/server/DashboardServer.js');
     server = createDashboardServer({
       port: 0,
@@ -185,7 +185,7 @@ describe('DashboardServer – TLS support', () => {
     expect(result.port).toBeGreaterThan(0);
   });
 
-  it.skipIf(!opensslAvailable)('should serve over HTTPS when tls option provided', async () => {
+  it.skipIf(!opensslAvailable)('should serve over HTTPS when tls option provided', async () => { // SKIP_OK: environment-gated: requires openssl on PATH
     const { createDashboardServer } = await import('../dashboard/server/DashboardServer.js');
     server = createDashboardServer({
       port: 0,
@@ -231,7 +231,7 @@ describe('DashboardServer – TLS support', () => {
     expect(result.url).toMatch(/^http:\/\//);
   });
 
-  it.skipIf(!opensslAvailable)('should report wss:// WebSocket URL when tls is enabled', async () => {
+  it.skipIf(!opensslAvailable)('should report wss:// WebSocket URL when tls is enabled', async () => { // SKIP_OK: environment-gated: requires openssl on PATH
     const { createDashboardServer } = await import('../dashboard/server/DashboardServer.js');
     server = createDashboardServer({
       port: 0,

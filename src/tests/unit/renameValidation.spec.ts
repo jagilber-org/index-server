@@ -82,7 +82,7 @@ describe('catalog to index rename validation', () => {
     const copilotInstructionsPath = path.resolve(SRC, '..', '.github', 'copilot-instructions.md');
     const hasCopilotInstructions = fs.existsSync(copilotInstructionsPath);
 
-    it.skipIf(!hasCopilotInstructions)('says Index Server not Catalog Server', () => {
+    it.skipIf(!hasCopilotInstructions)('says Index Server not Catalog Server', () => { // SKIP_OK: environment-gated: requires copilot-instructions.md file
       const content = fs.readFileSync(copilotInstructionsPath, 'utf8');
       expect(content).not.toMatch(/Catalog Server/);
       expect(content).toContain('Index Server');

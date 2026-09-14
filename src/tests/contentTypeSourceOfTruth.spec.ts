@@ -343,6 +343,23 @@ const PROTOCOL_ALLOWLIST = new Set<string>([
   'src/dashboard/client/js/admin.feedback.js',
   'src/dashboard/client/js/admin.instructions.js',
   'src/dashboard/client/js/admin.overview.js',
+  // Chart series definitions: each signal value needs a display label and a
+  // colour assigned by sentiment, which cannot be derived from the tuple.
+  // Both files degrade safely on drift -- a signal the client does not know
+  // is still counted in the server-side totals and rendered under its own
+  // name (see signalBreakdown / sigUnspecified), so a new signal shows up as
+  // an unstyled band rather than vanishing.
+  'src/dashboard/client/js/admin.performance.chart.js',
+  'src/dashboard/client/js/admin.activity.js',
+  // Chart / sampler spec fixtures mirror the sample shape the server emits;
+  // catalogSampler.spec.ts additionally asserts the enum-derived bucket names
+  // against USAGE_SIGNALS, which is the drift guard the literals would need.
+  'src/tests/performanceChart.spec.ts',
+  'src/tests/catalogSampler.spec.ts',
+  // Activity-store fixtures use concrete signal values as opaque payload
+  // strings; the store persists whatever it is given and never branches on
+  // the vocabulary, so there is nothing here to drift from.
+  'src/tests/activityStore.spec.ts',
   // Canonical JSON schema for FeedbackEntry — generated/maintained as the
   // schema-of-record for the feedback payload shape.
   'schemas/feedback-entry.schema.json',

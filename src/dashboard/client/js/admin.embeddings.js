@@ -9,12 +9,21 @@
 (function () {
   'use strict';
 
+  // One entry per label src/services/categoryRules.ts can return, plus 'Other'.
+  // Kept complete by src/tests/unit/embeddingsCategoryColors.spec.ts — adding a
+  // rule without a colour here fails that suite. Six labels (Kusto, .NET,
+  // Mermaid, Governance, Operations, Documentation) were missing before #534
+  // and fell through catColor's default, which is Other's grey: they did not
+  // merely lose their colour, they rendered AS Other.
   const CAT_COLORS = {
     'AI/ML': '#e74c3c', 'Azure': '#3498db', 'Service Fabric': '#e67e22',
     'PowerShell': '#2ecc71', 'Agent': '#9b59b6', 'MCP': '#1abc9c',
     'VS Code': '#f39c12', 'Git/Repo': '#34495e', 'Testing': '#16a085',
     'Debugging': '#c0392b', 'Containers': '#8e44ad', 'Security': '#d35400',
-    'Runbooks/Guides': '#27ae60', 'Other': '#95a5a6',
+    'Runbooks/Guides': '#27ae60',
+    'Kusto': '#48dbfb', '.NET': '#6c5ce7', 'Mermaid': '#fd79a8',
+    'Governance': '#badc58', 'Operations': '#feca57', 'Documentation': '#dcdde1',
+    'Other': '#95a5a6',
   };
 
   let embData = null;
@@ -126,6 +135,9 @@
 
   // ── Category & UI builders ────────────────────────────────────────────
 
+  // Unknown labels intentionally render as Other. This hex must stay equal to
+  // CAT_COLORS['Other']; the completeness spec guarantees no label the server
+  // can emit reaches this path.
   function catColor(cat) {
     return CAT_COLORS[cat] || '#95a5a6';
   }
@@ -172,7 +184,7 @@
       stat('Instructions', embData.count) +
       stat('Dimensions', embData.dimensions) +
       stat('Model', embData.model || '?') +
-      stat('index Hash', '<span title="' + hash + '">' + shortHash + '</span>') +
+      stat('Index Hash', '<span title="' + escapeHtml(hash) + '">' + escapeHtml(shortHash) + '</span>') +
       stat('Avg Cosine Sim', s.avgCosineSim) +
       stat('Min / Max Sim', (s.minCosineSim || '?') + ' / ' + (s.maxCosineSim || '?')) +
       stat('Avg Norm', s.avgNorm);
@@ -317,9 +329,9 @@
     if (detailEl && selectedIdx >= 0 && embData) {
       var pt = embData.points[selectedIdx];
       detailEl.innerHTML =
-        '<b>' + pt.id + '</b>' +
-        (pt.title ? '<br>' + pt.title : '') +
-        (pt.category ? '<br>Category: ' + pt.category : '') +
+        '<b>' + escapeHtml(pt.id) + '</b>' +
+        (pt.title ? '<br>' + escapeHtml(pt.title) : '') +
+        (pt.category ? '<br>Category: ' + escapeHtml(pt.category) : '') +
         '<br>Norm: ' + (pt.norm ? pt.norm.toFixed(4) : '?') +
         '<br>Position: (' + pt.x.toFixed(4) + ', ' + pt.y.toFixed(4) + ')';
     } else if (detailEl) {

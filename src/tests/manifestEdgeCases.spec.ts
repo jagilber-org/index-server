@@ -52,7 +52,7 @@ describe('manifest edge cases', () => {
   maybeIt('respects INDEX_SERVER_MANIFEST_WRITE=0 (no file produced)', async () => {
     const start = readManifest(WORKSPACE_DIR);
     // spawn with write disabled
-  const { server, parser } = await performHandshake({ cwd: WORKSPACE_DIR, extraEnv:{ INDEX_SERVER_MUTATION:'1', INDEX_SERVER_MANIFEST_WRITE:'0', INDEX_SERVER_DIR }});
+  const { server, parser } = await performHandshake({ cwd: WORKSPACE_DIR, extraEnv:{ INDEX_SERVER_MUTATION:'1', INDEX_SERVER_MANIFEST_WRITE:'0', INDEX_SERVER_DIR, INDEX_SERVER_STATE_ROOT: WORKSPACE_DIR }});
     const send = (m:unknown)=> server.stdin.write(buildContentLengthFrame(m));
     // perform a simple add mutation which would normally trigger manifest update
     const id = 'mw-disabled-' + Date.now();
@@ -97,7 +97,7 @@ describe('manifest edge cases', () => {
     writeCorruptedManifest(WORKSPACE_DIR);
     const beforeTxt = fs.readFileSync(path.join(WORKSPACE_DIR,'snapshots','index-manifest.json'),'utf8');
     expect(beforeTxt.startsWith('{"version":1,"entries":[{"id":"broken')).toBe(true);
-  const { server, parser } = await performHandshake({ cwd: WORKSPACE_DIR, extraEnv:{ INDEX_SERVER_MUTATION:'1', INDEX_SERVER_MANIFEST_WRITE:'1', INDEX_SERVER_DIR }});
+  const { server, parser } = await performHandshake({ cwd: WORKSPACE_DIR, extraEnv:{ INDEX_SERVER_MUTATION:'1', INDEX_SERVER_MANIFEST_WRITE:'1', INDEX_SERVER_DIR, INDEX_SERVER_STATE_ROOT: WORKSPACE_DIR }});
     const send = (m:unknown)=> server.stdin.write(buildContentLengthFrame(m));
     const id = 'mw-repair-' + Date.now();
     createdTestIds.push(id); // Register for cleanup

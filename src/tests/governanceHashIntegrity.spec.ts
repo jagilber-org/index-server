@@ -1,7 +1,7 @@
 /*
  * Governance & Hash Integrity Tests
  * Active foundational scenarios + advanced scenarios gated by explicit activation criteria comments.
- * Progression policy: enable one skipped test only after 10 consecutive green runs (guard:baseline + guard:decl) with
+ * Progression policy: enable one skipped test only after 10 consecutive green runs (guard:all + guard:decl) with
  * zero hash polling timeouts. Document each activation in CHANGELOG or GOV-HASH test plan.
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';

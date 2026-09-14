@@ -32,7 +32,7 @@ import { describe, it, expect } from 'vitest';
 const filePath = join(process.cwd(), '.vscode', 'mcp.json');
 const fileExists = existsSync(filePath);
 
-describe.skipIf(!fileExists)('Imperative Directive: mcp.json diagnostic flags remain disabled', () => {
+describe.skipIf(!fileExists)('Imperative Directive: mcp.json diagnostic flags remain disabled', () => { // SKIP_OK: environment-gated: requires mcp.json config file to exist
   let content = '';
   if (fileExists) {
     try {

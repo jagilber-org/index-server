@@ -1,6 +1,5 @@
 {
-  "version": "1.32.0",
-  "generatedAt": "2026-06-17T17:31:36.922Z",
+  "version": "1.42.0",
   "trackedDir": "schemas",
   "distDir": "dist/schemas",
   "jsonSchemas": [
@@ -40,6 +39,16 @@
       "file": "json-schema/instruction-instruction-entry.schema.json"
     },
     {
+      "type": "InstructionLink",
+      "source": "src/models/instruction.ts",
+      "file": "json-schema/instruction-instruction-link.schema.json"
+    },
+    {
+      "type": "LinkRel",
+      "source": "src/models/instruction.ts",
+      "file": "json-schema/instruction-link-rel.schema.json"
+    },
+    {
       "type": "PriorityTier",
       "source": "src/models/instruction.ts",
       "file": "json-schema/instruction-priority-tier.schema.json"
@@ -48,6 +57,11 @@
       "type": "RequirementLevel",
       "source": "src/models/instruction.ts",
       "file": "json-schema/instruction-requirement-level.schema.json"
+    },
+    {
+      "type": "SignalHistoryItem",
+      "source": "src/models/instruction.ts",
+      "file": "json-schema/instruction-signal-history-item.schema.json"
     },
     {
       "type": "PersistedAdminSession",
@@ -92,10 +106,10 @@
       "src",
       "scripts"
     ],
-    "fileCount": 287,
+    "fileCount": 307,
     "features": {
       "jsdoc": true,
-      "lineNumbers": true,
+      "lineNumbers": false,
       "typeParameters": true,
       "decorators": true
     }

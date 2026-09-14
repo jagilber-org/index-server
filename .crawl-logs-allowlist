@@ -94,3 +94,34 @@ Heap snapshot taken\. Memory after GC:
 # throwing hook to verify archive/restore/purge swallow the error and continue. The
 # logger auto-attaches a call-site stack at WARN (Error Trace Flow); not operator-actionable.
 \[archive\] embedding (evict|markStale)\('[^']*'\) failed:
+
+# CatalogSampler null-guard fires once per process when getRawIndexState() returns null
+# during cold start (before index is loaded). Tests exercise this path intentionally.
+CatalogSampler: getRawIndexState\(\) returned null
+
+# Groom tool error path exercised by negative-path test fixtures (archive, remap, junk
+# category cleanup). Covered by the same test-expected-error pattern as other registry errors.
+\[registry\] Tool error: index_groom
+
+# Add mutation_persist_failed is a post-write visibility anomaly surfaced by tests that
+# exercise concurrent write/read races. The anomaly is detected, logged and self-heals.
+\[add\] mutation_persist_failed
+
+# Lifecycle hook WARN entries (skipped due to concurrency, exited non-zero) carry a stack
+# trace in the detail field. Tests exercise these paths deliberately via fixture hooks.
+\[lifecycle-hooks\] (skipped: max concurrency reached|hook exited non-zero)
+
+# HttpTransport graceful-shutdown timeout fires during test teardown when the grace period
+# is set deliberately low (50ms) to exercise the timeout path. Stack trace in detail.
+\[httpLifecycle\] Graceful shutdown timed out
+
+# getInstructionsDir emits a WARN with stack when INDEX_SERVER_DIR is the literal string
+# "undefined" — exercised intentionally by undefinedEnvRestore520.spec.ts.
+\[indexContext\] INDEX_SERVER_DIR is the literal string
+
+# Messaging store deployment notices. Emitted once per BOOT (not per config parse),
+# but a test run spawns dozens of real server processes and each legitimately emits
+# once — the same "warn-once latch x N processes" shape as the SQLite notice above.
+# A real regression would repeat WITHIN one process, which the latch-free purity of
+# getMessagingStoreWarnings() plus its unit tests already pin.
+\[messaging\] (INDEX_SERVER_DIR is not set|A legacy messaging store still holds files)

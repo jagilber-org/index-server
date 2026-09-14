@@ -148,7 +148,9 @@
       "type": "string",
       "enum": [
         "6",
-        "7"
+        "7",
+        "8",
+        "9"
       ],
       "x-fieldClass": "server-managed",
       "description": "Internal schema version for migration"
@@ -351,6 +353,67 @@
       "type": "string",
       "maxLength": 200,
       "description": "Identifier of the MCP agent or client that created or promoted this entry"
+    },
+    "links": {
+      "type": "array",
+      "maxItems": 25,
+      "items": {
+        "type": "object",
+        "required": ["target"],
+        "additionalProperties": false,
+        "properties": {
+          "target": {
+            "type": "string",
+            "pattern": "^[a-z0-9](?:[a-z0-9-_]{0,118}[a-z0-9])?$",
+            "maxLength": 120,
+            "description": "Target instruction ID"
+          },
+          "rel": {
+            "type": "string",
+            "enum": ["related", "prerequisite", "sequel", "part-of", "see-also"],
+            "default": "related",
+            "description": "Relationship type"
+          },
+          "label": {
+            "type": "string",
+            "maxLength": 120,
+            "description": "Human-readable annotation"
+          }
+        }
+      },
+      "description": "Structured cross-references to other instruction entries"
+    },
+    "signalHistory": {
+      "type": "array",
+      "maxItems": 10,
+      "x-fieldClass": "server-managed",
+      "description": "Bounded FIFO of signal events on this entry (newest first, cap 10). Durable record — not prunable like activity.db.",
+      "items": {
+        "type": "object",
+        "required": ["signal", "ts"],
+        "additionalProperties": false,
+        "properties": {
+          "signal": {
+            "type": "string",
+            "description": "Signal value (e.g. helpful, outdated, applied)"
+          },
+          "ts": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the signal arrived (ISO 8601)"
+          },
+          "comment": {
+            "type": "string",
+            "description": "Optional freeform comment accompanying the signal"
+          }
+        }
+      }
+    },
+    "lastSignaledAt": {
+      "type": "string",
+      "format": "date-time",
+      "x-fieldClass": "server-managed",
+      "description": "Timestamp of the most recent signal event (ISO 8601)"
     },
     "extensions": {
       "type": "object",

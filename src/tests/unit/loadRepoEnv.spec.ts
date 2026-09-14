@@ -26,7 +26,7 @@ function runPwshJson<T>(command: string): T {
   return JSON.parse(result.stdout.trim()) as T;
 }
 
-describe.skipIf(!hasPwsh)('Load-RepoEnv.ps1', () => {
+describe.skipIf(!hasPwsh)('Load-RepoEnv.ps1', () => { // SKIP_OK: environment-gated: requires pwsh on PATH
   it('loads valid .env entries and preserves existing process values by default', () => {
     const fixtureDir = fs.mkdtempSync(path.join(os.tmpdir(), 'load-repoenv-'));
     try {

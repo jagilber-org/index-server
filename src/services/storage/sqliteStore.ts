@@ -13,7 +13,7 @@
  */
 
 import { DatabaseSync } from 'node:sqlite';
-import { InstructionEntry } from '../../models/instruction.js';
+import { InstructionEntry, AUDIENCES } from '../../models/instruction.js';
 import { computeGovernanceHashFromEntries, computeArchiveHashFromEntries } from './hashUtils.js';
 import { INSTRUCTIONS_DDL, FTS5_DDL, PRAGMAS, SCHEMA_VERSION } from './sqliteSchema.js';
 import type {
@@ -66,11 +66,20 @@ function rowToEntry(row: Record<string, unknown>): InstructionEntry {
     semanticSummary: row.semantic_summary as string | undefined,
     createdByAgent: row.created_by_agent as string | undefined,
     sourceWorkspace: row.source_workspace as string | undefined,
+    links: safeJsonParse(row.links as string, undefined),
     extensions: safeJsonParse(row.extensions as string, undefined),
     riskScore: row.risk_score as number | undefined,
     usageCount: row.usage_count as number | undefined,
     firstSeenTs: row.first_seen_ts as string | undefined,
     lastUsedAt: row.last_used_at as string | undefined,
+    // Split usage counters (issue #418). NULL is preserved as undefined so that
+    // rows written before these columns existed still read as "unknown" and go
+    // through the legacy usageCount backfill, rather than being asserted as a
+    // real 0/0 split that would erase a legacy total.
+    retrievedCount: (row.retrieved_count as number | null | undefined) ?? undefined,
+    appliedCount: (row.applied_count as number | null | undefined) ?? undefined,
+    lastRetrievedAt: (row.last_retrieved_at as string | null | undefined) ?? undefined,
+    lastAppliedAt: (row.last_applied_at as string | null | undefined) ?? undefined,
   };
 }
 
@@ -103,6 +112,33 @@ function val(v: unknown): unknown {
   return v === undefined ? null : v;
 }
 
+/**
+ * Coerce audience to a valid scalar — arrays/objects crash SQLite bind.
+ *
+ * Semantics are deliberately identical to `migrateAudience()` in
+ * schemaMigrationService.ts, which is the other coercion of this same concept:
+ *
+ *   array      -> first member that is IN the audience enum, else 'all'
+ *   string     -> passed through (migrateAudience owns legacy-alias mapping)
+ *   otherwise  -> 'all'
+ *
+ * The array arm must test enum MEMBERSHIP, not just `typeof === 'string'`.
+ * Returning `v[0]` unchecked persists an out-of-enum audience into the store —
+ * a silent data-integrity defect, where the crash it replaced was at least
+ * loud. Both arms derive from the AUDIENCES tuple so the two layers cannot
+ * drift apart; `audienceEnumParity.spec.ts` pins that they agree.
+ */
+function audienceVal(v: unknown): string {
+  if (Array.isArray(v)) {
+    const first = v.find(
+      (x: unknown): x is string => typeof x === 'string' && (AUDIENCES as readonly string[]).includes(x),
+    );
+    return first ?? 'all';
+  }
+  if (typeof v === 'string') return v;
+  return 'all';
+}
+
 function isDuplicateColumnError(error: unknown, column: string): boolean {
   if (!(error instanceof Error)) return false;
   const message = error.message.toLowerCase();
@@ -126,6 +162,17 @@ export class SqliteStore implements IInstructionStore {
     this.db.exec(PRAGMAS);
     this.db.exec(INSTRUCTIONS_DDL);
     this.ensureColumn('instructions', 'extensions', 'TEXT');
+    this.ensureColumn('instructions', 'links', 'TEXT');
+    this.ensureColumn('instructions_archive', 'links', 'TEXT');
+    // Split usage counters (issue #418) — added without a DEFAULT so that rows
+    // predating these columns read back NULL ("unknown") instead of a fabricated
+    // 0/0 split. write() always binds an explicit value for new/updated rows.
+    for (const table of ['instructions', 'instructions_archive']) {
+      this.ensureColumn(table, 'retrieved_count', 'INTEGER');
+      this.ensureColumn(table, 'applied_count', 'INTEGER');
+      this.ensureColumn(table, 'last_retrieved_at', 'TEXT');
+      this.ensureColumn(table, 'last_applied_at', 'TEXT');
+    }
     // FTS5 for full-text search (with content sync triggers)
     try { this.db.exec(FTS5_DDL); } catch { /* FTS5 may already exist */ }
     // Stamp / migrate schema version. CREATE TABLE IF NOT EXISTS makes the
@@ -209,8 +256,9 @@ export class SqliteStore implements IInstructionStore {
       last_reviewed_at, next_review_due, review_interval_days,
       change_log, supersedes, archived_at, workspace_id, user_id,
       team_ids, semantic_summary, created_by_agent, source_workspace,
-      extensions,
-      risk_score, usage_count, first_seen_ts, last_used_at
+      extensions, links,
+      risk_score, usage_count, first_seen_ts, last_used_at,
+      retrieved_count, applied_count, last_retrieved_at, last_applied_at
     ) VALUES (
       ?, ?, ?, ?, ?, ?, ?,
       ?, ?, ?, ?,
@@ -218,17 +266,20 @@ export class SqliteStore implements IInstructionStore {
       ?, ?, ?, ?, ?,
       ?, ?, ?,
       ?, ?, ?, ?, ?,
-      ?, ?, ?, ?, ?,
+      ?, ?, ?, ?,
+      ?, ?,
+      ?, ?, ?, ?,
       ?, ?, ?, ?
     )`;
 
+    const safeAudience = audienceVal(entry.audience);
     this.db.prepare(sql).run(
       entry.id,
       entry.title,
       entry.body,
       val(entry.rationale),
       val(entry.priority) ?? 0,
-      val(entry.audience) ?? 'all',
+      safeAudience,
       val(entry.requirement) ?? 'may',
       JSON.stringify(entry.categories ?? []),
       val(entry.contentType) ?? 'instruction',
@@ -256,14 +307,20 @@ export class SqliteStore implements IInstructionStore {
       val(entry.createdByAgent),
       val(entry.sourceWorkspace),
       entry.extensions === undefined ? null : JSON.stringify(entry.extensions),
+      JSON.stringify(entry.links ?? []),
       val(entry.riskScore),
       val(entry.usageCount) ?? 0,
       val(entry.firstSeenTs),
       val(entry.lastUsedAt),
+      val(entry.retrievedCount),
+      val(entry.appliedCount),
+      val(entry.lastRetrievedAt),
+      val(entry.lastAppliedAt),
     );
 
-    // Update in-memory cache
-    this.cache.set(entry.id, entry);
+    // Update in-memory cache with normalized audience
+    const cached = entry.audience === safeAudience ? entry : { ...entry, audience: safeAudience as InstructionEntry['audience'] };
+    this.cache.set(entry.id, cached);
     this.loaded = true;
   }
 
@@ -482,7 +539,8 @@ export class SqliteStore implements IInstructionStore {
       last_reviewed_at, next_review_due, review_interval_days,
       change_log, supersedes, archived_at, workspace_id, user_id,
       team_ids, semantic_summary, created_by_agent, source_workspace,
-      extensions, risk_score, usage_count, first_seen_ts, last_used_at,
+      extensions, links, risk_score, usage_count, first_seen_ts, last_used_at,
+      retrieved_count, applied_count, last_retrieved_at, last_applied_at,
       archived_by, archive_reason, archive_source, restore_eligible
     ) VALUES (
       ?, ?, ?, ?, ?, ?, ?,
@@ -492,7 +550,8 @@ export class SqliteStore implements IInstructionStore {
       ?, ?, ?,
       ?, ?, ?, ?, ?,
       ?, ?, ?, ?,
-      ?, ?, ?, ?, ?,
+      ?, ?, ?, ?, ?, ?,
+      ?, ?, ?, ?,
       ?, ?, ?, ?
     )`;
     this.db.prepare(sql).run(
@@ -501,13 +560,13 @@ export class SqliteStore implements IInstructionStore {
       entry.body,
       val(entry.rationale),
       val(entry.priority) ?? 0,
-      val(entry.audience) ?? 'all',
+      audienceVal(entry.audience),
       val(entry.requirement) ?? 'recommended',
       JSON.stringify(entry.categories ?? []),
       val(entry.contentType) ?? 'instruction',
       val(entry.primaryCategory),
       entry.sourceHash ?? '',
-      entry.schemaVersion ?? '7',
+      entry.schemaVersion ?? '8',
       val(entry.deprecatedBy),
       val(entry.createdAt) ?? new Date().toISOString(),
       val(entry.updatedAt) ?? new Date().toISOString(),
@@ -529,10 +588,15 @@ export class SqliteStore implements IInstructionStore {
       val(entry.createdByAgent),
       val(entry.sourceWorkspace),
       entry.extensions === undefined ? null : JSON.stringify(entry.extensions),
+      JSON.stringify(entry.links ?? []),
       val(entry.riskScore),
       val(entry.usageCount) ?? 0,
       val(entry.firstSeenTs),
       val(entry.lastUsedAt),
+      val(entry.retrievedCount),
+      val(entry.appliedCount),
+      val(entry.lastRetrievedAt),
+      val(entry.lastAppliedAt),
       val(entry.archivedBy),
       val(entry.archiveReason),
       val(entry.archiveSource),
@@ -686,8 +750,9 @@ export class SqliteStore implements IInstructionStore {
       last_reviewed_at, next_review_due, review_interval_days,
       change_log, supersedes, archived_at, workspace_id, user_id,
       team_ids, semantic_summary, created_by_agent, source_workspace,
-      extensions,
-      risk_score, usage_count, first_seen_ts, last_used_at
+      extensions, links,
+      risk_score, usage_count, first_seen_ts, last_used_at,
+      retrieved_count, applied_count, last_retrieved_at, last_applied_at
     ) VALUES (
       ?, ?, ?, ?, ?, ?, ?,
       ?, ?, ?, ?,
@@ -695,7 +760,9 @@ export class SqliteStore implements IInstructionStore {
       ?, ?, ?, ?, ?,
       ?, ?, ?,
       ?, ?, ?, ?, ?,
-      ?, ?, ?, ?, ?,
+      ?, ?, ?, ?,
+      ?, ?,
+      ?, ?, ?, ?,
       ?, ?, ?, ?
     )`;
     this.db.prepare(sql).run(
@@ -704,13 +771,13 @@ export class SqliteStore implements IInstructionStore {
       entry.body,
       val(entry.rationale),
       val(entry.priority) ?? 0,
-      val(entry.audience) ?? 'all',
+      audienceVal(entry.audience),
       val(entry.requirement) ?? 'recommended',
       JSON.stringify(entry.categories ?? []),
       val(entry.contentType) ?? 'instruction',
       val(entry.primaryCategory),
       entry.sourceHash ?? '',
-      entry.schemaVersion ?? '7',
+      entry.schemaVersion ?? '8',
       val(entry.deprecatedBy),
       val(entry.createdAt) ?? new Date().toISOString(),
       val(entry.updatedAt) ?? new Date().toISOString(),
@@ -732,10 +799,15 @@ export class SqliteStore implements IInstructionStore {
       val(entry.createdByAgent),
       val(entry.sourceWorkspace),
       entry.extensions === undefined ? null : JSON.stringify(entry.extensions),
+      JSON.stringify(entry.links ?? []),
       val(entry.riskScore),
       val(entry.usageCount) ?? 0,
       val(entry.firstSeenTs),
       val(entry.lastUsedAt),
+      val(entry.retrievedCount),
+      val(entry.appliedCount),
+      val(entry.lastRetrievedAt),
+      val(entry.lastAppliedAt),
     );
   }
 

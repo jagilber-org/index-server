@@ -3,6 +3,7 @@ import './handlers/instructions.add';
 import './handlers/instructions.import';
 import './handlers/instructions.remove';
 import './handlers/instructions.patch';
+import './handlers/instructions.bodyPatch';
 import './handlers/instructions.reload';
 import './handlers/instructions.groom';
 import './handlers/instructions.query';

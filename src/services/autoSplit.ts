@@ -4,6 +4,12 @@
  * by agents that bypass MCP tool size validation.
  */
 
+interface InstructionLink {
+  target: string;
+  rel?: string;
+  label?: string;
+}
+
 interface InstructionLike {
   id: string;
   title: string;
@@ -13,6 +19,7 @@ interface InstructionLike {
   requirement: string;
   categories: string[];
   schemaVersion?: string;
+  links?: InstructionLink[];
   [key: string]: unknown;
 }
 
@@ -66,7 +73,7 @@ export function splitOversizedEntry(entry: InstructionLike, maxLength: number): 
   // Generate part IDs
   const partIds = merged.map((_, i) => `${entry.id}-part-${i + 1}`);
 
-  // Build cross-link footer
+  // Build cross-link footer + structured links
   const parts: InstructionLike[] = merged.map((chunk, i) => {
     const siblingIds = partIds.filter((_, j) => j !== i);
     const crossLinkFooter = `\n\n---\n**Cross-linked parts:** ${siblingIds.join(', ')}`;
@@ -75,13 +82,25 @@ export function splitOversizedEntry(entry: InstructionLike, maxLength: number): 
     const maxBodyContent = maxLength - crossLinkFooter.length;
     const bodyContent = chunk.length > maxBodyContent ? chunk.slice(0, maxBodyContent) : chunk;
 
-    const { body: _body, id: _id, title: _title, ...rest } = entry;
+    // Structured links: part-of for all siblings, sequel for sequential reading order
+    const links: InstructionLink[] = [];
+    if (i > 0) {
+      links.push({ target: partIds[i - 1], rel: 'sequel' });
+    }
+    for (const sibId of siblingIds) {
+      if (sibId !== partIds[i - 1]) {
+        links.push({ target: sibId, rel: 'part-of' });
+      }
+    }
+
+    const { body: _body, id: _id, title: _title, links: _links, ...rest } = entry;
     return {
       ...rest,
       id: partIds[i],
       title: `${entry.title} (Part ${i + 1}/${merged.length})`,
       body: bodyContent + crossLinkFooter,
       categories: [...entry.categories],
+      links,
     } as InstructionLike;
   });
 

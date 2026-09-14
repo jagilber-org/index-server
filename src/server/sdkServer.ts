@@ -6,11 +6,11 @@
  * Orchestrates server creation and startup, delegating handshake/protocol logic to
  * handshakeManager.ts and transport/dispatcher setup to transportFactory.ts.
  */
-import fs from 'fs';
-import path from 'path';
+import { findPackageVersion } from '../utils/version';
 import { getToolRegistry } from '../services/toolRegistry';
 import '../services/toolHandlers';
 import { getHandler } from './registry';
+import { guardToolInvocation } from './toolInvocationGuard';
 import { z } from 'zod';
 import { getRuntimeConfig } from '../config/runtimeConfig';
 import { registerMcpServer } from '../services/mcpLogBridge';
@@ -49,21 +49,7 @@ let StdioServerTransport: any;
  * @returns Configured SDK server instance with all tool handlers registered
  */
 export function createSdkServer(ServerClass: any) {
-  // Derive version from package.json (no artificial suffix so clients see real semantic version)
-  let version = '0.0.0';
-  const pkgCandidates = [
-    path.join(process.cwd(), 'package.json'),
-    path.join(__dirname, '..', '..', 'package.json'),  // dist/server/../.. = repo root
-    path.join(__dirname, '..', 'package.json'),         // fallback
-  ];
-  for (const pkgPath of pkgCandidates) {
-    try {
-      if (fs.existsSync(pkgPath)) {
-        const raw = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
-        if (raw.version) { version = raw.version; break; }
-      }
-    } catch { /* ignore */ }
-  }
+  const version = findPackageVersion(__dirname);
   const serverCapabilities = {
     tools: { listChanged: true },
     logging: {},
@@ -225,10 +211,22 @@ export function createSdkServer(ServerClass: any) {
     try {
       if(getRuntimeConfig().logging.verbose) process.stderr.write(`[rpc] call method=tools/call tool=${name} id=${(req as any)?.id ?? 'n/a'}\n`);
     } catch { /* ignore */ }
-    const handler = getHandler(name);
-    if(!handler){
-      throw { code: -32601, message: `Unknown tool: ${name}`, data: { message: `Unknown tool: ${name}`, method: name } };
+    // Issue #605: the declared-tool gate (#592), the handler lookup and the
+    // INPUT_SCHEMA pre-validation (#581) now live in guardToolInvocation, so
+    // every transport that can reach a handler runs the SAME sequence. They
+    // used to be inline here, and POST /mcp/rpc grew without any of them.
+    // See src/server/toolInvocationGuard.ts for why the undeclared and
+    // unregistered refusals are byte-identical (enumeration oracle, #592),
+    // why the refusal is logged at INFO and audited, and why index_dispatch
+    // opts out of generic validation.
+    const guard = guardToolInvocation(name, args, { lookup: getHandler, auditKind: 'read', transport: 'stdio' });
+    if(!guard.ok){
+      // `reason` is a server-side discriminator; it never goes on the wire,
+      // because a distinct reason per refusal is exactly the oracle #592 closed.
+      const { reason: _reason, ...wire } = guard.error;
+      throw wire;
     }
+    const handler = guard.handler;
     try {
       const result = await Promise.resolve(handler(args));
       const bytes = Buffer.byteLength(JSON.stringify(result), 'utf8');

@@ -1,6 +1,30 @@
 # Index: Leader/Follower Architecture Spec
 
-> **Status: EXPERIMENTAL** — This feature is under active development. APIs, configuration, and behavior may change without notice. Use `INDEX_SERVER_MODE=standalone` (default) for production workloads.
+> **Status: HISTORICAL DESIGN PROPOSAL — do not configure from this document.**
+>
+> This is the pre-implementation spec. It was written before the feature was
+> built and never reconciled with what shipped, so most of its concrete
+> identifiers are wrong (#589). It is kept for the problem statement and the
+> reasoning, which are still sound; everything below that names a port, a
+> route, an environment variable or a module is superseded.
+>
+> **The as-built reference is [multi_instance_design.md](multi_instance_design.md).**
+>
+> What this document gets wrong, measured against the code:
+>
+> | This spec says | Reality |
+> |---|---|
+> | `INDEX_SERVER_LEADER_PORT` defaults to `8399` | **9090** (`src/config/defaultValues.ts:63`), `4090` under the `dev` profile |
+> | `INDEX_SERVER_MODE` defaults to `auto` | **`standalone`** (`src/config/serverConfig.ts:120`) |
+> | Routes `/leader/tools/call`, `/leader/health`, `/leader/info` | **`/mcp/rpc`**, **`/mcp/health`**, **`/mcp/leader`** (`src/dashboard/server/HttpTransport.ts`) |
+> | `INDEX_SERVER_FOLLOWER_HEARTBEAT_MS`, default 2000 | `INDEX_SERVER_HEARTBEAT_MS`, default **5000** (`serverConfig.ts:143`) |
+> | `INDEX_SERVER_LEADER_HOST`, `_FOLLOWER_HEARTBEAT_MISSES`, `_FOLLOWER_RETRY_ATTEMPTS`, `_FOLLOWER_RETRY_BACKOFF_MS`, `_LEADER_REQUEST_TIMEOUT_MS` | **None of these five exist.** Setting them does nothing. The only follower-side variable is `INDEX_SERVER_LEADER_URL` |
+> | Modules `election.ts`, `leaderServer.ts`, `followerProxy.ts`, `leaderPortFile.ts` | `LeaderElection.ts`, `HttpTransport.ts`, `ThinClient.ts` (all under `src/dashboard/server/`) and `src/server/multiInstanceStartup.ts` |
+> | "All 51 tools callable via follower" | **65** registered tools |
+>
+> Retained rather than deleted because the problem statement — 20+ stdio
+> instances each loading a full copy of the index — is the reason the feature
+> exists, and no other document states it.
 
 ## Problem Statement
 

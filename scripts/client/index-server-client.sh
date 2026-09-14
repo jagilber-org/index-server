@@ -32,6 +32,18 @@ if [ "${INDEX_SERVER_SKIP_CERT:-}" = "1" ]; then
     CURL_OPTS+=(-k)
 fi
 
+# JSON-escape a string value, outputting with surrounding quotes: "escaped".
+# Uses node (always available — this is an npm project).
+json_quote() {
+    printf '%s' "$1" | node -e 'process.stdout.write(JSON.stringify(require("fs").readFileSync(0,"utf8")))'
+}
+
+# JSON-escape a string value, outputting WITHOUT surrounding quotes (for
+# interpolation inside an existing "..." pair in the JSON template).
+json_escape_inner() {
+    printf '%s' "$1" | node -e 'var s=JSON.stringify(require("fs").readFileSync(0,"utf8"));process.stdout.write(s.slice(1,-1))'
+}
+
 call_tool() {
     local tool="$1"
     local body="$2"
@@ -91,9 +103,8 @@ case "$ACTION" in
             exit 1
         fi
         [ -z "$title" ] && title="$id"
-        # Escape body for JSON (newlines, quotes, backslashes)
-        esc_body=$(printf '%s' "$body" | python3 -c 'import json,sys;print(json.dumps(sys.stdin.read()))' 2>/dev/null || printf '%s' "$body" | sed 's/\\/\\\\/g;s/"/\\"/g' | tr '\n' ' ')
-        esc_title=$(printf '%s' "$title" | sed 's/\\/\\\\/g;s/"/\\"/g')
+        esc_body=$(json_quote "$body")
+        esc_title=$(json_escape_inner "$title")
         call_tool "index_add" "{\"entry\":{\"id\":\"${id}\",\"title\":\"${esc_title}\",\"body\":${esc_body},\"priority\":${priority},\"audience\":\"all\",\"requirement\":\"optional\",\"categories\":[\"general\"],\"contentType\":\"instruction\"},\"lax\":true,\"overwrite\":${overwrite}}"
         ;;
     remove)

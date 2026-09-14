@@ -83,7 +83,6 @@ const snapshots = findSnapshotFiles();
 const perfAnn = extractAnnotations();
 
 const report = {
-  generatedAt: new Date().toISOString(),
   browsers: process.env.DRIFT_BROWSERS || 'chromium,firefox,webkit',
   maxDiffPixelRatio: process.env.DRIFT_MAX_DIFF_RATIO,
   maxDiffPixels: process.env.DRIFT_MAX_DIFF_PIXELS,
@@ -98,7 +97,6 @@ fs.writeFileSync(JSON_OUT, JSON.stringify(report, null, 2));
 const md = [
   '# UI Drift Report',
   '',
-  `Generated: ${report.generatedAt}`,
   `Browsers: ${report.browsers}`,
   `Thresholds: ratio=${report.maxDiffPixelRatio} pixels=${report.maxDiffPixels}`,
   '',

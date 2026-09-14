@@ -17,6 +17,14 @@ import { logInfo, logWarn } from './logger';
 import { InstructionEntry } from '../models/instruction';
 import type { EmbeddingCacheData, IEmbeddingStore } from './storage/types';
 
+/**
+ * Bumped whenever the text fed to the embedder changes shape (see #537).
+ * A cache carrying a different (or absent) value cannot be reused and
+ * forces a one-time full re-embed. Exported so tests seed the current
+ * value rather than hardcoding it.
+ */
+export const DERIVATION_VERSION = 2;
+
 // Re-export for backwards compatibility
 export type { EmbeddingCacheData } from './storage/types';
 
@@ -264,11 +272,21 @@ export async function getInstructionEmbeddings(
   device: string = 'cpu',
   localOnly: boolean = false,
   embedFn: EmbedFn = embedText,
-  store?: IEmbeddingStore,
+  /**
+   * Destination/source for cached vectors. REQUIRED by design (issue #572).
+   *
+   * This was optional, and two of three production call sites omitted it. The
+   * fallback silently wrote `embeddings.json` regardless of
+   * INDEX_SERVER_STORAGE_BACKEND, while the dashboard read `embeddings.db` --
+   * 284 entries in one store, 78 in the other, diverging for two weeks with no
+   * error. Making it required turns that mistake into a compile error instead
+   * of a silent backend switch. Callers should pass `getEmbeddingStore()`.
+   */
+  store: IEmbeddingStore,
 ): Promise<Record<string, Float32Array>> {
   // Full cache hit: same index hash and model — return immediately without locking.
-  const cached = store ? store.load() : loadCachedEmbeddings(embeddingPath);
-  if (cached && !isStale(indexHash, cached.indexHash) && cached.modelName === modelName) {
+  const cached = store.load();
+  if (cached && !isStale(indexHash, cached.indexHash) && cached.modelName === modelName && cached.derivationVersion === DERIVATION_VERSION) {
     const entryCount = Object.keys(cached.embeddings).length;
     logInfo(`[embeddingService] Embedding cache HIT: ${entryCount} entries from ${embeddingPath} (model=${modelName})`);
     const result: Record<string, Float32Array> = {};
@@ -286,8 +304,9 @@ export async function getInstructionEmbeddings(
 
   // Model changed -> cannot reuse any cached entries.
   const modelChanged = !!cached && cached.modelName !== modelName;
-  const existingEmbeddings: Record<string, number[]> = (!modelChanged && cached?.embeddings) ? cached.embeddings : {};
-  const existingHashes: Record<string, string> = (!modelChanged && cached?.entryHashes) ? cached.entryHashes : {};
+  const derivationChanged = !!cached && cached.derivationVersion !== DERIVATION_VERSION;
+  const existingEmbeddings: Record<string, number[]> = (!modelChanged && !derivationChanged && cached?.embeddings) ? cached.embeddings : {};
+  const existingHashes: Record<string, string> = (!modelChanged && !derivationChanged && cached?.entryHashes) ? cached.entryHashes : {};
 
   // Determine which entries need (re)computation.
   const currentIds = new Set(instructions.map(i => i.id));
@@ -298,6 +317,7 @@ export async function getInstructionEmbeddings(
   const reuseCount = instructions.length - toCompute.length;
 
   const missReason = !cached ? 'no cache'
+    : (cached.derivationVersion !== DERIVATION_VERSION) ? 'derivation version changed'
     : modelChanged ? `model changed (${cached.modelName} -> ${modelName})`
     : toCompute.length === instructions.length ? 'index stale (no hashes to reuse)'
     : `incremental (${toCompute.length} new/changed, ${reuseCount} reused)`;
@@ -309,7 +329,7 @@ export async function getInstructionEmbeddings(
       const entryHashes: Record<string, string> = { ...existingHashes };
 
       for (const inst of toCompute) {
-        const text = `${inst.title} ${inst.semanticSummary || inst.body}`;
+        const text = [inst.title, inst.semanticSummary].join(' ');
         embeddings[inst.id] = Array.from(await embedFn(text, modelName, cacheDir, device, localOnly)); // lgtm[js/remote-property-injection] — id is schema-validated before reaching index
         if (inst.sourceHash) entryHashes[inst.id] = inst.sourceHash; // lgtm[js/remote-property-injection] — id is schema-validated before reaching index
       }
@@ -324,12 +344,8 @@ export async function getInstructionEmbeddings(
 
       // Persist updated cache.
       try {
-        const cacheData: EmbeddingCacheData = { indexHash, modelName, entryHashes, embeddings };
-        if (store) {
-          store.save(cacheData);
-        } else {
-          saveCachedEmbeddings(embeddingPath, cacheData);
-        }
+        const cacheData: EmbeddingCacheData = { indexHash, modelName, entryHashes, embeddings, derivationVersion: DERIVATION_VERSION };
+        store.save(cacheData);
         logInfo('[embeddingService] Embeddings cached to disk');
       } catch (err) {
         logWarn(`[embeddingService] Failed to cache embeddings: ${err instanceof Error ? err.message : 'unknown'}`);

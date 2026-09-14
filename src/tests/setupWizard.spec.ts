@@ -7,7 +7,7 @@
  * Constitution: TS-9 (test real code), TS-12 (>=5 cases)
  */
 import { describe, it, expect, afterEach } from 'vitest';
-import { execSync, ExecSyncOptions, spawnSync } from 'child_process';
+import { execFile, execSync, ExecSyncOptions, spawnSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
@@ -20,10 +20,7 @@ const EXEC_OPTS: ExecSyncOptions = { stdio: 'pipe', timeout: 60_000 };
 // slow Windows GitHub runners. Linux runners are dramatically faster, so a smaller
 // budget is fine there.
 const IS_WINDOWS = process.platform === 'win32';
-const DEPLOY_EXEC_OPTS: ExecSyncOptions = {
-  stdio: 'pipe',
-  timeout: IS_WINDOWS ? 600_000 : 180_000,
-};
+const DEPLOY_EXEC_TIMEOUT_MS = IS_WINDOWS ? 600_000 : 180_000;
 const DEPLOY_TEST_TIMEOUT_MS = IS_WINDOWS ? 720_000 : 240_000;
 const ROOT = path.resolve(__dirname, '..', '..');
 const WIZARD_SCRIPT = path.join(ROOT, 'scripts', 'build', 'setup-wizard.mjs');
@@ -46,6 +43,30 @@ function runWizard(args: string, opts?: ExecSyncOptions): string {
     `node "${WIZARD_SCRIPT}" --non-interactive ${args}`,
     { ...EXEC_OPTS, ...opts, cwd: ROOT, env: { ...process.env, HOME: os.tmpdir(), USERPROFILE: os.tmpdir() } }
   ).toString();
+}
+
+function runWizardAsync(args: string[], timeoutMs: number): Promise<string> {
+  return new Promise((resolve, reject) => {
+    execFile(
+      process.execPath,
+      [WIZARD_SCRIPT, '--non-interactive', ...args],
+      {
+        cwd: ROOT,
+        env: { ...process.env, HOME: os.tmpdir(), USERPROFILE: os.tmpdir() },
+        encoding: 'utf8',
+        maxBuffer: 10 * 1024 * 1024,
+        timeout: timeoutMs,
+        windowsHide: true,
+      },
+      (error, stdout, stderr) => {
+        if (error) {
+          reject(new Error(`${error.message}\nSTDOUT: ${stdout}\nSTDERR: ${stderr}`, { cause: error }));
+          return;
+        }
+        resolve(stdout);
+      },
+    );
+  });
 }
 
 function readGeneratedEnv(): string {
@@ -543,8 +564,11 @@ describe('Setup Wizard Runtime Deployment', () => {
     try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* ok */ }
   });
 
-  it('should deploy runtime when root differs from package root', () => {
-    const output = runWizard(`--root "${tmpDir}" --no-preview`, DEPLOY_EXEC_OPTS);
+  it('should deploy runtime when root differs from package root', async () => {
+    const output = await runWizardAsync(
+      ['--root', tmpDir, '--no-preview'],
+      DEPLOY_EXEC_TIMEOUT_MS,
+    );
     expect(output).toContain('Deploying runtime');
     expect(output).toContain('Runtime deployed');
     // dist/ should exist at target
@@ -558,8 +582,11 @@ describe('Setup Wizard Runtime Deployment', () => {
     expect(output).not.toContain('Deploying runtime');
   });
 
-  it('should skip "Build the server" step after successful deploy', () => {
-    const output = runWizard(`--root "${tmpDir}" --no-preview`, DEPLOY_EXEC_OPTS);
+  it('should skip "Build the server" step after successful deploy', async () => {
+    const output = await runWizardAsync(
+      ['--root', tmpDir, '--no-preview'],
+      DEPLOY_EXEC_TIMEOUT_MS,
+    );
     expect(output).toContain('Runtime deployed');
     // Next steps should NOT show build step since dist was just deployed
     expect(output).not.toContain('Build the server');

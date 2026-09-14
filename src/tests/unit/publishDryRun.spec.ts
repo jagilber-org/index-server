@@ -11,8 +11,11 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import fs from 'fs';
 import path from 'path';
-import { execSync } from 'child_process';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
 import { sanitizedPublishEnv } from '../helpers/publishEnv';
+
+const execFileAsync = promisify(execFile);
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
 const CJS_PATH = path.join(REPO_ROOT, 'scripts', 'build', 'publish-direct-to-remote.cjs');
@@ -20,22 +23,30 @@ const HAS_PUBLISH_EXCLUDE = fs.existsSync(path.join(REPO_ROOT, '.publish-exclude
 const EXEC_OPTS = {
   cwd: REPO_ROOT,
   encoding: 'utf8' as const,
-  stdio: 'pipe' as const,
   maxBuffer: 50 * 1024 * 1024,
   env: sanitizedPublishEnv(),
 };
 
+// execFile (not execSync) keeps the Vitest worker's event loop responsive; a
+// synchronous child call blocks it past the 60s worker RPC deadline and fails
+// the run even when every assertion passes.
+let verifyOnlyRun: Promise<string> | null = null;
+function runVerifyOnly(): Promise<string> {
+  verifyOnlyRun ??= execFileAsync(
+    process.execPath,
+    [CJS_PATH, '--verify-only', '--quiet'],
+    EXEC_OPTS
+  ).then(r => r.stdout);
+  return verifyOnlyRun;
+}
+
 describe('publish --verify-only scenarios', () => {
 
-  describe.skipIf(!HAS_PUBLISH_EXCLUDE)('exit code and basic output', () => {
+  describe.skipIf(!HAS_PUBLISH_EXCLUDE)('exit code and basic output', () => { // SKIP_OK: environment-gated: requires .publish-exclude file
     let output: string;
 
-    beforeAll(() => {
-      // Run once and cache — staging 15K+ files is expensive
-      output = execSync(
-        `node "${CJS_PATH}" --verify-only --quiet`,
-        EXEC_OPTS
-      );
+    beforeAll(async () => {
+      output = await runVerifyOnly();
     }, 120_000);
 
     it('exits with code 0 (no throw)', () => {
@@ -51,14 +62,11 @@ describe('publish --verify-only scenarios', () => {
     });
   });
 
-  describe.skipIf(!HAS_PUBLISH_EXCLUDE)('file count summary', () => {
+  describe.skipIf(!HAS_PUBLISH_EXCLUDE)('file count summary', () => { // SKIP_OK: environment-gated: requires .publish-exclude file
     let output: string;
 
-    beforeAll(() => {
-      output = execSync(
-        `node "${CJS_PATH}" --verify-only --quiet`,
-        EXEC_OPTS
-      );
+    beforeAll(async () => {
+      output = await runVerifyOnly();
     }, 120_000);
 
     it('reports "Files that would be published" with a count', () => {
@@ -73,23 +81,17 @@ describe('publish --verify-only scenarios', () => {
     });
   });
 
-  describe.skipIf(!HAS_PUBLISH_EXCLUDE)('no forbidden items in output', () => {
+  describe.skipIf(!HAS_PUBLISH_EXCLUDE)('no forbidden items in output', () => { // SKIP_OK: environment-gated: requires .publish-exclude file
     // With --quiet, individual file lines are suppressed — the real forbidden-item
     // check is done internally by verifyNoLeakedArtifacts() which would cause a
-    // non-zero exit (and execSync would throw) if any leaked artifacts were found.
-    it('verify-only exits successfully (verifyNoLeakedArtifacts passed internally)', () => {
-      const output = execSync(
-        `node "${CJS_PATH}" --verify-only --quiet`,
-        EXEC_OPTS
-      );
+    // non-zero exit (rejecting the exec promise) if any leaked artifacts were found.
+    it('verify-only exits successfully (verifyNoLeakedArtifacts passed internally)', async () => {
+      const output = await runVerifyOnly();
       expect(output).toContain('Verification passed');
     }, 120_000);
 
-    it('no git push or remote operations in output', () => {
-      const output = execSync(
-        `node "${CJS_PATH}" --verify-only --quiet`,
-        EXEC_OPTS
-      );
+    it('no git push or remote operations in output', async () => {
+      const output = await runVerifyOnly();
       expect(output).not.toContain('git push');
       expect(output).not.toContain('Pushing to');
       expect(output).not.toContain('git remote');

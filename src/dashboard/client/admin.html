@@ -18,30 +18,45 @@
     <script defer src="js/admin.maintenance.js"></script>
     <script defer src="js/admin.config.render.js"></script>
     <script defer src="js/admin.config.js"></script>
+    <script defer src="js/admin.performance.chart.js"></script>
     <script defer src="js/admin.performance.js"></script>
+    <script defer src="js/admin.activity.js"></script>
+    <script defer src="js/admin.growth.js"></script>
     <script defer src="js/admin.instances.js"></script>
     <script defer src="js/admin.embeddings.js"></script>
     <script defer src="js/admin.messaging.js"></script>
     <script defer src="js/admin.sqlite.js"></script>
     <script defer src="js/admin.boot.js"></script>
     <script defer src="js/admin.feedback.js"></script>
+    <script defer src="js/admin.nav-bubbles.js"></script>
 </head>
 <body>
     <div class="admin-container admin-root">
         <div class="admin-header">
-            <h1>Index Server</h1>
-            <span id="auth-indicator" class="auth-indicator"></span>
-            <span id="storage-badge" class="storage-badge" style="display:none;margin-left:8px;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;letter-spacing:0.5px"></span>
-            <div id="instances-widget" class="instances-widget" style="display:none;">
-                <button id="instances-badge" class="instances-badge" title="Running instances">
-                    <span id="instances-count">1</span> instance<span id="instances-plural">s</span>
-                </button>
-                <div id="instances-dropdown" class="instances-dropdown hidden">
-                    <div class="instances-dropdown-header">Running Instances</div>
-                    <div id="instances-list" class="instances-list"></div>
+            <!-- Row 1: primary status bar — service name (left), health + instances (right) -->
+            <div class="hdr-status-bar">
+                <h1>Index Server</h1>
+                <div class="hdr-status-right">
+                    <span id="auth-indicator" class="auth-indicator"></span>
+                    <span id="health-badge" class="health-badge" title="Server health">…</span>
+                    <span id="storage-badge" class="storage-badge" style="display:none;"></span>
+                    <div id="instances-widget" class="instances-widget" style="display:none;">
+                        <button id="instances-badge" class="instances-badge" title="Running instances">
+                            <span id="instances-count">1</span> instance<span id="instances-plural">s</span>
+                        </button>
+                        <div id="instances-dropdown" class="instances-dropdown hidden">
+                            <div class="instances-dropdown-header">Running Instances</div>
+                            <div id="instances-list" class="instances-list"></div>
+                        </div>
+                    </div>
                 </div>
             </div>
-            <div id="buildMeta" class="build-meta">Loading build metadata…</div>
+            <!-- Row 2: compact metadata + action chips (no raw URLs) -->
+            <div class="hdr-meta-bar">
+                <div id="buildMeta" class="build-meta">Loading build metadata…</div>
+                <div id="headerLinks" class="header-links"></div>
+            </div>
+            <!-- Row 3: navigation -->
             <div class="admin-nav">
                 <!-- Added explicit data-section attributes so JS can reliably map buttons to sections after HTML refactor -->
                 <!-- Redundant inline onclick fallback keeps basic navigation working even if JS wiring changes -->
@@ -50,11 +65,11 @@
                 <button id="nav-sessions" class="nav-btn" data-section="sessions" onclick="window.showSection && window.showSection('sessions')">Sessions</button>
                 <button class="nav-btn" data-section="maintenance" onclick="window.showSection && window.showSection('maintenance')">Maintenance</button>
                 <button class="nav-btn" data-section="monitoring" onclick="window.showSection && window.showSection('monitoring')">Monitoring<span id="nav-events-bubble" class="nav-bubble" hidden></span></button>
-                <button class="nav-btn" data-section="instructions" onclick="window.showSection && window.showSection('instructions')">Instructions</button>
+                <button class="nav-btn" data-section="instructions" onclick="window.showSection && window.showSection('instructions')">Instructions<span id="nav-instructions-bubble" class="nav-bubble" hidden></span></button>
                 <button class="nav-btn" data-section="graph" onclick="window.showSection && window.showSection('graph')">Graph</button>
                 <button class="nav-btn" data-section="embeddings" onclick="window.showSection && window.showSection('embeddings')">Embeddings</button>
-                <button class="nav-btn" data-section="messaging" data-feature="messaging" onclick="window.showSection && window.showSection('messaging')">Messaging</button>
-                <button class="nav-btn" data-section="feedback" onclick="window.showSection && window.showSection('feedback')">Feedback</button>
+                <button class="nav-btn" data-section="messaging" data-feature="messaging" onclick="window.showSection && window.showSection('messaging')">Messaging<span id="nav-messaging-bubble" class="nav-bubble" hidden></span></button>
+                <button class="nav-btn" data-section="feedback" onclick="window.showSection && window.showSection('feedback')">Feedback<span id="nav-feedback-bubble" class="nav-bubble" hidden></span></button>
                 <button class="nav-btn" data-section="sqlite" id="nav-sqlite" onclick="window.showSection && window.showSection('sqlite')" style="display:none">SQLite</button>
             </div>
         </div>
@@ -84,9 +99,80 @@
                         <div class="card-title">Performance <a class="doc-link" href="/api/docs/overview" target="_blank" title="Panel documentation">?</a></div>
                     </div>
                     <div id="performance-stats" class="loading metrics-list">Loading performance data...</div>
+                    <!-- Catalog history chart (#525). Deliberately a SIBLING of
+                         #performance-stats, not a child: admin.overview.js
+                         reassigns that element's innerHTML on every stats
+                         refresh and would destroy the canvas. Hidden until the
+                         server reports a catalogHistory array. -->
+                    <div id="catalog-history" class="catalog-chart" hidden>
+                        <canvas id="catalog-history-chart" height="198"></canvas>
+                    </div>
                 </div>
 
                 <!-- index Status merged into System Statistics card -->
+            </div>
+
+            <!-- Catalog Activity (#525 follow-up). A FLOW view: events per time
+                 bucket, deliberately drawn as bars rather than lines because
+                 the values are counts of discrete events and a line would
+                 imply interpolation between buckets that does not exist. Pairs
+                 with the composition chart above, which is the STOCK view. -->
+            <div class="admin-card mt-30">
+                <div class="card-header">
+                    <div class="card-icon">📈</div>
+                    <div class="card-title">Catalog Activity <a class="doc-link" href="/api/docs/overview" target="_blank" title="Panel documentation">?</a></div>
+                    <div class="card-actions">
+                        <select id="activity-bucket" class="activity-select" aria-label="Time bucket">
+                            <option value="hour">hourly</option>
+                            <option value="6h">6-hourly</option>
+                            <option value="day" selected>daily</option>
+                            <option value="week">weekly</option>
+                        </select>
+                        <select id="activity-window" class="activity-select" aria-label="Time range">
+                            <option value="7">last 7 days</option>
+                            <option value="30" selected>last 30 days</option>
+                            <option value="90">last 90 days</option>
+                        </select>
+                    </div>
+                </div>
+                <div id="activity-chart-host" class="activity-chart">
+                    <canvas id="activity-chart" height="140"></canvas>
+                </div>
+                <div id="activity-legend" class="catalog-chart-legend"></div>
+                <div id="activity-readout" class="catalog-chart-readout" aria-live="polite"></div>
+                <div id="activity-instances" class="activity-instances"></div>
+            </div>
+
+            <!-- Index Growth. A DERIVED stock view: the server reconstructs it
+                 from each entry's own createdAt/archivedAt rather than from
+                 sampled history, so it reaches back to the oldest entry in the
+                 catalog even on a server that has never recorded a sample. That
+                 is the whole point — the two charts above can only ever show
+                 the period since telemetry was switched on. The caveat line is
+                 required, not decorative: hard-deleted entries leave no record,
+                 so this is a survivor curve. -->
+            <div class="admin-card mt-30">
+                <div class="card-header">
+                    <div class="card-icon">🌱</div>
+                    <div class="card-title">Index Growth <a class="doc-link" href="/api/docs/overview" target="_blank" title="Panel documentation">?</a></div>
+                    <div class="card-actions">
+                        <select id="growth-bucket" class="activity-select" aria-label="Time bucket">
+                            <option value="day" selected>daily</option>
+                            <option value="week">weekly</option>
+                        </select>
+                        <select id="growth-window" class="activity-select" aria-label="Time range">
+                            <option value="all" selected>all time</option>
+                            <option value="90">last 90 days</option>
+                            <option value="30">last 30 days</option>
+                        </select>
+                    </div>
+                </div>
+                <div id="growth-chart-host" class="growth-chart">
+                    <canvas id="growth-chart" height="130"></canvas>
+                </div>
+                <div id="growth-legend" class="catalog-chart-legend"></div>
+                <div id="growth-readout" class="catalog-chart-readout" aria-live="polite"></div>
+                <div id="growth-caveat" class="chart-caveat"></div>
             </div>
 
             <!-- Individual Tool Metrics -->
@@ -489,6 +575,10 @@
                         <button type="button" id="instruction-view-active" class="action-btn btn-active" onclick="setInstructionView('active')">Active</button>
                         <button type="button" id="instruction-view-archived" class="action-btn" onclick="setInstructionView('archived')">Archived</button>
                     </div>
+                    <div class="instr-view-mode-toggle" role="group" aria-label="Tree or flat instruction view">
+                        <button type="button" id="instruction-mode-tree" class="action-btn btn-active" onclick="setInstructionViewMode('tree')" title="Tree view grouped by category with markdown preview">🌳 Tree</button>
+                        <button type="button" id="instruction-mode-flat" class="action-btn" onclick="setInstructionViewMode('flat')" title="Flat list view">☰ Flat</button>
+                    </div>
                     <input id="instruction-filter" placeholder="Filter by name (supports regex)..." class="form-input instr-filter" oninput="filterInstructions()" />
                     <label class="regex-toggle" title="Enable regex matching"><input type="checkbox" id="instruction-regex-toggle" onchange="filterInstructions()" /><span class="regex-label">.*</span></label>
                     <select id="instruction-category-filter" class="form-input w-130" onchange="filterInstructions()">
@@ -601,8 +691,14 @@
                                 <input type="checkbox" id="msg-select-all" data-action="select-all" style="accent-color:var(--admin-accent)"> Select All
                             </label>
                             <span class="msg-toolbar-count" id="msg-count"></span>
+                            <label class="msg-toolbar-toggle"
+                                   title="Poll for new messages. Pauses automatically while you are viewing, editing, composing, or selecting text.">
+                                <input type="checkbox" id="msg-auto-refresh" data-action="toggle-auto-refresh" checked> Auto
+                            </label>
+                            <span class="msg-toolbar-count" id="msg-refresh-status"></span>
                             <button class="action-btn" data-action="refresh">🔄 Refresh</button>
                             <button class="action-btn" data-action="download">⬇ Download</button>
+                            <button class="action-btn danger" data-action="delete-selected" id="msg-delete-selected" disabled>🗑 Delete</button>
                         </div>
                         <!-- Message list -->
                         <div id="messaging-message-list"></div>
@@ -821,6 +917,16 @@
                     if (msg.type === 'synthetic_trace' && msg.data) {
                         handleSyntheticTrace(msg.data);
                     }
+                    // Fan out to feature modules (messaging, etc). Modules must
+                    // register here rather than wrapping onmessage themselves:
+                    // deferred scripts run before this socket exists, and the
+                    // onclose reconnect below replaces onmessage wholesale.
+                    const listeners = window.dashboardSocketListeners;
+                    if (Array.isArray(listeners)) {
+                        for (const fn of listeners) {
+                            try { fn(msg); } catch (e) { console.warn('ws listener failed', e); }
+                        }
+                    }
                 } catch {/* ignore */}
             };
             dashboardSocket.onclose = ()=>{ setTimeout(initDashboardSocket, 4000); };
@@ -934,6 +1040,82 @@
             } catch (err) {
                 console.warn('displayMaintenanceInfo error:', err);
             }
+        }
+
+        function drawResourceChart(canvas, samples, field, unit, lineColor, fillColor, transform) {
+            if (!canvas || !samples || samples.length < 2) return;
+            var dpr = window.devicePixelRatio || 1;
+            // The `|| 300` sat on the wrong ternary branch: when a parent
+            // EXISTS but reports clientWidth 0 — which is every canvas in a
+            // hidden tab, and the common case on first paint — cssW became 0
+            // and the chart rendered zero-width with no fallback. The guard
+            // only ever applied on the branch where there is no parent at all.
+            // This is the pattern already used correctly in
+            // admin.performance.chart.js sizeCanvas().
+            var cssW = (canvas.parentElement && canvas.parentElement.clientWidth) || canvas.clientWidth || 300;
+            var cssH = 48;
+            canvas.width = Math.round(cssW * dpr);
+            canvas.height = Math.round(cssH * dpr);
+            canvas.style.width = cssW + 'px';
+            canvas.style.height = cssH + 'px';
+            var ctx = canvas.getContext('2d');
+            if (!ctx) return;
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+            var padL = 32, padR = 4, padT = 4, padB = 4;
+            var w = cssW - padL - padR, h = cssH - padT - padB;
+
+            var vals = samples.map(function(s) { var v = s[field] || 0; return transform ? transform(v) : v; });
+            var vMin = vals.reduce(function(a,b){ return a<b?a:b; }, vals[0]);
+            var vMax = vals.reduce(function(a,b){ return a>b?a:b; }, vals[0]);
+            if (vMax === vMin) vMax = vMin + 1;
+            var range = vMax - vMin;
+            var niceTop = vMax + range * 0.05;
+            var niceBot = Math.max(0, vMin - range * 0.05);
+            var span = niceTop - niceBot || 1;
+
+            var bg = getComputedStyle(document.documentElement).getPropertyValue('--admin-spark-bg').trim() || '#13151a';
+            var gridColor = getComputedStyle(document.documentElement).getPropertyValue('--admin-border-muted').trim() || '#24282f';
+            var textColor = getComputedStyle(document.documentElement).getPropertyValue('--admin-text-dim').trim() || '#8e959e';
+
+            ctx.fillStyle = bg;
+            ctx.fillRect(0, 0, cssW, cssH);
+
+            ctx.strokeStyle = gridColor;
+            ctx.lineWidth = 1;
+            ctx.fillStyle = textColor;
+            ctx.font = '9px system-ui, sans-serif';
+            ctx.textAlign = 'right';
+            ctx.textBaseline = 'middle';
+            for (var gi = 0; gi <= 2; gi++) {
+                var frac = gi / 2;
+                var gy = Math.round(padT + h - frac * h) + 0.5;
+                ctx.beginPath(); ctx.moveTo(padL, gy); ctx.lineTo(padL + w, gy); ctx.stroke();
+                var tickVal = niceBot + frac * span;
+                ctx.fillText(tickVal.toFixed(tickVal >= 100 ? 0 : 1), padL - 3, gy);
+            }
+
+            function xFor(i) { return padL + (i / (samples.length - 1)) * w; }
+            function yFor(v) { return padT + h - ((v - niceBot) / span) * h; }
+
+            // Fill
+            ctx.beginPath();
+            ctx.moveTo(xFor(0), yFor(vals[0]));
+            for (var i = 1; i < vals.length; i++) ctx.lineTo(xFor(i), yFor(vals[i]));
+            ctx.lineTo(xFor(vals.length - 1), padT + h);
+            ctx.lineTo(xFor(0), padT + h);
+            ctx.closePath();
+            ctx.fillStyle = fillColor + '40';
+            ctx.fill();
+
+            // Line
+            ctx.beginPath();
+            ctx.moveTo(xFor(0), yFor(vals[0]));
+            for (var j = 1; j < vals.length; j++) ctx.lineTo(xFor(j), yFor(vals[j]));
+            ctx.strokeStyle = lineColor;
+            ctx.lineWidth = 1.5;
+            ctx.lineJoin = 'round';
+            ctx.stroke();
         }
 
         function displaySystemHealth(health) {
@@ -1073,7 +1255,7 @@
                 `;
             }
 
-            // Append CPU / Memory spark lines (moved from performance card)
+            // Append CPU / Memory canvas charts (styled to match catalog chart)
             try {
                 if (window.__resourceTrendCache) {
                     const t = window.__resourceTrendCache;
@@ -1082,14 +1264,14 @@
                             <div class="resource-trend-label">Resource Trend</div>
                             <div class="resource-trend-col">
                                 <div class="spark-col">
-                                    <span class="spark-label">CPU Spark (last ${Math.min(40, t.sampleCount || 0)} samples)</span>
-                                    <span class="spark-value">${escapeHtml(t.spark || '')}</span>
-                                    <span class="spark-stats">Latest ${t.latestCpu?.toFixed ? t.latestCpu.toFixed(1) : '0'}% • Min ${(t.minCpu??0).toFixed(1)}% • Max ${(t.maxCpu??0).toFixed(1)}%</span>
+                                    <span class="spark-label">CPU (last ${Math.min(40, t.sampleCount || 0)} samples)</span>
+                                    <canvas class="resource-canvas" id="resource-cpu-canvas" height="48"></canvas>
+                                    <span class="spark-stats">Latest ${t.latestCpu?.toFixed ? t.latestCpu.toFixed(1) : '0'}% &bull; Min ${(t.minCpu??0).toFixed(1)}% &bull; Max ${(t.maxCpu??0).toFixed(1)}%</span>
                                 </div>
                                 <div class="spark-col">
-                                    <span class="spark-label">Mem Spark (heap)</span>
-                                    <span class="spark-value">${escapeHtml(t.memSpark || '')}</span>
-                                    <span class="spark-stats">Latest ${(t.latestHeap/1024/1024).toFixed(2)} MB • Min ${(t.minHeap/1024/1024).toFixed(2)} MB • Max ${(t.maxHeap/1024/1024).toFixed(2)} MB</span>
+                                    <span class="spark-label">Memory (heap)</span>
+                                    <canvas class="resource-canvas" id="resource-mem-canvas" height="48"></canvas>
+                                    <span class="spark-stats">Latest ${(t.latestHeap/1024/1024).toFixed(2)} MB &bull; Min ${(t.minHeap/1024/1024).toFixed(2)} MB &bull; Max ${(t.maxHeap/1024/1024).toFixed(2)} MB</span>
                                 </div>
                             </div>
                         </div>`;
@@ -1098,6 +1280,19 @@
             } catch {/* ignore */}
 
             document.getElementById('system-health').innerHTML = html;
+
+            // Draw resource canvases after DOM insertion
+            try {
+                if (window.__resourceTrendCache && window.__resourceTrendCache.samples) {
+                    const samples = window.__resourceTrendCache.samples;
+                    if (samples.length > 0) {
+                        const cpuCanvas = document.getElementById('resource-cpu-canvas');
+                        if (cpuCanvas) drawResourceChart(cpuCanvas, samples, 'cpuPercent', '%', '#2a78d6', '#1a4a8a');
+                        const memCanvas = document.getElementById('resource-mem-canvas');
+                        if (memCanvas) drawResourceChart(memCanvas, samples, 'heapUsed', 'MB', '#1baf7a', '#12664f', function(v) { return v / 1024 / 1024; });
+                    }
+                }
+            } catch {/* ignore */}
             try { window.lastSystemHealth = health; } catch {/* ignore */}
         }
 
@@ -1712,6 +1907,7 @@
                 if (!r.ok) throw new Error(r.statusText);
                 const j = await r.json();
                 const el = document.getElementById('buildMeta');
+                const linksEl = document.getElementById('headerLinks');
                 const ver = j.version || '?.?.?';
                 const bt = j.buildTime ? new Date(j.buildTime).toLocaleString() : 'unknown';
                 if(el){
@@ -1728,70 +1924,90 @@
                         el.appendChild(buildBadge);
                     }
                     el.append(` • Built ${bt}`);
-                    if(j.paths){
-                        const p = j.paths;
-                        const isSqlite = p.storageBackend === 'sqlite';
-                        const addPath = (label, value, key) => {
-                            if(!value) return;
-                            const wrap = document.createElement('div');
-                            wrap.className = 'build-path';
-                            wrap.append(`${label}: `);
-                            const code = document.createElement('code');
-                            code.textContent = String(value);
-                            code.title = `Click to open ${value}`;
-                            code.style.cursor = 'pointer';
-                            code.style.textDecoration = 'underline dotted';
-                            code.addEventListener('click', async (ev) => {
-                                ev.preventDefault();
-                                code.style.opacity = '0.5';
-                                try {
-                                    const r = await fetch('/api/system/reveal-path', {
-                                        method: 'POST',
-                                        headers: { 'Content-Type': 'application/json' },
-                                        body: JSON.stringify({ key })
-                                    });
-                                    if (!r.ok) {
-                                        const j2 = await r.json().catch(() => ({}));
-                                        showError(`Open folder failed: ${j2.error || r.statusText}`);
-                                    }
-                                } catch (e) {
-                                    showError(`Open folder failed: ${e && e.message ? e.message : e}`);
-                                } finally {
-                                    code.style.opacity = '1';
+                }
+                if(linksEl && j.paths){
+                    linksEl.replaceChildren();
+                    const p = j.paths;
+                    const isSqlite = p.storageBackend === 'sqlite';
+                    // Reveal a filesystem path via the operator API (opens the OS
+                    // file manager server-side). Rendered as a compact action chip.
+                    // The full resolved path is shown on hover for transparency.
+                    const addPathChip = (label, value, key) => {
+                        if(!value) return;
+                        const btn = document.createElement('button');
+                        btn.type = 'button';
+                        btn.className = 'header-chip';
+                        btn.textContent = label;
+                        btn.title = value;
+                        btn.addEventListener('click', async () => {
+                            btn.style.opacity = '0.5';
+                            try {
+                                const rr = await fetch('/api/system/reveal-path', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ key })
+                                });
+                                if (!rr.ok) {
+                                    const j2 = await rr.json().catch(() => ({}));
+                                    showError(`Open folder failed: ${j2.error || rr.statusText}`);
                                 }
-                            });
-                            wrap.appendChild(code);
-                            el.appendChild(wrap);
-                        };
-                        // In SQLite mode the instructions directory is no longer the source of truth
-                        // (everything lives in the SQLite DB), so hide it to avoid operator confusion.
-                        if (!isSqlite) addPath('Instructions', p.instructionsDir, 'instructions');
-                        if (isSqlite) addPath('SQLite', p.sqlitePath, 'sqlite');
-                        addPath('Backups', p.backupsDir, 'backups');
-
-                        // Client scripts: show downloadable REST clients with the absolute URL
-                        // so operators can copy/paste into curl, Invoke-WebRequest, etc.
-                        const scripts = [
-                            { label: 'PowerShell client', file: 'index-server-client.ps1' },
-                            { label: 'Bash client',       file: 'index-server-client.sh'  },
-                        ];
-                        scripts.forEach(s => {
-                            const url = `${window.location.origin}/api/scripts/${s.file}`;
-                            const wrap = document.createElement('div');
-                            wrap.className = 'build-path build-script';
-                            wrap.append(`${s.label}: `);
-                            const a = document.createElement('a');
-                            a.href = url;
-                            a.textContent = url;
-                            a.title = `Download ${s.file}`;
-                            a.setAttribute('download', s.file);
-                            a.style.textDecoration = 'underline';
-                            wrap.appendChild(a);
-                            el.appendChild(wrap);
+                            } catch (e) {
+                                showError(`Open folder failed: ${e && e.message ? e.message : e}`);
+                            } finally {
+                                btn.style.opacity = '1';
+                            }
                         });
-                    }
+                        linksEl.appendChild(btn);
+                    };
+                    // In SQLite mode the instructions directory is no longer the source of truth
+                    // (everything lives in the SQLite DB), so show the DB path instead.
+                    if (!isSqlite) addPathChip('Instructions Path', p.instructionsDir, 'instructions');
+                    if (isSqlite) addPathChip('SQLite Path', p.sqlitePath, 'sqlite');
+                    addPathChip('Backup Path', p.backupsDir, 'backups');
+
+                    // Client scripts: downloadable REST clients rendered as chips
+                    // (the underlying absolute URL is preserved via href/title).
+                    const scripts = [
+                        { label: 'PowerShell Client', file: 'index-server-client.ps1' },
+                        { label: 'Bash Client',       file: 'index-server-client.sh'  },
+                    ];
+                    scripts.forEach(s => {
+                        const url = `${window.location.origin}/api/scripts/${s.file}`;
+                        const a = document.createElement('a');
+                        a.className = 'header-chip';
+                        a.href = url;
+                        a.textContent = s.label;
+                        a.title = `Download ${s.file}`;
+                        a.setAttribute('download', s.file);
+                        linksEl.appendChild(a);
+                    });
                 }
             } catch { const el = document.getElementById('buildMeta'); if(el) el.textContent='Build metadata unavailable'; }
+        })();
+
+        // Header health badge — reflects /api/health overall status at a glance.
+        (async function fetchHealthBadge(){
+            const el = document.getElementById('health-badge');
+            if(!el) return;
+            async function refresh(){
+                try {
+                    const r = await fetch('/api/health?t=' + Date.now());
+                    const j = await r.json().catch(() => ({}));
+                    const status = (j && j.status) || (r.ok ? 'healthy' : 'degraded');
+                    const healthy = status === 'healthy';
+                    el.textContent = healthy ? 'HEALTHY' : 'DEGRADED';
+                    el.classList.toggle('health-ok', healthy);
+                    el.classList.toggle('health-bad', !healthy);
+                    el.title = `Server health: ${status}`;
+                } catch {
+                    el.textContent = 'OFFLINE';
+                    el.classList.remove('health-ok');
+                    el.classList.add('health-bad');
+                    el.title = 'Server health: unreachable';
+                }
+            }
+            await refresh();
+            setInterval(refresh, 30000);
         })();
 
         // Issue #353: hide UI elements gated by server feature flags.

@@ -2,13 +2,12 @@
  * Server domain config: MCP server, bootstrap, transport, protocol, logging,
  * metrics, tracing, atomicFs, and preflight settings.
  */
-import path from 'path';
 import { getBooleanEnv, parseBooleanEnv } from '../utils/envUtils';
 import { INSTANCE_MODES, type InstanceMode } from '../lib/instanceTopology';
 import {
-  CWD,
   LogLevel,
   toAbsolute,
+  toStateAbsolute,
   numberFromEnv,
   floatFromEnv,
   optionalNumberFromEnv,
@@ -153,12 +152,12 @@ function resolveLogFile(): { file?: string; raw?: string; sentinelRequested: boo
   const isSentinel = raw === '1' || ['true','yes','on'].includes(normalized);
   if(isSentinel){
     return {
-      file: toAbsolute(path.join(DIR.LOGS_MCP_SERVER)),
+      file: toStateAbsolute(undefined, DIR.LOGS_MCP_SERVER),
       raw,
       sentinelRequested: true,
     };
   }
-  return { file: toAbsolute(raw), raw, sentinelRequested: false };
+  return { file: toStateAbsolute(raw), raw, sentinelRequested: false };
 }
 
 export function parseLoggingConfig(level: LogLevel): LoggingConfig {
@@ -178,7 +177,7 @@ export function parseLoggingConfig(level: LogLevel): LoggingConfig {
 
 export function parseMetricsConfig(): MetricsConfig {
   return {
-    dir: toAbsolute(process.env.INDEX_SERVER_METRICS_DIR, path.join(CWD, DIR.METRICS)),
+    dir: toStateAbsolute(process.env.INDEX_SERVER_METRICS_DIR, DIR.METRICS),
     resourceCapacity: numberFromEnv('INDEX_SERVER_RESOURCE_CAPACITY', DEFAULT_THRESHOLDS.RESOURCE_CAPACITY),
     sampleIntervalMs: numberFromEnv('INDEX_SERVER_RESOURCE_SAMPLE_INTERVAL_MS', DEFAULT_THRESHOLDS.RESOURCE_SAMPLE_INTERVAL_MS),
     toolcall: {
@@ -257,7 +256,7 @@ export function parseTracingConfig(traceSet: Set<string>, fallbackLevel: LogLeve
     buffer,
     file: filePath,
     persist: parseBooleanEnv(process.env.INDEX_SERVER_TRACE_PERSIST, !!filePath),
-    dir: toAbsolute(process.env.INDEX_SERVER_TRACE_DIR, path.join(CWD, DIR.LOGS_TRACE)),
+    dir: toStateAbsolute(process.env.INDEX_SERVER_TRACE_DIR, DIR.LOGS_TRACE),
     fsync: getBooleanEnv('INDEX_SERVER_TRACE_FSYNC'),
     maxFileSizeBytes: optionalIntFromEnv('INDEX_SERVER_TRACE_MAX_FILE_SIZE') ?? 0,
     sessionId: process.env.INDEX_SERVER_TRACE_SESSION || undefined,

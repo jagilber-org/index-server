@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
+import { mcpBackupRetention } from '../../config/serviceEnv';
 
 export interface BackupManifestEntry {
   originalPath: string;
@@ -37,9 +38,9 @@ function sha256(text: string): string {
 }
 
 export function retentionLimit(): number {
-  const raw = process.env.INDEX_SERVER_MCP_BACKUP_RETAIN;
-  const parsed = raw ? Number(raw) : 10;
-  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 10;
+  // Resolved by `config/serviceEnv` (#611), per call: `backup.spec.ts` changes
+  // INDEX_SERVER_MCP_BACKUP_RETAIN between cases to exercise pruning.
+  return mcpBackupRetention();
 }
 
 export function atomicWriteText(filePath: string, text: string): void {

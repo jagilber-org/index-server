@@ -1,5 +1,5 @@
 import fs from 'fs';
-import path from 'path';
+import { resolveMcpConfigRoot } from '../../config/serviceEnv';
 import { createBackup, restoreBackup } from './backup';
 import { buildServerEntry, getServerMap, parseConfigText, readConfigFile, removeConfigText, renderConfig, resolveServerLaunch, upsertConfigText, type McpServerEntry, type ServerBuildConfig } from './formats';
 import { buildEnvCatalog, resolveDataPaths, type McpProfile } from './flagCatalog';
@@ -83,7 +83,8 @@ function buildConfig(options: McpOperationOptions): ServerBuildConfig {
   const tls = options.tls ?? (profile === 'enhanced' || profile === 'experimental');
   return {
     profile,
-    root: path.resolve(options.root ?? process.env.INDEX_SERVER_MCP_CONFIG_ROOT ?? process.cwd()),
+    // #611: env fallback resolved by `config/serviceEnv`.
+    root: resolveMcpConfigRoot(options.root),
     port: options.port ?? 8787,
     host: options.host ?? '127.0.0.1',
     tls,

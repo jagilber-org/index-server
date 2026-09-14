@@ -61,8 +61,13 @@ function makeActiveEntry(id: string, overrides: Partial<InstructionEntry> = {}):
 
 describe('archive lifecycle schema (Phase A, spec 006)', () => {
   describe('REQ-25: schema version bump', () => {
-    it('SCHEMA_VERSION constant is "7"', () => {
-      expect(SCHEMA_VERSION).toBe('7');
+    // REQ-25 required the archive-lifecycle bump to v7. Later specs bump further
+    // (v8 = structured links), so pinning the exact literal here would re-break on
+    // every subsequent bump while testing nothing about archive lifecycle. The
+    // durable invariant is that the schema is at or past the version that
+    // introduced the archive fields — this still catches an accidental downgrade.
+    it('SCHEMA_VERSION is at or past the archive-lifecycle bump ("7")', () => {
+      expect(Number(SCHEMA_VERSION)).toBeGreaterThanOrEqual(7);
     });
 
     it('loader path (migrate) accepts a v6 record without throwing', () => {
@@ -70,12 +75,15 @@ describe('archive lifecycle schema (Phase A, spec 006)', () => {
       expect(() => migrateInstructionRecord(rec)).not.toThrow();
     });
 
-    it('first write of a v6 record promotes schemaVersion to "7"', () => {
+    // Migration is not chained: it stamps SCHEMA_VERSION directly rather than
+    // stepping 6→7→8, so a v6 record lands on the current version in one pass.
+    it('first write of a v6 record promotes schemaVersion to the current version', () => {
       const rec = makeV6Record();
       const result = migrateInstructionRecord(rec);
       expect(result.changed).toBe(true);
-      expect(rec.schemaVersion).toBe('7');
-      expect(result.notes?.some(n => /v6.*v7|schemaVersion updated 6.*7/.test(n))).toBe(true);
+      expect(rec.schemaVersion).toBe(SCHEMA_VERSION);
+      // The v6→v7 note is what REQ-25 actually pins: the archive-lifecycle step ran.
+      expect(result.notes?.some(n => /v6.*v7/.test(n))).toBe(true);
     });
 
     it('a v6 record migrated then validated against the canonical schema passes', () => {

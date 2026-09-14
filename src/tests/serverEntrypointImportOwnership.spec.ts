@@ -32,10 +32,13 @@ describe('server entrypoint import ownership', () => {
     expect(source).toContain('startDeferredBackgroundServices(runtime);');
     expect(source).not.toContain('const memMonitor = getMemoryMonitor();');
     expect(source).not.toContain('startIndexVersionPoller({');
-    expect(source).not.toContain('startAutoBackup();');
+    expect(source).not.toContain('startAutoBackup(');
     expect(helperSource).toContain('const memMonitor = getMemoryMonitor();');
     expect(helperSource).toContain('startIndexVersionPoller({');
-    expect(helperSource).toContain('startAutoBackup();');
+    // Matched without a trailing `;` because the call site is guarded —
+    // `if (startAutoBackup()) started.push('autoBackup')` — so that a refused
+    // start is not reported as a started service. Ownership is what matters here.
+    expect(helperSource).toContain('startAutoBackup()');
   });
 
   it('delegates startup diagnostics to the extracted helper', () => {

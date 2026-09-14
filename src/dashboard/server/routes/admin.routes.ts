@@ -19,7 +19,7 @@ import { getAdminPanel } from '../AdminPanel.js';
 import { getWebSocketManager } from '../WebSocketManager.js';
 import { dumpFlags, updateFlags } from '../../../services/featureFlags.js';
 import { getFlagRegistrySnapshot, FLAG_REGISTRY } from '../../../services/handlers.dashboardConfig.js';
-import { reloadRuntimeConfig } from '../../../config/runtimeConfig.js';
+import { reloadRuntimeConfig, loadRuntimeConfig } from '../../../config/runtimeConfig.js';
 import { writeOverride, clearOverride, shadowedEnv } from '../../../config/runtimeOverrides.js';
 import { validateFlagUpdate, isWriteable } from '../../../services/configValidation.js';
 import { listEvents, eventCounts, clearEvents } from '../../../services/eventBuffer.js';
@@ -136,6 +136,29 @@ export function createAdminRoutes(metricsCollector: MetricsCollector): Router {
           const stringified = typeof result.value === 'boolean'
             ? (result.value ? '1' : '0')
             : String(result.value);
+
+          // Probe BEFORE persisting. `validateFlagUpdate` is a per-field rule
+          // engine (type/range/enum/pattern) and cannot express a cross-field
+          // constraint such as "the messaging store must not resolve inside
+          // INDEX_SERVER_DIR". Without this, a semantically fatal value is
+          // written to the overlay, the follow-on reload throws and is
+          // swallowed, and the caller still gets HTTP 200 — while the overlay
+          // is replayed into process.env on every subsequent boot and kills the
+          // server during module evaluation, taking the dashboard (the only
+          // surface that could clear the overlay) down with it.
+          //
+          // loadRuntimeConfig() is pure: it builds a fresh config and never
+          // touches the cached one, so a throw here leaves the running server
+          // untouched.
+          const priorEnv = process.env[name];
+          process.env[name] = stringified;
+          try {
+            loadRuntimeConfig();
+          } finally {
+            if (priorEnv === undefined) delete process.env[name];
+            else process.env[name] = priorEnv;
+          }
+
           writeOverride(name, stringified);
           results[name] = {
             applied: true,
@@ -148,25 +171,39 @@ export function createAdminRoutes(metricsCollector: MetricsCollector): Router {
             applied: false,
             reloadBehavior: entry.reloadBehavior,
             requiresRestart: entry.reloadBehavior === 'restart-required',
-            error: `persist failed: ${e instanceof Error ? e.message : String(e)}`,
+            // Not persisted: either the probe rejected the value or the write
+            // itself failed. Either way the overlay is unchanged, so the next
+            // boot is unaffected.
+            error: `rejected (not persisted): ${e instanceof Error ? e.message : String(e)}`,
           };
         }
       }
 
+      let reloadError: string | undefined;
       if (anyApplied) {
+        // Every persisted value was probed above, so this should not throw. If
+        // it does, the response must say so rather than reporting success — the
+        // running server keeps its previous config (the cache assignment never
+        // happens), but the operator needs to know the overlay and the live
+        // config have diverged.
         try { reloadRuntimeConfig(); } catch (e) {
-          logWarn('[API] reloadRuntimeConfig after admin update failed:', e instanceof Error ? e.message : e);
+          reloadError = e instanceof Error ? e.message : String(e);
+          logWarn('[API] reloadRuntimeConfig after admin update failed:', reloadError);
         }
         const appliedNames = Object.entries(results).filter(([, r]) => r.applied).map(([k]) => k);
         logInfo(`[admin] applied ${appliedNames.length} flag(s) via overlay: ${appliedNames.join(', ')}`);
       }
 
-      const httpStatus = anyApplied
-        ? (Object.values(results).every(r => r.applied) ? 200 : 207)
-        : 400;
+      const allApplied = Object.values(results).every(r => r.applied);
+      const httpStatus = reloadError
+        ? 500
+        : anyApplied
+          ? (allApplied ? 200 : 207)
+          : 400;
       res.status(httpStatus).json({
-        success: anyApplied,
+        success: anyApplied && !reloadError,
         results,
+        ...(reloadError ? { reloadError } : {}),
         timestamp: Date.now(),
       });
     } catch (error) {

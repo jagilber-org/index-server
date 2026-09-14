@@ -11,8 +11,6 @@ once to wire them up.
 |--------|------|---------|
 | `pre-commit.mjs` | `pre-commit` | ESM pre-commit runner: lint, type-check, schema validate |
 | `pre-commit.ps1` | `pre-commit` | PowerShell pre-commit runner (PII scan, security scan) |
-| `commit-msg-baseline.mjs` | `commit-msg` | Validate commit message against Conventional Commits |
-| `commit-msg-baseline.ps1` | `commit-msg` | PowerShell shim for `commit-msg-baseline.mjs` |
 | `pre-push.mjs` | `pre-push` | ESM pre-push runner: full test suite gate |
 | `pre-push.ps1` | `pre-push` | PowerShell pre-push runner: build verify + governance |
 | `pre-push-integrity.ps1` | `pre-push` | Assert dist/ integrity before push |
@@ -24,6 +22,16 @@ once to wire them up.
 | `setup-hooks.cjs` | setup | CJS installer: symlink hook scripts into `.git/hooks/` |
 | `setup-hooks.ps1` | setup | PowerShell installer: same, with Windows path handling |
 
+**There is no `commit-msg` hook.** The table used to list `commit-msg-baseline.{mjs,ps1}`
+as validating "commit message against Conventional Commits". It never did that:
+it exited 0 unless `INTERNAL-BASELINE.md` appeared in the staged diff, and that
+file does not exist and has no commits — so the hook could not fire, on any
+commit, ever. Deleted in #582 along with the rest of the baseline machinery.
+`setup-hooks.cjs` removes the stale hook from existing clones.
+
+Conventional-commit format is therefore **unenforced** at commit time. If that
+is wanted, it needs a real check, not a resurrection of this one.
+
 ## Setup
 
 ```pwsh
@@ -34,7 +42,7 @@ pwsh -File scripts/hooks/setup-hooks.ps1
 pwsh -File scripts/setup-hooks.ps1
 
 # Or via pre-commit
-pre-commit install --hook-type commit-msg --hook-type pre-push
+pre-commit install --hook-type pre-push
 ```
 
 > Do NOT use `--no-verify` to bypass hooks. Fix the gate or fix the code.

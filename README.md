@@ -251,6 +251,7 @@ The optional admin dashboard provides a Grafana-dark themed interface for monito
 | Panel | Description |
 |-------|-------------|
 | **Overview** | Server health, uptime, system status |
+| **Configuration** | Runtime flags, overlay editing, reload status, and redacted lifecycle-hook status |
 | **Instructions** | Catalog browser with usage counts and governance status |
 | **Monitoring** | Performance metrics and error rates |
 | **Maintenance** | Backup, repair, and catalog operations |
@@ -268,6 +269,7 @@ See [dashboard.md](docs/dashboard.md) for full details. REST client scripts (`sc
 - **Bootstrap security** — Mutations gated until human confirmation on fresh installs
 - **Cross-repo knowledge promotion** — Validate locally, then promote proven patterns to the shared catalog
 - **Governance workflows** — Ownership, versioning, approval status, and deterministic governance hashing
+- **Post-commit lifecycle hooks** — Optional create/update/remove/change automation with timeout, concurrency, blocking, redaction, and failure isolation
 - **REST client scripts** — PowerShell and Bash scripts for CI/agents without MCP
 
 ---
@@ -282,6 +284,7 @@ See [dashboard.md](docs/dashboard.md) for full details. REST client scripts (`sc
 | [MCP Configuration](docs/mcp_configuration.md) | Setup patterns for all environments |
 | [Server Configuration](docs/configuration.md) | Environment variables and CLI options |
 | [Architecture](docs/architecture.md) | System design and component overview |
+| [Lifecycle Hooks](docs/lifecycle-hooks.md) | Post-commit automation design, configuration, security, and troubleshooting |
 | [Admin Dashboard](docs/dashboard.md) | UI features, drift monitoring, maintenance |
 | [Content Guidance](docs/content_guidance.md) | Local vs. central instruction guidance |
 | [Network Privacy](docs/network-privacy.md) | Network transparency and offline deployment |
@@ -291,7 +294,7 @@ See [dashboard.md](docs/dashboard.md) for full details. REST client scripts (`sc
 
 ## Security
 
-Index Server makes **zero telemetry calls** and sends **no data to external services** during normal operation. The dashboard binds to **localhost only** by default. Mutations are audit-logged, can be forced read-only with `INDEX_SERVER_MUTATION=0`, and fresh installations gate writes until human confirmation via the bootstrap workflow. Optional subsystems can be disabled at boot (e.g. `INDEX_SERVER_MESSAGING_ENABLED=0` to remove all `messaging_*` MCP tools and the dashboard Messaging tab).
+Index Server makes **zero telemetry calls** and sends **no data to external services** during normal operation. Operator-configured lifecycle hooks can explicitly invoke local or remote integrations; they are disabled by default. The dashboard binds to **localhost only** by default. Mutations are audit-logged, can be forced read-only with `INDEX_SERVER_MUTATION=0`, and fresh installations gate writes until human confirmation via the bootstrap workflow. Optional subsystems can be disabled at boot (e.g. `INDEX_SERVER_MESSAGING_ENABLED=0` to remove all `messaging_*` MCP tools and the dashboard Messaging tab).
 
 See [SECURITY.md](SECURITY.md) for vulnerability reporting, [PRIVACY.md](PRIVACY.md) for data collection policy and optional outbound connections, and [Network Privacy Guide](docs/network-privacy.md) for offline deployment and verification.
 

@@ -15,6 +15,8 @@ import { emitTrace, traceEnabled } from './tracing';
 import { getRuntimeConfig } from '../config/runtimeConfig';
 import { splitOversizedEntry } from './autoSplit';
 import { logWarn } from './logger.js';
+import { GOVERNANCE_DENYLIST_REASON, isGovernanceDeniedBasename } from './governanceDenylist';
+import { looksLikeInstruction } from './handlers/instructions.shared';
 
 export interface IndexLoadResult {
   entries: InstructionEntry[];
@@ -183,6 +185,7 @@ export class IndexLoader {
   }
   const entries: InstructionEntry[] = [];
   const errors: { file: string; error: string }[] = [];
+  const deniedFiles: { file: string; reason: string }[] = [];
   // File-level trace (opt-in) surfaces every scanned file decision so higher-level diagnostics
   // can correlate missingOnIndex IDs with explicit acceptance / rejection reasons. Enable by
   // setting INDEX_SERVER_FILE_TRACE=1 together with INDEX_SERVER_TRACE_ALL for broader context.
@@ -234,10 +237,7 @@ export class IndexLoader {
       //  - any file named 'constitution.json'
       //  - any file whose first line (if readable) contains marker '__GOVERNANCE_SEED__'
       const lowerBase = f.toLowerCase();
-      let denied = false;
-      if(/^(000-bootstrapper|001-lifecycle-bootstrap)/.test(lowerBase)) denied = true;
-      else if(lowerBase.includes('.governance.')) denied = true;
-      else if(lowerBase === 'constitution.json') denied = true;
+      let denied = isGovernanceDeniedBasename(lowerBase);
       if(!denied){
         try {
           // Very small peek (first 200 bytes) – safe even for large files
@@ -246,8 +246,9 @@ export class IndexLoader {
         } catch { /* ignore peek errors */ }
       }
       if(denied){
-        bump('ignored:governance-denylist');
-        if(trace) trace.push({ file:f, accepted:false, reason:'ignored:governance-denylist' });
+        bump(GOVERNANCE_DENYLIST_REASON);
+        deniedFiles.push({ file: f, reason: GOVERNANCE_DENYLIST_REASON });
+        if(trace) trace.push({ file:f, accepted:false, reason:GOVERNANCE_DENYLIST_REASON });
         if(traceEnabled(1)){
           try { emitTrace('[trace:index:file-end]', { file: f, accepted: false, reason: 'ignored:governance-denylist', scanned: scannedSoFar, acceptedSoFar }); } catch { /* ignore */ }
           try { emitTrace('[trace:index:file-progress]', { scanned: scannedSoFar, total: files.length, acceptedSoFar, rejectedSoFar: scannedSoFar - acceptedSoFar }); } catch { /* ignore */ }
@@ -312,7 +313,7 @@ export class IndexLoader {
         }
   const rawAny = this.readJsonWithRetry(full) as Record<string, unknown>;
         // Ignore clearly non-instruction config files (no id/title/body/requirement) e.g. gates.json
-        const looksInstruction = typeof rawAny.id === 'string' && typeof rawAny.title === 'string' && typeof rawAny.body === 'string';
+        const looksInstruction = looksLikeInstruction(rawAny);
         if(!looksInstruction){
           bump('ignored:non-instruction-config');
           if(trace) trace.push({ file:f, accepted:false, reason:'ignored:non-instruction-config' });
@@ -724,9 +725,11 @@ export class IndexLoader {
       fs.renameSync(tmpPath, manifestPath); // atomic replace
     } catch { /* ignore manifest failure */ }
 
-    // Emit skipped details artifact (_skipped.json) for transparency
+    // Emit skipped details artifact (_skipped.json) for transparency.
+    // Denied files are included: they are dropped on every load, so omitting them
+    // made the denial untraceable from the client side (#494).
     try {
-      const skipped = errors.map(e => ({ file: e.file, reason: e.error }));
+      const skipped = [...errors.map(e => ({ file: e.file, reason: e.error })), ...deniedFiles];
       const skippedPath = path.join(dir, '_skipped.json');
       const tmpSkipped = skippedPath + '.tmp';
       const payload = { generatedAt: new Date().toISOString(), count: skipped.length, items: skipped };

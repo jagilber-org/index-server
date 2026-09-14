@@ -133,6 +133,11 @@ tmp/**/*.tmp
 data/
 data/**
 !data/.gitkeep
+# Messaging store. Normally a sibling of INDEX_SERVER_DIR and therefore outside
+# the repo, but it lands here whenever the server is run from the repo root with
+# INDEX_SERVER_DIR unset (tests, local dev). Previously covered by `data/`.
+index-messaging/
+index-messaging/**
 memory/
 memory/**
 !memory/.gitkeep
@@ -149,7 +154,6 @@ metrics/**
 .test-run-complete.*
 .test-run-status.json
 .test-run-complete.latest
-.baseline.sentinel
 
 # MCP and VS Code workspace configurations
 # Ignore local MCP workspace config (contains machine-specific paths)
@@ -247,3 +251,10 @@ findings-triage.csv
 
 # CodeQL local scan artifacts (template-repo#77)
 .codeql/
+
+# Messaging store when INDEX_SERVER_DIR is unset.
+# resolveInstructionsDir() falls back to <cwd>/instructions, so the derived
+# messaging store lands at <cwd>/index-messaging -- i.e. in this repo whenever
+# the server or the suite runs from here. Untracked and unignored, it was
+# getting swept into commits by `git add -A`, publishing agent message traffic.
+index-messaging/

@@ -6,7 +6,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { getHandler } from '../server/registry';
-import { STABLE } from '../services/toolRegistry';
+import { STABLE, getToolRegistry } from '../services/toolRegistry';
 
 // Import the consolidated handler registration shim used by the server entrypoint.
 import '../services/toolHandlers';
@@ -35,7 +35,18 @@ const MINIMAL_PARAMS: Record<string, unknown> = {
 const EXPECT_ERROR = new Set<string>();
 
 describe('Tool Handler Smoke (all STABLE tools)', () => {
-  const stableToolNames = Array.from(STABLE);
+  // Intersect STABLE with what the registry actually DECLARES in this runtime.
+  //
+  // STABLE is a classification ("non-privileged read surface"), not a promise
+  // that the handler exists in every process. Some tools are gated at
+  // registration time: the dangerous diagnostics behind INDEX_SERVER_DEBUG /
+  // INDEX_SERVER_STRESS_DIAG, and messaging_* behind
+  // INDEX_SERVER_MESSAGING_ENABLED (#353). getToolRegistry() applies exactly
+  // those gates, so intersecting against it keeps this canary honest — it still
+  // fails loudly on a genuinely missing handler import, without demanding a
+  // handler the runtime deliberately did not register (#592).
+  const declared = new Set(getToolRegistry({ tier: 'admin' }).map(t => t.name));
+  const stableToolNames = Array.from(STABLE).filter(name => declared.has(name));
 
   it('all STABLE tools have registered handlers', () => {
     const missing = stableToolNames.filter(name => !getHandler(name));

@@ -12,7 +12,16 @@ const BASELINE_PATH = 'coverage-baseline.json';
 const SUMMARY_PATH = 'coverage/coverage-final.json';
 const IMPROVEMENT_THRESHOLD = parseFloat(process.env.COVERAGE_RATCHET_THRESHOLD || '0.25');
 const ALLOWED_DROP = parseFloat(process.env.COVERAGE_ALLOWED_DROP || '0');
-const HARD_MIN = parseFloat(process.env.INDEX_SERVER_COVERAGE_HARD_MIN || '0');
+// Falls back to the shared thresholds file rather than 0 (#584). A hard floor
+// of 0 is satisfied by any coverage at all, so when the env var was unset --
+// which was every invocation outside ci-enhanced.yml -- this check could not
+// fail for the reason it exists.
+const HARD_MIN = parseFloat(
+  process.env.INDEX_SERVER_COVERAGE_HARD_MIN
+  ?? String(JSON.parse(
+       fs.readFileSync(new URL('./coverage-thresholds.json', import.meta.url), 'utf8'),
+     ).hardMin),
+);
 const READONLY = process.env.COVERAGE_READONLY === '1';
 
 function log(m){ process.stdout.write(`[coverage-ratchet] ${m}\n`); }

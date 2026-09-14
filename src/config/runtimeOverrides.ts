@@ -41,6 +41,34 @@
  */
 import fs from 'fs';
 import path from 'path';
+// Load-order anchor (#607) — DO NOT REMOVE, and do not convert to a type-only
+// or lazy import.
+//
+// `STATE_ROOT` is an `export const` resolved once when `configUtils` is
+// evaluated; it reads `INDEX_SERVER_STATE_ROOT` from `process.env` at that
+// moment and never again. `applyOverlay()` below works by MUTATING
+// `process.env`. So "is the state root dashboard-controllable?" is decided
+// entirely by which of the two modules is evaluated first:
+//
+//   configUtils first  -> STATE_ROOT already frozen; an overlay entry for
+//                         INDEX_SERVER_STATE_ROOT is inert.
+//   overlay first      -> STATE_ROOT picks up the overlay value, and an
+//                         authenticated admin-config write becomes an
+//                         audit-log redirection primitive: relocate the state
+//                         root and the audit log, activity DB, trace logs and
+//                         server log for everything that follows go with it.
+//
+// That used to hold only by accident, via whichever modules an entry point
+// happened to import above its `applyOverlay()` call (see the ordering note in
+// `src/server/index-server.ts`) — a property no reviewer of an unrelated import
+// reshuffle would know to preserve. This side-effect import makes it structural
+// instead: ES/CJS module semantics evaluate it before any of this module's body,
+// so `configUtils` is loaded, and STATE_ROOT resolved, before `applyOverlay()`
+// can possibly be called — whatever the entry point does.
+//
+// Pinned by `src/tests/unit/stateRootImportOrder.spec.ts`; delete this line and
+// that suite goes red.
+import './configUtils';
 
 /** Map of env-var name -> string value present at the moment applyOverlay() ran. */
 type EnvSnapshot = Record<string, string | undefined>;
@@ -64,8 +92,31 @@ export interface ApplyOverlayResult {
 
 const DEFAULT_OVERLAY_RELPATH = path.join('data', 'runtime-overrides.json');
 
-/** Snapshot of pre-overlay env values, populated by applyOverlay(). */
+/**
+ * Snapshot of pre-overlay env values for keys the overlay genuinely CHANGED.
+ *
+ * Diagnostic only — this is what `overlayShadowsEnv` reports, so it must stay
+ * limited to real shadowing. An overlay value identical to the operator's env
+ * value is not "masking" anything, and reporting it as such would put a
+ * misleading badge in the dashboard.
+ */
 let _shadowSnapshot: EnvSnapshot = {};
+
+/**
+ * Snapshot of pre-overlay env values for EVERY overlay key, including those
+ * whose prior value equalled the overlay's.
+ *
+ * This is the restore source, and it is deliberately separate from
+ * `_shadowSnapshot`. Deriving restore from the diagnostic map was a defect:
+ * when the operator's existing value equalled the overlay's, the key was
+ * absent from that map and revert took its `delete process.env[key]` branch —
+ * unsetting a variable the operator set and the overlay never owned. The two
+ * maps answer different questions, so they are now two maps.
+ *
+ * `key in _priorEnv` distinguishes "was unset" (value `undefined`, key
+ * present) from "never seen" (key absent), which a plain value check cannot.
+ */
+let _priorEnv: EnvSnapshot = {};
 
 /** Most recent result from applyOverlay(), exported for diagnostics. */
 let _lastResult: ApplyOverlayResult | undefined;
@@ -165,18 +216,25 @@ export function applyOverlay(): ApplyOverlayResult {
     const result: ApplyOverlayResult = { file, applied: 0, disabled: true, missing: false, shadowed: {} };
     _lastResult = result;
     _shadowSnapshot = {};
+    _priorEnv = {};
     return result;
   }
   const { entries: overlay, missing } = readOverlayDetailed();
   const shadowed: EnvSnapshot = {};
+  const prior: EnvSnapshot = {};
   let applied = 0;
   for (const [k, v] of Object.entries(overlay)) {
-    const prior = process.env[k];
-    if (prior !== undefined && prior !== v) shadowed[k] = prior;
+    const before = process.env[k];
+    // Restore map: record every key, including when before === v. Omitting the
+    // equal case is what made revert delete operator-set variables.
+    prior[k] = before;
+    // Diagnostic map: only genuine shadowing.
+    if (before !== undefined && before !== v) shadowed[k] = before;
     process.env[k] = v;
     applied++;
   }
   _shadowSnapshot = shadowed;
+  _priorEnv = prior;
   const result: ApplyOverlayResult = { file, applied, disabled: false, missing, shadowed };
   _lastResult = result;
   return result;
@@ -205,17 +263,19 @@ export function writeOverride(key: string, value: string): void {
   const current = readOverlay();
   current[key] = value;
   atomicWriteJson(file, current);
-  // Shadow capture (#359 A2 quality remediation):
-  // If this key has no entry in _shadowSnapshot yet, this is the FIRST write
-  // since boot — applyOverlay() either didn't run or didn't cover this key.
+  // Prior-value capture (#359 A2 quality remediation):
+  // If this key has no entry in _priorEnv yet, this is the FIRST write since
+  // boot — applyOverlay() either didn't run or didn't cover this key.
   // Capture the *current* process.env value (which is the pre-overlay value
   // because we haven't mutated env yet) so a later clearOverride() can
   // restore "the env value the operator had before they touched the
   // overlay" rather than silently deleting the env var. The captured value
-  // may be `undefined` to record "was unset"; clearOverride()'s `priorShadow
-  // !== undefined` check then correctly falls through to `delete`.
-  if (!(key in _shadowSnapshot)) {
-    _shadowSnapshot[key] = process.env[key];
+  // may be `undefined` to record "was unset" — which is why clearOverride()
+  // tests `key in _priorEnv` rather than the value alone: the two cases are
+  // "restore nothing, delete" and "never recorded", and only the key check
+  // separates them.
+  if (!(key in _priorEnv)) {
+    _priorEnv[key] = process.env[key];
     if (isTruthy(process.env.INDEX_SERVER_LOG_DIAG)) {
       // eslint-disable-next-line no-console
       console.debug(`[runtimeOverrides] captured shadow at first write: ${key} prior=${process.env[key] === undefined ? '<unset>' : JSON.stringify(process.env[key])}`);
@@ -252,9 +312,10 @@ export function clearOverride(key: string): void {
   // it back; otherwise drop the var so defaults apply on the next reload.
   // Performed unconditionally (even when hadKey===false) so callers can use
   // clearOverride() to forcibly reset a key to its boot-time state.
-  const priorShadow = _shadowSnapshot[key];
-  if (priorShadow !== undefined) {
-    process.env[key] = priorShadow;
+  //  distinguishes "recorded as unset" from "never seen";
+  // a bare value check collapses the two and deletes in both cases.
+  if (key in _priorEnv && _priorEnv[key] !== undefined) {
+    process.env[key] = _priorEnv[key] as string;
   } else {
     delete process.env[key];
   }
@@ -274,6 +335,30 @@ export function shadowedEnv(): Readonly<EnvSnapshot> {
 /** Diagnostic getter for the most recent applyOverlay() invocation. */
 export function lastOverlayResult(): ApplyOverlayResult | undefined {
   return _lastResult;
+}
+
+/**
+ * Undo the effect of `applyOverlay()` on `process.env`, restoring each key to
+ * the value it held before the overlay wrote over it (or removing it if it had
+ * none). The overlay FILE is left untouched.
+ *
+ * This is the boot escape hatch. The overlay is replayed into `process.env` on
+ * every start, so a persisted value that makes config materialization throw is
+ * not a one-off failure — it is permanent, and it takes down the dashboard,
+ * which is the only surface that could remove it. Reverting in-memory lets the
+ * server boot far enough to serve that surface and report the bad key.
+ *
+ * Returns the keys that were reverted, for diagnostics.
+ */
+export function revertOverlay(): string[] {
+  const { entries } = readOverlayDetailed();
+  const reverted: string[] = [];
+  for (const key of Object.keys(entries)) {
+    if (key in _priorEnv && _priorEnv[key] !== undefined) process.env[key] = _priorEnv[key] as string;
+    else delete process.env[key];
+    reverted.push(key);
+  }
+  return reverted;
 }
 
 // ---------- internals ----------

@@ -22,7 +22,7 @@ function makeTmpDir(): string {
   return d;
 }
 
-describe.skipIf(!hasSqliteVec)('createEmbeddingStore integration', () => {
+describe.skipIf(!hasSqliteVec)('createEmbeddingStore integration', () => { // SKIP_OK: environment-gated: requires sqlite-vec native module
   it('creates SqliteEmbeddingStore for sqlite backend', () => {
     const tmpDir = makeTmpDir();
     const dbPath = path.join(tmpDir, 'test.db');

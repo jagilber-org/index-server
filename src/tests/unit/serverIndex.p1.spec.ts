@@ -3,7 +3,7 @@ import http from 'http';
 import { _parseArgs, _findPackageVersion, _startDashboard } from '../../server/index-server';
 import fs from 'fs';
 import path from 'path';
-import { logInfo } from '../../services/logger';
+import { flushLogs, logInfo } from '../../services/logger';
 import { reloadRuntimeConfig } from '../../config/runtimeConfig';
 
 // P1 coverage: exercise server helper exports and dashboard lifecycle
@@ -101,8 +101,7 @@ describe('logger file logging (P1)', () => {
   });
   it('writes log lines to file', async () => {
     logInfo('[test] p1_test', { sample: true });
-    // wait for async stream flush
-    await new Promise(r=>setTimeout(r,100));
+    await flushLogs();
     const content = fs.readFileSync(logFile,'utf8');
     expect(content).toMatch(/p1_test/);
   });

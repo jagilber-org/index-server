@@ -348,14 +348,15 @@ Use this profile when production must remain explicitly read-only. Governed prod
 | `INDEX_SERVER_AUTO_BACKUP` | Boolean | `true` | Enable periodic Index backups | Data protection |
 | `INDEX_SERVER_AUTO_BACKUP_INTERVAL_MS` | Number | `3600000` | Backup interval (ms) | Frequency tuning |
 | `INDEX_SERVER_AUTO_BACKUP_MAX_COUNT` | Number | `10` | Max backup snapshots retained | Storage management |
-| `INDEX_SERVER_BACKUPS_DIR` | Path | `./backups` | Backup storage directory | Deployment |
+| `INDEX_SERVER_BACKUPS_DIR` | Path | `<INDEX_SERVER_DIR>/../backups` | Backup storage directory (derived from the instruction directory when unset) | Deployment |
 
 ### Analytics & Usage Tracking
 
 | Variable | Type | Default | Description | Privacy Impact |
 |----------|------|---------|-------------|----------------|
-| `INDEX_SERVER_AUTO_USAGE_TRACK` | Boolean | `true` | Auto-track retrievals: returned `get` entry + top-3 search/query results + explicit-id export (issue #418) | Medium |
-| `INDEX_SERVER_FEATURES` | String | `""` | Enable feature flags (e.g., "usage") | Medium - Usage tracking |
+| `INDEX_SERVER_AUTO_USAGE_TRACK` | Boolean | `true` | Auto-track retrievals: returned `get` entry + top-3 search/query results + explicit-id export (issue #418). Inert when usage tracking is opted out. | Medium |
+| `INDEX_SERVER_FEATURES` | String | `"usage"` | Enable feature flags (e.g., "usage"). `usage` is on by default for every profile. | Medium - Usage tracking |
+| `INDEX_SERVER_USAGE_ENABLED` | Boolean | `true` | Dedicated usage-tracking switch; set `0` to opt out. Takes precedence over `INDEX_SERVER_FEATURES`. | Medium - Usage tracking |
 | `USAGE_ANALYTICS_DIR` | Path | `./data` | Directory for usage analytics storage | Medium - Analytics data |
 
 ## 🛡️ Security Configurations
@@ -619,7 +620,7 @@ node dist/server/index-server.js --help
 
 ```text
 Error: ENOENT: no such file or directory, scandir 'instructions'
-Error: Direct mutation calls are disabled by the current runtime override. Remove INDEX_SERVER_MUTATION=0 to re-enable direct calls.
+Error: Mutations are disabled: this server was started with INDEX_SERVER_MUTATION=0 (explicit read-only runtime). index_add is refused, and so is every other write path including index_dispatch. Restart the server without INDEX_SERVER_MUTATION=0 to re-enable writes.
 ```
 
 ## 📊 Performance Monitoring

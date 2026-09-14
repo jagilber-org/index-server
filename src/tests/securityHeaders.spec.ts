@@ -10,48 +10,38 @@
  */
 
 import { describe, it, expect, afterEach } from 'vitest';
-import http from 'http';
+import type { IncomingHttpHeaders } from 'http';
 import { DashboardServer } from '../dashboard/server/DashboardServer.js';
+import { requestLoopback } from './util/loopbackHttp';
 
 /** Helper: make an HTTP GET request and return the response headers + status */
-function httpGet(url: string): Promise<{ status: number; headers: http.IncomingHttpHeaders; body: string }> {
-  return new Promise((resolve, reject) => {
-    http.get(url, (res) => {
-      let body = '';
-      res.on('data', (chunk) => { body += chunk; });
-      res.on('end', () => resolve({ status: res.statusCode ?? 0, headers: res.headers, body }));
-      res.on('error', reject);
-    }).on('error', reject);
-  });
+async function httpGet(url: string): Promise<{ status: number; headers: IncomingHttpHeaders; body: string }> {
+  return requestLoopback({ url });
 }
 
 describe('Security Headers — Pen Test Regression', () => {
-  let server: DashboardServer;
+  let server: DashboardServer | undefined;
   let url: string;
-  let close: () => void;
 
   afterEach(async () => {
-    if (close) {
-      close();
-      // Small delay to let socket drain
-      await new Promise(r => setTimeout(r, 50));
-    }
+    await server?.stop();
+    server = undefined;
   });
 
   async function startServer(): Promise<void> {
     // Use port 0 so the OS assigns a free port, avoiding EACCES on restricted ports.
     // DashboardServer.start() returns the requested port, so we read the real
     // port from getServerInfo() which calls server.address().
-    server = new DashboardServer({
+    const nextServer = new DashboardServer({
       host: '127.0.0.1',
       port: 0,
       enableWebSockets: false,
       enableCors: false,
     });
-    const info = await server.start();
-    const resolved = server.getServerInfo();
+    const info = await nextServer.start();
+    server = nextServer;
+    const resolved = nextServer.getServerInfo();
     url = resolved ? resolved.url : info.url;
-    close = info.close;
   }
 
   // L1: X-Powered-By must NOT be present (technology fingerprinting)

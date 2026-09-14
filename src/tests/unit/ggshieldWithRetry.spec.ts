@@ -78,7 +78,7 @@ function runWrapper(opts: {
   }
 }
 
-describe.skipIf(isWindows)('ggshield-with-retry.sh', () => {
+describe.skipIf(isWindows)('ggshield-with-retry.sh', () => { // SKIP_OK: platform-gated: bash script not applicable on Windows
   it('exits 0 when ggshield succeeds on first try', () => {
     const { code, stdout } = runWrapper({ fakeMode: 'ok' });
     expect(code).toBe(0);

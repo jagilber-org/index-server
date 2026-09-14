@@ -57,7 +57,7 @@ async function runNmap(args: string, timeoutMs = 60_000): Promise<string> {
 
 const hasNmap = nmapAvailable();
 
-describe.skipIf(!hasNmap)('Nmap Security Scanning', () => {
+describe.skipIf(!hasNmap)('Nmap Security Scanning', () => { // SKIP_OK: environment-gated: requires nmap on PATH
   const hasVulnScript = nmapScriptAvailable('vuln') && process.platform !== 'win32';
   const hasHttpEnumScript = nmapScriptAvailable('http-enum');
   let server: DashboardServer | null = null;
@@ -118,7 +118,7 @@ describe.skipIf(!hasNmap)('Nmap Security Scanning', () => {
     expect(output).not.toMatch(/Node\.js \d+/);
   }, 200_000);
 
-  it.skipIf(!hasVulnScript)('should not have known vulnerabilities (vuln scan)', async () => {
+  it.skipIf(!hasVulnScript)('should not have known vulnerabilities (vuln scan)', async () => { // SKIP_OK: environment-gated: requires nmap vuln script
     if (!hasNmap) return;
     const output = await runNmap(`--script vuln -p ${activePort} ${NMAP_HOST}`);
     const vulnLines = output.split('\n').filter(l => l.includes('VULNERABLE'));
@@ -132,7 +132,7 @@ describe.skipIf(!hasNmap)('Nmap Security Scanning', () => {
     expect(response.headers.get('x-frame-options')).toBe('DENY');
   }, 90_000);
 
-  it.skipIf(!hasHttpEnumScript)('should not expose directory listing', async () => {
+  it.skipIf(!hasHttpEnumScript)('should not expose directory listing', async () => { // SKIP_OK: environment-gated: requires nmap http-enum script
     if (!hasNmap) return;
     const output = await runNmap(`--script http-enum -p ${activePort} ${NMAP_HOST}`);
     const lower = output.toLowerCase();
@@ -168,7 +168,7 @@ describe.skipIf(!hasNmap)('Nmap Security Scanning', () => {
 
 const hasOpenssl = opensslAvailable();
 
-describe.skipIf(!hasNmap || !hasOpenssl)('Nmap TLS Security', () => {
+describe.skipIf(!hasNmap || !hasOpenssl)('Nmap TLS Security', () => { // SKIP_OK: environment-gated: requires nmap and openssl on PATH
   const hasSslEnumCiphersScript = nmapScriptAvailable('ssl-enum-ciphers');
   let server: DashboardServer | null = null;
   const tlsPort = 19788;
@@ -213,7 +213,7 @@ describe.skipIf(!hasNmap || !hasOpenssl)('Nmap TLS Security', () => {
     expect(output.toLowerCase()).toMatch(/ssl|https|tls/);
   });
 
-  it.skipIf(!hasSslEnumCiphersScript)('should not support SSLv3 or TLS 1.0/1.1 (weak protocols)', async () => {
+  it.skipIf(!hasSslEnumCiphersScript)('should not support SSLv3 or TLS 1.0/1.1 (weak protocols)', async () => { // SKIP_OK: environment-gated: requires nmap ssl-enum-ciphers script
     if (!hasNmap || !server) return;
     const output = await runNmap(`--script ssl-enum-ciphers -p ${activeTlsPort} ${NMAP_HOST}`);
     const lower = output.toLowerCase();
@@ -221,7 +221,7 @@ describe.skipIf(!hasNmap || !hasOpenssl)('Nmap TLS Security', () => {
     expect(lower).not.toMatch(/tlsv1\.0.*accepted/);
   });
 
-  it.skipIf(!hasSslEnumCiphersScript)('should not have weak ciphers enabled', async () => {
+  it.skipIf(!hasSslEnumCiphersScript)('should not have weak ciphers enabled', async () => { // SKIP_OK: environment-gated: requires nmap ssl-enum-ciphers script
     if (!hasNmap || !server) return;
     const output = await runNmap(`--script ssl-enum-ciphers -p ${activeTlsPort} ${NMAP_HOST}`);
     const lower = output.toLowerCase();

@@ -34,11 +34,9 @@
         const navBtn = document.getElementById('nav-sqlite');
         if (navBtn) navBtn.style.display = '';
       } else {
-        badge.textContent = '📁 JSON';
-        badge.style.display = 'inline-block';
-        badge.style.background = 'var(--admin-card-bg, #1e293b)';
-        badge.style.color = 'var(--admin-text-dim, #94a3b8)';
-        badge.style.border = '1px solid var(--admin-border, #334155)';
+        // JSON backend is the default; no dedicated header badge (keeps the
+        // status bar compact). The SQLite badge only appears when active.
+        badge.style.display = 'none';
       }
     } catch { /* ignore — badge stays hidden */ }
   }

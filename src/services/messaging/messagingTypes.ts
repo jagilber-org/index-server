@@ -77,6 +77,8 @@ export const ReadMessagesOptionsSchema = z.object({
   markRead: z.boolean().optional(),
   tags: z.array(z.string()).optional(),
   sender: z.string().min(1).optional(),
+  requiresAck: z.boolean().optional(),
+  unacked: z.boolean().optional(),
 }).strict();
 
 export type ReadMessagesOptions = z.infer<typeof ReadMessagesOptionsSchema>;

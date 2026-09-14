@@ -1,0 +1,14 @@
+{
+  "comment": "Direct process.env reads outside the config layer. See #579 (guard repair) and #611 (the sweep). `entries` is a work queue and a ratchet: it may shrink, never grow. `exempt` records reads that cannot be routed through the config layer for a structural reason; each needs a written justification and is checked for staleness the same way, so it cannot outlive the code it describes.",
+  "entries": [],
+  "exempt": [
+    {
+      "key": "src/utils/envUtils.ts::INDEX_SERVER_DEBUG",
+      "reason": "envUtils is BELOW the config layer, not outside it: runtimeConfig.ts imports getBooleanEnv/parseBooleanEnv/isFalsy/isFalsyExtended/isTruthy/isDebugOrVerbose/TRUTHY_OR_DEFAULT from it to do its own parsing. Routing this read through runtimeConfig would be a self-referential import cycle -- the loader would have to be loaded to answer a question it asks while loading. See the header comment in src/utils/envUtils.ts."
+    },
+    {
+      "key": "src/utils/envUtils.ts::INDEX_SERVER_VERBOSE_LOGGING",
+      "reason": "Same structural cycle as INDEX_SERVER_DEBUG above: read by isDebugOrVerbose(), which runtimeConfig.ts calls from parseLogLevel() while building the config object. The exemption is keyed per variable, not per file, so a NEW variable read added to envUtils still fails the guard."
+    }
+  ]
+}

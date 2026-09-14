@@ -48,7 +48,10 @@ Options:
   --output-dir <dir>        Output directory for schemas (default: schemas)
   --no-archive              Skip archiving previous schemas
   --no-jsdoc                Omit JSDoc descriptions from code model
-  --no-line-numbers         Omit line numbers from code model
+  --line-numbers            Include declaration line numbers in the code model.
+                            OFF by default (#558/#555 P2.4): line renumbering was
+                            221 of the 226 changed rows in a typical diff, which
+                            buried real shape changes and conflicted branches.
   --no-type-params          Omit type parameter info from code model
   --no-decorators           Omit decorator info from code model
   --verbose                 Print detailed progress
@@ -60,7 +63,12 @@ Options:
 const VERBOSE = flags.has('--verbose');
 const SKIP_ARCHIVE = flags.has('--no-archive');
 const INCLUDE_JSDOC = !flags.has('--no-jsdoc');
-const INCLUDE_LINE_NUMBERS = !flags.has('--no-line-numbers');
+// Line numbers are OPT-IN (#558). They made the tracked code schema churn on
+// every unrelated edit above a declaration -- 221 of the 226 rows in #554's
+// diff were pure `"line": N` renumbering -- which is both merge-conflict fuel
+// and camouflage for the real shape changes a freshness gate needs to surface.
+// `--no-line-numbers` is still accepted so older invocations keep working.
+const INCLUDE_LINE_NUMBERS = flags.has('--line-numbers') && !flags.has('--no-line-numbers');
 const INCLUDE_TYPE_PARAMS = !flags.has('--no-type-params');
 const INCLUDE_DECORATORS = !flags.has('--no-decorators');
 
@@ -140,7 +148,6 @@ console.log('[schemas] Generated repo code schema -> index-server.code-schema.js
 
 const manifest = {
   version: PKG.version,
-  generatedAt: new Date().toISOString(),
   trackedDir: normalizePath(relative(ROOT, TRACKED_SCHEMAS_DIR)),
   distDir: normalizePath(relative(ROOT, DIST_SCHEMAS_DIR)),
   jsonSchemas: generatedSchemas,
@@ -303,7 +310,6 @@ function buildCodeModel() {
   return {
     name: PKG.name,
     version: PKG.version,
-    generatedAt: new Date().toISOString(),
     sourceRoots: SOURCE_ROOTS,
     summary,
     files,

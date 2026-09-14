@@ -18,7 +18,7 @@ import { ensureLoaded, writeEntry } from './indexContext';
 import { ClassificationService } from './classificationService';
 import { logAudit } from './auditLog';
 import { SCHEMA_VERSION } from '../versioning/schemaVersion';
-import type { InstructionEntry, RequirementLevel, ContentType } from '../models/instruction';
+import type { InstructionEntry, RequirementLevel, ContentType, InstructionLink } from '../models/instruction';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -148,6 +148,7 @@ function buildEntryFromSource(
     createdByAgent: 'promote_from_repo',
     createdAt: now,
     updatedAt: now,
+    links: undefined,
   };
 }
 
@@ -252,6 +253,7 @@ function scanInstructionFiles(
         createdByAgent: (parsed.createdByAgent as string) || 'promote_from_repo',
         createdAt: (parsed.createdAt as string) || now,
         updatedAt: now,
+        links: Array.isArray(parsed.links) ? parsed.links as InstructionLink[] : undefined,
       };
 
       results.push({ entry, hash, source: 'file' });

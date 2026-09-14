@@ -56,7 +56,7 @@ bash scripts/client/index-server-client.sh health
 | `-Action` | string | **Required.** One of: `search`, `get`, `list`, `add`, `remove`, `groom`, `health`, `track`, `hotset` |
 | `-Id` | string | Instruction ID (for `get`, `remove`, `track`) |
 | `-Keywords` | string[] | Search keywords (for `search`) |
-| `-Mode` | string | Search mode: `keyword`, `regex`, `semantic` (default: `keyword`) |
+| `-Mode` | string | Search mode: `keyword`, `regex`, `semantic`. Default is **`semantic` when the server has `INDEX_SERVER_SEMANTIC_ENABLED=1`**, otherwise `keyword` — the default is the server's, not the script's |
 | `-Body` | string | Instruction body (for `add`) |
 | `-Title` | string | Instruction title (for `add`) |
 | `-Priority` | int | Priority 1–100 (for `add`, default: 50) |
@@ -91,7 +91,10 @@ bash scripts/client/index-server-client.sh health
 ./index-server-client.sh search "deploy release" semantic 10
 ```
 
-**Modes:** `keyword` (default), `regex`, `semantic`
+**Modes:** `keyword`, `regex`, `semantic`. Omitting the mode does not mean
+`keyword`: the server picks `semantic` when `INDEX_SERVER_SEMANTIC_ENABLED=1`
+and `keyword` otherwise, so the same command can behave differently against two
+servers. Pass the mode explicitly when the result set matters.
 
 ### get — Retrieve Instruction by ID
 

@@ -34,9 +34,12 @@
 import fs from 'fs';
 import path from 'path';
 import { getBooleanEnv, parseBooleanEnv, isFalsy, isFalsyExtended, isTruthy, isDebugOrVerbose, TRUTHY_OR_DEFAULT } from '../utils/envUtils';
-import { CWD, LogLevel, toAbsolute, numberFromEnv, optionalIntFromEnv, clamp, parseJSONMaybe } from './configUtils';
+import { CWD, LogLevel, toAbsolute, toStateAbsolute, numberFromEnv, optionalIntFromEnv, clamp, parseJSONMaybe } from './configUtils';
 import { LOG_LEVELS_LOWER } from '../lib/logLevels';
 import { DIR } from './dirConstants';
+// Single definition of the catalog directory. Shared storage (messaging)
+// derives from the same resolver, which is what keeps every client on one store.
+import { resolveInstructionsDir } from './pathResolution';
 import { DEFAULT_LIMITS, DEFAULT_GOVERNANCE, DEFAULT_TIMEOUTS_MS } from './defaultValues';
 import { parseServerConfig, parseLoggingConfig, parseMetricsConfig, parseAtomicFsConfig, parsePreflightConfig, parseTracingConfig } from './serverConfig';
 import type { ServerConfig, LoggingConfig, MetricsConfig, AtomicFsConfig, PreflightConfig, TracingConfig } from './serverConfig';
@@ -53,6 +56,7 @@ import {
   parseDynamicConfig,
   parseGraphConfig,
   parseStorageConfig,
+  parseLifecycleHooksConfig,
 } from './featureConfig';
 import type {
   FeatureFlagsConfig,
@@ -65,6 +69,7 @@ import type {
   DynamicConfig,
   GraphConfig,
   StorageConfig,
+  LifecycleHooksConfig,
 } from './featureConfig';
 
 export type IndexMode = 'normal' | 'memoize' | 'memoize+hash' | 'reload' | 'reload+memo';
@@ -158,6 +163,7 @@ interface InstructionsConfig {
   strictRemove: boolean;
   requireCategory: boolean;
   traceQueryDiag: boolean;
+  defaultPageSize: number;
   manifest: InstructionsManifestConfig;
   ciContext: InstructionsCIContextConfig;
   auditLog: InstructionsAuditLogConfig;
@@ -205,6 +211,7 @@ export interface RuntimeConfig {
   dynamic: DynamicConfig;
   graph: GraphConfig;
   storage: StorageConfig;
+  lifecycleHooks: LifecycleHooksConfig;
 }
 
 
@@ -290,7 +297,7 @@ function parseCoverage(): CoverageConfig {
 }
 
 function resolveInstructionsAuditLog(): InstructionsAuditLogConfig {
-  const defaultPath = toAbsolute(path.join(DIR.LOGS_AUDIT));
+  const defaultPath = toStateAbsolute(undefined, DIR.LOGS_AUDIT);
   const raw = process.env.INDEX_SERVER_AUDIT_LOG;
   if(raw === undefined || raw.trim().length === 0){
     return { enabled: true, file: defaultPath, rawValue: undefined, usesDefault: true };
@@ -302,17 +309,12 @@ function resolveInstructionsAuditLog(): InstructionsAuditLogConfig {
   const defaultRequested = trimmed === '1' || (TRUTHY_OR_DEFAULT as readonly string[]).includes(trimmed.toLowerCase());
   return {
     enabled: true,
-    file: defaultRequested ? defaultPath : toAbsolute(trimmed),
+    file: defaultRequested ? defaultPath : toStateAbsolute(trimmed),
     rawValue: raw,
     usesDefault: defaultRequested || trimmed.length === 0,
   };
 }
 
-function resolveInstructionsDir(): string {
-  const raw = process.env.INDEX_SERVER_DIR;
-  const fallback = path.join(CWD, DIR.INSTRUCTIONS);
-  return toAbsolute(raw, fallback);
-}
 
 function parseIndexConfig(): IndexConfig {
   const baseDir = resolveInstructionsDir();
@@ -320,8 +322,8 @@ function parseIndexConfig(): IndexConfig {
   let normalizationLog: string | boolean | undefined;
   if(normalizationRaw){
     if(isFalsy(normalizationRaw)) normalizationLog = false;
-    else if(isTruthy(normalizationRaw)) normalizationLog = toAbsolute(path.join(DIR.LOGS_NORMALIZATION));
-    else normalizationLog = toAbsolute(normalizationRaw);
+    else if(isTruthy(normalizationRaw)) normalizationLog = toStateAbsolute(undefined, DIR.LOGS_NORMALIZATION);
+    else normalizationLog = toStateAbsolute(normalizationRaw);
   }
   const memoizeRaw = process.env.INDEX_SERVER_MEMOIZE;
   const attempts = numberFromEnv('INDEX_SERVER_READ_RETRIES', DEFAULT_LIMITS.READ_RETRIES);
@@ -382,6 +384,7 @@ function parseInstructionsConfig(_mutationEnabled: boolean): InstructionsConfig 
   const sampleSeed = optionalIntFromEnv('LIST_GET_SAMPLE_SEED');
   const concurrency = clamp(optionalIntFromEnv('LIST_GET_CONCURRENCY') ?? 8, 1, 64);
   const maxDurationMs = Math.max(500, optionalIntFromEnv('LIST_GET_MAX_DURATION_MS') ?? 7000);
+  const defaultPageSize = clamp(numberFromEnv('INDEX_SERVER_DEFAULT_PAGE_SIZE', DEFAULT_LIMITS.DEFAULT_PAGE_SIZE), 1, DEFAULT_LIMITS.MAX_PAGE_SIZE);
   return {
     workspaceId: workspaceId && workspaceId.trim().length ? workspaceId : undefined,
     agentId: process.env.INDEX_SERVER_AGENT_ID || undefined,
@@ -391,6 +394,7 @@ function parseInstructionsConfig(_mutationEnabled: boolean): InstructionsConfig 
     strictRemove: getBooleanEnv('INDEX_SERVER_STRICT_REMOVE'),
     requireCategory: getBooleanEnv('INDEX_SERVER_REQUIRE_CATEGORY'),
     traceQueryDiag: getBooleanEnv('INDEX_SERVER_TRACE_QUERY_DIAG'),
+    defaultPageSize,
     manifest: {
       writeEnabled: manifestWriteEnabled,
       fastload: getBooleanEnv('INDEX_SERVER_MANIFEST_FASTLOAD'),
@@ -504,6 +508,7 @@ export function loadRuntimeConfig(): RuntimeConfig {
   const dynamic = parseDynamicConfig();
   const graph = parseGraphConfig();
   const storage = parseStorageConfig();
+  const lifecycleHooks = parseLifecycleHooksConfig();
   return {
     profile,
     testMode,
@@ -535,6 +540,7 @@ export function loadRuntimeConfig(): RuntimeConfig {
     dynamic,
     graph,
     storage,
+    lifecycleHooks,
   };
 }
 

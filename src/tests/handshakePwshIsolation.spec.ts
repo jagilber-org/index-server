@@ -35,7 +35,7 @@ function runPwshServer(){
 }
 
 describe('PowerShell MCP Server Handshake (isolation)', () => {
-  it.skipIf(skipNoPwsh)('initialize -> server/ready -> tools/list_changed -> tools/list -> ping', async () => {
+  it.skipIf(skipNoPwsh)('initialize -> server/ready -> tools/list_changed -> tools/list -> ping', async () => { // SKIP_OK: environment-gated: requires pwsh on PATH
     const child = runPwshServer();
   const frames: Frame[] = [];
   const rawLines: string[] = [];

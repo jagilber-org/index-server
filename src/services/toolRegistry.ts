@@ -8,7 +8,7 @@ import { buildInstructionSearchFieldsSchema } from '../schemas/instructionSchema
 import { flagEnabled } from './featureFlags';
 import { dangerousDiagnosticsEnabled } from '../utils/envUtils';
 import { getRuntimeConfig } from '../config/runtimeConfig';
-import { CONTENT_TYPES, AUDIENCES, REQUIREMENTS, STATUSES, PRIORITY_TIERS, CLASSIFICATIONS, ARCHIVE_REASONS, ARCHIVE_SOURCES } from '../models/instruction';
+import { CONTENT_TYPES, AUDIENCES, REQUIREMENTS, STATUSES, PRIORITY_TIERS, CLASSIFICATIONS, ARCHIVE_REASONS, ARCHIVE_SOURCES, LINK_RELS } from '../models/instruction';
 import { FEEDBACK_TYPES, FEEDBACK_SEVERITIES, FEEDBACK_STATUSES } from './feedbackStorage';
 import { USAGE_ACTIONS, USAGE_SIGNALS, SEARCH_MODES } from './protocolEnums';
 export { TOOL_TIERS, ToolTier } from './protocolEnums';
@@ -35,6 +35,10 @@ const DANGEROUS_DIAGNOSTIC_TOOLS = new Set([
   'diagnostics_block',
   'diagnostics_microtaskFlood',
   'diagnostics_memoryPressure',
+  // #592: joined its siblings. It exposes the internal handshake event ring
+  // (SH-9) and until then was registered unconditionally while declared
+  // nowhere, so it was callable but invisible at every tier.
+  'diagnostics_handshake',
 ]);
 
 // Issue #353: messaging_* tools are filtered out of the registry when the
@@ -53,6 +57,15 @@ const MESSAGING_TOOLS = new Set([
   'messaging_purge',
   'messaging_reply',
   'messaging_thread',
+  // The dispatcher, omitted until #592 review. handlers.messaging.ts registers
+  // 11 messaging_* handlers but this set listed 10, so with messaging disabled
+  // the registry still ADVERTISED messaging_manage in tools/list even though
+  // its handler is never registered — a tool guaranteed to -32601. Not a
+  // bypass: the registration gate at handlers.messaging.ts:28-34 covers all 11
+  // (measured: 0 messaging handlers register when the flag is off). This is a
+  // tools/list consistency fix, and it honours the #353 promise that these
+  // "never appear in tools/list".
+  'messaging_manage',
 ]);
 
 /** True when the messaging subsystem is enabled at runtime. */
@@ -105,7 +118,7 @@ let subSchemaCounter = 0;
 const INPUT_SCHEMAS: Record<string, object> = {
   // graph export (Phase 1 + Phase 2 enrichment). All params optional.
   'graph_export': { type: 'object', additionalProperties: false, properties: {
-    includeEdgeTypes: { type: 'array', items: { type: 'string', enum: ['primary','category','belongs'] }, maxItems: 3 },
+    includeEdgeTypes: { type: 'array', items: { type: 'string', enum: ['primary','category','belongs','link'] }, maxItems: 4 },
     maxEdges: { type: 'number', minimum: 0 },
     // Added 'mermaid' format for dashboard visualization / documentation embedding
     format: { type: 'string', enum: ['json','dot','mermaid'] },
@@ -121,7 +134,7 @@ const INPUT_SCHEMAS: Record<string, object> = {
         // Read-only queries
         'list', 'listScoped', 'get', 'getEnhanced', 'search', 'query', 'categories', 'diff', 'export',
         // Mutations
-        'add', 'import', 'remove', 'reload', 'groom', 'repair', 'enrich',
+        'add', 'import', 'patch', 'remove', 'reload', 'groom', 'repair', 'enrich',
         // Governance
         'governanceHash', 'governanceUpdate',
         // Utilities
@@ -135,7 +148,7 @@ const INPUT_SCHEMAS: Record<string, object> = {
     },
     id: { type: 'string', description: 'Instruction ID for get, getEnhanced, remove, inspect, governanceUpdate actions.' },
     q: { type: 'string', description: 'Single-string query for search action. The dispatcher searches the full q phrase first and, if needed, retries with split-word keywords.' },
-    keywords: { type: 'array', items: { type: 'string' }, description: 'Explicit keyword array for search action when the caller wants direct token control.' },
+    keywords: { anyOf: [{ type: 'array', items: { type: 'string' } }, { type: 'string', minLength: 1, maxLength: 500 }], description: 'Keywords for search action: an array of tokens, OR a single string (one or many words). A string is searched as-is first, then split on spaces if no match.' },
     searchString: { type: 'string', minLength: 1, maxLength: 500, description: 'Ergonomic phrase input for search action. Mutually exclusive with keywords.' },
     fields: { ...buildInstructionSearchFieldsSchema(), description: 'Structural field predicates for search action. Unknown fields are rejected.' },
     ids: { type: 'array', items: { type: 'string' }, description: 'Array of instruction IDs for remove or export actions.' },
@@ -148,7 +161,18 @@ const INPUT_SCHEMAS: Record<string, object> = {
     categoriesAll: { type: 'array', items: { type: 'string' }, description: 'Match instructions having all of these categories (query action).' },
     clientHash: { type: 'string', description: 'Client-side index hash for diff action (returns changes since).' },
     metaOnly: { type: 'boolean', description: 'Return metadata only (omit body) for export action.' },
-    limit: { type: 'number', description: 'Maximum number of results to return (search or query action).' },
+    includeBody: { type: 'boolean', description: 'Include the full body in list/search items. Default false: items are body-light (bodyPreview + bodyLength, full body omitted) to keep responses within MCP client limits. Use the get action for full content.' },
+    bodyOffset: { type: 'number', description: 'Start character offset for paginated body retrieval (get action). Supplying bodyOffset or bodyLimit returns a body window plus a bodyPagination envelope; omit both to get the full body.' },
+    bodyLimit: { type: 'number', description: 'Maximum number of body characters to return per page (get action). Pairs with bodyOffset for deterministic, surrogate-safe pagination.' },
+    // Patch action params (#486) — body patching without resending the whole body.
+    op: { type: 'string', enum: ['splice','append','prepend','replace','metadata'], description: 'Patch operation (patch action). splice=replace a character window at bodyOffset; append/prepend=concatenate text; replace=literal substring substitution; metadata=update title/semanticSummary/categories/primaryCategory/contentType without touching the body.' },
+    bodyLength: { type: 'number', description: 'Number of body characters to remove at bodyOffset (patch action, splice op). Defaults to 0, making the splice a pure insertion.' },
+    find: { type: 'string', description: 'Literal substring to find (patch action, replace op). Never interpreted as a regular expression.' },
+    replaceWith: { type: 'string', description: 'Replacement text (patch action, replace op). Defaults to empty string.' },
+    replaceAll: { type: 'boolean', description: 'Replace every occurrence instead of only the first (patch action, replace op).' },
+    expectedSourceHash: { type: 'string', description: 'Optimistic-concurrency precondition (patch action). When it does not match the stored sourceHash the patch is refused with precondition_failed and nothing is written.' },
+    summary: { type: 'string', description: 'Changelog summary recorded when patch is combined with bump.' },
+    limit: { type: 'number', description: 'Maximum number of results to return (list, search, or query action). When omitted, list/search default to INDEX_SERVER_DEFAULT_PAGE_SIZE (default 50). Pass limit:0 on list to return all items.' },
     offset: { type: 'number', description: 'Pagination offset (query action).' },
     // Mutation params for add action (flat-param support: agents can pass these at top level instead of nested entry wrapper)
     entry: { type: 'object', description: 'Instruction entry object for add action. Alternatively, pass id/body/title as top-level params.', additionalProperties: true, properties: { id: { type: 'string' }, title: { type: 'string' }, body: { type: 'string' } } },
@@ -161,6 +185,7 @@ const INPUT_SCHEMAS: Record<string, object> = {
     version: { type: 'string' },
     priorityTier: { type: 'string', enum: [...PRIORITY_TIERS] },
     classification: { type: 'string', enum: [...CLASSIFICATIONS] },
+    links: { type: 'array', maxItems: 25, items: { type: 'object', properties: { target: { type: 'string' }, rel: { type: 'string', enum: [...LINK_RELS] }, label: { type: 'string', maxLength: 120 } }, required: ['target'] }, description: 'Structured cross-references to other instruction entries (add action).' },
     overwrite: { type: 'boolean', description: 'Allow overwriting existing instruction (add action).' },
     lax: { type: 'boolean', description: 'Enable lax mode with default fills for missing optional fields (add action).' },
     // Import action params
@@ -170,7 +195,7 @@ const INPUT_SCHEMAS: Record<string, object> = {
     // Governance update params
     owner: { type: 'string', description: 'Owner identifier for governanceUpdate action or add action.' },
     status: { type: 'string', description: 'Governance status for governanceUpdate action or add action.', enum: [...STATUSES] },
-    bump: { type: 'string', description: 'Version bump level for governanceUpdate action.', enum: ['patch','minor','major','none'] },
+    bump: { type: 'string', description: 'Version bump level for governanceUpdate or patch actions.', enum: ['patch','minor','major','none'] },
     lastReviewedAt: { type: 'string', description: 'Last review date (ISO 8601) for governanceUpdate action.' },
     nextReviewDue: { type: 'string', description: 'Next review due date (ISO 8601) for governanceUpdate action.' },
     // Remove action params
@@ -186,6 +211,25 @@ const INPUT_SCHEMAS: Record<string, object> = {
     includeContent: { type: 'boolean', description: 'Include full entry bodies in listArchived results (defaults to false).' }
   } },
   'index_governanceHash': { type: 'object', additionalProperties: true },
+  'index_patch': { type: 'object', additionalProperties: false, required: ['id','op'], properties: {
+    id: { type: 'string', description: 'Instruction id to patch.' },
+    op: { type: 'string', enum: ['splice','append','prepend','replace','metadata'], description: 'Patch operation. splice=replace a character window; append/prepend=concatenate; replace=literal substring substitution; metadata=update title/semanticSummary/categories/primaryCategory/contentType without touching the body.' },
+    text: { type: 'string', description: 'Text to insert (splice) or concatenate (append/prepend).' },
+    bodyOffset: { type: 'number', description: 'Splice window start in UTF-16 code units. Mirrors the bodyOffset used by the get action, so a windowed read can be written straight back. Clamped into range; never splits a surrogate pair.' },
+    bodyLength: { type: 'number', description: 'Number of code units to remove at bodyOffset (splice). Defaults to 0, which makes the splice a pure insertion.' },
+    find: { type: 'string', description: 'Literal substring to find (replace op). Never interpreted as a regular expression.' },
+    replaceWith: { type: 'string', description: 'Replacement text for the replace op. Defaults to an empty string (deletion).' },
+    replaceAll: { type: 'boolean', description: 'Replace every occurrence instead of only the first (replace op).' },
+    expectedSourceHash: { type: 'string', description: 'Optimistic-concurrency precondition. When supplied and it does not match the stored sourceHash, the patch is refused with precondition_failed and nothing is written.' },
+    bump: { type: 'string', enum: ['patch','minor','major','none'], description: 'Optional semver bump applied alongside the body change.' },
+    summary: { type: 'string', description: 'Changelog summary recorded when bump is supplied.' },
+    dryRun: { type: 'boolean', description: 'Compute and report the result without writing.' },
+    title: { type: 'string', description: 'New title (op: metadata only).' },
+    semanticSummary: { type: 'string', description: 'New semantic summary, max 600 chars (op: metadata only).' },
+    categories: { type: 'array', items: { type: 'string' }, description: 'New categories (op: metadata only).' },
+    primaryCategory: { type: 'string', description: 'New primary category (op: metadata only).' },
+    contentType: { type: 'string', description: 'New content type (op: metadata only).' }
+  } },
   // status enum intentionally limited to schema-supported states (PROJECT_PRD Governance Hash Integrity Policy)
   'index_governanceUpdate': { type: 'object', additionalProperties: false, required: ['id'], properties: {
     id: { type: 'string' },
@@ -193,6 +237,11 @@ const INPUT_SCHEMAS: Record<string, object> = {
     status: { type: 'string', enum: ['approved','draft','deprecated'] },
     lastReviewedAt: { type: 'string' },
     nextReviewDue: { type: 'string' },
+    riskScore: { type: 'number' },
+    priority: { type: 'number' },
+    priorityTier: { type: 'string', enum: [...PRIORITY_TIERS] },
+    requirement: { type: 'string', enum: [...REQUIREMENTS] },
+    categories: { type: 'array', items: { type: 'string' } },
     bump: { type: 'string', enum: ['patch','minor','major','none'] }
   } },
   // NOTE: instructions_query & instructions_categories removed as standalone tools.
@@ -230,7 +279,7 @@ const INPUT_SCHEMAS: Record<string, object> = {
   'integrity_verify': { type: 'object', additionalProperties: true },
   'feature_status': { type: 'object', additionalProperties: false, properties: {} },
   'index_health': { type: 'object', additionalProperties: true },
-  'usage_track': { type: 'object', additionalProperties: false, required: ['id'], properties: { id: { type: 'string' }, action: { type: 'string', enum: [...USAGE_ACTIONS], description: 'Usage action type (default: retrieved)' }, signal: { type: 'string', enum: [...USAGE_SIGNALS], description: 'Qualitative signal about instruction usefulness' }, comment: { type: 'string', maxLength: 256, description: 'Optional short comment about the instruction' } } },
+  'usage_track': { type: 'object', additionalProperties: false, anyOf: [{ required: ['id'] }, { required: ['instructionId'] }], properties: { id: { type: 'string' }, instructionId: { type: 'string', description: 'Alias for id (accepts the instructionId field returned by search/query/get).' }, action: { type: 'string', enum: [...USAGE_ACTIONS], description: 'Usage action type (default: retrieved)' }, signal: { type: 'string', enum: [...USAGE_SIGNALS], description: 'Qualitative signal about instruction usefulness' }, comment: { type: 'string', maxLength: 256, description: 'Optional short comment about the instruction' } } },
   'usage_hotset': { type: 'object', additionalProperties: false, properties: { limit: { type: 'number', minimum: 1, maximum: 100 } } },
   'usage_flush': { type: 'object', additionalProperties: false, properties: { id: { type: 'string', description: 'Instruction ID to reset usage for' }, before: { type: 'string', description: 'ISO date — reset usage for entries with lastUsedAt before this date' } } },
   'metrics_snapshot': { type: 'object', additionalProperties: true },
@@ -292,14 +341,21 @@ const INPUT_SCHEMAS: Record<string, object> = {
   'index_search': { type: 'object', additionalProperties: false, anyOf: [
     { required: ['keywords'] },
     { required: ['searchString'] },
-    { required: ['fields'] }
+    { required: ['fields'] },
+    { required: ['q'] },
+    { required: ['query'] }
   ], not: { required: ['keywords', 'searchString'] }, properties: {
     keywords: {
-      type: 'array',
-      items: { type: 'string', minLength: 1, maxLength: 100 },
-      minItems: 1,
-      maxItems: 10,
-      description: 'Search keywords to match against instruction titles, bodies, and categories'
+      anyOf: [
+        {
+          type: 'array',
+          items: { type: 'string', minLength: 1, maxLength: 100 },
+          minItems: 1,
+          maxItems: 10
+        },
+        { type: 'string', minLength: 1, maxLength: 500 }
+      ],
+      description: 'Search keywords: an array of tokens, OR a single string (one or many words). A string is searched as-is first, then split on spaces if no match.'
     },
     searchString: {
       type: 'string',
@@ -307,6 +363,8 @@ const INPUT_SCHEMAS: Record<string, object> = {
       maxLength: 500,
       description: 'Phrase input for search. Mutually exclusive with keywords.'
     },
+    q: { type: 'string', minLength: 1, maxLength: 500, description: 'Alias for searchString (accepts the common `q` search parameter name).' },
+    query: { type: 'string', minLength: 1, maxLength: 500, description: 'Alias for searchString (accepts the common `query` search parameter name).' },
     mode: { type: 'string', enum: [...SEARCH_MODES], description: 'Search mode: keyword (substring), regex (patterns like "deploy|release"), or semantic (embedding similarity). Default is semantic when INDEX_SERVER_SEMANTIC_ENABLED=1, otherwise keyword. Omit to use the server default.' },
     limit: { type: 'number', minimum: 1, maximum: 100, default: 50, description: 'Maximum number of instruction IDs to return' },
     includeCategories: { type: 'boolean', default: false, description: 'Include categories in search scope' },
@@ -347,6 +405,10 @@ const INPUT_SCHEMAS: Record<string, object> = {
 (INPUT_SCHEMAS as Record<string, object>)['index_inspect'] = { type: 'object', additionalProperties: false, required: ['id'], properties: { id: { type: 'string' } } };
 (INPUT_SCHEMAS as Record<string, object>)['index_debug'] = { type: 'object', additionalProperties: true };
 (INPUT_SCHEMAS as Record<string, object>)['integrity_manifest'] = { type: 'object', additionalProperties: true };
+// #592: two handlers that were registered but declared nowhere, so tools/call
+// served them while tools/list never showed them at any tier.
+(INPUT_SCHEMAS as Record<string, object>)['dashboard_config'] = { type: 'object', additionalProperties: true };
+(INPUT_SCHEMAS as Record<string, object>)['diagnostics_handshake'] = { type: 'object', additionalProperties: true };
 
 // Archive lifecycle tools (spec 006-archive-lifecycle Phase D).
 // Surfaced via index_dispatch actions: archive, restore, listArchived, getArchived, purgeArchive.
@@ -403,7 +465,9 @@ const INPUT_SCHEMAS: Record<string, object> = {
   limit: { type: 'number', minimum: 1, maximum: 500, description: 'Maximum messages to return' },
   markRead: { type: 'boolean', description: 'Mark returned messages as read by reader' },
   tags: { type: 'array', items: { type: 'string' }, description: 'Filter by tags (match any)' },
-  sender: { type: 'string', description: 'Filter by sender name' }
+  sender: { type: 'string', description: 'Filter by sender name' },
+  requiresAck: { type: 'boolean', description: 'Filter to messages that require/do not require acknowledgment' },
+  unacked: { type: 'boolean', description: 'Only return unacknowledged messages (requires reader)' }
 } };
 (INPUT_SCHEMAS as Record<string, object>)['messaging_list_channels'] = { type: 'object', additionalProperties: true };
 (INPUT_SCHEMAS as Record<string, object>)['messaging_ack'] = { type: 'object', additionalProperties: false, required: ['messageIds', 'reader'], properties: {
@@ -464,6 +528,7 @@ const INPUT_SCHEMAS: Record<string, object> = {
   unreadOnly: { type: 'boolean' },
   limit: { type: 'number' },
   markRead: { type: 'boolean' },
+  unacked: { type: 'boolean', description: 'Only return unacknowledged messages (action=read, requires reader).' },
   // ack / update / get / purge
   messageIds: { type: 'array', items: { type: 'string' } },
   messageId: { type: 'string' },
@@ -476,8 +541,8 @@ const INPUT_SCHEMAS: Record<string, object> = {
 } };
 
 // Stable & mutation classification lists (mirrors usage in toolHandlers; exported to remove duplication there).
-export const STABLE = new Set(['health_check','feedback_submit','graph_export','index_dispatch','index_search','index_governanceHash','prompt_review','integrity_verify','usage_track','usage_hotset','metrics_snapshot','gates_evaluate','meta_tools','help_overview','index_schema','manifest_status','index_diagnostics','meta_activation_guide','meta_check_activation','bootstrap','bootstrap_status','feature_status','index_health','index_inspect','index_debug','integrity_manifest','messaging_read','messaging_list_channels','messaging_stats','messaging_get','messaging_thread','trace_dump','index_listArchived','index_getArchived']);
-export const MUTATION = new Set(['feedback_manage','index_add','index_import','index_repair','index_reload','index_remove','index_groom','index_enrich','index_governanceUpdate','index_normalize','usage_flush','manifest_refresh','manifest_repair','promote_from_repo','bootstrap_request','bootstrap_confirmFinalize','messaging_send','messaging_ack','messaging_update','messaging_purge','messaging_reply','messaging_manage','diagnostics_block','diagnostics_microtaskFlood','diagnostics_memoryPressure','index_archive','index_restore','index_purgeArchive']);
+export const STABLE = new Set(['health_check','feedback_submit','graph_export','index_dispatch','index_search','index_governanceHash','prompt_review','integrity_verify','usage_track','usage_hotset','metrics_snapshot','gates_evaluate','meta_tools','help_overview','index_schema','manifest_status','index_diagnostics','meta_activation_guide','meta_check_activation','bootstrap','bootstrap_status','feature_status','index_health','index_inspect','index_debug','integrity_manifest','messaging_read','messaging_list_channels','messaging_stats','messaging_get','messaging_thread','trace_dump','index_listArchived','index_getArchived','dashboard_config','diagnostics_handshake']);
+export const MUTATION = new Set(['feedback_manage','index_add','index_import','index_patch','index_repair','index_reload','index_remove','index_groom','index_enrich','index_governanceUpdate','index_normalize','usage_flush','manifest_refresh','manifest_repair','promote_from_repo','bootstrap_request','bootstrap_confirmFinalize','messaging_send','messaging_ack','messaging_update','messaging_purge','messaging_reply','messaging_manage','diagnostics_block','diagnostics_microtaskFlood','diagnostics_memoryPressure','index_archive','index_restore','index_purgeArchive']);
 
 // Tool tier classification (002-tool-consolidation spec)
 // core: always visible, essential daily use
@@ -493,9 +558,11 @@ const TOOL_TIERS: Record<string, ToolTier> = {
   'prompt_review': 'core',
   'help_overview': 'core',
   'bootstrap': 'core',
-  // Extended (14)
+  // Extended. Deliberately uncounted: the comment here said "(14)" while the
+  // tier held 26, and a hand-written count next to a hand-edited map is wrong
+  // by default (#587). `npm run docs:tools` derives the real counts.
   'graph_export': 'extended',
-  'usage_track': 'extended',
+  'usage_track': 'core',
   'usage_hotset': 'extended',
   'index_add': 'extended',
   'index_import': 'extended',
@@ -503,6 +570,7 @@ const TOOL_TIERS: Record<string, ToolTier> = {
   'index_reload': 'extended',
   'index_governanceHash': 'extended',
   'index_governanceUpdate': 'extended',
+  'index_patch': 'extended',
   'gates_evaluate': 'extended',
   'integrity_verify': 'extended',
   'metrics_snapshot': 'extended',
@@ -531,6 +599,9 @@ const TOOL_TIERS: Record<string, ToolTier> = {
   'diagnostics_memoryPressure': 'admin',
   'index_inspect': 'admin',
   'index_debug': 'admin',
+  // #592: declared so the callable surface equals the declared surface (A-2).
+  'dashboard_config': 'admin',
+  'diagnostics_handshake': 'admin',
   'integrity_manifest': 'admin',
   // Messaging tools (extended tier)
   'messaging_send': 'extended',
@@ -567,31 +638,65 @@ export function resolveActiveTier(): ToolTier {
   return 'core';
 }
 
-export function getToolRegistry(filter?: ToolRegistryFilter): ToolRegistryEntry[] {
-  const maxTier = filter?.tier ?? resolveActiveTier();
+/**
+ * Enumerate the DECLARED tool names for a tier, without building input schemas.
+ *
+ * Split out of {@link getToolRegistry} so the `tools/call` membership check
+ * ({@link isDeclaredTool}) does not pay for schema construction:
+ * `withDynamicInstructionBodyLimits` deep-clones every entry and mutates a
+ * module-global sub-schema counter, neither of which belongs on a per-request
+ * path. The previous implementation also applied the diagnostics/messaging
+ * filters twice — once while collecting schema keys and again in the emit loop
+ * — which is now done once here (CQ-5).
+ */
+function enumerateDeclaredToolNames(maxTier: ToolTier): string[] {
   const maxLevel = TIER_LEVEL[maxTier];
   const diagnosticsEnabled = dangerousDiagnosticsEnabled();
   const messagingOn = messagingEnabled();
-  const entries: ToolRegistryEntry[] = [];
-  const names = new Set<string>([...STABLE, ...MUTATION]);
-  // Ensure we also expose any tools that have schemas even if not in STABLE/MUTATION lists.
-  for(const k of Object.keys(INPUT_SCHEMAS)) {
-    if (!diagnosticsEnabled && DANGEROUS_DIAGNOSTIC_TOOLS.has(k)) continue;
-    if (!messagingOn && MESSAGING_TOOLS.has(k)) continue;
-    names.add(k);
-  }
+  const names = new Set<string>([...STABLE, ...MUTATION, ...Object.keys(INPUT_SCHEMAS)]);
+  const out: string[] = [];
   for(const name of Array.from(names).sort()){
     if (!diagnosticsEnabled && DANGEROUS_DIAGNOSTIC_TOOLS.has(name)) continue;
     if (!messagingOn && MESSAGING_TOOLS.has(name)) continue;
-    const tier = TOOL_TIERS[name] || 'admin';
-    if (TIER_LEVEL[tier] > maxLevel) continue;
+    if (TIER_LEVEL[TOOL_TIERS[name] || 'admin'] > maxLevel) continue;
+    out.push(name);
+  }
+  return out;
+}
+
+/**
+ * True when `name` is a tool this server DECLARES over MCP.
+ *
+ * Issue #592. The allowlist is deliberately the FULL registry (`'admin'`), not
+ * {@link resolveActiveTier}: tiers are a `tools/list` VISIBILITY contract
+ * (`specs/002-tool-consolidation.md:33-41`, `docs/tools.md` § Tier Visibility),
+ * so an extended or admin tool a client already knows about stays callable when
+ * the tier flags are off. What this rejects is a handler registered but
+ * declared NOWHERE — invisible at every tier, absent from `meta_tools` and the
+ * generated artifacts, and unvalidated, because `validateParams` fails open
+ * when no schema is registered.
+ *
+ * Deliberately not cached: the diagnostics and messaging gates it consults are
+ * runtime-reloadable, and a cache would make a flag flip a false pass.
+ *
+ * @param name - Tool name taken from a `tools/call` request
+ * @returns true when the tool is part of the declared surface
+ */
+export function isDeclaredTool(name: string): boolean {
+  return enumerateDeclaredToolNames('admin').includes(name);
+}
+
+export function getToolRegistry(filter?: ToolRegistryFilter): ToolRegistryEntry[] {
+  const maxTier = filter?.tier ?? resolveActiveTier();
+  const entries: ToolRegistryEntry[] = [];
+  for(const name of enumerateDeclaredToolNames(maxTier)){
     const outputSchema = (outputSchemas as Record<string, object>)[name];
     entries.push({
       name,
       description: describeTool(name),
       stable: STABLE.has(name),
       mutation: MUTATION.has(name),
-      tier,
+      tier: TOOL_TIERS[name] || 'admin',
       inputSchema: withDynamicInstructionBodyLimits(name, INPUT_SCHEMAS[name] || { type: 'object' }),
       outputSchema,
       // zodSchema to be attached incrementally by a forthcoming zodRegistry enhancer.
@@ -604,7 +709,7 @@ function describeTool(name: string): string {
   switch(name){
     case 'health_check': return 'Returns server health status & version.';
   case 'graph_export': return 'Export instruction relationship graph (schema v1 minimal or v2 enriched).';
-  case 'index_dispatch': return 'Unified dispatcher for instruction index operations. Required: "action". Key params by action: get/getEnhanced(id), search(q/searchString/keywords/fields, includeCategories, caseSensitive, limit, mode), query(text,categoriesAny,limit,offset), list(category), diff(clientHash), export(ids,metaOnly), remove(id or ids, mode:"archive"|"purge"), archive(ids, reason), restore(ids, restoreMode), listArchived/getArchived/purgeArchive. Read actions accept includeArchived/onlyArchived flags (mutually exclusive). Use action="capabilities" to discover all supported actions.';
+  case 'index_dispatch': return 'Unified dispatcher for instruction index operations. Required: "action". Key params by action: get/getEnhanced(id, bodyOffset?, bodyLimit?), search(q/searchString/keywords/fields, includeCategories, caseSensitive, limit, mode, includeBody?), query(text,categoriesAny,limit,offset), list(category, limit?, offset?, includeBody?), diff(clientHash), export(ids,metaOnly), patch(id, op:"splice"|"append"|"prepend"|"replace", text?/find?/replaceWith?, bodyOffset?, bodyLength?, expectedSourceHash?, dryRun?), remove(id or ids, mode:"archive"|"purge"), archive(ids, reason), restore(ids, restoreMode), listArchived/getArchived/purgeArchive. Use patch to edit an instruction body in place instead of resending the whole body via add+overwrite. list/search return body-light items by default (bodyPreview+bodyLength); pass includeBody:true for full bodies or use get (supports bodyOffset/bodyLimit pagination). list/search default to INDEX_SERVER_DEFAULT_PAGE_SIZE results (default 50) when limit is omitted; pass limit:0 on list to return all. Read actions accept includeArchived/onlyArchived flags (mutually exclusive). Use action="capabilities" to discover all supported actions.';
   case 'index_search': return '🔍 PRIMARY: Search instructions by keywords, searchString phrase input, and/or structural fields — returns instruction IDs for targeted retrieval. Supports mode: "keyword" (substring match), "regex" (patterns like "deploy|release"), or "semantic" (embedding similarity). Default mode is semantic when INDEX_SERVER_SEMANTIC_ENABLED=1, otherwise keyword. Omit the mode parameter to let the server choose the best default. Use this FIRST to discover relevant instructions, then use index_dispatch get for details.';
   case 'index_governanceHash': return 'Return governance projection & deterministic governance hash.';
   // query & categories now accessed via dispatcher actions.
@@ -616,7 +721,8 @@ function describeTool(name: string): string {
   case 'index_remove': return 'Delete one or more instruction entries by id. Bulk deletes exceeding INDEX_SERVER_MAX_BULK_DELETE (default 5) require force=true and auto-create a backup first. Use dryRun=true to preview. NOTE: spec 006-archive-lifecycle introduces a new mode parameter ("archive" | "purge"). Today the omitted-mode default remains destructive ("purge") for backwards compatibility, but the response includes defaultBehaviorChangeWarning — pass mode:"archive" to opt into the upcoming default (move to archive store, restorable) or mode:"purge" (or purge:true alias) to keep destructive behavior. The default WILL change to "archive" in a future release.';
   case 'index_groom': return 'Groom index: normalize, repair hashes, merge duplicates, ARCHIVE deprecated (was: remove), remap categories, apply usage signal feedback (outdated/not-relevant/helpful/applied) to instruction priority and requirement. Spec 006 Phase D: retirement paths now archive instead of permanently delete; pass mode.purgeArchive=true (mutually exclusive with retirement flags) to permanently purge archived entries.';
   case 'index_enrich': return 'Persist normalization of placeholder governance fields to disk.';
-  case 'index_governanceUpdate': return 'Patch limited governance fields (owner/status/review dates + optional version bump).';
+  case 'index_governanceUpdate': return 'Patch governance fields (owner/status/review dates/riskScore/priority/priorityTier/requirement + optional version bump).';
+  case 'index_patch': return 'Patch an instruction body in place (splice/append/prepend/replace) or update metadata fields (title/semanticSummary/categories/primaryCategory/contentType) via op:metadata without touching the body; supports an expectedSourceHash precondition for lost-update protection.';
     case 'prompt_review': return 'Static analysis of a prompt returning issues & summary.';
   case 'integrity_verify': return 'Verify each instruction body hash against stored sourceHash.';
   case 'feature_status': return 'Report active index feature flags and counters.';
@@ -652,6 +758,7 @@ function describeTool(name: string): string {
   case 'index_inspect': return 'Return raw instruction entry by ID for debugging (full JSON).';
   case 'index_debug': return 'Dump raw index state for debugging (entry count, keys, load status).';
   case 'integrity_manifest': return 'Verify integrity of index manifest entries against stored sourceHash values.';
+  case 'dashboard_config': return 'Deterministic snapshot of every recognized environment / feature flag with metadata (category, stability, default, reload behavior). Flags marked sensitive return only a present boolean, never the value.';
   // messaging system descriptions
   case 'messaging_send': return 'Send a message to a channel with recipient targeting. Supports broadcast (*), directed, priority, TTL, threading, and structured payloads.';
   case 'messaging_read': return 'Read messages from a channel with visibility filtering. Supports unread-only, limit, mark-as-read, tag filtering, and sender filtering.';

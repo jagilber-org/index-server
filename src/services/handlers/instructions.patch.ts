@@ -1,10 +1,10 @@
-import { InstructionEntry, STATUSES } from '../../models/instruction';
+import { InstructionEntry, PRIORITY_TIERS, REQUIREMENTS, STATUSES } from '../../models/instruction';
 import { registerHandler } from '../../server/registry';
 import { computeGovernanceHash, ensureLoaded, invalidate, projectGovernance, touchIndexVersion, writeEntry } from '../indexContext';
 import { logAudit } from '../auditLog';
 import { attemptManifestUpdate } from '../manifestManager';
 import { incrementCounter } from '../features';
-import { guard, bumpVersion, createChangeLogEntry } from './instructions.shared';
+import { guard, bumpVersion, createChangeLogEntry, normalizeInputCategories } from './instructions.shared';
 
 registerHandler('index_governanceHash', () => {
   const reloadFailures: string[] = [];
@@ -56,7 +56,7 @@ registerHandler('index_governanceHash', () => {
   return { count: projections.length, governanceHash, items: projections };
 });
 
-registerHandler('index_governanceUpdate', guard('index_governanceUpdate', (p: { id: string; owner?: string; status?: string; lastReviewedAt?: string; nextReviewDue?: string; bump?: 'patch' | 'minor' | 'major' | 'none' }) => {
+registerHandler('index_governanceUpdate', guard('index_governanceUpdate', (p: { id: string; owner?: string; status?: string; lastReviewedAt?: string; nextReviewDue?: string; riskScore?: number; priority?: number; priorityTier?: string; requirement?: string; categories?: string[]; bump?: 'patch' | 'minor' | 'major' | 'none' }) => {
   const id = p.id;
   const st = ensureLoaded();
   const existing = st.byId.get(id);
@@ -68,6 +68,12 @@ registerHandler('index_governanceUpdate', guard('index_governanceUpdate', (p: { 
   const record: InstructionEntry = { ...existing };
   let changed = false; const now = new Date().toISOString();
   const bump = p.bump || 'none';
+  // #493: these fields are advertised by the dispatcher schema. Reject bad values
+  // rather than dropping them, which previously reported changed:true and wrote nothing.
+  const reject = (error: string, provided: unknown) => {
+    logAudit('governanceUpdate', id, { changed: false, error, provided });
+    return { id, error, provided };
+  };
   if (p.owner && p.owner !== record.owner) { record.owner = p.owner; changed = true; }
   if (p.status) {
     const allowed: readonly InstructionEntry['status'][] = STATUSES;
@@ -80,6 +86,28 @@ registerHandler('index_governanceUpdate', guard('index_governanceUpdate', (p: { 
       record.status = desired as InstructionEntry['status'];
       changed = true;
     }
+  }
+  if (p.riskScore !== undefined) {
+    if (typeof p.riskScore !== 'number' || !Number.isFinite(p.riskScore)) return reject('invalid riskScore', p.riskScore);
+    if (p.riskScore !== record.riskScore) { record.riskScore = p.riskScore; changed = true; }
+  }
+  if (p.priority !== undefined) {
+    if (!Number.isInteger(p.priority) || p.priority < 1 || p.priority > 100) return reject('invalid priority', p.priority);
+    if (p.priority !== record.priority) { record.priority = p.priority; changed = true; }
+  }
+  if (p.priorityTier !== undefined) {
+    if (!PRIORITY_TIERS.includes(p.priorityTier as (typeof PRIORITY_TIERS)[number])) return reject('invalid priorityTier', p.priorityTier);
+    if (p.priorityTier !== record.priorityTier) { record.priorityTier = p.priorityTier as InstructionEntry['priorityTier']; changed = true; }
+  }
+  if (p.requirement !== undefined) {
+    if (!REQUIREMENTS.includes(p.requirement as (typeof REQUIREMENTS)[number])) return reject('invalid requirement', p.requirement);
+    if (p.requirement !== record.requirement) { record.requirement = p.requirement as InstructionEntry['requirement']; changed = true; }
+  }
+  if (p.categories !== undefined) {
+    const cats = normalizeInputCategories(p.categories);
+    if (cats.length === 0) return reject('categories must be a non-empty array of strings', p.categories);
+    const prev = JSON.stringify(record.categories);
+    if (JSON.stringify(cats) !== prev) { record.categories = cats; record.primaryCategory = cats[0]; changed = true; }
   }
   if (p.lastReviewedAt) { record.lastReviewedAt = p.lastReviewedAt; changed = true; }
   if (p.nextReviewDue) { record.nextReviewDue = p.nextReviewDue; changed = true; }
@@ -98,8 +126,8 @@ registerHandler('index_governanceUpdate', guard('index_governanceUpdate', (p: { 
     return { id, error: 'write-failed', detail: safeDetail, errorType };
   }
   touchIndexVersion(); invalidate(); ensureLoaded();
-  const resp = { id, changed: true, version: record.version, owner: record.owner, status: record.status, lastReviewedAt: record.lastReviewedAt, nextReviewDue: record.nextReviewDue };
-  logAudit('governanceUpdate', id, { changed: true, version: record.version, owner: record.owner, status: record.status, lastReviewedAt: record.lastReviewedAt, nextReviewDue: record.nextReviewDue });
+  const resp = { id, changed: true, version: record.version, owner: record.owner, status: record.status, lastReviewedAt: record.lastReviewedAt, nextReviewDue: record.nextReviewDue, riskScore: record.riskScore, priority: record.priority, priorityTier: record.priorityTier, requirement: record.requirement, categories: record.categories };
+  logAudit('governanceUpdate', id, { changed: true, version: record.version, owner: record.owner, status: record.status, lastReviewedAt: record.lastReviewedAt, nextReviewDue: record.nextReviewDue, riskScore: record.riskScore, priority: record.priority, priorityTier: record.priorityTier, requirement: record.requirement, categories: record.categories });
   attemptManifestUpdate();
   return resp;
 }));

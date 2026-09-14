@@ -14,7 +14,6 @@ import './handlers.usage';
 import './handlers.prompt';
 import './handlers.metrics';
 import './handlers.gates';
-import './handlers.testPrimitive'; // test helper primitive handler registration
 import './handlers.diagnostics';
 import './handlers.feedback';
 import './handlers.help';
@@ -27,6 +26,11 @@ import './handlers.activation'; // VSCode activation guide for tool enablement
 import './handlers.promote'; // promote_from_repo: scan repo & upsert into index
 import './handlers.messaging'; // inter-agent messaging (not stored in instruction index)
 import './handlers.trace'; // trace_dump: write in-memory trace ring buffer to file
+// #592: dashboard_config is now DECLARED in the tool registry, so its handler
+// must exist in every process that serves tools/call — not only when the
+// dashboard admin routes happen to import it. Without this a stdio-only run
+// would advertise a tool it cannot serve (toolRegistryConformance).
+import './handlers.dashboardConfig'; // dashboard_config: flag registry snapshot
 
 // Rich meta_tools implementation (stable vs dynamic)
 function mutationEnabled(){ return getRuntimeConfig().mutation.enabled; }

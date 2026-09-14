@@ -12,6 +12,7 @@ The browser refreshes the Overview panel from several admin endpoints.
 
 - **`GET /api/admin/stats`**: feeds System Statistics, Performance, and Individual Tool Call Metrics. This is the primary source for request counters, index counts, connection counts, memory values, and per-tool metrics.
 - **`GET /api/system/health`**: feeds System Health. The client normalizes modern and older health response shapes before rendering status, checks, issues, recommendations, and trend data.
+- **`GET /api/system/resources`**: feeds the Performance card's resource sparklines and the Catalog History chart. The response includes a `catalogHistory` array of samples collected every 5 minutes by the server-side `CatalogSampler`.
 - **`GET /api/admin/maintenance`**: loads maintenance state alongside the overview request so maintenance status can be surfaced where the UI supports it.
 - **`GET /api/usage/snapshot`**: feeds Usage Signals, including instruction usage counts, latest qualitative signals, and top signaled instructions.
 
@@ -60,15 +61,75 @@ The client can derive CPU and memory checks from the latest resource cache or st
 
 ## Performance
 
-The Performance card is a compact throughput and latency summary. It is smaller than the Monitoring panel on purpose; use it to decide whether deeper investigation is needed.
+The Performance card combines a compact throughput and latency summary with a Catalog History line chart. The stat rows give current-value answers; the chart shows how catalog health has changed over time.
+
+### Stat rows
 
 - **Total Connections**: total observed dashboard/client connections since process start. Use it to spot connection churn.
 - **Error Rate**: aggregate request error rate, repeated here so performance and reliability can be read together.
 - **Response Time**: average tracked response time in milliseconds. Watch for sudden increases after imports, restores, or search-heavy workflows.
-- **Window**: recent resource-trend sampling window when available. This explains how much history the sparkline represents.
+- **Window**: recent resource-trend sampling window. This describes how much history the CPU/heap sparkline represents and operates on a separate, faster cadence (seconds) from the Catalog History chart.
 - **Memory Usage**: current heap used compared with heap limit or heap reservation. This is useful after bulk operations or long-running sessions.
 
+### Catalog History chart
+
+Below the stat rows, the Catalog History chart shows the **composition of the index over time** as two stacked-area panels sharing one x-axis.
+
+**Panel 1 — index composition.** The total height *is* the instruction count, split into three mutually exclusive bands:
+
+- **never used**: never retrieved and never signalled.
+- **retrieved**: retrieved or applied at least once, but carrying no signal.
+- **signalled**: carrying any feedback signal.
+
+Because the three bands sum to the entry count, the signal count and the instruction count share a single axis. There is no second scale and no ratio to misread — the signalled band's height against the full stack *is* the coverage.
+
+**Panel 2 — signals by type.** The signalled band decomposed into `applied`, `helpful`, `not-relevant`, and `outdated`, on its own axis. Colours run from positive (blue) through negative (red), so a growing red band means the catalog is going stale.
+
+Both panels carry numeric y-axis ticks. Hovering draws one crosshair across both panels and prints every band's value for that sample; "Show data table" prints the same numbers as text, for keyboard readers and anyone who cannot separate the bands by colour.
+
+**Counts are index-scoped.** Every band is computed by walking the live index, not the usage snapshot. The snapshot retains records for entries that have since been removed, so counting its keys could report more signalled entries than exist.
+
+**The history is persistent.** `CatalogSampler` takes one sample every 5 minutes and writes it to SQLite (`metrics/activity.db` by default, `INDEX_SERVER_ACTIVITY_DB` to relocate). History survives restarts and is pruned by age (`INDEX_SERVER_ACTIVITY_RETENTION_DAYS`, default 90). The in-process ring buffer still holds the most recent 72 samples and is used only as a fallback when the store is unavailable — in that case the chart shows history since the last restart rather than nothing.
+
+The 5-minute catalog cadence is separate from the resource-trend "Window" row above, which tracks CPU and heap on a faster cadence. Two different sampling windows appear on the same card — the "Window" row describes the resource sparkline, not the catalog chart.
+
+Before the first sample exists, the chart area displays "No sampled history yet."
+
+### Catalog Activity chart
+
+Where Catalog History is a *stock* view (what the index looks like), Catalog Activity is a *flow* view (what happened). It draws stacked bars per time bucket — `added`, `modified`, `signalled`, `archived`, `removed` — with selectable bucket width (hourly to weekly) and time range.
+
+Bars rather than lines: these are counts of discrete events, and a line between two buckets would draw values that were never observed, rendering a quiet day as a smooth slope rather than as nothing happening.
+
+Below the chart, **By instance** breaks the same window down per server process (`<pid>@<cwd>`), including a per-signal breakdown. Use it to answer "which instance wrote this" when several are running against one catalog.
+
+Activity is recorded from the audit choke point that every committed mutation already passes through, so it captures adds, patches, archives, restores, and purges without per-handler wiring. Signals are recorded separately at `usage_track`, carrying the previous signal value — the usage snapshot keeps only a last-write-wins `lastSignal` with no timestamp, so a `helpful` later changed to `applied` would otherwise leave no trace.
+
+Set `INDEX_SERVER_ACTIVITY_LOG=0` to disable activity recording; both charts then fall back to whatever history already exists.
+
 For percentiles, event streams, synthetic activity, and live log tailing, switch to the Monitoring panel. Overview is optimized for quick triage, not exhaustive profiling.
+
+## Index Growth
+
+Cumulative catalog size over time, drawn as a filled area from `GET /api/usage/growth`.
+
+**This chart reads no telemetry.** The two catalog charts above are both *measured*: Catalog History samples the index every 5 minutes, and Catalog Activity records events as they happen. Neither can describe anything that happened before telemetry was switched on, so on a freshly-upgraded server they show a flat line and a row of empty buckets while the catalog itself may be months old.
+
+Index Growth is *derived* instead. Every instruction already carries `createdAt`, and archived entries carry `archivedAt`, so the server reconstructs the curve from the catalog as it stands right now — back to the oldest entry, with no accumulated history required. It is correct immediately after a fresh install, and it survives the activity database being lost, relocated, or reset.
+
+A line rather than bars: cumulative size is a quantity that genuinely exists between observations, so interpolating across a quiet week is honest here in a way it would not be for the event counts above. The y-axis always starts at zero — a cumulative count auto-scaled to its own minimum would render a two-entry drift as a dramatic climb.
+
+**It is a survivor curve, not a measured time series.** This is the one thing to understand before reading anything into it:
+
+- Entries that exist today are placed on the day they were created.
+- Entries that were **archived** are counted from their creation day and subtracted on their archive day — archives keep a row, so they are fully recoverable.
+- Entries that were **permanently deleted** leave no row anywhere. They cannot appear, so the line understates the catalog's true size at any past moment when something has since been purged.
+
+The caveat is rendered under the chart on every load for that reason, and the API response carries `derived: true`. Do not cite this curve as evidence of what the index contained on a given date; cite it for shape and growth pattern.
+
+Entries whose `createdAt` is missing or unparseable are excluded rather than defaulted, and counted in the response's `undated` field (surfaced in the readout as "N undated entries excluded"). Defaulting them would place them at the Unix epoch and drag the curve's origin back by decades.
+
+The **all time** range omits `since` and lets the server default it to the catalog's own first creation. The 30/90-day ranges fold everything older into a baseline, so a short window on an old catalog opens at the real count rather than at zero.
 
 ## Individual Tool Call Metrics
 
@@ -104,7 +165,7 @@ Use this card to find instruction content that operators or agents are actually 
 - Check Overall Status. If it is not healthy, read failed checks, issues, recommendations, and resource trends.
 - Check Error Rate. If it is elevated, inspect Individual Tool Call Metrics to identify whether failures are global or tool-specific.
 - Check index Accepted, index Files, and index Skipped. If counts are unexpected, move to Instructions or Maintenance.
-- Check Performance for response time and memory pressure. If the card looks abnormal, use Monitoring for deeper timing and log context.
+- Check Performance for response time, memory pressure, and catalog trends. If the stat rows look abnormal, use Monitoring for deeper timing and log context. If the Catalog History chart shows a sudden drop in index count, check whether a restart, reload, or validation failure occurred.
 - Check Usage Signals last. Use it to prioritize instruction content review after runtime health is understood.
 
 ## Common Findings
@@ -116,6 +177,8 @@ Use this card to find instruction content that operators or agents are actually 
 - **Tool success rate is below 95 percent** usually points to tool-specific failures, bad input shape, disabled mutation, or a backend dependency issue. Open Monitoring logs and reproduce the affected call with a focused request.
 - **Memory sparkline climbs steadily** can indicate a long-running operation, cache growth, import/restore pressure, or a possible leak. Compare with Monitoring, then capture logs before restarting.
 - **Many `outdated` Usage Signals** means instruction content may no longer match current repo or runtime behavior. Review the signaled instruction IDs and update or deprecate stale guidance.
+- **Catalog History chart shows a single point or very short line** means the server started recently. The catalog sampler collects one sample every 5 minutes and holds up to 72 samples (6 hours). The chart fills in over time.
+- **Catalog History chart is empty after a restart** is expected. History is in-memory only and resets when the server process restarts. This is not data loss — the stat rows and System Statistics still show current absolute values.
 
 ## Related Panels
 
@@ -142,10 +205,16 @@ Use this card to find instruction content that operators or agents are actually 
 - **`INDEX_SERVER_VERBOSE_LOGGING`** enables more detailed diagnostic output.
 - **`INDEX_SERVER_LOG_FILE`** enables or selects file logging for operational investigation.
 - **`INDEX_SERVER_HTTP_METRICS`** enables HTTP metrics where supported by the runtime.
+- **`INDEX_SERVER_ACTIVITY_LOG`** records catalog activity and periodic catalog samples for the Overview charts (on by default; set `0` to disable).
+- **`INDEX_SERVER_ACTIVITY_DB`** relocates the activity/sample database (default `<cwd>/metrics/activity.db`). Independent of `INDEX_SERVER_STORAGE_BACKEND`, so chart history exists in both `json` and `sqlite` modes.
+- **`INDEX_SERVER_ACTIVITY_RETENTION_DAYS`** sets the age at which activity events and catalog samples are pruned (default `90`).
 
 ## Operator Notes
 
 - Overview values reset when the server process restarts unless they are backed by persisted state.
+- The Catalog History chart is in-memory only. It resets on restart and grows from a single point — this is by design, not a bug. SQLite persistence for catalog history is a deferred follow-up.
+- Catalog History axes are absolute and tick-labelled; bands within a panel share one scale and are directly comparable. Do not compare heights *across* the two panels — they have separate maxima, shown on their own axes.
+- The "Window" row in the Performance stat rows describes the CPU/heap resource sparkline cadence, not the Catalog History chart cadence. The two sampling windows are independent.
 - Treat the Overview panel as a triage surface. Use panel-specific pages for root-cause work.
 - Check index counts after backup restore, bulk import, cache clear, or schema migration.
 - Keep browser tabs reasonable during diagnosis; each dashboard tab can add WebSocket/admin activity.

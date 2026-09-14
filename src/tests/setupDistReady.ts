@@ -2,6 +2,7 @@
 // Centralizes previous per-spec waitForDist calls and reduces race-induced ENOENT/timeouts.
 import { beforeAll } from 'vitest';
 import { waitForDist } from './distReady';
+import { withTransientRetry } from './helpers/localhostRetry';
 import fs from 'fs';
 import path from 'path';
 
@@ -39,6 +40,16 @@ if(!g.__SETUP_DIST_READY_INIT){
 
     // All tests use the dev repo's local dist/ — no production deploy sync needed.
     // If dist/ is missing, waitForDist (below) will handle it.
+
+    // Loopback connects/reads to test servers intermittently fail at the transport
+    // layer on this platform (ETIMEDOUT/ECONNRESET before any response). Retry those
+    // and only those — a completed HTTP exchange is returned untouched.
+    if (typeof g.fetch === 'function' && !g.__TRANSIENT_FETCH_RETRY) {
+      g.__TRANSIENT_FETCH_RETRY = true;
+      const nativeFetch = g.fetch.bind(g) as typeof fetch;
+      g.fetch = ((input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) =>
+        withTransientRetry(() => nativeFetch(input, init))) as typeof fetch;
+    }
   } catch {/* ignore init errors */}
 }
 

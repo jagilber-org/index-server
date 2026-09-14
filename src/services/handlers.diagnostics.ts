@@ -78,13 +78,21 @@ if (dangerousDiagnosticsEnabled()) {
 /**
  * diagnostics_handshake: Returns recent handshake events captured by sdkServer (if present).
  * If instrumentation not present (older build), returns empty list with a warning flag.
+ *
+ * Gated identically to its three siblings above (#592). The handshake event
+ * ring exposes internal startup ordering detail, which SH-9 says should be off
+ * by default and enabled by configuration rather than by request. Until #592
+ * this handler was registered unconditionally AND absent from the tool
+ * registry, so it was callable while invisible at every tier.
  */
 interface HandshakeEvt { seq: number; ts: string; stage: string; extra?: Record<string,unknown>; }
 const gRef = global as unknown as { HANDSHAKE_EVENTS_REF?: HandshakeEvt[] };
-registerHandler('diagnostics_handshake', () => {
-  const buf = gRef.HANDSHAKE_EVENTS_REF;
-  if(Array.isArray(buf)) return { events: buf.slice(-50) };
-  return { events: [], warning: 'handshake instrumentation unavailable in this build' };
-});
+if (dangerousDiagnosticsEnabled()) {
+  registerHandler('diagnostics_handshake', () => {
+    const buf = gRef.HANDSHAKE_EVENTS_REF;
+    if(Array.isArray(buf)) return { events: buf.slice(-50) };
+    return { events: [], warning: 'handshake instrumentation unavailable in this build' };
+  });
+}
 
 export {}; // module scope

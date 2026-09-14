@@ -18,7 +18,7 @@
 import fs from 'fs';
 import path from 'path';
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
-import { migrateInstructionRecord } from '../../versioning/schemaVersion';
+import { migrateInstructionRecord, SCHEMA_VERSION } from '../../versioning/schemaVersion';
 import { AUDIENCES, REQUIREMENTS } from '../../models/instruction';
 
 // ---------------------------------------------------------------------------
@@ -198,7 +198,7 @@ describe('Import migration ordering — structural guard (#346)', () => {
 // ---------------------------------------------------------------------------
 describe('Import migration ordering — backward compat (#346)', () => {
   it('SE-08: valid current-schema entry passes migration unchanged', () => {
-    const rec = legacyEntry({ schemaVersion: '7' });
+    const rec = legacyEntry({ schemaVersion: SCHEMA_VERSION });
     const result = migrateInstructionRecord(rec);
     expect(result.changed).toBe(false);
     // All fields remain valid

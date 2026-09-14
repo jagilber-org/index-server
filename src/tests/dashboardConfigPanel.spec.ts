@@ -77,7 +77,7 @@ describe('dashboardConfigPanel – flag registry snapshot', () => {
   it('categories are consistent with known set', () => {
     const knownCategories = new Set([
       'auth', 'bootstrap', 'feedback', 'index', 'core', 'dashboard', 'deprecated', 'diagnostics',
-      'instructions', 'manifest', 'messaging', 'metrics', 'multi-instance', 'semantic', 'storage', 'stress',
+      'instructions', 'lifecycle-hooks', 'manifest', 'messaging', 'metrics', 'multi-instance', 'semantic', 'storage', 'stress',
       'tracing', 'usage', 'validation',
     ]);
     const flags = getFlagRegistrySnapshot();
@@ -90,5 +90,52 @@ describe('dashboardConfigPanel – flag registry snapshot', () => {
     const flags = getFlagRegistrySnapshot();
     const names = flags.map(f => f.name);
     expect(new Set(names).size).toBe(names.length);
+  });
+
+  it('surfaces lifecycle hook commands as sensitive write-only presence indicators', () => {
+    const key = 'INDEX_SERVER_HOOK_ON_CHANGE';
+    const previous = process.env[key];
+    const command = 'operator-command-must-not-leak';
+    try {
+      process.env[key] = command;
+      const flag = getFlagRegistrySnapshot().find(f => f.name === key);
+      expect(flag).toBeDefined();
+      expect(flag).toMatchObject({
+        category: 'lifecycle-hooks',
+        editable: true,
+        sensitive: true,
+        writeOnly: true,
+        reloadBehavior: 'restart-required',
+        present: true,
+      });
+      expect(flag).not.toHaveProperty('value');
+      expect(flag).not.toHaveProperty('parsed');
+      expect(JSON.stringify(flag)).not.toContain(command);
+    } finally {
+      if (previous === undefined) delete process.env[key];
+      else process.env[key] = previous;
+    }
+  });
+
+  it('surfaces lifecycle hook execution controls with validation metadata', () => {
+    const byName = new Map(FLAG_REGISTRY.map(flag => [flag.name, flag]));
+    expect(byName.get('INDEX_SERVER_HOOK_BLOCKING')).toMatchObject({
+      category: 'lifecycle-hooks',
+      type: 'boolean',
+      reloadBehavior: 'restart-required',
+      editable: true,
+    });
+    expect(byName.get('INDEX_SERVER_HOOK_TIMEOUT_MS')).toMatchObject({
+      category: 'lifecycle-hooks',
+      type: 'number',
+      default: '10000',
+      validation: { min: 1, unit: 'ms' },
+    });
+    expect(byName.get('INDEX_SERVER_HOOK_MAX_CONCURRENT')).toMatchObject({
+      category: 'lifecycle-hooks',
+      type: 'number',
+      default: '4',
+      validation: { min: 1 },
+    });
   });
 });

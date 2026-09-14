@@ -68,7 +68,10 @@ export type FlagMeta = {
   name: string;
   category: string;
   description: string;
-  stability: 'stable' | 'diagnostic' | 'experimental' | 'reserved';
+  // 'deprecated' added by #588: the catalog had no way to say "this variable
+  // is recognized but no longer does anything", so INDEX_SERVER_BODY_MAX_LENGTH
+  // sat at 'stable' with editable:true long after it was removed.
+  stability: 'stable' | 'diagnostic' | 'experimental' | 'reserved' | 'deprecated';
   since?: string;
   default?: string;
   type?: 'boolean' | 'string' | 'number';
@@ -76,6 +79,10 @@ export type FlagMeta = {
   /** Optional UI surface hint (Morpheus §2.1 revision #2). */
   surfaces?: ('pinned' | 'advanced')[];
   validation?: FlagValidation;
+  /** Value is sensitive and must never be returned by configuration reads. */
+  sensitive?: boolean;
+  /** Dashboard accepts replacements but never pre-populates or echoes the value. */
+  writeOnly?: boolean;
   /**
    * Opt-in marker that promotes a `dynamic` / `next-request` classification.
    * Required by the T1 boot-time-read audit when a flag is read in a
@@ -116,10 +123,31 @@ export const FLAG_REGISTRY: FlagMeta[] = [
   { name:'INDEX_SERVER_MUTATION', category:'core', description:'Override mutation tools (unset or 1 = enabled, 0 = read-only).', stability:'stable', default:'on', type:'boolean', since:'1.0.0', reloadBehavior:'restart-required', editable:true },
   { name:'INDEX_SERVER_VERBOSE_LOGGING', category:'core', description:'Verbose logging (handshake, dispatch timings).', stability:'stable', default:'off', type:'boolean', since:'1.0.0', reloadBehavior:'restart-required', editable:true },
   { name:'INDEX_SERVER_LOG_DIAG', category:'diagnostics', description:'Diagnostic logging (lower-level/internal).', stability:'diagnostic', default:'off', type:'boolean', since:'1.0.0', reloadBehavior:'restart-required', editable:true },
-  { name:'INDEX_SERVER_DASHBOARD', category:'dashboard', description:'Enable admin dashboard HTTP server.', stability:'stable', default:'off', type:'boolean', since:'1.0.0', reloadBehavior:'restart-required', editable:true },
+  { name:'INDEX_SERVER_DASHBOARD', category:'dashboard', description:'Enable admin dashboard HTTP server (loopback-only).', stability:'stable', default:'on', type:'boolean', since:'1.0.0', reloadBehavior:'restart-required', editable:true },
   { name:'INDEX_SERVER_DASHBOARD_PORT', category:'dashboard', description:'Dashboard port.', stability:'stable', default:'8787', type:'number', since:'1.0.0', reloadBehavior:'restart-required', editable:true, validation:{ min:1, max:65535, format:'port' } },
+  // Registered so the Configuration panel SHOWS where mutable state lives, but
+  // deliberately NOT editable. STATE_ROOT is resolved once at module load
+  // (configUtils.ts), before applyOverlay() runs, and the overlay works by
+  // mutating process.env — so an admin-config write cannot relocate the audit
+  // log, activity DB or trace logs today. Making it editable would hand an
+  // authenticated admin write an audit-log redirection primitive: point
+  // STATE_ROOT elsewhere and the audit trail for everything after it follows.
+  // `editable:false` routes through registerReadonlyFlags(), so writeOverride()
+  // refuses it rather than relying on the UI to not offer it. See #607.
+  { name:'INDEX_SERVER_STATE_ROOT', category:'storage', description:'Root directory for all mutable server state (logs, metrics, data, feedback, snapshots). Defaults to the OS user-data dir.', stability:'stable', default:'%LOCALAPPDATA%/index-server or $XDG_STATE_HOME/index-server', type:'string', since:'1.42.0', reloadBehavior:'restart-required', editable:false, readonlyReason:'sensitive', readonlyDetail:'Resolved at process start, before the overrides overlay is applied. Editable only via the environment or CLI, so an admin-config write cannot redirect the audit log. See issue #607.' },
   { name:'INDEX_SERVER_DASHBOARD_HOST', category:'dashboard', description:'Dashboard bind host.', stability:'stable', default:'127.0.0.1', type:'string', since:'1.0.0', reloadBehavior:'restart-required', editable:true },
   { name:'INDEX_SERVER_DASHBOARD_TRIES', category:'dashboard', description:'Dashboard port retry attempts.', stability:'stable', default:'10', type:'number', since:'1.0.0', reloadBehavior:'restart-required', editable:true, validation:{ min:1, max:100 } },
+
+  // Post-mutation lifecycle hooks. Commands are write-only: authenticated
+  // operators may replace/disable them, but configuration reads expose only
+  // presence and command text never returns to the browser.
+  { name:'INDEX_SERVER_HOOK_ON_CREATE', category:'lifecycle-hooks', description:'Command run after a new instruction is durably created.', stability:'stable', default:'(unset)', type:'string', reloadBehavior:'restart-required', editable:true, sensitive:true, writeOnly:true },
+  { name:'INDEX_SERVER_HOOK_ON_UPDATE', category:'lifecycle-hooks', description:'Command run after an existing instruction is durably overwritten.', stability:'stable', default:'(unset)', type:'string', reloadBehavior:'restart-required', editable:true, sensitive:true, writeOnly:true },
+  { name:'INDEX_SERVER_HOOK_ON_REMOVE', category:'lifecycle-hooks', description:'Command run after one or more instructions are durably removed.', stability:'stable', default:'(unset)', type:'string', reloadBehavior:'restart-required', editable:true, sensitive:true, writeOnly:true },
+  { name:'INDEX_SERVER_HOOK_ON_CHANGE', category:'lifecycle-hooks', description:'Catch-all command run after any committed mutation, including import and promotion.', stability:'stable', default:'(unset)', type:'string', reloadBehavior:'restart-required', editable:true, sensitive:true, writeOnly:true },
+  { name:'INDEX_SERVER_HOOK_BLOCKING', category:'lifecycle-hooks', description:'Wait for hook completion before returning the mutation response. Off uses fire-and-forget dispatch.', stability:'stable', default:'off', type:'boolean', reloadBehavior:'restart-required', editable:true },
+  { name:'INDEX_SERVER_HOOK_TIMEOUT_MS', category:'lifecycle-hooks', description:'Maximum wall-clock runtime for each hook process.', stability:'stable', default:'10000', type:'number', reloadBehavior:'restart-required', editable:true, validation:{ min:1, unit:'ms' } },
+  { name:'INDEX_SERVER_HOOK_MAX_CONCURRENT', category:'lifecycle-hooks', description:'Maximum concurrent hook processes; excess dispatches are dropped with a warning.', stability:'stable', default:'4', type:'number', reloadBehavior:'restart-required', editable:true, validation:{ min:1 } },
 
   // Manifest & index
   { name:'INDEX_SERVER_MANIFEST_WRITE', category:'manifest', description:'Allow writing index manifest (set 0 to disable).', stability:'stable', default:'on', type:'boolean', since:'1.1.0', reloadBehavior:'restart-required', editable:true },
@@ -128,6 +156,19 @@ export const FLAG_REGISTRY: FlagMeta[] = [
   { name:'INDEX_SERVER_POLL_MS', category:'manifest', description:'Index poll interval ms when poller enabled.', stability:'diagnostic', default:'10000', type:'number', since:'1.1.1', reloadBehavior:'restart-required', editable:true, validation:{ min:100, unit:'ms' } },
   { name:'INDEX_SERVER_POLL_PROACTIVE', category:'manifest', description:'Proactive reload on poll interval even if version unchanged.', stability:'diagnostic', default:'off', type:'boolean', since:'1.1.1', reloadBehavior:'restart-required', editable:true },
 
+  // Registered by #611, when the S-4 sweep moved these reads into the config
+  // layer. `dashboardConfigCoverage.spec.ts` requires every INDEX_SERVER_* var
+  // referenced under src/config/ to be either registered here or excluded with
+  // a rationale -- so relocating a read into the config layer is also a
+  // commitment to surface it to operators, which is the right trade: these were
+  // undocumented in the Configuration panel while being read on every call.
+  //
+  // `dynamic` rather than `restart-required` where the accessor in
+  // `config/serviceEnv.ts` re-reads process.env per call: writeOverride()
+  // mutates process.env synchronously, so those genuinely take effect without a
+  // restart and saying otherwise would make the panel lie.
+  { name:'INDEX_SERVER_MANIFEST_PATH', category:'manifest', description:'Explicit index manifest location. Relative values resolve against STATE_ROOT, not CWD; the reader (integrity_manifest) uses the same resolver, so both sides move together.', stability:'diagnostic', default:'<STATE_ROOT>/snapshots/index-manifest.json', type:'string', since:'1.42.0', reloadBehavior:'dynamic', editable:true, validation:{ format:'path' } },
+
   // Instructions strictness / visibility / creation controls
   { name:'INDEX_SERVER_STRICT_CREATE', category:'index', description:'After add, perform strict visibility verification chain.', stability:'diagnostic', default:'off', type:'boolean', since:'1.1.1', reloadBehavior:'restart-required', editable:true },
   { name:'INDEX_SERVER_STRICT_REMOVE', category:'index', description:'After remove, enforce strict verification of absence.', stability:'diagnostic', default:'off', type:'boolean', since:'1.1.1', reloadBehavior:'restart-required', editable:true },
@@ -135,8 +176,9 @@ export const FLAG_REGISTRY: FlagMeta[] = [
   { name:'INDEX_SERVER_REQUIRE_CATEGORY', category:'instructions', description:'Reject instructions missing category unless lax override set.', stability:'stable', default:'off', type:'boolean', since:'1.0.0', reloadBehavior:'restart-required', editable:true },
   { name:'INDEX_SERVER_CANONICAL_DISABLE', category:'instructions', description:'Disable canonical sourceHash persistence (forces runtime recompute).', stability:'diagnostic', default:'off', type:'boolean', since:'1.1.1', reloadBehavior:'restart-required', editable:true },
   { name:'INDEX_SERVER_SEARCH_OMIT_ZERO_QUERY', category:'instructions', description:'Omit echoed query metadata from zero-result search responses.', stability:'diagnostic', default:'off', type:'boolean', since:'1.28.2', reloadBehavior:'restart-required', editable:true },
-  { name:'INDEX_SERVER_READ_RETRIES', category:'instructions', description:'Retries for post-add disk visibility checks.', stability:'diagnostic', default:'5', type:'number', since:'1.1.1', reloadBehavior:'restart-required', editable:true, validation:{ min:0, max:100 } },
-  { name:'INDEX_SERVER_READ_BACKOFF_MS', category:'instructions', description:'Backoff ms between read retries.', stability:'diagnostic', default:'10', type:'number', since:'1.1.1', reloadBehavior:'restart-required', editable:true, validation:{ min:0, unit:'ms' } },
+  { name:'INDEX_SERVER_DEFAULT_PAGE_SIZE', category:'instructions', description:'Default result count for list/search/query when limit is omitted (clamped 1-100). Pass limit:0 on list to return all.', stability:'stable', default:'50', type:'number', since:'1.33.0', reloadBehavior:'restart-required', editable:true, validation:{ min:1, max:100 } },
+  { name:'INDEX_SERVER_READ_RETRIES', category:'instructions', description:'Retries for post-add disk visibility checks.', stability:'diagnostic', default:'3', type:'number', since:'1.1.1', reloadBehavior:'restart-required', editable:true, validation:{ min:0, max:100 } },
+  { name:'INDEX_SERVER_READ_BACKOFF_MS', category:'instructions', description:'Backoff ms between read retries.', stability:'diagnostic', default:'8', type:'number', since:'1.1.1', reloadBehavior:'restart-required', editable:true, validation:{ min:0, unit:'ms' } },
 
   // Tracing & logging advanced
   { name:'INDEX_SERVER_TRACE_LEVEL', category:'tracing', description:'Explicit trace level (off|core|perf|files|verbose).', stability:'stable', default:'off', type:'string', since:'1.1.2', reloadBehavior:'restart-required', editable:true, validation:{ enum:['off','core','perf','files','verbose'] } },
@@ -150,7 +192,7 @@ export const FLAG_REGISTRY: FlagMeta[] = [
   { name:'INDEX_SERVER_TRACE_CALLSITE', category:'tracing', description:'Include emitting function callsite (verbose or explicit).', stability:'diagnostic', default:'off', type:'boolean', since:'1.1.2', reloadBehavior:'restart-required', editable:true },
   { name:'INDEX_SERVER_TRACE_FSYNC', category:'tracing', description:'fsync after each trace write (heavy, diagnostics only).', stability:'diagnostic', default:'off', type:'boolean', since:'1.1.2', reloadBehavior:'restart-required', editable:true },
   { name:'INDEX_SERVER_TRACE_BUFFER_SIZE', category:'tracing', description:'Enable in-memory ring buffer of last N trace frames.', stability:'experimental', default:'0', type:'number', since:'1.1.2', reloadBehavior:'restart-required', editable:true, validation:{ min:0 } },
-  { name:'INDEX_SERVER_TRACE_BUFFER_FILE', category:'tracing', description:'Explicit file path for buffer dump.', stability:'experimental', default:'./logs/trace/trace-buffer.json', type:'string', since:'1.1.2', reloadBehavior:'restart-required', editable:true },
+  { name:'INDEX_SERVER_TRACE_BUFFER_FILE', category:'tracing', description:'Explicit file path for buffer dump. No default — the buffer is not written unless this is set.', stability:'experimental', default:'(unset)', type:'string', since:'1.1.2', reloadBehavior:'restart-required', editable:true },
   { name:'INDEX_SERVER_TRACE_BUFFER_DUMP_ON_EXIT', category:'tracing', description:'Dump ring buffer automatically on process exit.', stability:'experimental', default:'off', type:'boolean', since:'1.1.2', reloadBehavior:'restart-required', editable:true },
   { name:'INDEX_SERVER_VISIBILITY_DIAG', category:'tracing', description:'Force core trace level for visibility diagnostics.', stability:'diagnostic', default:'off', type:'boolean', since:'1.1.1', reloadBehavior:'restart-required', editable:true },
   { name:'INDEX_SERVER_FILE_TRACE', category:'tracing', description:'Promote index file events to trace level (files).', stability:'diagnostic', default:'off', type:'boolean', since:'1.1.1', reloadBehavior:'restart-required', editable:true },
@@ -181,10 +223,14 @@ export const FLAG_REGISTRY: FlagMeta[] = [
   // Metrics collection (file-based)
   { name:'INDEX_SERVER_METRICS_FILE_STORAGE', category:'metrics', description:'Persist metrics snapshots to files for dashboard aggregation.', stability:'experimental', default:'off', type:'boolean', since:'1.1.2', reloadBehavior:'restart-required', editable:true },
   { name:'INDEX_SERVER_METRICS_DIR', category:'metrics', description:'Directory for metrics file storage.', stability:'experimental', default:'./metrics', type:'string', since:'1.1.2', reloadBehavior:'restart-required', editable:true },
-  { name:'INDEX_SERVER_METRICS_MAX_FILES', category:'metrics', description:'Max metrics files to retain (rotation).', stability:'experimental', default:'720', type:'number', since:'1.1.2', reloadBehavior:'restart-required', editable:true, validation:{ min:1 } },
+  { name:'INDEX_SERVER_METRICS_MAX_FILES', category:'metrics', description:'DEPRECATED — never implemented. Metrics file rotation does not exist; nothing reads this variable. 720 is a MetricsCollector constructor default, not a configurable limit.', stability:'deprecated', default:'(ignored)', type:'number', since:'1.1.2', reloadBehavior:'restart-required', editable:false, validation:{ min:1 }, readonlyReason:'deprecated', readonlyDetail:'Not implemented — setting this has no effect' },
 
   // Debug / developer ergonomics
   { name:'INDEX_SERVER_DEBUG', category:'diagnostics', description:'Enable developer diagnostics bundle (memory, internals).', stability:'diagnostic', default:'off', type:'boolean', since:'1.1.0', reloadBehavior:'restart-required', editable:true },
+  // Read during module evaluation of the entry point's FIRST import, above
+  // applyOverlay() -- so an overlay write is recorded but only takes effect on
+  // the next boot. 'restart-required' is the honest label (#611).
+  { name:'INDEX_SERVER_ENABLE_STDERR_BRIDGE', category:'diagnostics', description:'Route server logs through MCP notifications/message instead of raw stderr. Off by default: VS Code Insiders renders no visible channel for those notifications, so enabling it there produces complete log silence.', stability:'stable', default:'off', type:'boolean', since:'1.42.0', reloadBehavior:'restart-required', editable:true },
   { name:'INDEX_SERVER_MEMORY_MONITOR', category:'diagnostics', description:'Enable periodic memory usage sampling/logging.', stability:'diagnostic', default:'off', type:'boolean', since:'1.1.0', reloadBehavior:'restart-required', editable:true },
   { name:'INDEX_SERVER_LOG_MUTATION', category:'diagnostics', description:'Emit mutation-specific verbose logs.', stability:'diagnostic', default:'off', type:'boolean', since:'1.1.0', reloadBehavior:'restart-required', editable:true },
 
@@ -212,13 +258,16 @@ export const FLAG_REGISTRY: FlagMeta[] = [
   { name:'INDEX_SERVER_SQLITE_MIGRATE_ON_START', category:'storage', description:'Run schema migrations at startup.', stability:'experimental', default:'on', type:'boolean', since:'1.25.0', reloadBehavior:'restart-required', editable:true },
   { name:'INDEX_SERVER_SQLITE_VEC_ENABLED', category:'storage', description:'Enable sqlite-vec extension for embeddings. Auto-enabled when INDEX_SERVER_STORAGE_BACKEND=sqlite; set 0 to opt out. Falls back to JSON if native extension fails.', stability:'experimental', default:'on (when backend=sqlite), off otherwise', type:'boolean', since:'1.25.0', reloadBehavior:'restart-required', editable:true },
   { name:'INDEX_SERVER_SQLITE_VEC_PATH', category:'storage', description:'Path to sqlite-vec loadable extension.', stability:'experimental', default:'(unset)', type:'string', since:'1.25.0', reloadBehavior:'restart-required', editable:true },
+  { name:'INDEX_SERVER_USAGE_SNAPSHOT_PATH', category:'storage', description:'JSON usage-counter snapshot file. For the JSON backend this file, not the instruction entries, holds accumulated usage counts. Resolves against CWD when relative — unlike the other state paths, pending its own migration.', stability:'stable', default:'./data/usage-snapshot.json', type:'string', since:'1.42.0', reloadBehavior:'dynamic', editable:true, validation:{ format:'path' } },
+  { name:'INDEX_SERVER_MCP_CONFIG_ROOT', category:'storage', description:'Root directory written into generated MCP client configs. An explicit root passed to the operation wins over this.', stability:'stable', default:'(current working directory)', type:'string', since:'1.42.0', reloadBehavior:'dynamic', editable:true, validation:{ format:'path' } },
+  { name:'INDEX_SERVER_MCP_BACKUP_RETAIN', category:'storage', description:'Backups retained per managed MCP client config file. Non-positive and unparseable values fall back to the default.', stability:'stable', default:'10', type:'number', since:'1.42.0', reloadBehavior:'dynamic', editable:true, validation:{ min:1 } },
 
   // Feedback & messaging
   { name:'INDEX_SERVER_FEEDBACK_DIR', category:'feedback', description:'Feedback storage directory.', stability:'stable', default:'./feedback', type:'string', since:'1.10.0', reloadBehavior:'restart-required', editable:true },
-  { name:'INDEX_SERVER_FEEDBACK_MAX_ENTRIES', category:'feedback', description:'Maximum retained feedback entries.', stability:'stable', default:'10000', type:'number', since:'1.10.0', reloadBehavior:'restart-required', editable:true, validation:{ min:1 } },
+  { name:'INDEX_SERVER_FEEDBACK_MAX_ENTRIES', category:'feedback', description:'Maximum retained feedback entries.', stability:'stable', default:'1000', type:'number', since:'1.10.0', reloadBehavior:'restart-required', editable:true, validation:{ min:1 } },
   { name:'INDEX_SERVER_MESSAGING_ENABLED', category:'messaging', description:'Enable inter-agent messaging subsystem (kill-switch). When 0/false, all messaging_* MCP tools, dashboard tab, and REST routes are disabled.', stability:'stable', default:'1', type:'boolean', since:'1.27.0', reloadBehavior:'restart-required', editable:true },
-  { name:'INDEX_SERVER_MESSAGING_DIR', category:'messaging', description:'Inter-agent messaging storage dir.', stability:'experimental', default:'./data/messaging', type:'string', since:'1.18.0', reloadBehavior:'restart-required', editable:true },
-  { name:'INDEX_SERVER_MESSAGING_MAX', category:'messaging', description:'Max retained messages.', stability:'experimental', default:'5000', type:'number', since:'1.18.0', reloadBehavior:'restart-required', editable:true, validation:{ min:1 } },
+  { name:'INDEX_SERVER_MESSAGING_DIR', category:'messaging', description:'Inter-agent messaging storage dir. Shared across every client. Relative values resolve against STATE_ROOT, never CWD. Must not resolve inside the instruction catalog.', stability:'experimental', default:'<STATE_ROOT>/data/messaging', type:'string', since:'1.18.0', reloadBehavior:'restart-required', editable:true },
+  { name:'INDEX_SERVER_MESSAGING_MAX', category:'messaging', description:'Max retained messages.', stability:'experimental', default:'10000', type:'number', since:'1.18.0', reloadBehavior:'restart-required', editable:true, validation:{ min:1 } },
   { name:'INDEX_SERVER_MESSAGING_SWEEP_MS', category:'messaging', description:'Messaging sweep interval (ms).', stability:'experimental', default:'60000', type:'number', since:'1.18.0', reloadBehavior:'restart-required', editable:true, validation:{ min:1000, unit:'ms' } },
 
   // Dashboard / TLS
@@ -231,28 +280,35 @@ export const FLAG_REGISTRY: FlagMeta[] = [
   { name:'INDEX_SERVER_REQUEST_TIMEOUT', category:'dashboard', description:'HTTP request timeout (ms).', stability:'stable', default:'30000', type:'number', since:'1.20.0', reloadBehavior:'restart-required', editable:true, validation:{ min:0, unit:'ms' } },
   { name:'INDEX_SERVER_MAX_CONNECTIONS', category:'dashboard', description:'Max concurrent HTTP connections.', stability:'stable', default:'100', type:'number', since:'1.20.0', reloadBehavior:'restart-required', editable:true, validation:{ min:1, max:100000 } },
   { name:'INDEX_SERVER_ADMIN_API_KEY', category:'auth', description:'Bearer token for admin endpoints.', stability:'stable', default:'(unset)', type:'string', since:'1.20.0', reloadBehavior:'restart-required', editable:false, readonlyReason:'sensitive', readonlyDetail:'Secret — set via env or secret manager only' },
-  { name:'INDEX_SERVER_ADMIN_MAX_SESSION_HISTORY', category:'dashboard', description:'Max retained admin session history.', stability:'stable', default:'500', type:'number', since:'1.20.0', reloadBehavior:'restart-required', editable:true, validation:{ min:1 } },
+  { name:'INDEX_SERVER_ADMIN_MAX_SESSION_HISTORY', category:'dashboard', description:'Max retained admin session history.', stability:'stable', default:'200', type:'number', since:'1.20.0', reloadBehavior:'restart-required', editable:true, validation:{ min:1 } },
   { name:'INDEX_SERVER_BACKUPS_DIR', category:'dashboard', description:'Directory for backup zips.', stability:'stable', default:'./backups', type:'string', since:'1.20.0', reloadBehavior:'restart-required', editable:true },
-  { name:'INDEX_SERVER_STATE_DIR', category:'dashboard', description:'Persistent dashboard state directory.', stability:'stable', default:'./data/state', type:'string', since:'1.20.0', reloadBehavior:'restart-required', editable:true },
+  // Default corrected with #611: relative values have anchored to STATE_ROOT
+  // since #577, not to CWD. The panel was still advertising the pre-#577 path,
+  // which is exactly the divergence that made the thin client look in a
+  // directory the leader never writes to.
+  { name:'INDEX_SERVER_STATE_DIR', category:'dashboard', description:'Persistent dashboard state directory; also holds the leader lock file the thin client discovers. Relative values resolve against STATE_ROOT.', stability:'stable', default:'<STATE_ROOT>/data/state', type:'string', since:'1.20.0', reloadBehavior:'restart-required', editable:true },
+  { name:'INDEX_SERVER_LEADER_URL', category:'dashboard', description:'Explicit leader URL for the thin client (e.g. http://127.0.0.1:9090/mcp). Unset means auto-discover from the lock file in INDEX_SERVER_STATE_DIR.', stability:'experimental', default:'(unset)', type:'string', since:'1.42.0', reloadBehavior:'restart-required', editable:true, validation:{ format:'url' } },
 
   // Backup / mutation safety
   { name:'INDEX_SERVER_AUTO_BACKUP', category:'index', description:'Auto-create backup before risky mutations.', stability:'stable', default:'on', type:'boolean', since:'1.20.0', reloadBehavior:'restart-required', editable:true },
   { name:'INDEX_SERVER_AUTO_BACKUP_INTERVAL_MS', category:'index', description:'Auto-backup interval ms.', stability:'stable', default:'3600000', type:'number', since:'1.20.0', reloadBehavior:'restart-required', editable:true, validation:{ min:0, unit:'ms' } },
   { name:'INDEX_SERVER_AUTO_BACKUP_MAX_COUNT', category:'index', description:'Max retained auto-backups.', stability:'stable', default:'10', type:'number', since:'1.20.0', reloadBehavior:'restart-required', editable:true, validation:{ min:0 } },
+  { name:'INDEX_SERVER_AUTO_BACKUP_ALLOW_IMPLICIT_DIR', category:'index', description:'Allow auto-backup when INDEX_SERVER_BACKUPS_DIR is set but INDEX_SERVER_DIR is not (source falls back to cwd).', stability:'stable', default:'off', type:'boolean', since:'1.41.0', reloadBehavior:'restart-required', editable:true },
   { name:'INDEX_SERVER_BACKUP_BEFORE_BULK_DELETE', category:'index', description:'Snapshot before bulk delete.', stability:'stable', default:'on', type:'boolean', since:'1.20.0', reloadBehavior:'restart-required', editable:true },
-  { name:'INDEX_SERVER_MAX_BULK_DELETE', category:'index', description:'Max ids per bulk delete call.', stability:'stable', default:'1000', type:'number', since:'1.20.0', reloadBehavior:'restart-required', editable:true, validation:{ min:1 } },
+  { name:'INDEX_SERVER_MAX_BULK_DELETE', category:'index', description:'Ids per bulk delete or purge above which `force:true` is required.', stability:'stable', default:'5', type:'number', since:'1.20.0', reloadBehavior:'restart-required', editable:true, validation:{ min:1 } },
   { name:'INDEX_SERVER_BODY_WARN_LENGTH', category:'index', description:'Warn-then-reject threshold for instruction body length.', stability:'stable', default:'50000', type:'number', since:'1.20.0', reloadBehavior:'restart-required', editable:true, validation:{ min:1, unit:'bytes' } },
   { name:'INDEX_SERVER_AUTO_SPLIT_OVERSIZED', category:'index', description:'Auto-split oversized instruction bodies on add.', stability:'experimental', default:'off', type:'boolean', since:'1.20.0', reloadBehavior:'restart-required', editable:true },
   { name:'INDEX_SERVER_AUTO_USAGE_TRACK', category:'usage', description:'Auto-track usage for tool invocations.', stability:'stable', default:'on', type:'boolean', since:'1.20.0', reloadBehavior:'restart-required', editable:true },
+  { name:'INDEX_SERVER_USAGE_ENABLED', category:'usage', description:'Usage tracking master switch. On by default for every profile; set 0 to opt out. Takes precedence over INDEX_SERVER_FEATURES.', stability:'stable', default:'on', type:'boolean', since:'1.41.0', reloadBehavior:'restart-required', editable:true },
 
   // Bootstrap & seed
   { name:'INDEX_SERVER_AUTO_SEED', category:'bootstrap', description:'Auto-seed canonical bootstrap instructions on first start.', stability:'stable', default:'on', type:'boolean', since:'1.10.0', reloadBehavior:'restart-required', editable:true },
   { name:'INDEX_SERVER_SEED_VERBOSE', category:'bootstrap', description:'Verbose seed-bootstrap logging.', stability:'diagnostic', default:'off', type:'boolean', since:'1.10.0', reloadBehavior:'restart-required', editable:true },
   { name:'INDEX_SERVER_BOOTSTRAP_AUTOCONFIRM', category:'bootstrap', description:'Auto-confirm bootstrap (skip token prompt).', stability:'stable', default:'off', type:'boolean', since:'1.10.0', reloadBehavior:'restart-required', editable:true },
-  { name:'INDEX_SERVER_BOOTSTRAP_TOKEN_TTL_SEC', category:'bootstrap', description:'Bootstrap token TTL (seconds).', stability:'stable', default:'600', type:'number', since:'1.10.0', reloadBehavior:'restart-required', editable:true, validation:{ min:10, unit:'s' } },
+  { name:'INDEX_SERVER_BOOTSTRAP_TOKEN_TTL_SEC', category:'bootstrap', description:'Bootstrap token TTL (seconds).', stability:'stable', default:'900', type:'number', since:'1.10.0', reloadBehavior:'restart-required', editable:true, validation:{ min:10, unit:'s' } },
 
   // Logging surface
-  { name:'INDEX_SERVER_LOG_FILE', category:'core', description:'NDJSON log file path (or 1 to use default).', stability:'stable', default:'(unset)', type:'string', since:'1.0.0', reloadBehavior:'restart-required', editable:true },
+  { name:'INDEX_SERVER_LOG_FILE', category:'core', description:'NDJSON log file path, or 1 for the default path. File logging is ON by default: every runtime profile sets this to 1.', stability:'stable', default:'<STATE_ROOT>/logs/mcp-server.log (enabled on every profile)', type:'string', since:'1.0.0', reloadBehavior:'restart-required', editable:true },
   { name:'INDEX_SERVER_LOG_LEVEL', category:'core', description:'Minimum log level: trace|debug|info|warn|error.', stability:'stable', default:'info', type:'string', since:'1.20.0', reloadBehavior:'restart-required', editable:true, validation:{ enum:['trace','debug','info','warn','error'] } },
   { name:'INDEX_SERVER_LOG_JSON', category:'core', description:'(Reserved) Force JSON log mode.', stability:'reserved', default:'off', type:'boolean', since:'1.0.0', reloadBehavior:'restart-required', editable:false, readonlyReason:'reserved', readonlyDetail:'Reserved for future use' },
   { name:'INDEX_SERVER_LOG_SYNC', category:'diagnostics', description:'Fsync after each log write (test determinism).', stability:'diagnostic', default:'off', type:'boolean', since:'1.0.0', reloadBehavior:'restart-required', editable:true },
@@ -264,21 +320,30 @@ export const FLAG_REGISTRY: FlagMeta[] = [
   { name:'INDEX_SERVER_PROFILE', category:'core', description:'Runtime profile selector (default | dev | prod).', stability:'stable', default:'default', type:'string', since:'1.20.0', reloadBehavior:'restart-required', editable:true, validation:{ enum:['default','dev','prod'] } },
 
   // Operationally-meaningful additions surfaced by the catalog drift test.
-  { name:'INDEX_SERVER_BODY_MAX_LENGTH', category:'index', description:'Hard reject threshold for instruction body length (bytes).', stability:'stable', default:'(unset)', type:'number', since:'1.20.0', reloadBehavior:'restart-required', editable:true, validation:{ min:1, unit:'bytes' } },
+  // #588: was offered as `stability:'stable', editable:true`, so the panel let
+  // an operator type a value into a control whose only runtime effect is a
+  // "no longer recognized" warning (`runtimeConfig.ts:343-345`). Kept as a
+  // deprecated, non-editable row rather than deleted: an operator who already
+  // has it in an mcp.json needs to see that it is inert, and a silent
+  // disappearance from the panel teaches them nothing.
+  { name:'INDEX_SERVER_BODY_MAX_LENGTH', category:'index', description:'DEPRECATED — no longer recognized. Setting this has no effect beyond a startup warning. The configurable limit is INDEX_SERVER_BODY_WARN_LENGTH; the hard ceiling is not configurable.', stability:'deprecated', default:'(ignored)', type:'number', since:'1.20.0', reloadBehavior:'restart-required', editable:false, readonlyReason:'deprecated', readonlyDetail:'Removed setting — use INDEX_SERVER_BODY_WARN_LENGTH' },
   { name:'INDEX_SERVER_MAX_FILES', category:'index', description:'Soft cap on number of indexed instruction files.', stability:'stable', default:'(unset)', type:'number', since:'1.20.0', reloadBehavior:'restart-required', editable:true, validation:{ min:1 } },
   { name:'INDEX_SERVER_LOAD_WARN_MS', category:'diagnostics', description:'Emit WARN if initial index load exceeds this many ms.', stability:'diagnostic', default:'(unset)', type:'number', since:'1.20.0', reloadBehavior:'restart-required', editable:true, validation:{ min:0, unit:'ms' } },
   { name:'INDEX_SERVER_AGENT_ID', category:'core', description:'Logical agent identity for audit/attestation trailers.', stability:'stable', default:'(unset)', type:'string', since:'1.20.0', reloadBehavior:'restart-required', editable:false, readonlyReason:'derived', readonlyDetail:'Assigned by launcher / runtime' },
   { name:'INDEX_SERVER_FLAGS_FILE', category:'core', description:'Path to feature-flag persistence file.', stability:'stable', default:'./flags.json', type:'string', since:'1.10.0', reloadBehavior:'restart-required', editable:true },
-  { name:'INDEX_SERVER_HEALTH_MEMORY_THRESHOLD', category:'diagnostics', description:'Memory threshold (bytes) for /health degraded status.', stability:'diagnostic', default:'(unset)', type:'number', since:'1.20.0', reloadBehavior:'restart-required', editable:true, validation:{ min:0, unit:'bytes' } },
-  { name:'INDEX_SERVER_HEALTH_ERROR_THRESHOLD', category:'diagnostics', description:'Error-rate threshold for /health degraded status.', stability:'diagnostic', default:'(unset)', type:'number', since:'1.20.0', reloadBehavior:'restart-required', editable:true, validation:{ min:0 } },
-  { name:'INDEX_SERVER_HEALTH_MIN_UPTIME', category:'diagnostics', description:'Minimum uptime (s) before /health reports healthy.', stability:'diagnostic', default:'(unset)', type:'number', since:'1.20.0', reloadBehavior:'restart-required', editable:true, validation:{ min:0, unit:'s' } },
-  { name:'INDEX_SERVER_RESOURCE_CAPACITY', category:'diagnostics', description:'In-memory resource sample buffer capacity.', stability:'diagnostic', default:'(unset)', type:'number', since:'1.20.0', reloadBehavior:'restart-required', editable:true, validation:{ min:1 } },
-  { name:'INDEX_SERVER_RESOURCE_SAMPLE_INTERVAL_MS', category:'diagnostics', description:'Resource sampler interval (ms).', stability:'diagnostic', default:'(unset)', type:'number', since:'1.20.0', reloadBehavior:'restart-required', editable:true, validation:{ min:100, unit:'ms' } },
-  { name:'INDEX_SERVER_TOOLCALL_CHUNK_SIZE', category:'diagnostics', description:'Tool-call ring buffer chunk size.', stability:'diagnostic', default:'(unset)', type:'number', since:'1.20.0', reloadBehavior:'restart-required', editable:true, validation:{ min:1 } },
-  { name:'INDEX_SERVER_TOOLCALL_FLUSH_MS', category:'diagnostics', description:'Tool-call ring buffer flush interval (ms).', stability:'diagnostic', default:'(unset)', type:'number', since:'1.20.0', reloadBehavior:'restart-required', editable:true, validation:{ min:0, unit:'ms' } },
-  { name:'INDEX_SERVER_TOOLCALL_COMPACT_MS', category:'diagnostics', description:'Tool-call ring buffer compaction interval (ms).', stability:'diagnostic', default:'(unset)', type:'number', since:'1.20.0', reloadBehavior:'restart-required', editable:true, validation:{ min:0, unit:'ms' } },
+  { name:'INDEX_SERVER_HEALTH_MEMORY_THRESHOLD', category:'diagnostics', description:'Heap-used fraction above which /health reports degraded. A ratio 0-1, not bytes.', stability:'diagnostic', default:'0.95', type:'number', since:'1.20.0', reloadBehavior:'restart-required', editable:true, validation:{ min:0, max:1 } },
+  { name:'INDEX_SERVER_HEALTH_ERROR_THRESHOLD', category:'diagnostics', description:'Error-rate threshold for /health degraded status.', stability:'diagnostic', default:'10', type:'number', since:'1.20.0', reloadBehavior:'restart-required', editable:true, validation:{ min:0 } },
+  { name:'INDEX_SERVER_HEALTH_MIN_UPTIME', category:'diagnostics', description:'Minimum uptime (s) before /health reports healthy.', stability:'diagnostic', default:'1000', type:'number', since:'1.20.0', reloadBehavior:'restart-required', editable:true, validation:{ min:0, unit:'s' } },
+  { name:'INDEX_SERVER_RESOURCE_CAPACITY', category:'diagnostics', description:'In-memory resource sample buffer capacity.', stability:'diagnostic', default:'720', type:'number', since:'1.20.0', reloadBehavior:'restart-required', editable:true, validation:{ min:1 } },
+  { name:'INDEX_SERVER_RESOURCE_SAMPLE_INTERVAL_MS', category:'diagnostics', description:'Resource sampler interval (ms).', stability:'diagnostic', default:'5000', type:'number', since:'1.20.0', reloadBehavior:'restart-required', editable:true, validation:{ min:100, unit:'ms' } },
+  { name:'INDEX_SERVER_TOOLCALL_CHUNK_SIZE', category:'diagnostics', description:'Tool-call ring buffer chunk size.', stability:'diagnostic', default:'250', type:'number', since:'1.20.0', reloadBehavior:'restart-required', editable:true, validation:{ min:1 } },
+  { name:'INDEX_SERVER_TOOLCALL_FLUSH_MS', category:'diagnostics', description:'Tool-call ring buffer flush interval (ms).', stability:'diagnostic', default:'5000', type:'number', since:'1.20.0', reloadBehavior:'restart-required', editable:true, validation:{ min:0, unit:'ms' } },
+  { name:'INDEX_SERVER_TOOLCALL_COMPACT_MS', category:'diagnostics', description:'Tool-call ring buffer compaction interval (ms).', stability:'diagnostic', default:'300000', type:'number', since:'1.20.0', reloadBehavior:'restart-required', editable:true, validation:{ min:0, unit:'ms' } },
   { name:'INDEX_SERVER_TOOLCALL_APPEND_LOG', category:'diagnostics', description:'Append-only tool-call log path.', stability:'diagnostic', default:'(unset)', type:'string', since:'1.20.0', reloadBehavior:'restart-required', editable:true },
-  { name:'INDEX_SERVER_AUDIT_LOG', category:'diagnostics', description:'Audit log file path (mutation operations).', stability:'diagnostic', default:'(unset)', type:'string', since:'1.10.0', reloadBehavior:'restart-required', editable:true },
+  { name:'INDEX_SERVER_AUDIT_LOG', category:'diagnostics', description:'Audit log for instruction mutations. ON by default — an unset value means enabled, not disabled. A falsy value disables it; any other value is a path.', stability:'diagnostic', default:'<STATE_ROOT>/logs/audit.log (enabled)', type:'string', since:'1.10.0', reloadBehavior:'restart-required', editable:true },
+  { name:'INDEX_SERVER_ACTIVITY_LOG', category:'diagnostics', description:'Record semantic catalog activity (added/modified/archived/removed/signaled) and periodic catalog samples for the dashboard charts. Set 0/off to disable.', stability:'stable', default:'on', type:'boolean', since:'1.41.0', reloadBehavior:'restart-required', editable:true },
+  { name:'INDEX_SERVER_ACTIVITY_DB', category:'diagnostics', description:'SQLite database for activity events and catalog samples. Independent of INDEX_SERVER_STORAGE_BACKEND so chart history exists in both json and sqlite modes. Precedence: this, then <INDEX_SERVER_METRICS_DIR>/activity.db, then the default.', stability:'stable', default:'<STATE_ROOT>/metrics/activity.db', type:'string', since:'1.41.0', reloadBehavior:'restart-required', editable:true },
+  { name:'INDEX_SERVER_ACTIVITY_RETENTION_DAYS', category:'diagnostics', description:'Age at which activity events and catalog samples are pruned. Time-based so the chart x-range stays predictable regardless of event volume.', stability:'stable', default:'90', type:'number', since:'1.41.0', reloadBehavior:'restart-required', editable:true },
   { name:'INDEX_SERVER_NORMALIZATION_LOG', category:'diagnostics', description:'Normalization log file path.', stability:'diagnostic', default:'(unset)', type:'string', since:'1.10.0', reloadBehavior:'restart-required', editable:true },
   { name:'INDEX_SERVER_TRACE', category:'diagnostics', description:'Enable verbose trace logging.', stability:'diagnostic', default:'off', type:'boolean', since:'1.0.0', reloadBehavior:'restart-required', editable:true },
   { name:'INDEX_SERVER_TIMING_JSON', category:'diagnostics', description:'Emit timing data as JSON-NDJSON.', stability:'diagnostic', default:'off', type:'boolean', since:'1.20.0', reloadBehavior:'restart-required', editable:true },
@@ -305,8 +370,9 @@ function parseValue(meta: FlagMeta): { value?:string; enabled?:boolean; parsed?:
   // a boolean `present` signal so the UI can render "configured /
   // not configured" without exposing the secret in HTTP logs, DevTools,
   // dashboard render state, or session-history backups.
-  if (meta.editable === false && meta.readonlyReason === 'sensitive') {
-    return { present: raw !== undefined };
+  if (meta.sensitive === true || (meta.editable === false && meta.readonlyReason === 'sensitive')) {
+    const isLifecycleCommand = meta.name.startsWith('INDEX_SERVER_HOOK_ON_');
+    return { present: isLifecycleCommand ? Boolean(raw?.trim()) : raw !== undefined };
   }
   if(raw === undefined) return {};
   if(meta.type === 'boolean'){

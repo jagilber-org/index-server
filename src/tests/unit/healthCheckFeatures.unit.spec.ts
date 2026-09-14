@@ -44,6 +44,7 @@ describe('#384 obs1: health_check exposes features state', () => {
   afterEach(() => {
     if (originalFeatures === undefined) delete process.env.INDEX_SERVER_FEATURES;
     else process.env.INDEX_SERVER_FEATURES = originalFeatures;
+    delete process.env.INDEX_SERVER_USAGE_ENABLED;
   });
 
   it('returns features.usage === true when INDEX_SERVER_FEATURES=usage is set', async () => {
@@ -54,11 +55,19 @@ describe('#384 obs1: health_check exposes features state', () => {
     expect(features.usage).toBe(true);
   });
 
-  it('returns features.usage === false when INDEX_SERVER_FEATURES is unset', async () => {
+  it('returns features.usage === false when usage tracking is opted out', async () => {
+    process.env.INDEX_SERVER_USAGE_ENABLED = '0';
     const handler = await loadHandlerWithFeatures(undefined);
     const result = await handler({}) as Record<string, unknown>;
     expect(result.features).toBeDefined();
     const features = result.features as Record<string, unknown>;
     expect(features.usage).toBe(false);
+  });
+
+  it('returns features.usage === true by default when INDEX_SERVER_FEATURES is unset', async () => {
+    const handler = await loadHandlerWithFeatures(undefined);
+    const result = await handler({}) as Record<string, unknown>;
+    const features = result.features as Record<string, unknown>;
+    expect(features.usage).toBe(true);
   });
 });

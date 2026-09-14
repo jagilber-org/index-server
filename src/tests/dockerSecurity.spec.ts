@@ -38,7 +38,7 @@ function containerExec(cmd: string): string {
   return execFileSync('docker', ['exec', CONTAINER_NAME, 'sh', '-lc', cmd], EXEC_OPTS).toString().trim();
 }
 
-describe.skipIf(!dockerAvailable())('Docker Image Security', () => {
+describe.skipIf(!dockerAvailable())('Docker Image Security', () => { // SKIP_OK: environment-gated: requires docker daemon
   let containerReady = false;
   let startupError: Error | null = null;
 

@@ -152,30 +152,102 @@ body {
     z-index: 100;
 }
 
+/* Row 1: service name + primary status indicators */
+.hdr-status-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    padding: 8px 0 6px;
+}
+
 .admin-header h1 {
     font-size: 16px;
     font-weight: 600;
     color: var(--admin-text);
-    padding: 12px 0 8px;
+    padding: 0;
+    margin: 0;
     letter-spacing: -0.01em;
+}
+
+.hdr-status-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+/* Health badge (Priority 1) */
+.health-badge {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    padding: 3px 10px;
+    border-radius: 4px;
+    border: 1px solid var(--admin-border-alt);
+    color: var(--admin-text-dim);
+    white-space: nowrap;
+}
+.health-badge.health-ok {
+    background: rgba(115, 191, 105, 0.15);
+    color: var(--admin-success);
+    border-color: var(--admin-success-border);
+}
+.health-badge.health-bad {
+    background: rgba(242, 73, 92, 0.15);
+    color: var(--admin-danger);
+    border-color: var(--admin-danger-darker);
+}
+
+/* Row 2: compact metadata + action chips */
+.hdr-meta-bar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    padding-bottom: 8px;
 }
 
 .build-meta {
     font-size: 11px;
     color: var(--admin-text-dim);
-    padding-bottom: 8px;
+    white-space: nowrap;
 }
-.build-meta .build-path {
-    display: block;
-    margin-top: 4px;
-    line-height: 1.5;
-    word-break: break-all;
+
+.header-links {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
 }
-.build-meta .build-path code,
-.build-meta .build-path a {
-    color: var(--admin-text);
+
+/* Action chip — replaces raw URLs/paths for docs and client scripts (Priority 3) */
+.header-chip {
+    display: inline-flex;
+    align-items: center;
+    font-family: var(--mcp-font-sans);
+    font-size: 11px;
+    font-weight: 500;
+    line-height: 1.4;
+    color: var(--admin-text-dim);
+    background: var(--admin-surface-alt);
+    border: 1px solid var(--admin-border-alt);
+    border-radius: 4px;
+    padding: 3px 10px;
+    text-decoration: none;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: color 0.15s, border-color 0.15s;
 }
-.build-meta .build-script a:hover { color: var(--admin-accent); }
+.header-chip:hover {
+    color: var(--admin-accent);
+    border-color: var(--admin-accent);
+}
+.header-chip:focus-visible {
+    outline: 1px solid var(--admin-accent);
+    outline-offset: 1px;
+}
 
 .feedback-btn {
     position: absolute;
@@ -758,6 +830,51 @@ table td, table th { border-bottom: 1px solid var(--admin-border); padding: 6px 
 .cfg-flag-ro { opacity: 0.7; }
 .cfg-flag-select { max-width: 100%; padding: 2px 4px; font-size: 11px; }
 .cfg-readonly-tag { display: inline-block; font-size: 10px; padding: 1px 6px; border-radius: 3px; background: rgba(255,152,48,0.12); color: #ff9830; }
+.cfg-writeonly-tag { display: inline-block; font-size: 10px; padding: 1px 6px; border-radius: 3px; background: rgba(59,130,246,0.12); color: var(--admin-node-hover-stroke); }
+.cfg-sensitive-status { display: inline-flex; align-items: center; gap: 5px; min-height: 30px; color: var(--admin-success); font-size: 12px; font-weight: 600; }
+.cfg-sensitive-status--unset { color: var(--admin-text-dim); font-weight: 500; }
+
+/* Lifecycle hooks: presence-only operational summary. Command text never enters the DOM. */
+.cfg-lifecycle-summary { padding: 14px 16px; border: 1px solid var(--admin-border); border-radius: 8px; background: linear-gradient(135deg, rgba(59,130,246,0.08), rgba(15,23,42,0.04)); }
+.cfg-lifecycle-summary__heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.cfg-lifecycle-summary__heading h3 { margin: 0; font-size: 15px; }
+.cfg-lifecycle-summary__heading p { margin: 4px 0 0; opacity: 0.68; font-size: 11px; }
+.cfg-lifecycle-state { flex: 0 0 auto; padding: 3px 9px; border-radius: 999px; font-size: 11px; font-weight: 700; }
+.cfg-lifecycle-state--enabled { color: var(--admin-success); background: rgba(34,197,94,0.12); }
+.cfg-lifecycle-state--disabled { color: var(--admin-text-dim); background: rgba(148,163,184,0.12); }
+.cfg-lifecycle-metrics { display: grid; grid-template-columns: repeat(4, minmax(110px, 1fr)); gap: 8px; margin-top: 12px; }
+.cfg-lifecycle-metrics > div { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border: 1px solid var(--admin-border); border-radius: 6px; background: rgba(0,0,0,0.08); }
+.cfg-lifecycle-metrics strong { font-size: 13px; }
+.cfg-lifecycle-metrics span { opacity: 0.65; font-size: 10px; }
+
+/* Lifecycle hook manager: write-only command replacement plus runtime controls. */
+.cfg-hook-manager { padding: 16px; border: 1px solid var(--admin-accent-alt); border-radius: 8px; background: var(--admin-surface); box-shadow: inset 3px 0 0 var(--admin-accent); }
+.cfg-hook-manager__heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 14px; }
+.cfg-hook-manager__heading h3 { margin: 0; font-size: 15px; color: var(--admin-heading-dark); }
+.cfg-hook-manager__heading p { margin: 4px 0 0; max-width: 760px; color: var(--admin-text-dim); font-size: 11px; }
+.cfg-hook-command-grid { display: grid; grid-template-columns: repeat(2, minmax(280px, 1fr)); gap: 10px; }
+.cfg-hook-command { padding: 11px; border: 1px solid var(--admin-border); border-radius: 6px; background: var(--admin-surface-darker); }
+.cfg-hook-command__label { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 7px; }
+.cfg-hook-command__label label { font-weight: 600; color: var(--admin-heading-dark); }
+.cfg-hook-command__label .cfg-sensitive-status { min-height: auto; font-size: 10px; }
+.cfg-hook-command__input-row { display: flex; gap: 7px; }
+.cfg-hook-command-input { min-width: 0; flex: 1 1 auto; font-family: var(--mcp-font-mono); }
+.cfg-hook-clear-btn { flex: 0 0 auto; background: var(--admin-surface-alt); border-color: var(--admin-border-alt); color: var(--admin-text-dim); }
+.cfg-hook-command p { margin: 6px 0 0; color: var(--admin-text-dim); font-size: 10px; }
+.cfg-hook-execution { display: grid; grid-template-columns: minmax(130px, 0.7fr) minmax(150px, 1fr) minmax(150px, 1fr) auto; align-items: end; gap: 10px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--admin-border); }
+.cfg-hook-setting { display: flex; flex-direction: column; gap: 5px; }
+.cfg-hook-setting label { font-size: 11px; font-weight: 600; color: var(--admin-text-dim); }
+.cfg-hook-security-note { margin: 10px 0 0; color: var(--admin-warn); font-size: 10px; }
+@media (max-width: 900px) {
+    .cfg-hook-command-grid { grid-template-columns: 1fr; }
+    .cfg-hook-execution { grid-template-columns: repeat(3, minmax(120px, 1fr)); }
+    .cfg-hook-execution > .action-btn { grid-column: 1 / -1; }
+}
+@media (max-width: 760px) {
+    .cfg-lifecycle-metrics { grid-template-columns: repeat(2, minmax(110px, 1fr)); }
+    .cfg-hook-manager__heading { flex-direction: column; }
+    .cfg-hook-execution { grid-template-columns: 1fr; }
+}
 
 /* Static restart-info banner: shown once at top of config tab. */
 .cfg-restart-info-banner { padding: 8px 12px; border: 1px solid var(--admin-border); border-left: 3px solid #3b82f6; border-radius: 4px; background: rgba(59,130,246,0.06); font-size: 12px; line-height: 1.5; }
@@ -893,8 +1010,41 @@ table td, table th { border-bottom: 1px solid var(--admin-border); padding: 6px 
 .instr-preview-content hr { border: none; border-top: 1px solid var(--admin-border); margin: 1em 0; }
 .instr-preview-content a { color: var(--admin-accent); text-decoration: underline; }
 .instr-preview-content strong { color: #fff; }
+
+/* #449: instructions tree view + master-detail preview */
+.instr-view-mode-toggle { display: inline-flex; gap: 4px; }
+.instr-master-detail { display: grid; grid-template-columns: minmax(220px, 320px) 1fr; gap: 14px; align-items: start; min-height: 320px; }
+.instr-tree { border: 1px solid var(--admin-border); border-radius: 6px; padding: 6px; max-height: 620px; overflow-y: auto; background: var(--admin-surface); }
+.instr-tree-group { margin-bottom: 2px; }
+.instr-tree-toggle { display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 8px; background: none; border: none; color: var(--admin-text); font-size: 13px; font-weight: 600; cursor: pointer; border-radius: 4px; text-align: left; }
+.instr-tree-toggle:hover { background: rgba(255,255,255,0.06); }
+.instr-tree-caret { width: 12px; opacity: 0.7; }
+.instr-tree-cat { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.instr-tree-count { font-size: 11px; opacity: 0.65; background: rgba(255,255,255,0.08); padding: 0 7px; border-radius: 10px; }
+.instr-tree-leaves { display: flex; flex-direction: column; gap: 1px; padding: 2px 0 4px 22px; }
+.instr-tree-leaf { display: block; width: 100%; text-align: left; padding: 4px 8px; background: none; border: none; color: var(--admin-text); font-size: 12px; cursor: pointer; border-radius: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; opacity: 0.85; }
+.instr-tree-leaf:hover { background: rgba(255,255,255,0.06); opacity: 1; }
+.instr-tree-leaf.selected { background: rgba(87,148,242,0.18); color: var(--admin-accent); opacity: 1; font-weight: 600; }
+.instr-detail { border: 1px solid var(--admin-border); border-radius: 6px; background: var(--admin-surface); display: flex; flex-direction: column; max-height: 620px; }
+.instr-detail-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 12px; border-bottom: 1px solid var(--admin-border); }
+.instr-detail-title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.instr-detail-actions { display: flex; gap: 6px; flex-shrink: 0; }
+.instr-detail-body { padding: 4px 4px 12px; overflow-y: auto; flex: 1; }
+.instr-detail-hint { opacity: 0.55; padding: 24px 16px; text-align: center; font-size: 13px; }
+.instr-detail-raw { background: rgba(0,0,0,0.3); border: 1px solid var(--admin-border); border-radius: 4px; padding: 10px 12px; overflow-x: auto; margin: 8px 12px; font-family: var(--mcp-font-mono); font-size: 12px; white-space: pre-wrap; word-break: break-word; }
+.instr-md-empty { opacity: 0.6; padding: 20px; }
+@media (max-width: 760px) { .instr-master-detail { grid-template-columns: 1fr; } .instr-tree { max-height: 260px; } }
+
 .btn-green { background: rgba(115,191,105,0.15); color: #73bf69; border-color: #73bf6944; }
 .btn-green:hover { background: rgba(115,191,105,0.25); }
+
+/* Flat-view inline preview pane */
+/* #552: the pane itself no longer pads — the header sits flush at the top and the
+   body carries .instr-preview-content's padding. The header is sticky so the Copy
+   button stays reachable while scrolling a long body. */
+.flat-preview-pane { margin-top: 10px; max-height: 500px; overflow: auto; border: 1px solid var(--admin-accent); border-radius: 4px; background: var(--admin-surface-darker); }
+.flat-preview-header { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 12px; background: var(--admin-surface); border-bottom: 1px solid var(--admin-border); }
+.flat-preview-label { font-weight: 600; font-size: 12px; }
 
 /* ==========================================================================
    Health
@@ -917,6 +1067,17 @@ table td, table th { border-bottom: 1px solid var(--admin-border); padding: 6px 
 .spark-label { font-size: 11px; opacity: 0.55; }
 .spark-value { font-family: var(--mcp-font-mono); font-size: 14px; background: var(--admin-spark-bg); padding: 4px 6px; border-radius: 4px; overflow: hidden; }
 .spark-stats { font-size: 11px; opacity: 0.45; }
+.resource-canvas { display: block; width: 100%; height: 48px; border-radius: 4px; background: var(--admin-spark-bg); }
+
+/* Time window selector */
+.catalog-chart-timewindow { display: flex; gap: 2px; margin-bottom: 6px; }
+.catalog-chart-tw-btn {
+    background: transparent; border: 1px solid var(--admin-border-muted);
+    color: var(--admin-text-dim); font-size: 10px; padding: 2px 8px;
+    border-radius: 3px; cursor: pointer; font-family: inherit;
+}
+.catalog-chart-tw-btn:hover { border-color: var(--admin-border); color: var(--admin-text); }
+.catalog-chart-tw-btn.active { background: var(--admin-border-muted); color: var(--admin-text); border-color: var(--admin-border); }
 
 /* ==========================================================================
    Feature Flags (JS-generated)
@@ -1102,6 +1263,9 @@ a.mermaid-link { color: var(--admin-accent); }
     .admin-header { padding: 0 16px; }
     .admin-nav { gap: 0; }
     .nav-btn { padding: 8px 10px; font-size: 12px; }
+    /* Keep status indicators visible; allow metadata + chips to wrap */
+    .hdr-status-bar { padding: 8px 0 4px; }
+    .build-meta { white-space: normal; }
 }
 
 /* ==========================================================================
@@ -1327,6 +1491,14 @@ a.mermaid-link { color: var(--admin-accent); }
 }
 .msg-toolbar .form-input { flex: 1; min-width: 180px; }
 .msg-toolbar-group { display: flex; align-items: center; gap: 4px; }
+/* Toolbar checkbox + label pair (e.g. the auto-refresh switch). Defined here
+   rather than inline so admin.html stays within its inline-style budget. */
+.msg-toolbar-toggle {
+    display: flex; align-items: center; gap: 4px;
+    font-size: 12px; color: var(--admin-text-dim);
+    cursor: pointer; white-space: nowrap;
+}
+.msg-toolbar-toggle input[type="checkbox"] { accent-color: var(--admin-accent); }
 .msg-toolbar select {
     background: var(--admin-surface-alt); border: 1px solid var(--admin-border);
     color: var(--admin-text); padding: 5px 8px; border-radius: 4px;
@@ -1513,6 +1685,7 @@ a.mermaid-link { color: var(--admin-accent); }
 }
 .msg-pagination button:hover { background: var(--admin-border); }
 .msg-pagination button:disabled { opacity: 0.4; cursor: default; }
+.msg-toolbar .action-btn:disabled { opacity: 0.4; cursor: default; pointer-events: none; }
 .msg-pagination span { font-size: 12px; color: var(--admin-text-dim); }
 
 /* --- Timeline view --- */
@@ -1816,3 +1989,238 @@ a.mermaid-link { color: var(--admin-accent); }
 .events-pager.hidden { display:none; }
 .events-search { min-width: 180px; }
 .events-table tr.event-row mark { background: var(--admin-drill-gold); color: var(--admin-text); padding: 0 1px; border-radius: 2px; }
+
+/* --- Catalog history chart (Performance panel, #525) ---------------------- */
+
+.catalog-chart {
+    margin-top: 10px;
+    padding-top: 8px;
+    border-top: 1px solid var(--admin-border-muted);
+}
+
+.catalog-chart canvas {
+    display: block;
+    width: 100%;
+    /* Two stacked panels + shared x-axis; must match CHART_HEIGHT in
+       admin.performance.chart.js and the canvas height attribute. */
+    height: 198px;
+    border-radius: 4px;
+    background: var(--admin-spark-bg);
+}
+
+.catalog-chart-meta { margin-top: 6px; }
+
+.catalog-chart-legend {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 14px;
+    font-size: 11px;
+    color: var(--admin-text-dim);
+}
+
+/* One group per panel, so the legend mirrors the figure's structure rather
+   than presenting seven bands as a single undifferentiated row. */
+.catalog-chart-legend-group {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+
+.catalog-chart-legend-caption {
+    color: var(--admin-text-dim);
+    font-variant: small-caps;
+    letter-spacing: 0.02em;
+}
+
+.catalog-chart-legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    color: var(--admin-text);
+}
+
+/* Swatch colour is set inline from the series definition so the legend cannot
+   drift from the bands the canvas actually drew. Filled block rather than a
+   2px rule: these are areas, and the swatch should read as the same mark. */
+.catalog-chart-swatch {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+}
+
+.catalog-chart-readout {
+    margin-top: 4px;
+    font-size: 10px;
+    color: var(--admin-text-dim);
+}
+
+/* Accessibility: the same numbers without hover and without relying on hue.
+   Not optional chrome — it is how a keyboard or colourblind reader gets the
+   values the bands encode. */
+.catalog-chart-table-toggle {
+    margin-top: 6px;
+    padding: 2px 8px;
+    font-size: 10px;
+    color: var(--admin-text-dim);
+    background: transparent;
+    border: 1px solid var(--admin-border);
+    border-radius: 3px;
+    cursor: pointer;
+}
+
+.catalog-chart-table-toggle:hover {
+    color: var(--admin-text);
+    border-color: var(--admin-border-hover);
+}
+
+.catalog-chart-table {
+    margin-top: 6px;
+    max-height: 220px;
+    overflow: auto;
+}
+
+.catalog-chart-table table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 10px;
+}
+
+.catalog-chart-table th,
+.catalog-chart-table td {
+    padding: 2px 6px;
+    text-align: right;
+    white-space: nowrap;
+    border-bottom: 1px solid var(--admin-border-muted);
+}
+
+.catalog-chart-table th:first-child,
+.catalog-chart-table td:first-child {
+    text-align: left;
+}
+
+.catalog-chart-table th {
+    position: sticky;
+    top: 0;
+    background: var(--admin-surface);
+    color: var(--admin-text-dim);
+    font-weight: 600;
+}
+
+.catalog-chart-table td { color: var(--admin-text); }
+
+/* ── Catalog Activity (flow view) ─────────────────────────────────────────── */
+
+.activity-chart canvas,
+#activity-chart {
+    display: block;
+    width: 100%;
+    /* Must match CHART_HEIGHT in admin.activity.js and the height attribute. */
+    height: 130px;
+    border-radius: 4px;
+    background: var(--admin-spark-bg);
+}
+
+/* ── Index Growth (derived stock view) ────────────────────────────────────── */
+
+.growth-chart canvas,
+#growth-chart {
+    display: block;
+    width: 100%;
+    /* Must match CHART_HEIGHT in admin.growth.js and the height attribute. */
+    height: 130px;
+    border-radius: 4px;
+    background: var(--admin-spark-bg);
+}
+
+/* The provenance line under a derived chart. Dimmer than the readout because
+   it never changes, but present on every render — a reconstructed curve that
+   is not labelled as one reads as measured history. */
+.chart-caveat {
+    margin-top: 4px;
+    font-size: 10px;
+    line-height: 1.4;
+    color: var(--admin-text-dim);
+}
+
+/* Filters sit in one row above the chart, not scattered around it. */
+.card-actions {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.activity-select {
+    padding: 2px 6px;
+    font-size: 10px;
+    color: var(--admin-text-dim);
+    background: var(--admin-surface-alt);
+    border: 1px solid var(--admin-border);
+    border-radius: 3px;
+    cursor: pointer;
+}
+
+.activity-select:hover { border-color: var(--admin-border-hover); }
+
+.activity-instances { margin-top: 10px; }
+
+.activity-instances-caption {
+    font-size: 10px;
+    font-variant: small-caps;
+    letter-spacing: 0.02em;
+    color: var(--admin-text-dim);
+    margin-bottom: 4px;
+    cursor: pointer;
+    user-select: none;
+}
+
+/* The caption is a <summary>: the list is collapsed by default because
+   instances are ephemeral and the table grows without bound. Give it an
+   obvious affordance, since a small-caps dim label does not read as clickable
+   on its own. */
+.activity-instances-caption:hover { color: var(--admin-text); }
+
+.activity-instances-caption:focus-visible {
+    outline: 1px solid var(--admin-border-hover);
+    outline-offset: 2px;
+}
+
+.activity-instances table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 10px;
+}
+
+.activity-instances th,
+.activity-instances td {
+    padding: 3px 6px;
+    text-align: right;
+    white-space: nowrap;
+    border-bottom: 1px solid var(--admin-border-muted);
+}
+
+.activity-instances th:first-child,
+.activity-instances td:first-child,
+.activity-instances th:last-child,
+.activity-instances td:last-child {
+    text-align: left;
+}
+
+.activity-instances th {
+    color: var(--admin-text-dim);
+    font-weight: 600;
+}
+
+.activity-instances td { color: var(--admin-text); }
+
+/* min-height reserves the hover line so the card does not reflow on mouseover. */
+.catalog-chart-readout {
+    margin-top: 2px;
+    min-height: 15px;
+    font-size: 11px;
+    font-family: var(--mcp-font-mono);
+    color: var(--admin-text);
+}

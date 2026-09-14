@@ -4,6 +4,10 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    # Delay adopting freshly-published versions to reduce exposure to a
+    # compromised release being pulled in immediately after publish.
+    cooldown:
+      default-days: 7
     # Grouping collapses all eligible npm updates into a single PR per week so
     # Dependabot stops opening up to 10 PRs that each re-trigger the full
     # workflow fan-out (precommit + mirror CI). See issues #426 / #434.
@@ -23,6 +27,10 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    # Delay adopting freshly-published action versions to reduce supply-chain
+    # exposure to a compromised release immediately after publish.
+    cooldown:
+      default-days: 7
     # One grouped PR per week for all GitHub Actions version bumps.
     open-pull-requests-limit: 5
     labels:

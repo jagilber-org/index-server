@@ -13,10 +13,10 @@ This document provides guidance on what content should and should not be include
 
 ## 🚀 Quick Start for AI Agents
 
-**New to this system?** Start by reading the P0 bootstrap instruction:
+**New to this system?** Start with the built-in onboarding overview:
 
 ```json
-{"method": "index_dispatch", "params": {"action": "get", "id": "000-bootstrapper"}}
+{"method": "help_overview", "params": {}}
 ```
 
 This comprehensive guide teaches you:

@@ -95,7 +95,11 @@ describe('Embeddings Route: POST /embeddings/compute', () => {
 
     const app = express();
     app.use('/api', createEmbeddingsRoutes());
-    server = app.listen(0);
+    // Bind IPv4 explicitly: listen(0) on all interfaces plus a dual-stack client
+    // makes the connect race between ::1 and 127.0.0.1.
+    server = await new Promise<typeof server>((resolve) => {
+      const s = app.listen(0, '127.0.0.1', () => resolve(s));
+    });
     port = (server.address() as { port: number }).port;
   });
 
@@ -106,7 +110,7 @@ describe('Embeddings Route: POST /embeddings/compute', () => {
   });
 
   it('returns 400 when semantic embeddings are disabled', async () => {
-    const res = await httpRequest(`http://localhost:${port}/api/embeddings/compute`, 'POST');
+    const res = await httpRequest(`http://127.0.0.1:${port}/api/embeddings/compute`, 'POST');
     expect(res.status).toBe(400);
     const json = JSON.parse(res.body);
     expect(json.success).toBe(false);

@@ -22,7 +22,6 @@ export const slowTests = [
   'src/tests/createReadSmoke.spec.ts', // ~5-6s full CRUD smoke
   'src/tests/feedbackReproduction.spec.ts', // ~5-6s persistence & green path validations
   // Dashboard/live-server integration coverage — stable in isolation but high-cost/flaky in the fast aggregate run
-  'src/tests/embeddings-routes.spec.ts',
   'src/tests/integration/dashboardAuth.spec.ts',
   'src/tests/dashboardBackupFileImport.spec.ts',
   'src/tests/dashboardIntegration.spec.ts',
@@ -46,7 +45,9 @@ export const slowTests = [
   'src/tests/concurrent/failoverUnderLoad.spec.ts',
   'src/tests/concurrent/followerUsageFeedback.spec.ts',
   // Oversized-body negative test — pre-existing behavior gap (server accepts oversized body)
-  'src/tests/instructionsAddNegative.spec.ts'
+  'src/tests/instructionsAddNegative.spec.ts',
+  // Docker image build + container inspection — 200s+ runtime, requires Docker daemon
+  'src/tests/dockerSecurity.spec.ts'
 ].map(normalizeSpecPath);
 
 export function isSlowTest(filePath) {

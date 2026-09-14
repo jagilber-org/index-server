@@ -50,7 +50,7 @@ describe('publish pipeline — build + verify-only', () => {
     });
   });
 
-  describe.skipIf(!HAS_PUBLISH_EXCLUDE)('verify-only dry-run pipeline', () => {
+  describe.skipIf(!HAS_PUBLISH_EXCLUDE)('verify-only dry-run pipeline', () => { // SKIP_OK: environment-gated: requires .publish-exclude file
     let verifyOutput: string;
 
     beforeAll(() => {
@@ -87,7 +87,7 @@ describe('publish pipeline — build + verify-only', () => {
     });
   });
 
-  describe.skipIf(!HAS_PUBLISH_EXCLUDE)('critical files included in publish set', () => {
+  describe.skipIf(!HAS_PUBLISH_EXCLUDE)('critical files included in publish set', () => { // SKIP_OK: environment-gated: requires .publish-exclude file
     let output: string;
 
     beforeAll(() => {
@@ -108,7 +108,7 @@ describe('publish pipeline — build + verify-only', () => {
     });
   });
 
-  describe.skipIf(!HAS_PUBLISH_EXCLUDE)('sensitive artifacts excluded from publish set', () => {
+  describe.skipIf(!HAS_PUBLISH_EXCLUDE)('sensitive artifacts excluded from publish set', () => { // SKIP_OK: environment-gated: requires .publish-exclude file
     let output: string;
 
     beforeAll(() => {

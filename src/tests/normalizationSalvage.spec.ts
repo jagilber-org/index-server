@@ -134,6 +134,7 @@ describe('normalization salvage', () => {
   });
 
   afterAll(()=>{
-    process.env.INDEX_SERVER_DIR = prevEnv;
+    if (prevEnv === undefined) delete process.env.INDEX_SERVER_DIR;
+    else process.env.INDEX_SERVER_DIR = prevEnv;
   });
 });

@@ -2,11 +2,16 @@ import { registerHandler, getHandler } from '../server/registry';
 import { instructionActions } from './handlers.instructions';
 import { semanticError } from './errors';
 import { traceEnabled, emitTrace } from './tracing';
+import { lightenItems } from './handlers/instructions.shared';
 import { getInstructionsDir, ensureLoaded, incrementUsage, listArchivedEntries, getArchivedEntry, computeActiveAndArchiveHashes } from './indexContext';
 import { mutationGatedReason } from './bootstrapGating';
+import { logAudit } from './auditLog';
 import { getRuntimeConfig } from '../config/runtimeConfig';
 import { buildAfterRetrievalMeta } from './handlers.search';
 import type { InstructionEntry } from '../models/instruction';
+import { findPackageVersion } from '../utils/version';
+
+const VERSION = findPackageVersion(__dirname);
 
 // Dispatcher input type (loosely typed for now; validation handled by upstream schema layer soon)
 interface DispatchBase { action: string }
@@ -16,11 +21,28 @@ interface BatchOperation extends DispatchBase { [k: string]: unknown }
 
 const mutationMethods = new Set([
   'index_add','index_import','index_remove','index_reload','index_groom','index_repair','index_enrich','index_governanceUpdate','usage_flush',
-  'index_archive','index_restore','index_purgeArchive'
+  'index_archive','index_restore','index_purgeArchive','index_patch'
 ]);
 function isMutationEnabled(){
   const cfg = getRuntimeConfig();
   return cfg.mutation.enabled;
+}
+
+const MUTATION_DISABLED_HINT =
+  'INDEX_SERVER_MUTATION=0 makes this an explicit read-only runtime (constitution S-3). Dispatcher-mediated mutations are REFUSED, not deferred — nothing was written. Restart the server without INDEX_SERVER_MUTATION=0 to re-enable writes.';
+
+/**
+ * Build the refusal envelope for a mutation action attempted under a read-only
+ * runtime, and audit it.
+ *
+ * The audit row is emitted explicitly with kind 'mutation' because
+ * `index_dispatch` lives in STABLE rather than MUTATION, so the registry's
+ * automatic tool-audit would file this refusal as a mere read (A-5). Mirrors
+ * the existing `logAudit('remove_blocked', …)` precedent.
+ */
+function mutationDisabledEnvelope(action: string, target: string){
+  logAudit('mutation_blocked', undefined, { tool: 'index_dispatch', action, target, reason: 'mutation_disabled' }, 'mutation');
+  return { error: 'mutation_blocked', reason: 'mutation_disabled', target: action, mutationEnabled: false, mutationHint: MUTATION_DISABLED_HINT };
 }
 
 const READ_ACTIONS_SUPPORTING_ARCHIVE_FILTERS = new Set(['list','listScoped','search','query','categories','export','diff','get','governanceHash']);
@@ -42,6 +64,14 @@ registerHandler('index_dispatch', async (params: DispatchParams) => {
   const timing = getRuntimeConfig().mutation.dispatcherTiming;
   const t0 = timing ? Date.now() : 0;
   const action = (params && params.action) as string;
+
+  // Handler registry for mutation/governance actions (hoisted for capabilities + error derivation)
+  const methodMap: Record<string,string> = {
+    add: 'index_add', import: 'index_import', remove: 'index_remove', reload: 'index_reload', groom: 'index_groom', repair: 'index_repair', enrich: 'index_enrich', governanceHash: 'index_governanceHash', governanceUpdate: 'index_governanceUpdate', health: 'index_health', inspect: 'index_inspect', dir: 'index_dir',
+    patch: 'index_patch',
+    archive: 'index_archive', restore: 'index_restore', purgeArchive: 'index_purgeArchive', listArchived: 'index_listArchived', getArchived: 'index_getArchived'
+  };
+  const validActions = [...new Set([...Object.keys(instructionActions), ...Object.keys(methodMap), 'capabilities', 'batch', 'manifestStatus', 'manifestRefresh', 'manifestRepair'])];
   if(traceEnabled(1)){
     try {
       const dir = getInstructionsDir();
@@ -55,7 +85,7 @@ registerHandler('index_dispatch', async (params: DispatchParams) => {
   }
   if(typeof action !== 'string' || !action.trim()) {
     try { if(getRuntimeConfig().logging.verbose) process.stderr.write('[dispatcher] semantic_error code=-32602 reason=missing_action\n'); } catch { /* ignore */ }
-    semanticError(-32602,'Missing action',{ method:'index_dispatch', reason:'missing_action', hint: 'Provide an "action" parameter. Use action="capabilities" to list all valid actions.', schema: { required: ['action'], properties: { action: { type: 'string', enum: ['list','get','search','query','categories','diff','export','add','import','remove','reload','groom','repair','enrich','governanceHash','governanceUpdate','health','inspect','dir','capabilities','batch','manifestStatus','manifestRefresh','manifestRepair','archive','restore','listArchived','getArchived','purgeArchive'] } } }, example: { action: 'search', q: 'build validate' } });
+    semanticError(-32602,'Missing action',{ method:'index_dispatch', reason:'missing_action', hint: 'Provide an "action" parameter. Use action="capabilities" to list all valid actions.', schema: { required: ['action'], properties: { action: { type: 'string', enum: validActions } } }, example: { action: 'search', q: 'build validate' } });
   }
 
   // Archive filter mutex: includeArchived and onlyArchived cannot both be true.
@@ -69,7 +99,7 @@ registerHandler('index_dispatch', async (params: DispatchParams) => {
   // Capability listing
   if(action === 'capabilities'){
   try { if(getRuntimeConfig().logging.verbose) process.stderr.write('[dispatcher] capabilities invoked\n'); } catch { /* ignore */ }
-  return { version: process.env.npm_package_version || '0.0.0', supportedActions: Object.keys(instructionActions).concat(['add','import','remove','reload','groom','repair','enrich','governanceHash','governanceUpdate','health','inspect','dir','capabilities','batch','manifestStatus','manifestRefresh','manifestRepair','archive','restore','listArchived','getArchived','purgeArchive']), mutationEnabled: isMutationEnabled() };
+  return { version: VERSION, supportedActions: validActions, mutationEnabled: isMutationEnabled() };
   }
 
   // Batch execution
@@ -114,7 +144,12 @@ registerHandler('index_dispatch', async (params: DispatchParams) => {
           if(archived) return { item: { ...archived, archived: true }, _meta: buildAfterRetrievalMeta() };
           return { notFound: true, id, scope: 'archive' };
         }
-        const base = await Promise.resolve(fn({ id }));
+        const getParams: { id: string; bodyOffset?: number; bodyLimit?: number } = { id };
+        const boRaw = (params as { bodyOffset?: unknown }).bodyOffset;
+        const blRaw = (params as { bodyLimit?: unknown }).bodyLimit;
+        if(typeof boRaw === 'number') getParams.bodyOffset = boRaw;
+        if(typeof blRaw === 'number') getParams.bodyLimit = blRaw;
+        const base = await Promise.resolve(fn(getParams));
         if((base as { notFound?: boolean }).notFound){
           if(includeArchived){
             const archived = getArchivedEntry(id);
@@ -142,7 +177,9 @@ registerHandler('index_dispatch', async (params: DispatchParams) => {
     // For onlyArchived reads: short-circuit before invoking the active-set action.
     if(onlyArchived && (action === 'list' || action === 'listScoped' || action === 'search' || action === 'query' || action === 'export')){
       const archivedItems = mapArchivedAsItems(archiveParams);
-      const resp: Record<string, unknown> = { items: archivedItems, count: archivedItems.length, onlyArchived: true };
+      const lightenArchived = (action === 'list' || action === 'search') && (params as { includeBody?: unknown }).includeBody !== true;
+      const emitted = lightenArchived ? lightenItems(archivedItems, false) : archivedItems;
+      const resp: Record<string, unknown> = { items: emitted, count: emitted.length, onlyArchived: true, ...(lightenArchived ? { bodyLight: true } : {}) };
       if(shouldAddMeta) resp._meta = buildAfterRetrievalMeta();
       return resp;
     }
@@ -174,7 +211,9 @@ registerHandler('index_dispatch', async (params: DispatchParams) => {
         finalR = { ...robj, categories: [...existing].sort(), includeArchived: true };
       } else if(Array.isArray(robj.items)){
         const archivedItems = mapArchivedAsItems(archiveParams);
-        const merged = [...(robj.items as unknown[]), ...archivedItems];
+        const lightenArchived = (action === 'list' || action === 'search') && (params as { includeBody?: unknown }).includeBody !== true;
+        const archivedEmitted = lightenArchived ? lightenItems(archivedItems, false) : archivedItems;
+        const merged = [...(robj.items as unknown[]), ...archivedEmitted];
         finalR = { ...robj, items: merged, count: merged.length, includeArchived: true };
       } else {
         finalR = { ...robj, includeArchived: true };
@@ -212,6 +251,12 @@ registerHandler('index_dispatch', async (params: DispatchParams) => {
   // Manifest actions (002 Phase 2b consolidation)
   if(action === 'manifestStatus' || action === 'manifestRefresh' || action === 'manifestRepair'){
     if(action !== 'manifestStatus'){
+      // Issue #580: this branch checked bootstrap gating but never the mutation
+      // flag, so manifestRefresh/manifestRepair wrote _manifest.json under a
+      // runtime the operator had declared read-only. Both targets are in the
+      // MUTATION set; manifestStatus is a read and stays open.
+      const mTarget = action === 'manifestRefresh' ? 'manifest_refresh' : 'manifest_repair';
+      if(!isMutationEnabled()) return mutationDisabledEnvelope(action, mTarget);
       const gated = mutationGatedReason();
       if(gated) return { error:'mutation_blocked', reason: gated, target: action, bootstrap: true };
     }
@@ -223,36 +268,22 @@ registerHandler('index_dispatch', async (params: DispatchParams) => {
     return mResult;
   }
 
-  // Map selected action tokens to existing registered methods for mutation / governance
-  const methodMap: Record<string,string> = {
-    add: 'index_add', import: 'index_import', remove: 'index_remove', reload: 'index_reload', groom: 'index_groom', repair: 'index_repair', enrich: 'index_enrich', governanceHash: 'index_governanceHash', governanceUpdate: 'index_governanceUpdate', health: 'index_health', inspect: 'index_inspect', dir: 'index_dir',
-    archive: 'index_archive', restore: 'index_restore', purgeArchive: 'index_purgeArchive', listArchived: 'index_listArchived', getArchived: 'index_getArchived'
-  };
   const target = methodMap[action];
-  let mutationDisabledAnnotation: { mutationEnabled: false; mutationHint: string } | null = null;
   if(!target) {
     try { if(getRuntimeConfig().logging.verbose) process.stderr.write(`[dispatcher] semantic_error code=-32601 reason=unknown_action action=${action}\n`); } catch { /* ignore */ }
-    const validActions = ['list', 'get', 'search', 'query', 'categories', 'diff', 'export', 'add', 'import', 'remove', 'reload', 'groom', 'repair', 'enrich', 'governanceHash', 'governanceUpdate', 'health', 'inspect', 'dir', 'capabilities', 'batch', 'manifestStatus', 'manifestRefresh', 'manifestRepair', 'archive', 'restore', 'listArchived', 'getArchived', 'purgeArchive'];
     semanticError(-32601,`Unknown action: ${action}. Call with action="capabilities" to list all valid actions.`,{ action, reason:'unknown_action', hint: 'Use action="capabilities" for full list. Common actions: list, get, search, add, query, categories.', validActions, schema: { required: ['action'], properties: { action: { type: 'string', enum: validActions } } }, examples: { list: { action: 'list' }, get: { action: 'get', id: 'instruction-id' }, search: { action: 'search', q: 'keyword' } } });
   }
   if(mutationMethods.has(target) && !isMutationEnabled()) {
-    // Dispatcher design intent (issue #358): the dispatcher remains the safe
-    // path for mutations even when direct mutation tools are disabled via
-    // INDEX_SERVER_MUTATION=0. Previously this branch logged silently and
-    // proceeded — leaving callers with no signal that the runtime flag was
-    // off and that downstream visibility anomalies may follow.
-    //
-    // The fix: we DO still proceed (preserving the design intent so existing
-    // dispatcher mutation tests continue to pass), but we annotate the
-    // outbound response with `mutationEnabled:false` and an actionable
-    // `mutationHint` naming the env var. Combined with the new structured
-    // error in `instructions.add` for the post-write visibility anomaly,
-    // this eliminates the silent-skip class of bug.
-    try { if(getRuntimeConfig().logging.verbose) process.stderr.write(`[dispatcher] mutation_allowed_via_dispatcher action=${action} target=${target} (direct mutation override disabled)\n`); } catch { /* ignore */ }
-    mutationDisabledAnnotation = {
-      mutationEnabled: false,
-      mutationHint: 'INDEX_SERVER_MUTATION is disabled — direct mutation tools are off and write-path persistence may silently fail. Set INDEX_SERVER_MUTATION=1 (or leave it unset, which defaults to enabled) in the server environment, then restart the server.',
-    };
+    // Issue #580 / constitution S-3. This branch previously annotated the
+    // response with `mutationEnabled:false` and PROCEEDED WITH THE WRITE — the
+    // issue #358 design intent, whose comment read "we DO still proceed". That
+    // made INDEX_SERVER_MUTATION=0 mean only "direct mutation tools are off"
+    // rather than "read-only runtime". Measured over stdio: with the flag set,
+    // {action:'add'} wrote a file and {action:'remove',mode:'purge'} deleted
+    // one. The #358 contract — an actionable `mutationEnabled` + `mutationHint`
+    // on the response — is preserved here; only the write is now refused.
+    try { if(getRuntimeConfig().logging.verbose) process.stderr.write(`[dispatcher] mutation_blocked action=${action} target=${target} reason=mutation_disabled\n`); } catch { /* ignore */ }
+    return mutationDisabledEnvelope(action, target);
   }
   const handler = getHandler(target);
   if(!handler) {
@@ -270,7 +301,7 @@ registerHandler('index_dispatch', async (params: DispatchParams) => {
   // because the dispatch schema cannot express nested 'entry' wrappers.
   // When 'entry' is absent but 'id' is present, assemble the entry from flat params.
   if(action==='add' && !(rest as Record<string, unknown>).entry && typeof (rest as Record<string, unknown>).id === 'string'){
-    const entryFields = ['id','body','title','rationale','priority','audience','requirement','categories','deprecatedBy','riskScore','version','owner','status','priorityTier','classification','lastReviewedAt','nextReviewDue','semanticSummary','changeLog','contentType','extensions'];
+    const entryFields = ['id','body','title','rationale','priority','audience','requirement','categories','deprecatedBy','riskScore','version','owner','status','priorityTier','classification','lastReviewedAt','nextReviewDue','semanticSummary','changeLog','contentType','extensions','links'];
     const entry: Record<string, unknown> = {};
     for(const k of entryFields){
       if((rest as Record<string, unknown>)[k] !== undefined){ entry[k] = (rest as Record<string, unknown>)[k]; delete (rest as Record<string, unknown>)[k]; }
@@ -278,15 +309,16 @@ registerHandler('index_dispatch', async (params: DispatchParams) => {
     (rest as Record<string, unknown>).entry = entry;
   }
   void _ignoredAction; // explicitly ignore for lint
-  // Mark invocation origin so guard() can allow dispatcher-mediated mutations even if
-  // direct mutation tools were explicitly disabled via runtime override.
-  (rest as Record<string, unknown>)._viaDispatcher = true;
+  // No origin stamp is written here. `guard()` used to treat `_viaDispatcher`
+  // as permission to mutate under INDEX_SERVER_MUTATION=0, which any client
+  // could forge (issue #580). The mutation refusal above now happens before we
+  // ever reach a handler, so the flag has no remaining purpose (CQ-5).
   const hStart = timing? Date.now():0;
   // Gating: block mutation targets if bootstrap confirmation required or reference mode active.
   if(mutationMethods.has(target)){
     const gated = mutationGatedReason();
     if(gated){
-      return { error:'mutation_blocked', reason: gated, target: action, bootstrap: true, ...(mutationDisabledAnnotation || {}) };
+      return { error:'mutation_blocked', reason: gated, target: action, bootstrap: true };
     }
   }
   const out = await Promise.resolve(handler(rest));
@@ -299,19 +331,17 @@ registerHandler('index_dispatch', async (params: DispatchParams) => {
     const archiveParams2 = params as { includeArchived?: unknown; onlyArchived?: unknown };
     if(archiveParams2.onlyArchived === true){
       const { archive } = computeActiveAndArchiveHashes();
-      return { archiveHash: archive, onlyArchived: true, ...(mutationDisabledAnnotation || {}) };
+      return { archiveHash: archive, onlyArchived: true };
     }
     if(archiveParams2.includeArchived === true){
       const { archive } = computeActiveAndArchiveHashes();
-      return { ...(out as Record<string, unknown>), archiveHash: archive, includeArchived: true, ...(mutationDisabledAnnotation || {}) };
+      return { ...(out as Record<string, unknown>), archiveHash: archive, includeArchived: true };
     }
   }
-  // Issue #358: when mutation is disabled, annotate every dispatcher response
-  // for a mutation action with `mutationEnabled:false` + `mutationHint`. This
-  // gives callers an actionable signal at the point of use instead of leaving
-  // them to interpret a `skipped:true` envelope as success.
-  if(mutationDisabledAnnotation && out && typeof out === 'object' && !Array.isArray(out)){
-    return { ...(out as Record<string, unknown>), ...mutationDisabledAnnotation };
-  }
+  // Issue #358's response annotation used to be applied here, on the way OUT of
+  // a mutation that had already run. Since #580 a mutation action under a
+  // read-only runtime returns `mutationDisabledEnvelope()` before the handler
+  // is called, so `mutationEnabled` / `mutationHint` are carried by the refusal
+  // itself and there is nothing left to annotate on the success path.
   return out;
 });

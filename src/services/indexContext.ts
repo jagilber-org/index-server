@@ -3,7 +3,7 @@ import path from 'path';
 import crypto from 'crypto';
 import { IndexLoader } from './indexLoader';
 import { InstructionEntry } from '../models/instruction';
-import { hasFeature, incrementCounter } from './features';
+import { incrementCounter } from './features';
 import { atomicCreateJson, atomicCreateJsonAsync, atomicWriteJson, atomicWriteJsonAsync } from './atomicFs';
 import { ClassificationService } from './classificationService';
 import { resolveOwner } from './ownershipService';
@@ -14,7 +14,29 @@ import { migrateJsonToSqlite } from './storage/migrationEngine';
 import { assertValidInstructionRecord } from './instructionRecordValidation';
 import { validateForDisk } from './loaderSchemaValidator';
 import { migrateInstructionRecord } from '../versioning/schemaVersion';
-import { resolveUsageKind, deriveUsageCount, backfillLegacyCounters, type UsageKind } from './usageCounters';
+import { deriveUsageCount, backfillLegacyCounters } from './usageCounters';
+// Usage subsystem — split out for CQ-1 (#461 F-003). Runtime-only import cycle:
+// these functions run during index materialization; indexUsage reads the raw
+// state back via getRawIndexState(). No cross-calls happen at module-load time.
+import {
+  restoreFirstSeenInvariant,
+  restoreUsageInvariant,
+  restoreLastUsedInvariant,
+  loadUsageSnapshot,
+  incrementUsage,
+  scheduleUsagePersist,
+  clearUsageRateLimit,
+  __testResetUsageState,
+  getInvariantRepairSummary,
+  _internal,
+  resetUsageProcessLatches,
+  firstSeenAuthority,
+} from './indexUsage';
+import type { UsagePersistRecord, UsageTrackOptions } from './indexUsage';
+// Re-export the public usage API + types for backward compatibility (these were
+// previously defined in this module; external importers still import them here).
+export { incrementUsage, scheduleUsagePersist, clearUsageRateLimit, loadUsageSnapshot, __testResetUsageState, getInvariantRepairSummary, _internal };
+export type { UsagePersistRecord, UsageTrackOptions };
 
 // Extended IndexState to retain loader diagnostics so we can expose precise rejection reasons
 // via a forthcoming index_diagnostics tool. Keeping optional properties so older code paths
@@ -23,6 +45,91 @@ export interface IndexState { loadedAt: string; hash: string; byId: Map<string, 
 let state: IndexState | null = null;
 // Simple reliable invalidation: any mutation sets dirty=true; next ensureLoaded() performs full rescan.
 let dirty = false;
+
+/** Internal seam for the usage subsystem (indexUsage.ts): returns the raw cached
+ *  index state without triggering materialization/invariant repair. @internal */
+export function getRawIndexState(): IndexState | null { return state; }
+
+// ── Bulk-mutation guard ──────────────────────────────────────────
+//
+// `ensureLoaded()` swaps `state` atomically, so a reload is never observable
+// half-done. The exposure is `materializeWrittenEntry()` (below), which pushes
+// entries into the LIVE `state.list` one at a time. During a bulk import or a
+// backup restore that means `state.list.length` climbs from ~0 to its final
+// value across many event-loop turns, and anything reading it in between sees a
+// count that was never a real catalog size.
+//
+// Observed: catalog samples recorded index_count=2 and index_count=112 while
+// the catalog actually held 284 entries (metrics/activity.db, 2026-09-06
+// 10:51 and 12:18). Those two points render as full-height spikes on the
+// dashboard's index-composition chart, because a stacked area chart has no way
+// to distinguish "the index shrank to 2" from "we measured mid-write".
+//
+// Callers that rebuild the index entry-by-entry wrap the loop in
+// `withBulkMutation*`; background samplers skip while `isIndexSettling()`.
+let bulkMutationDepth = 0;
+let bulkMutationStartedAt = 0;
+
+/**
+ * Failsafe. A guard that is only ever released by a `finally` still wedges if a
+ * process is killed mid-scope and the counter is module state that outlives it,
+ * or if a caller forgets the pairing entirely. A permanently-stuck depth would
+ * silently stop catalog sampling forever — a far worse failure than the spikes
+ * this guard exists to prevent — so the scope self-expires.
+ *
+ * 5 minutes is one full sampling interval: long enough that no legitimate bulk
+ * import is cut short, short enough that a leak costs at most one sample.
+ */
+const BULK_MUTATION_MAX_MS = 300_000;
+
+/** Open a bulk-mutation scope. Prefer `withBulkMutation*` over calling directly. */
+export function beginBulkMutation(): void {
+  if (bulkMutationDepth === 0) bulkMutationStartedAt = Date.now();
+  bulkMutationDepth++;
+}
+
+/** Close a bulk-mutation scope. Never drops below zero. */
+export function endBulkMutation(): void {
+  if (bulkMutationDepth > 0) bulkMutationDepth--;
+  if (bulkMutationDepth === 0) bulkMutationStartedAt = 0;
+}
+
+/**
+ * True while the index is being rebuilt entry-by-entry and `state.list.length`
+ * is therefore a partial count.
+ *
+ * Read by background samplers, never by request paths — a dashboard request
+ * that lands mid-import should still get the best available answer, whereas a
+ * sampler is writing a permanent data point and can simply wait 5 minutes.
+ */
+export function isIndexSettling(): boolean {
+  if (bulkMutationDepth === 0) return false;
+  if (Date.now() - bulkMutationStartedAt > BULK_MUTATION_MAX_MS) {
+    // Leaked scope — release it rather than blocking sampling indefinitely.
+    bulkMutationDepth = 0;
+    bulkMutationStartedAt = 0;
+    return false;
+  }
+  return true;
+}
+
+/** Run `fn` inside a bulk-mutation scope, releasing it even if `fn` throws. */
+export function withBulkMutation<T>(fn: () => T): T {
+  beginBulkMutation();
+  try { return fn(); } finally { endBulkMutation(); }
+}
+
+/** Async form of {@link withBulkMutation}. */
+export async function withBulkMutationAsync<T>(fn: () => Promise<T>): Promise<T> {
+  beginBulkMutation();
+  try { return await fn(); } finally { endBulkMutation(); }
+}
+
+/** Test-only: force the guard closed. @internal */
+export function _resetBulkMutationGuard(): void {
+  bulkMutationDepth = 0;
+  bulkMutationStartedAt = 0;
+}
 
 // Storage backend — created on demand using current instructions directory.
 // Not cached globally because tests change INDEX_SERVER_DIR between runs.
@@ -34,54 +141,6 @@ function getStoreForDir(dir: string): IInstructionStore | null {
   }
 }
 
-// Usage snapshot persistence (shared)
-// Path can be overridden per-process via INDEX_SERVER_USAGE_SNAPSHOT_PATH (used by tests for isolation)
-function getUsageSnapshotPath(): string {
-  const override = process.env.INDEX_SERVER_USAGE_SNAPSHOT_PATH;
-  return override ? path.resolve(override) : path.join(process.cwd(),'data','usage-snapshot.json');
-}
-export interface UsagePersistRecord { usageCount?: number; retrievedCount?: number; appliedCount?: number; firstSeenTs?: string; lastUsedAt?: string; lastRetrievedAt?: string; lastAppliedAt?: string; lastAction?: string; lastSignal?: string; lastComment?: string }
-export interface UsageTrackOptions { action?: string; signal?: string; comment?: string; kind?: 'retrieved' | 'applied' }
-let usageDirty = false; let usageWriteTimer: NodeJS.Timeout | null = null;
-// Resilient snapshot cache (guards against rare parse races of partially written file)
-let lastGoodUsageSnapshot: Record<string, UsagePersistRecord> = {};
-// Monotonic in-process usage counter memory to repair rare reload races that transiently
-// re-materialize an entry with a lower usageCount than previously observed (e.g. snapshot
-// not yet flushed or parsed during a tight reload window). Ensures tests observing two
-// sequential increments never regress to 1 on second call.
-const observedUsage: Record<string, number> = {};
-// Ephemeral in-process firstSeen cache to survive index reloads that happen before first flush lands.
-// If a reload occurs in the narrow window after first increment (firstSeenTs set) but before the synchronous
-// flush writes the snapshot (or if a parse race causes fallback), we rehydrate from this map so tests and
-// callers never observe a regression to undefined.
-const ephemeralFirstSeen: Record<string,string> = {};
-// Authoritative map - once a firstSeenTs is established it is recorded here and treated as immutable.
-// Any future observation of an entry missing firstSeenTs will restore from this source first.
-const firstSeenAuthority: Record<string,string> = {};
-// Authoritative usage counter map similar to firstSeenAuthority. Guards against extremely
-// rare reload races observed in CI where an entry's in-memory object re-materializes with
-// usageCount undefined (or a lower value) prior to snapshot overlay / monotonic repair.
-// We promote from this authority map before applying increment so sequential increments
-// within a single test (expecting 1 -> 2) never regress to 1.
-const usageAuthority: Record<string, number> = {};
-// Authoritative lastUsedAt map for resilience between reload + snapshot overlay timing.
-const lastUsedAuthority: Record<string, string> = {};
-// Split-counter authority maps (issue #418): per-counter monotonic floors mirroring
-// usageAuthority. Guard against reload races re-materializing an entry with a lower
-// retrievedCount/appliedCount than previously observed in-process.
-const retrievedAuthority: Record<string, number> = {};
-const appliedAuthority: Record<string, number> = {};
-const lastRetrievedAuthority: Record<string, string> = {};
-const lastAppliedAuthority: Record<string, string> = {};
-
-// ── Invariant repair tracking (#131) ─────────────────────────────
-// Accumulates repair events so they can be surfaced via health checks.
-const invariantRepairLog: { ts: string; id: string; field: string; source: string }[] = [];
-const MAX_REPAIR_LOG = 200;
-function trackInvariantRepair(id: string, field: string, source: string) {
-  invariantRepairLog.push({ ts: new Date().toISOString(), id, field, source });
-  if (invariantRepairLog.length > MAX_REPAIR_LOG) invariantRepairLog.shift();
-}
 
 // ── Process-scoped latches for noise + work suppression ──────────
 // Symptom that motivated these latches (observed live on dev port 8687,
@@ -93,14 +152,13 @@ function trackInvariantRepair(id: string, field: string, source: string) {
 // genuinely unrecoverable. Both of those are infinite-cost loops once the
 // process is up. We dedupe both per-process here.
 const autoMigrationAttempted = new Set<string>();
-const firstSeenExhaustedReported = new Set<string>();
 /**
  * Test-only hook — reset process-scoped latches between vitest specs.
  * @internal Not part of the public API.
  */
 export function _resetIndexContextProcessLatches(): void {
   autoMigrationAttempted.clear();
-  firstSeenExhaustedReported.clear();
+  resetUsageProcessLatches();
 }
 
 /**
@@ -112,265 +170,6 @@ export function _resetIndexContextStateForTests(): void {
   dirty = false;
 }
 
-/** Returns a summary of invariant repairs for health check visibility. */
-export function getInvariantRepairSummary(): { totalRepairs: number; recentRepairs: typeof invariantRepairLog } {
-  return { totalRepairs: invariantRepairLog.length, recentRepairs: invariantRepairLog.slice(-20) };
-}
-
-// Defensive invariant repair: if any code path ever observes an InstructionEntry with a missing
-// firstSeenTs after it was previously established (should not happen, but flake indicates a very
-// rare timing or cross-test interaction), we repair it from ephemeral cache or lastGood snapshot.
-function restoreFirstSeenInvariant(e: InstructionEntry){
-  if(e.firstSeenTs) return;
-  const auth = firstSeenAuthority[e.id];
-  if(auth){ e.firstSeenTs = auth; incrementCounter('usage:firstSeenAuthorityRepair'); trackInvariantRepair(e.id, 'firstSeenTs', 'authority'); logDebug(`[invariant-repair] firstSeenTs restored from authority for ${e.id}`); return; }
-  const ep = ephemeralFirstSeen[e.id];
-  if(ep){ e.firstSeenTs = ep; incrementCounter('usage:firstSeenInvariantRepair'); trackInvariantRepair(e.id, 'firstSeenTs', 'ephemeral'); logDebug(`[invariant-repair] firstSeenTs restored from ephemeral cache for ${e.id}`); return; }
-  const snap = (lastGoodUsageSnapshot as Record<string, UsagePersistRecord>)[e.id];
-  if(snap?.firstSeenTs){ e.firstSeenTs = snap.firstSeenTs; incrementCounter('usage:firstSeenInvariantRepair'); trackInvariantRepair(e.id, 'firstSeenTs', 'snapshot'); logDebug(`[invariant-repair] firstSeenTs restored from snapshot for ${e.id}`); return; }
-  // Final fallback: createdAt. By definition firstSeenTs ≤ createdAt is impossible
-  // (the index can never have observed an entry before it was created). For
-  // freshly-imported / freshly-added entries with no usage history yet, this is
-  // the correct answer; for legacy on-disk entries written before write-path
-  // populated firstSeenTs, it heals them silently. Repaired silently (no WARN)
-  // because this is the documented authoritative semantic, not a defect.
-  if(e.createdAt){ e.firstSeenTs = e.createdAt; firstSeenAuthority[e.id] = e.createdAt; incrementCounter('usage:firstSeenCreatedAtFallback'); trackInvariantRepair(e.id, 'firstSeenTs', 'createdAt'); return; }
-  // If still missing after all repair sources, track an exhausted repair attempt (extremely rare diagnostic).
-  // Dedup the WARN per-id-per-process: a permanently unrecoverable id otherwise spams hundreds of
-  // stack-traced WARNs per dashboard poll (RCA 2026-05-01, dev port 8687). The counter and audit
-  // trail still increment on every call so health metrics remain accurate.
-  if(!e.firstSeenTs){
-    incrementCounter('usage:firstSeenRepairExhausted');
-    trackInvariantRepair(e.id, 'firstSeenTs', 'exhausted');
-    if(!firstSeenExhaustedReported.has(e.id)){
-      firstSeenExhaustedReported.add(e.id);
-      logWarn(`[invariant-repair] firstSeenTs repair exhausted — no source found for ${e.id}`);
-    }
-  }
-}
-
-/**
- * Internal handles for unit tests only. Not part of the public API.
- * @internal
- */
-export const _internal = { restoreFirstSeenInvariant };
-
-// Usage invariant repair (mirrors firstSeen invariant strategy). Extremely rare reload races in CI produced
-// states where a freshly re-materialized InstructionEntry temporarily lacked its prior usageCount (observed
-// by usageTracking.spec snapshot reads) even though authority maps retained the correct monotonic value.
-// We aggressively repair here so any index state snapshot reflects at least the authoritative monotonic
-// count (never regressing) – eliminating flakiness without impacting production semantics.
-function restoreUsageInvariant(e: InstructionEntry){
-  // Split-counter restore (issue #418): prefer authority maps, then the
-  // snapshot's REAL split. The snapshot's legacy total (usageCount only) is
-  // intentionally NOT consulted here so that the entry's own monotonic
-  // usageCount on disk wins over a stale snapshot total.
-  if(e.retrievedCount == null && retrievedAuthority[e.id] != null) e.retrievedCount = retrievedAuthority[e.id];
-  if(e.appliedCount == null && appliedAuthority[e.id] != null) e.appliedCount = appliedAuthority[e.id];
-  const snapRec = (lastGoodUsageSnapshot as Record<string, UsagePersistRecord>)[e.id];
-  if(snapRec){
-    if(e.retrievedCount == null && snapRec.retrievedCount != null) e.retrievedCount = snapRec.retrievedCount;
-    if(e.appliedCount == null && snapRec.appliedCount != null) e.appliedCount = snapRec.appliedCount;
-  }
-  if(e.retrievedCount != null || e.appliedCount != null){
-    if(e.retrievedCount == null) e.retrievedCount = 0;
-    if(e.appliedCount == null) e.appliedCount = 0;
-    // Honor an existing monotonic usageCount as a floor (surplus → retrievals).
-    if(e.usageCount != null && e.usageCount > e.retrievedCount + e.appliedCount){
-      e.retrievedCount += e.usageCount - (e.retrievedCount + e.appliedCount);
-    }
-    e.usageCount = e.retrievedCount + e.appliedCount;
-    return;
-  }
-  // Legacy: entry carries only usageCount — reconstruct as retrievals. This
-  // wins over the snapshot legacy total above (monotonic-floor semantics).
-  if(e.usageCount != null){ e.retrievedCount = e.usageCount; e.appliedCount = 0; return; }
-  if(usageAuthority[e.id] != null){
-    e.usageCount = usageAuthority[e.id];
-    e.retrievedCount = e.usageCount; e.appliedCount = 0;
-    incrementCounter('usage:usageInvariantAuthorityRepair');
-    trackInvariantRepair(e.id, 'usageCount', 'authority');
-    logWarn(`[invariant-repair] usageCount restored from authority for ${e.id} (value=${usageAuthority[e.id]})`);
-    return;
-  }
-  if(observedUsage[e.id] != null){
-    e.usageCount = observedUsage[e.id];
-    e.retrievedCount = e.usageCount; e.appliedCount = 0;
-    incrementCounter('usage:usageInvariantObservedRepair');
-    trackInvariantRepair(e.id, 'usageCount', 'observed');
-    logWarn(`[invariant-repair] usageCount restored from observed for ${e.id} (value=${observedUsage[e.id]})`);
-    return;
-  }
-  const snap = (lastGoodUsageSnapshot as Record<string, UsagePersistRecord>)[e.id];
-  if(snap?.usageCount != null){
-    e.usageCount = snap.usageCount;
-    e.retrievedCount = e.usageCount; e.appliedCount = 0;
-    incrementCounter('usage:usageInvariantSnapshotRepair');
-    trackInvariantRepair(e.id, 'usageCount', 'snapshot');
-    logWarn(`[invariant-repair] usageCount restored from snapshot for ${e.id} (value=${snap.usageCount})`);
-    return;
-  }
-  // Fall back to 0 – deterministic floor; next increment will advance.
-  // Repaired silently (no WARN): for freshly seeded entries with no usage history,
-  // 0 is the correct authoritative value, not a defect. Same pattern as the
-  // firstSeenTs → createdAt fallback above. The counter + repair log still
-  // record the event for health visibility.
-  e.usageCount = 0;
-  e.retrievedCount = 0; e.appliedCount = 0;
-  incrementCounter('usage:usageInvariantZeroRepair');
-  trackInvariantRepair(e.id, 'usageCount', 'zero-default');
-}
-
-// Repair missing lastUsedAt for entries with usage.
-function restoreLastUsedInvariant(e: InstructionEntry){
-  if(e.lastUsedAt) return;
-  if(lastUsedAuthority[e.id]){ e.lastUsedAt = lastUsedAuthority[e.id]; incrementCounter('usage:lastUsedAuthorityRepair'); trackInvariantRepair(e.id, 'lastUsedAt', 'authority'); logWarn(`[invariant-repair] lastUsedAt restored from authority for ${e.id}`); return; }
-  const snap = (lastGoodUsageSnapshot as Record<string, UsagePersistRecord>)[e.id];
-  if(snap?.lastUsedAt){ e.lastUsedAt = snap.lastUsedAt; incrementCounter('usage:lastUsedSnapshotRepair'); trackInvariantRepair(e.id, 'lastUsedAt', 'snapshot'); logWarn(`[invariant-repair] lastUsedAt restored from snapshot for ${e.id}`); return; }
-  if((e.usageCount ?? 0) > 0 && e.firstSeenTs){ e.lastUsedAt = e.firstSeenTs; incrementCounter('usage:lastUsedFirstSeenRepair'); trackInvariantRepair(e.id, 'lastUsedAt', 'firstSeen-approx'); logWarn(`[invariant-repair] lastUsedAt approximated from firstSeenTs for ${e.id}`); }
-}
-
-// Rate limiting for usage increments (Phase 1 requirement)
-const USAGE_RATE_LIMIT_PER_SECOND = 10; // max increments per id per second
-const usageRateLimiter = new Map<string, { count: number; windowStart: number }>();
-function checkUsageRateLimit(id: string): boolean {
-  // Rate limiting is opt-in. INDEX_SERVER_RATE_LIMIT=0 (default) or unset
-  // disables both the dashboard HTTP limiter and this usage limiter.
-  // Any positive integer enables both.
-  const rl = Number(process.env.INDEX_SERVER_RATE_LIMIT);
-  if (!Number.isFinite(rl) || rl <= 0) return true;
-  const now = Date.now();
-  const windowStart = Math.floor(now / 1000) * 1000; // 1-second windows
-
-  const current = usageRateLimiter.get(id);
-  if (!current || current.windowStart !== windowStart) {
-    // New window or first access
-    usageRateLimiter.set(id, { count: 1, windowStart });
-    return true;
-  }
-
-  if (current.count >= USAGE_RATE_LIMIT_PER_SECOND) {
-    incrementCounter('usage:rateLimited');
-    return false;
-  }
-
-  current.count++;
-  return true;
-}
-
-// Export for testing
-export function clearUsageRateLimit(id?: string) {
-  if (id) {
-    usageRateLimiter.delete(id);
-  } else {
-    usageRateLimiter.clear();
-  }
-}
-
-function ensureDataDir(){ const dir = path.dirname(getUsageSnapshotPath()); if(!fs.existsSync(dir)) fs.mkdirSync(dir,{recursive:true}); }
-export function loadUsageSnapshot(){
-  // Up to three immediate attempts (fast, synchronous) – mitigates transient parse / rename visibility races
-  for(let attempt=0; attempt<3; attempt++){
-    try {
-      if(fs.existsSync(getUsageSnapshotPath())){
-        const raw = fs.readFileSync(getUsageSnapshotPath(),'utf8');
-        const parsed = JSON.parse(raw) as Record<string, UsagePersistRecord>;
-        // Merge forward any firstSeenTs that disappeared (should not happen, but protects against rare partial reads)
-        if(lastGoodUsageSnapshot && parsed){
-          for(const [id, prev] of Object.entries(lastGoodUsageSnapshot)){
-            const cur = parsed[id];
-            if(cur && !cur.firstSeenTs && prev.firstSeenTs){
-              cur.firstSeenTs = prev.firstSeenTs; // repair silently
-              incrementCounter('usage:firstSeenMergedFromCache');
-            }
-          }
-        }
-        lastGoodUsageSnapshot = parsed;
-        return parsed;
-      }
-      break; // file not present – exit attempts
-    } catch (err) {
-      // Log parse/read error and retry (tight loop – extremely rare path)
-      logWarn(`[invariant-repair] loadUsageSnapshot attempt ${attempt} failed: ${(err as Error).message || String(err)}`);
-    }
-  }
-  // Fallback to last good snapshot (prevents loss of firstSeenTs on rare parse race)
-  return lastGoodUsageSnapshot;
-}
-// Shorter debounce (was 500ms) to reduce race windows in tight tests that assert on snapshot
-function scheduleUsageFlush(){
-  usageDirty = true;
-  if(usageWriteTimer) return;
-  const delay = getRuntimeConfig().index.usageFlushMs;
-  usageWriteTimer = setTimeout(flushUsageSnapshot, delay);
-}
-function flushUsageSnapshot(){
-  if(!usageDirty) return;
-  if(usageWriteTimer) clearTimeout(usageWriteTimer);
-  usageWriteTimer=null; usageDirty=false;
-  try {
-    ensureDataDir();
-    if(state){
-      const obj: Record<string, UsagePersistRecord> = {};
-      for(const e of state.list){
-        const authoritative = e.firstSeenTs || firstSeenAuthority[e.id];
-        if(authoritative && !firstSeenAuthority[e.id]) firstSeenAuthority[e.id] = authoritative; // lgtm[js/remote-property-injection] — id is regex-validated by instruction schema (^[a-z0-9](?:[a-z0-9-_]{0,118}[a-z0-9])?$) before reaching index
-        const cached = lastGoodUsageSnapshot[e.id];
-        const hasSignalMeta = !!(cached && (cached.lastAction || cached.lastSignal || cached.lastComment));
-        const retrievedCount = e.retrievedCount;
-        const appliedCount = e.appliedCount;
-        const derivedTotal = (retrievedCount ?? 0) + (appliedCount ?? 0);
-        const usageCount = e.usageCount != null ? e.usageCount : derivedTotal;
-        // Persist when there is any usage signal: counters, timestamps, firstSeen,
-        // or feedback metadata (issue #418: signal-only feedback must survive flush
-        // even when it advanced no counter).
-        if(usageCount || retrievedCount || appliedCount || e.lastUsedAt || authoritative || hasSignalMeta){
-          const rec: UsagePersistRecord = {
-            usageCount: usageCount || derivedTotal,
-            retrievedCount: retrievedCount ?? 0,
-            appliedCount: appliedCount ?? 0,
-            firstSeenTs: authoritative,
-            lastUsedAt: e.lastUsedAt,
-          };
-          if(e.lastRetrievedAt) rec.lastRetrievedAt = e.lastRetrievedAt;
-          if(e.lastAppliedAt) rec.lastAppliedAt = e.lastAppliedAt;
-          // Merge signal/comment/action from in-memory cache (last-write-wins from incrementUsage calls)
-          if (cached) {
-            if (cached.lastAction) rec.lastAction = cached.lastAction;
-            if (cached.lastSignal) rec.lastSignal = cached.lastSignal;
-            if (cached.lastComment) rec.lastComment = cached.lastComment;
-          }
-          obj[e.id] = rec; // lgtm[js/remote-property-injection] — id is schema-validated before reaching index
-        }
-      }
-      // Atomic write: write to temp then rename to avoid readers seeing partial JSON
-      const snapPath = getUsageSnapshotPath();
-      const tmp = snapPath + '.tmp';
-      fs.writeFileSync(tmp, JSON.stringify(obj,null,2)); // lgtm[js/http-to-file-access] — snapPath is config-controlled usage snapshot path
-      try { fs.renameSync(tmp, snapPath); } catch { /* fallback to direct write if rename fails */ fs.writeFileSync(snapPath, JSON.stringify(obj,null,2)); /* lgtm[js/http-to-file-access] — snapPath is config-controlled usage snapshot path */ }
-      lastGoodUsageSnapshot = obj; // update cache
-    }
-  } catch { /* ignore */ }
-}
-// Register usage flush with shutdown guard instead of direct signal handlers.
-// The guard ensures cleanup runs exactly once even if multiple signals race.
-try {
-  // Import directly from shutdownGuard module (no circular dependency)
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { createShutdownGuard: _createShutdownGuard } = require('../server/shutdownGuard');
-  // Get or create a process-wide singleton via a global symbol
-  const key = Symbol.for('mcp-shutdown-guard');
-  const g = globalThis as Record<symbol, ReturnType<typeof _createShutdownGuard>>;
-  if (g[key] && typeof g[key].registerCleanup === 'function') {
-    g[key].registerCleanup('flushUsageSnapshot', () => { flushUsageSnapshot(); });
-  }
-} catch {
-  // Fallback: if shutdownGuard not available (e.g. tests), register direct handlers
-  process.on('SIGINT', ()=>{ flushUsageSnapshot(); process.exit(0); });
-  process.on('SIGTERM', ()=>{ flushUsageSnapshot(); process.exit(0); });
-}
-process.on('beforeExit', ()=>{ flushUsageSnapshot(); });
-
 // Dynamically pinned index directory.
 // Original implementation captured environment at module load which made later per-suite
 // INDEX_SERVER_DIR overrides (set in individual test files *after* other suites imported
@@ -381,7 +180,9 @@ process.on('beforeExit', ()=>{ flushUsageSnapshot(); });
 let PINNED_INDEX_SERVER_DIR: string | null = null;
 let LAST_ENV_INDEX_SERVER_DIR: string | null = null;
 export function getInstructionsDir(){
-  const raw = process.env.INDEX_SERVER_DIR || '';
+  const envVal = process.env.INDEX_SERVER_DIR;
+  if (envVal === 'undefined') { logWarn('[indexContext] INDEX_SERVER_DIR is the literal string "undefined" — ignoring (likely a test env restore bug)'); }
+  const raw = (envVal && envVal !== 'undefined') ? envVal : '';
   const desired = raw ? path.resolve(raw) : path.join(process.cwd(),'instructions');
   if(!PINNED_INDEX_SERVER_DIR){
     PINNED_INDEX_SERVER_DIR = desired; LAST_ENV_INDEX_SERVER_DIR = raw || '';
@@ -404,7 +205,7 @@ export function getInstructionsDir(){
 }
 // Centralized tracing utilities
 import { emitTrace, traceEnabled } from './tracing';
-import { logInfo, logWarn, logDebug } from './logger.js';
+import { logInfo, logWarn } from './logger.js';
 // Throttled file trace emission (avoid per-get amplification). We emit per-file decisions only
 // on true reloads AND if file signature changed OR time since last emission > threshold.
 // (legacy file-level trace removed in simplified loader)
@@ -968,7 +769,7 @@ function safeEvictEmbedding(id: string): void {
     try { logWarn(`[archive] embedding evict('${id}') failed: ${err instanceof Error ? err.message : 'unknown'}`); } catch { /* ignore */ }
   }
 }
-function safeMarkStaleEmbedding(id: string): void {
+export function safeMarkStaleEmbedding(id: string): void {
   const hook = embeddingEvictionHook;
   if (!hook?.markStale) return;
   try { hook.markStale(id); } catch (err) {
@@ -1217,220 +1018,4 @@ export function computeActiveAndArchiveHashes(): { active: string; archive: stri
   };
   /* eslint-enable @typescript-eslint/no-require-imports */
   return { active, archive: computeArchiveHashFromEntries(listArchivedEntries()) };
-}
-export function scheduleUsagePersist(){ scheduleUsageFlush(); }
-export function incrementUsage(id:string, opts?: UsageTrackOptions){
-  if(!hasFeature('usage')){
-    incrementCounter('usage:gated');
-    const observed = process.env.INDEX_SERVER_FEATURES;
-    return {
-      featureDisabled: true,
-      gate: 'INDEX_SERVER_FEATURES',
-      required: 'usage',
-      observed: observed === undefined ? null : observed,
-      hint: 'Set env INDEX_SERVER_FEATURES to include "usage" (csv) and restart the server to enable usage tracking.',
-    };
-  }
-
-  let st = ensureLoaded();
-  let e = st.byId.get(id);
-  if(!e){
-    // Possible race: caller invalidated then immediately incremented before file write completed on disk.
-    // Perform a forced reload; if still absent but file exists on disk, late-materialize directly to avoid returning null.
-    invalidate();
-    st = ensureLoaded();
-    e = st.byId.get(id);
-    if(!e){
-      const filePath = path.join(getInstructionsDir(), `${id}.json`);
-      if(fs.existsSync(filePath)){
-        try {
-          const raw = JSON.parse(fs.readFileSync(filePath,'utf8')) as InstructionEntry;
-          if(raw && raw.id === id){
-            st.list.push(raw);
-            st.byId.set(id, raw);
-            e = raw;
-            try { incrementCounter('usage:lateMaterialize'); } catch { /* ignore */ }
-          }
-        } catch { /* ignore parse */ }
-      }
-    }
-    if(!e){
-      // Ultra-narrow race: writer created file but directory signature reload loop hasn't yet surfaced it.
-      // Perform a very short synchronous spin (<=3 attempts, ~2ms total budget) to catch imminent visibility.
-      for(let spin=0; spin<3 && !e; spin++){
-        try {
-          const fp = path.join(getInstructionsDir(), id + '.json');
-          if(fs.existsSync(fp)){
-            try {
-              const raw = JSON.parse(fs.readFileSync(fp,'utf8')) as InstructionEntry;
-              if(raw && raw.id === id){
-                st.list.push(raw);
-                st.byId.set(id, raw);
-                e = raw; incrementCounter('usage:spinMaterialize');
-                break;
-              }
-            } catch { /* ignore */ }
-          }
-        } catch { /* ignore */ }
-      }
-    }
-    if(!e) return null; // genuinely absent after recovery attempts + spin
-  }
-
-  // Phase 1 rate limiting: prevent runaway from tight loops (only applies once entry exists)
-  // Deterministic test stability: always allow first two logical increments for any id even if the
-  // token bucket temporarily thinks we've exceeded the window (rare ordering / clock skew race).
-  if (!checkUsageRateLimit(id)) {
-    const current = (e.retrievedCount ?? 0) + (e.appliedCount ?? 0);
-    if(current < 2){
-      try { incrementCounter('usage:earlyRateBypass'); } catch { /* ignore */ }
-      // continue without returning so we still record increment
-    } else {
-  return { id, rateLimited: true, usageCount: current, retrievedCount: e.retrievedCount ?? 0, appliedCount: e.appliedCount ?? 0 };
-    }
-  }
-
-  // Resolve which counter this event advances (issue #418). An explicit opts.kind
-  // wins; otherwise classify from action/signal via the single shared resolver.
-  const action = opts?.action;
-  const signal = opts?.signal;
-  const comment = opts?.comment;
-  const kind: UsageKind = opts?.kind ? opts.kind : resolveUsageKind(action, signal);
-
-  // Self-healing: rare reload races can yield an entry whose split counters are
-  // undefined even though a prior increment flushed a snapshot. Restore them from
-  // the in-memory authority maps then the snapshot (legacy single-counter records
-  // are interpreted as retrievals) so deterministic tests see monotonic counts.
-  const restoreSnap = (() => { try { return loadUsageSnapshot() as Record<string, UsagePersistRecord> | undefined; } catch { return undefined; } })();
-  if(e.retrievedCount == null){
-    if(retrievedAuthority[id] != null){ e.retrievedCount = retrievedAuthority[id]; incrementCounter('usage:restoredFromAuthority'); }
-    else { const rec = restoreSnap && restoreSnap[id]; if(rec){ if(rec.retrievedCount != null) e.retrievedCount = rec.retrievedCount; else if(rec.usageCount != null && rec.appliedCount == null){ e.retrievedCount = rec.usageCount; incrementCounter('usage:restoredFromSnapshot'); } } }
-  }
-  if(e.appliedCount == null){
-    if(appliedAuthority[id] != null){ e.appliedCount = appliedAuthority[id]; }
-    else { const rec = restoreSnap && restoreSnap[id]; if(rec?.appliedCount != null) e.appliedCount = rec.appliedCount; }
-  }
-  if(e.retrievedCount == null) e.retrievedCount = 0;
-  if(e.appliedCount == null) e.appliedCount = 0;
-  // Monotonic repair per counter: never regress below an in-process observed floor.
-  if(retrievedAuthority[id] != null && e.retrievedCount < retrievedAuthority[id]){ e.retrievedCount = retrievedAuthority[id]; incrementCounter('usage:monotonicRepair'); }
-  if(appliedAuthority[id] != null && e.appliedCount < appliedAuthority[id]){ e.appliedCount = appliedAuthority[id]; incrementCounter('usage:monotonicRepair'); }
-
-  // Defensive: ensure we never operate on an entry that lost its firstSeenTs unexpectedly.
-  restoreFirstSeenInvariant(e);
-
-  if(kind === 'none'){
-    // Pure feedback signal (helpful / not-relevant / outdated): record the signal
-    // but advance NEITHER counter and do NOT touch lastUsedAt (issue #418 breaking change).
-    e.usageCount = e.retrievedCount + e.appliedCount;
-    if(!e.firstSeenTs){
-      const nowIso0 = new Date().toISOString();
-      e.firstSeenTs = nowIso0;
-      ephemeralFirstSeen[e.id] = nowIso0; firstSeenAuthority[e.id] = nowIso0; // lgtm[js/remote-property-injection]
-    }
-    if (action || signal || comment) {
-      const snap = (restoreSnap || {}) as Record<string, UsagePersistRecord>;
-      const rec = snap[id] || {};
-      if (action) rec.lastAction = action;
-      if (signal) rec.lastSignal = signal;
-      if (comment) rec.lastComment = comment;
-      snap[id] = rec;
-      lastGoodUsageSnapshot = snap;
-      usageDirty = true;
-      flushUsageSnapshot();
-    }
-    const noneResult: Record<string, unknown> = { id: e.id, usageCount: e.usageCount, retrievedCount: e.retrievedCount, appliedCount: e.appliedCount, firstSeenTs: e.firstSeenTs, lastUsedAt: e.lastUsedAt };
-    if (action) noneResult.action = action;
-    if (signal) noneResult.signal = signal;
-    if (comment) noneResult.comment = comment;
-    return noneResult;
-  }
-
-  const nowIso = new Date().toISOString();
-  if(kind === 'applied'){
-    e.appliedCount = e.appliedCount + 1;
-    e.lastAppliedAt = nowIso;
-    appliedAuthority[id] = e.appliedCount; lastAppliedAuthority[id] = nowIso; // lgtm[js/remote-property-injection]
-    incrementCounter('propertyUpdate:usage:applied');
-  } else {
-    e.retrievedCount = e.retrievedCount + 1;
-    e.lastRetrievedAt = nowIso;
-    retrievedAuthority[id] = e.retrievedCount; lastRetrievedAuthority[id] = nowIso; // lgtm[js/remote-property-injection]
-    incrementCounter('propertyUpdate:usage:retrieved');
-  }
-  e.usageCount = e.retrievedCount + e.appliedCount;
-  incrementCounter('propertyUpdate:usage');
-
-  // Atomically establish firstSeenTs if missing (avoid any window where undefined persists after increment)
-  if(!e.firstSeenTs){
-    e.firstSeenTs = nowIso;
-    ephemeralFirstSeen[e.id] = e.firstSeenTs; // track immediately for reload resilience  // lgtm[js/remote-property-injection] — id is schema-validated before reaching index
-    firstSeenAuthority[e.id] = e.firstSeenTs; incrementCounter('usage:firstSeenAuthoritySet'); // lgtm[js/remote-property-injection] — id is schema-validated before reaching index
-  }
-  e.lastUsedAt = nowIso; // always advance lastUsedAt on any counter increment
-  lastUsedAuthority[e.id] = e.lastUsedAt; // lgtm[js/remote-property-injection] — id is schema-validated before reaching index
-
-  // For the first usage we force a synchronous flush to guarantee persistence of firstSeenTs quickly;
-  // subsequent usages can rely on the debounce timer to coalesce writes.
-  if(e.usageCount <= 2){
-    // Force immediate persistence for first two increments so tests asserting on lastUsedAt & usageCount=2 see durable state.
-    usageDirty = true; if(usageWriteTimer) { clearTimeout(usageWriteTimer); usageWriteTimer = null; }
-    flushUsageSnapshot();
-  } else {
-    scheduleUsageFlush();
-  }
-  // Record observed monotonic value after all mutation logic.
-  observedUsage[id] = e.usageCount;
-  usageAuthority[id] = e.usageCount;
-  // Persist signal/comment/action in usage snapshot (last-write-wins)
-  if (action || signal || comment) {
-    const snap = loadUsageSnapshot() as Record<string, UsagePersistRecord>;
-    const rec = snap[id] || {};
-    if (action) rec.lastAction = action;
-    if (signal) rec.lastSignal = signal;
-    if (comment) rec.lastComment = comment;
-    snap[id] = rec;
-    lastGoodUsageSnapshot = snap;
-    usageDirty = true;
-    flushUsageSnapshot();
-  }
-  const result: Record<string, unknown> = { id: e.id, usageCount: e.usageCount, retrievedCount: e.retrievedCount, appliedCount: e.appliedCount, firstSeenTs: e.firstSeenTs, lastUsedAt: e.lastUsedAt };
-  if (e.lastRetrievedAt) result.lastRetrievedAt = e.lastRetrievedAt;
-  if (e.lastAppliedAt) result.lastAppliedAt = e.lastAppliedAt;
-  if (action) result.action = action;
-  if (signal) result.signal = signal;
-  if (comment) result.comment = comment;
-  return result;
-}
-
-// Test-only helper to fully reset usage tracking state for isolation between test files / repeated runs.
-// Not part of public runtime API; name is intentionally prefixed to discourage production usage.
-export function __testResetUsageState(){
-  try { if(fs.existsSync(getUsageSnapshotPath())) fs.unlinkSync(getUsageSnapshotPath()); } catch { /* ignore */ }
-  usageDirty = false;
-  if(usageWriteTimer){ clearTimeout(usageWriteTimer); usageWriteTimer = null; }
-  usageRateLimiter.clear();
-  lastGoodUsageSnapshot = {};
-  for(const k of Object.keys(ephemeralFirstSeen)) delete (ephemeralFirstSeen as Record<string,string>)[k]; // lgtm[js/remote-property-injection] — k is own-key from internal object reset (test helper)
-  for(const k of Object.keys(firstSeenAuthority)) delete (firstSeenAuthority as Record<string,string>)[k]; // lgtm[js/remote-property-injection] — k is own-key from internal object reset (test helper)
-  for(const k of Object.keys(usageAuthority)) delete (usageAuthority as Record<string,number>)[k]; // lgtm[js/remote-property-injection] — k is own-key from internal object reset (test helper)
-  for(const k of Object.keys(lastUsedAuthority)) delete (lastUsedAuthority as Record<string,string>)[k]; // lgtm[js/remote-property-injection] — k is own-key from internal object reset (test helper)
-  for(const k of Object.keys(retrievedAuthority)) delete (retrievedAuthority as Record<string,number>)[k]; // lgtm[js/remote-property-injection] — k is own-key from internal object reset (test helper)
-  for(const k of Object.keys(appliedAuthority)) delete (appliedAuthority as Record<string,number>)[k]; // lgtm[js/remote-property-injection] — k is own-key from internal object reset (test helper)
-  for(const k of Object.keys(lastRetrievedAuthority)) delete (lastRetrievedAuthority as Record<string,string>)[k]; // lgtm[js/remote-property-injection] — k is own-key from internal object reset (test helper)
-  for(const k of Object.keys(lastAppliedAuthority)) delete (lastAppliedAuthority as Record<string,string>)[k]; // lgtm[js/remote-property-injection] — k is own-key from internal object reset (test helper)
-  if(state){
-    for(const e of state.list){
-      // Reset optional usage-related fields; preserve object identity.
-      (e as InstructionEntry).usageCount = undefined as unknown as number | undefined;
-      (e as InstructionEntry).retrievedCount = undefined as unknown as number | undefined;
-      (e as InstructionEntry).appliedCount = undefined as unknown as number | undefined;
-      (e as InstructionEntry).firstSeenTs = undefined as unknown as string | undefined;
-      (e as InstructionEntry).lastUsedAt = undefined as unknown as string | undefined;
-      (e as InstructionEntry).lastRetrievedAt = undefined as unknown as string | undefined;
-      (e as InstructionEntry).lastAppliedAt = undefined as unknown as string | undefined;
-    }
-  }
-  // Invalidate index so a clean reload will occur next access.
-  invalidate();
 }

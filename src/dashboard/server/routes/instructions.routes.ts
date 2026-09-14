@@ -319,6 +319,7 @@ export function createInstructionsRoutes(): Router {
         contentType: dashboardContentType(contentObj.contentType),
         sourceHash: typeof contentObj.sourceHash === 'string' ? contentObj.sourceHash : '',
         schemaVersion: typeof contentObj.schemaVersion === 'string' ? contentObj.schemaVersion : SCHEMA_VERSION,
+        links: Array.isArray(contentObj.links) ? contentObj.links : undefined,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
@@ -331,6 +332,13 @@ export function createInstructionsRoutes(): Router {
         logError('[API] Instruction written but NOT visible after reload', { id });
         return res.status(500).json({ success: false, error: 'Instruction written but failed read-back verification' });
       }
+      // Audit the create. The archive-lifecycle routes below already do this;
+      // create/update/delete did not, so dashboard edits were absent from the
+      // audit trail entirely — and, once activity telemetry was hooked to
+      // logAudit, absent from Catalog Activity too. Emitted only after
+      // read-back verification, so a write that failed verification is not
+      // reported as a committed change.
+      logAudit('add', [id], { created: true, overwritten: false, verified, via: 'dashboard' });
       res.json({ success: true, message: 'Instruction created', name: id, verified, timestamp: Date.now() });
     } catch (error) {
       if (isInstructionValidationError(error)) {
@@ -374,6 +382,7 @@ export function createInstructionsRoutes(): Router {
         logError('[API] Instruction updated but NOT visible after reload', { id });
         return res.status(500).json({ success: false, error: 'Instruction updated but failed read-back verification' });
       }
+      logAudit('patch', [id], { changed: true, op: 'dashboard_edit', verified, via: 'dashboard' });
       res.json({ success: true, message: 'Instruction updated', verified, timestamp: Date.now() });
     } catch (error) {
       if (isInstructionValidationError(error)) {
@@ -396,6 +405,7 @@ export function createInstructionsRoutes(): Router {
       touchIndexVersion();
       invalidate();
       await ensureLoadedAsync();
+      logAudit('remove', [id], { via: 'dashboard' });
       res.json({ success: true, message: 'Instruction deleted', timestamp: Date.now() });
     } catch (error) {
       if (isInstructionValidationError(error)) {

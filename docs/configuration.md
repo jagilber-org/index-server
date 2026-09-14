@@ -392,7 +392,6 @@ files and (with `--start`) feeds them into the running process. See
 | `npm start` | Runs server after implicit build (`prestart`) |
 | `npm run build:watch` | Continuous incremental compilation during development |
 | `npm run dev` | Runs built server with Node's `--watch` (restarts on JS changes) |
-| `npm run check:dist` | CI-friendly guard: fails if `dist/` changes after a fresh build (stale committed output) |
 
 Recommended dev workflow (two terminals):
 
@@ -404,7 +403,6 @@ npm run build:watch
 npm start
 ```
 
-To enforce generated artifacts consistency in CI, add `npm run check:dist` before packaging or releasing.
 
 #### Add / Remove Instructions (Mutation Examples)
 
@@ -585,6 +583,7 @@ Process lifecycle: See `docs/feedback_defect_lifecycle.md` for the end-to-end fe
 * **INDEX_SERVER_AUTO_BACKUP=1**: Enables automatic periodic backup of the instruction index (default on). Backups are written to `backups/auto-backup-{timestamp}/` and old snapshots are pruned to `INDEX_SERVER_AUTO_BACKUP_MAX_COUNT`.
 * **INDEX_SERVER_AUTO_BACKUP_INTERVAL_MS=3600000**: Interval between automatic backups in milliseconds (default 1 hour)
 * **INDEX_SERVER_AUTO_BACKUP_MAX_COUNT=10**: Maximum number of auto-backup snapshots to retain (default 10)
+* **INDEX_SERVER_AUTO_BACKUP_ALLOW_IMPLICIT_DIR=1**: Overrides the guard that refuses auto-backups when `INDEX_SERVER_BACKUPS_DIR` is set but `INDEX_SERVER_DIR` is not (see [Backup](#backup))
 * **INDEX_SERVER_VERBOSE_LOGGING=1**: Detailed logging for debugging
 * **Input validation**: AJV-based schema validation with fail-open fallback
 
@@ -637,6 +636,7 @@ Rationale: a single execution pathway (tools/call) eliminates duplicate validati
 | Flag | Default | Scope | Description |
 |------|---------|-------|-------------|
 | `INDEX_SERVER_DIR` | `./instructions` | runtime | Root directory containing instruction JSON files. |
+| `INDEX_SERVER_STATE_ROOT` | `%LOCALAPPDATA%\index-server` (Win) / `$XDG_STATE_HOME/index-server` (Linux/Mac) | restart | Root directory for all mutable server state (logs, metrics, data, feedback, flags). All state artifacts resolve under this path. Never cwd-relative. |
 | `INDEX_SERVER_CACHE_MODE` | `normal` | runtime | Index caching mode: `normal`, `memoize`, `memoize+hash`, `reload`, `reload+memo`. |
 | `INDEX_SERVER_ALWAYS_RELOAD` | off | runtime | Force full reload on every Index access (disables caching). |
 | `INDEX_SERVER_MEMOIZE` | off | runtime | Enable memoized Index caching (mtime/size heuristic). |
@@ -645,7 +645,9 @@ Rationale: a single execution pathway (tools/call) eliminates duplicate validati
 | `INDEX_SERVER_AGENT_ID` | (none) | runtime | Agent identifier for attribution tracking. |
 | `INDEX_SERVER_PROFILE` | `default` | runtime | Runtime profile name. |
 | `INDEX_SERVER_VALIDATION_MODE` | `zod` | runtime | Validation engine: `zod` or `ajv`. |
-| `INDEX_SERVER_FEATURES` | (none) | runtime | Comma-separated feature flags: `usage`, `window`, `hotness`, `drift`, `risk`. |
+| `INDEX_SERVER_FEATURES` | `usage` | runtime | Comma-separated feature flags: `usage`, `window`, `hotness`, `drift`, `risk`. `usage` is enabled on every profile by default; set `INDEX_SERVER_USAGE_ENABLED=0` to opt out. |
+| `INDEX_SERVER_USAGE_ENABLED` | on | runtime | Dedicated switch for usage tracking. Takes precedence over `INDEX_SERVER_FEATURES`. Usage data is local-only (see `PRIVACY.md`) and cannot be backfilled, so it defaults on. |
+| `INDEX_SERVER_DEFAULT_PAGE_SIZE` | 50 | runtime | Default result count for read actions (`index_dispatch` `list`/`search`/`query`, `index_search`) when `limit` is omitted. Clamped 1–100. Pass `limit: 0` on `list` to return all items. |
 
 #### Mutation Control
 
@@ -668,7 +670,12 @@ Rationale: a single execution pathway (tools/call) eliminates duplicate validati
 | `INDEX_SERVER_AUTO_BACKUP` | on | runtime | Enable automatic periodic backup. Set `0` to disable. |
 | `INDEX_SERVER_AUTO_BACKUP_INTERVAL_MS` | 3600000 | runtime | Interval between automatic backups in milliseconds (default 1 hour). |
 | `INDEX_SERVER_AUTO_BACKUP_MAX_COUNT` | 10 | runtime | Maximum auto-backup snapshots to retain. |
-| `INDEX_SERVER_BACKUPS_DIR` | `./backups` | runtime | Directory for backup snapshots. |
+| `INDEX_SERVER_BACKUPS_DIR` | `<INDEX_SERVER_DIR>/../backups` | runtime | Directory for backup snapshots. Defaults to a `backups` sibling of the resolved instruction directory, so it follows `INDEX_SERVER_DIR` automatically (and resolves to `<cwd>/backups` when `INDEX_SERVER_DIR` is unset). |
+| `INDEX_SERVER_AUTO_BACKUP_ALLOW_IMPLICIT_DIR` | off | runtime | Overrides the source/target mismatch guard (see below). |
+
+**Target follows source:** Neither `INDEX_SERVER_AUTO_BACKUP` nor `INDEX_SERVER_BACKUPS_DIR` has to be set for auto-backup to archive the right directory. Auto-backup is on by default whenever mutation is enabled, and the backup target is derived from the resolved instruction directory. Setting only `INDEX_SERVER_DIR` is sufficient.
+
+**Source/target mismatch guard:** The one configuration that cannot be inferred is an explicit `INDEX_SERVER_BACKUPS_DIR` with no `INDEX_SERVER_DIR`. `INDEX_SERVER_DIR` silently falls back to `<cwd>/instructions` when unset, so auto-backup would archive whatever instruction files ship next to the server binary into the real backup store — snapshots that are indistinguishable from genuine backups by name and destructive if restored. Auto-backup refuses to start (and `runAutoBackupOnce()` returns `null`) in that configuration, logging an actionable `[auto-backup] not started: ...` message. Set `INDEX_SERVER_DIR`, drop `INDEX_SERVER_BACKUPS_DIR` to use the derived default, or set `INDEX_SERVER_AUTO_BACKUP_ALLOW_IMPLICIT_DIR=1` to opt out.
 
 **Zip-based backups:** All backup operations (auto-backup, bulk-delete safety snapshots, admin panel exports) produce `.zip` archives via `adm-zip`. Backup files are named `auto-backup-{YYYYMMDD-HHMM}.zip` with a numeric suffix if a collision occurs.
 
@@ -683,7 +690,7 @@ Rationale: a single execution pathway (tools/call) eliminates duplicate validati
 
 | Flag | Default | Scope | Description |
 |------|---------|-------|-------------|
-| `INDEX_SERVER_DASHBOARD` | off | runtime | Enable admin dashboard (0=disable, 1=enable). |
+| `INDEX_SERVER_DASHBOARD` | on | runtime | Enable admin dashboard (0=disable, 1=enable). Binds to 127.0.0.1 only. |
 | `INDEX_SERVER_DASHBOARD_PORT` | 8787 | runtime | Dashboard HTTP port. |
 | `INDEX_SERVER_DASHBOARD_HOST` | 127.0.0.1 | runtime | Dashboard bind address. |
 | `INDEX_SERVER_DASHBOARD_TRIES` | 10 | runtime | Maximum port retry attempts when port is busy. |
@@ -692,7 +699,7 @@ Rationale: a single execution pathway (tools/call) eliminates duplicate validati
 | `INDEX_SERVER_DASHBOARD_TLS_CERT` | (none) | runtime | Path to TLS certificate file. |
 | `INDEX_SERVER_DASHBOARD_TLS_KEY` | (none) | runtime | Path to TLS private key file. |
 | `INDEX_SERVER_DASHBOARD_TLS_CA` | (none) | runtime | Path to TLS CA certificate file. |
-| `INDEX_SERVER_HTTP_METRICS` | off | runtime | Enable HTTP request metrics collection. |
+| `INDEX_SERVER_HTTP_METRICS` | **on** | runtime | Enable HTTP request metrics collection. Set `0` to disable. |
 
 #### Logging & Tracing
 
@@ -706,7 +713,6 @@ Rationale: a single execution pathway (tools/call) eliminates duplicate validati
 | `INDEX_SERVER_LOG_SYNC` | off | runtime | Enable synchronous log writes. |
 | `INDEX_SERVER_LOG_DIAG` | off | runtime | Enable runtime diagnostic logging. |
 | `INDEX_SERVER_LOG_PROTOCOL` | off | runtime | Log protocol-level messages. |
-| `INDEX_SERVER_LOG_MUTATION` | off | runtime | Emit mutation-specific verbose logs. |
 | `INDEX_SERVER_NORMALIZATION_LOG` | (none) | runtime | Path for normalization audit log output. |
 | `INDEX_SERVER_DEBUG` | off | runtime | Enable debug mode (sets log level to debug). |
 | `INDEX_SERVER_TRACE` | (none) | runtime | Comma-separated trace categories to enable. |
@@ -719,32 +725,28 @@ Rationale: a single execution pathway (tools/call) eliminates duplicate validati
 | `INDEX_SERVER_TRACE_CATEGORIES` | (none) | runtime | Comma-separated trace categories filter. |
 | `INDEX_SERVER_TRACE_SESSION` | (none) | runtime | Trace session identifier. |
 | `INDEX_SERVER_TRACE_BUFFER_FILE` | (none) | runtime | Trace ring buffer file path. |
-| `INDEX_SERVER_TRACE_BUFFER_SIZE` | 1048576 | runtime | Trace ring buffer size in bytes. |
+| `INDEX_SERVER_TRACE_BUFFER_SIZE` | 0 (disabled) | runtime | Trace ring buffer capacity in **frames**, not bytes. `0` means no buffer. |
 | `INDEX_SERVER_TRACE_BUFFER_DUMP_ON_EXIT` | off | runtime | Dump trace buffer on process exit. |
 | `INDEX_SERVER_TRACE_MAX_FILE_SIZE` | (none) | runtime | Maximum trace file size before rotation. |
 | `INDEX_SERVER_TRACE_QUERY_DIAG` | off | runtime | Enable query diagnostic tracing. |
-| `INDEX_SERVER_TRACE_DISPATCH_DIAG` | off | runtime | Extra dispatcher timing/phase diagnostic logs. |
-| `INDEX_SERVER_TRACE_ALL` | off | runtime | Enable all trace categories. |
 
 #### Multi-Instance (Leader-Follower)
 
 | Flag | Default | Scope | Description |
 |------|---------|-------|-------------|
 | `INDEX_SERVER_MODE` | `standalone` | runtime | Server instance mode: `standalone`, `leader`, `follower`, `auto`. |
-| `INDEX_SERVER_LEADER_PORT` | 9100 | runtime | HTTP port for leader's MCP transport. |
+| `INDEX_SERVER_LEADER_PORT` | 9090 (4090 under the `dev` profile) | runtime | HTTP port for leader's MCP transport. |
 | `INDEX_SERVER_LEADER_URL` | (none) | runtime | Follower: URL of the leader to connect to. |
 | `INDEX_SERVER_HEARTBEAT_MS` | 5000 | runtime | Leader heartbeat broadcast interval (ms). |
 | `INDEX_SERVER_STALE_THRESHOLD_MS` | 15000 | runtime | Follower stale leader threshold before promotion (ms). |
 | `INDEX_SERVER_SHARED_SERVER_SENTINEL` | (none) | runtime | Shared server sentinel for leader-follower sync. |
-| `INDEX_SERVER_IDLE_READY_SENTINEL` | (none) | runtime | Ready sentinel for idle shared server (requires SHARED_SERVER_SENTINEL). |
 
 #### Metrics
 
 | Flag | Default | Scope | Description |
 |------|---------|-------|-------------|
-| `INDEX_SERVER_METRICS_DIR` | `./metrics` | runtime | Directory for metrics files. |
+| `INDEX_SERVER_METRICS_DIR` | `<STATE_ROOT>/metrics` | runtime | Directory for metrics files. |
 | `INDEX_SERVER_METRICS_FILE_STORAGE` | off | runtime | Enable file-based metrics storage. |
-| `INDEX_SERVER_METRICS_MAX_FILES` | (none) | runtime | Maximum metrics files to retain. |
 | `INDEX_SERVER_TOOLCALL_CHUNK_SIZE` | (none) | runtime | Tool call metrics chunk size. |
 | `INDEX_SERVER_TOOLCALL_FLUSH_MS` | (none) | runtime | Tool call metrics flush interval (ms). |
 | `INDEX_SERVER_TOOLCALL_COMPACT_MS` | (none) | runtime | Tool call metrics compaction interval (ms). |
@@ -764,7 +766,7 @@ Rationale: a single execution pathway (tools/call) eliminates duplicate validati
 | `INDEX_SERVER_SEMANTIC_MODEL` | `Xenova/all-MiniLM-L6-v2` | runtime | Embedding model name. |
 | `INDEX_SERVER_SEMANTIC_CACHE_DIR` | `./data/models` | runtime | Local model cache directory. |
 | `INDEX_SERVER_SEMANTIC_DEVICE` | `cpu` | runtime | Inference device: `cpu`, `cuda`, `dml`. |
-| `INDEX_SERVER_SEMANTIC_LOCAL_ONLY` | off | runtime | Only use locally cached models (no downloads). |
+| `INDEX_SERVER_SEMANTIC_LOCAL_ONLY` | **on** | runtime | Only use locally cached models (no downloads). On for the `default` profile; the `enhanced` and `experimental` profiles force it off. Set `0` to allow downloads. |
 | `INDEX_SERVER_EMBEDDING_PATH` | `./data/embeddings.json` | runtime | Path to embeddings data file. |
 
 #### Governance
@@ -827,7 +829,7 @@ Rationale: a single execution pathway (tools/call) eliminates duplicate validati
 
 | Flag | Default | Scope | Description |
 |------|---------|-------|-------------|
-| `INDEX_SERVER_AUTO_USAGE_TRACK` | on | runtime | Auto-track usage as *retrievals*. Records the returned `get` entry and the **top-3** results of `index_search`/`query` plus explicit-id `export` (issue #418). `list`/`listScoped` are not auto-tracked. |
+| `INDEX_SERVER_AUTO_USAGE_TRACK` | on | runtime | Auto-track usage as *retrievals*. Records the returned `get` entry and the **top-3** results of `index_search`/`query` plus explicit-id `export` (issue #418). `list`/`listScoped` are not auto-tracked. Inert when usage tracking is disabled via `INDEX_SERVER_USAGE_ENABLED=0`. |
 | `INDEX_SERVER_RATE_LIMIT` | `0` | runtime | Dashboard HTTP API and usage-tracking rate limit, in requests per minute. `0` (default) disables rate limiting; any positive integer N enforces N requests/minute (fixed 60-second window). Bulk import/export/backup/restore routes are unconditionally exempt — see issue #270. |
 | `INDEX_SERVER_USAGE_FLUSH_MS` | (none) | runtime | Usage data flush interval (ms). |
 | `INDEX_SERVER_DISABLE_USAGE_CLAMP` | off | runtime | Disable usage rate clamping. |
@@ -914,7 +916,6 @@ Rationale: a single execution pathway (tools/call) eliminates duplicate validati
 |------|---------|-------|-------------|
 | `INDEX_SERVER_STRESS_DIAG` | off | test harness | Activate heavy fuzz/fragmentation/stress tests. |
 | `INDEX_SERVER_STRESS_MODE` | off | test harness | Enable stress mode (forces full list scan). |
-| `INDEX_SERVER_VISIBILITY_DIAG` | off | diagnostic | Visibility verification diagnostic logging. |
 | `INDEX_SERVER_MINIMAL_DEBUG` | off | diagnostic | Minimal debug mode. |
 | `INDEX_SERVER_TEST_MODE` | (none) | test | Test mode: `coverage-fast`, `coverage-strict`, etc. |
 | `INDEX_SERVER_TEST_STRICT_VISIBILITY` | off | test | Strict visibility checks in tests. |
@@ -941,16 +942,189 @@ Rationale: a single execution pathway (tools/call) eliminates duplicate validati
 
 | Flag | Default | Scope | Description |
 |------|---------|-------|-------------|
-| `INDEX_SERVER_STATE_DIR` | `./data/state` | runtime | State directory for runtime data. |
+| `INDEX_SERVER_STATE_DIR` | `<STATE_ROOT>/data/state` | runtime | State directory for runtime data. |
 | `INDEX_SERVER_TIMING_JSON` | (none) | runtime | Path to timing configuration JSON. |
 | `INDEX_SERVER_FORCE_REBUILD` | off | runtime | Force Index rebuild on startup. |
-| `INDEX_SERVER_REQUIRE_AUTH_ALL` | off | runtime | Require authentication for all operations. |
-| `INDEX_SERVER_AUTH_KEY` | (none) | runtime | Authentication API key. |
-| `INDEX_SERVER_ADMIN_API_KEY` | (none) | runtime | Admin API key for dashboard authentication. When set, all mutation endpoints (POST/PUT/DELETE) require `Authorization: Bearer <key>`. When unset, localhost requests pass through without auth; remote requests to mutation endpoints are blocked (403). GET routes are always open. |
-| `INDEX_SERVER_LOG_SEARCH` | off | runtime | Log search operations. |
-| `INDEX_SERVER_LOG_TOOLS` | off | runtime | Log tool invocations. |
-| `INDEX_SERVER_FEEDBACK_DIR` | `./feedback` | runtime | Directory for feedback data storage. |
+| `INDEX_SERVER_ADMIN_API_KEY` | (none) | runtime | **The only authentication control that is enforced.** Admin API key for dashboard authentication. When set, all mutation endpoints (POST/PUT/DELETE) require `Authorization: Bearer <key>`. When unset, localhost requests pass through without auth; remote requests to mutation endpoints are blocked (403). GET routes are always open. Enforced at `src/dashboard/server/routes/adminAuth.ts:22` and `WebSocketManager.ts:148`. |
+| `INDEX_SERVER_FEEDBACK_DIR` | `<STATE_ROOT>/feedback` | runtime | Directory for feedback data storage. |
 | `INDEX_SERVER_FEEDBACK_MAX_ENTRIES` | 1000 | runtime | Maximum feedback entries to store before rotation. |
+
+#### Removed / not implemented — setting these does nothing
+
+These were documented as ordinary runtime settings. **No code path reads any of
+them** (#588). They are listed here rather than silently deleted, because an
+operator who already has one in an `mcp.json` needs to know it is inert; the
+`config-parity` gate now prevents a new one from appearing.
+
+| Flag | Status |
+|------|--------|
+| `INDEX_SERVER_REQUIRE_AUTH_ALL` | **Never implemented.** Documented as "require authentication for all operations"; nothing consults it. Setting it to `1` authenticates nothing. Use `INDEX_SERVER_ADMIN_API_KEY`. |
+| `INDEX_SERVER_AUTH_KEY` | **Never implemented.** Documented as an authentication API key; nothing consults it. `SECURITY.md` already calls it an "experimental placeholder"; this table said otherwise. Use `INDEX_SERVER_ADMIN_API_KEY`. |
+| `INDEX_SERVER_LOG_SEARCH` | Removed. Appears only in the flag allow-list. |
+| `INDEX_SERVER_LOG_TOOLS` | Removed. `src/server/registry.ts:34` records that tool lifecycle logging was "previously gated by" it and is now unconditional. |
+| `INDEX_SERVER_LOG_MUTATION` | Removed. Catalog metadata only. |
+| `INDEX_SERVER_METRICS_MAX_FILES` | **Never implemented.** Metrics file rotation does not exist; `720` is a `MetricsCollector` constructor default. Still offered as editable in the dashboard Configuration panel. |
+| `INDEX_SERVER_TRACE_ALL` | Removed. Use `INDEX_SERVER_TRACE_CATEGORIES`. |
+| `INDEX_SERVER_TRACE_DISPATCH_DIAG` | Superseded by `INDEX_SERVER_TRACE=dispatchDiag`. |
+| `INDEX_SERVER_VISIBILITY_DIAG` | Removed. Referenced only in a comment. |
+| `INDEX_SERVER_IDLE_READY_SENTINEL` | Never implemented. Referenced only in a comment describing what it *would* do. |
+| `INDEX_SERVER_BODY_MAX_LENGTH` | Removed. `runtimeConfig.ts:343-345` logs "no longer recognized" and ignores it. The configurable limit is `INDEX_SERVER_BODY_WARN_LENGTH`; the hard ceiling is not configurable. |
+
+> **Why two of these matter more than the rest.** `REQUIRE_AUTH_ALL` and
+> `AUTH_KEY` are *authentication* controls. An operator following this table
+> could set both, see no error, and believe the surface was locked down while
+> nothing was enforced — the worst failure mode a configuration document has.
+
+#### Activity Log
+
+The activity database powers the dashboard's usage-over-time charts. None of
+these were documented before #588.
+
+| Flag | Default | Scope | Description |
+|------|---------|-------|-------------|
+| `INDEX_SERVER_ACTIVITY_LOG` | on (off under a test runner unless `_ACTIVITY_DB` is set) | restart | Record tool invocations to the activity database. `0`/`off`/`false`/`no` disables. |
+| `INDEX_SERVER_ACTIVITY_DB` | `<STATE_ROOT>/metrics/activity.db` | restart | Explicit activity database path. Precedence: this → `<INDEX_SERVER_METRICS_DIR>/activity.db` → the default. |
+| `INDEX_SERVER_ACTIVITY_RETENTION_DAYS` | 90 | restart | Days of activity history retained. Non-finite or non-positive values fall back to the default. |
+| `INDEX_SERVER_AUDIT_LOG` | on, at `<STATE_ROOT>/logs/audit.log` | restart | Instruction mutation audit log. **On by default** — an unset value means enabled, not disabled. A falsy value disables it; any other value is treated as a path (relative values resolve against `STATE_ROOT`). |
+
+#### Messaging
+
+The inter-agent messaging subsystem. None of these were documented before #588;
+see [messaging.md](messaging.md) for the tools and REST surface.
+
+| Flag | Default | Scope | Description |
+|------|---------|-------|-------------|
+| `INDEX_SERVER_MESSAGING_ENABLED` | on | restart | Master switch. `0` removes all 11 `messaging_*` tools from `tools/list`, skips the dashboard REST routes, and hides the Messaging tab. |
+| `INDEX_SERVER_MESSAGING_DIR` | `<STATE_ROOT>/data/messaging` | restart | Message store directory. Relative values resolve against `STATE_ROOT`, never CWD. Rejected at startup if it resolves inside the instruction catalog. |
+| `INDEX_SERVER_MESSAGING_MAX` | 10000 | restart | Maximum retained messages. |
+| `INDEX_SERVER_MESSAGING_SWEEP_MS` | 60000 | restart | TTL sweep interval (ms). |
+
+#### Runtime Overrides & MCP Config Management
+
+| Flag | Default | Scope | Description |
+|------|---------|-------|-------------|
+| `INDEX_SERVER_DISABLE_OVERRIDES` | off | restart | Disable the runtime override overlay entirely. |
+| `INDEX_SERVER_OVERRIDES_FILE` | `./data/runtime-overrides.json` | restart | Override file location. Unlike the other state paths this one resolves against **CWD**, not `STATE_ROOT`. |
+| `INDEX_SERVER_MCP_CONFIG_ROOT` | (current working directory) | runtime | Root directory written into generated MCP client configs. An explicit root passed to the operation wins. |
+| `INDEX_SERVER_MCP_BACKUP_RETAIN` | 10 | runtime | Backups retained per managed MCP client config file. Non-positive and unparseable values fall back to the default. |
+| `INDEX_SERVER_MANIFEST_PATH` | `<STATE_ROOT>/snapshots/index-manifest.json` | runtime | Explicit index manifest location. |
+| `INDEX_SERVER_MANIFEST_WRITE` | on | restart | Write the manifest after each load. Any falsy value disables. |
+| `INDEX_SERVER_MANIFEST_FASTLOAD` | off | restart | Experimental manifest-driven fast load. |
+| `INDEX_SERVER_EVENT_BUFFER_SIZE` | 500 | restart | Capacity of the in-memory event ring. |
+| `INDEX_SERVER_ENABLE_STDERR_BRIDGE` | off | restart | Route server logs through MCP `notifications/message` instead of raw stderr. Off by default: VS Code Insiders renders no visible channel for those notifications, so enabling it there produces complete log silence. |
+| `INDEX_SERVER_BUFFER_RING_APPEND` | on | restart | Append-mode BufferRing persistence. `0` disables, `1` forces on. |
+| `INDEX_SERVER_BUFFER_RING_PRELOAD` | off | restart | Preload persisted BufferRing contents at startup. `1` enables. |
+| `INDEX_SERVER_SEARCH_OMIT_ZERO_QUERY` | off | runtime | Omit zero-result queries from search telemetry. |
+| `INDEX_SERVER_AUTO_EMBED_ON_IMPORT` | on | restart | Compute embeddings automatically after import/restore when semantic search is enabled. |
+| `INDEX_SERVER_GRAPH_INCLUDE_PRIMARY_EDGES` | on | runtime | Include primary-category edges in `graph_export`. |
+| `INDEX_SERVER_GRAPH_LARGE_CATEGORY_CAP` | unlimited | runtime | Cap on nodes emitted for a single large category. Unset means no cap. |
+
+### Lifecycle Hooks
+
+Optional operator-configured commands that run **after** a committed instruction
+CRUD mutation is durably written. Off by default — hooks fire only when at
+least one non-empty command is configured. Dispatch enters through the single
+mutation audit point, independently of whether audit-file output is enabled, so
+every supported mutation path (`index_add`, `index_import`, `index_remove`,
+`promote_from_repo`) uses the same classification and failure-isolation logic.
+
+| Variable | Default | Reload | Description |
+|------|---------|-------|-------------|
+| `INDEX_SERVER_HOOK_ON_CREATE` | (none) | restart-required | Command run when a new instruction is created. |
+| `INDEX_SERVER_HOOK_ON_UPDATE` | (none) | restart-required | Command run when an existing instruction is overwritten. |
+| `INDEX_SERVER_HOOK_ON_REMOVE` | (none) | restart-required | Command run when instructions are removed. |
+| `INDEX_SERVER_HOOK_ON_CHANGE` | (none) | restart-required | Catch-all command run for any committed mutation (also the only hook for bulk `import`/`promote`). |
+| `INDEX_SERVER_HOOK_BLOCKING` | off | restart-required | When on, synchronously await each selected hook before the mutation call returns. Default is fire-and-forget. |
+| `INDEX_SERVER_HOOK_TIMEOUT_MS` | 10000 | restart-required | Per-hook wall-clock timeout (ms), minimum 1. |
+| `INDEX_SERVER_HOOK_MAX_CONCURRENT` | 4 | restart-required | Max concurrent in-flight hook processes, minimum 1; excess non-blocking dispatches are dropped with a WARN. |
+
+The mutation context is delivered to the hook process through a documented set
+of child-process environment variables and a stdin JSON payload; mutation data
+is never interpolated into the command. See the
+[Hook Input Contract](lifecycle-hooks.md#hook-input-contract) for the exact
+output-variable names, payload schema, and consumer examples. Those variables
+are hook outputs, not Index Server configuration inputs, so they are
+intentionally excluded from the configuration catalog.
+
+> **Security boundary:** the hook **command** comes from trusted operator
+> configuration (env) only. Instruction content and tool parameters are never
+> interpolated into the command — they are passed exclusively via the env vars
+> and stdin JSON above — so hostile instruction data cannot inject shell
+> commands. Hook failures are logged at WARN and isolated: they never corrupt
+> index state or change the mutation result. Hook commands are intentionally
+> **not** editable from the dashboard.
+
+Delivery is at-most-once per selected command within the running process. Hooks
+are not backed by a durable queue and are not retried. A process crash between
+the committed write and child creation can lose a notification, so integrations
+that require durable delivery must periodically reconcile from Index Server and
+should process hook events idempotently. An operation-specific command and
+`ON_CHANGE` both run for create/update/remove unless their command strings are
+identical, in which case dispatch is deduplicated.
+
+Example (fire a re-index webhook whenever anything changes):
+
+```bash
+INDEX_SERVER_HOOK_ON_CHANGE='curl -fsS -X POST https://hooks.example.test/reindex -H "Content-Type: application/json" --data-binary @-'
+```
+
+#### Windows PowerShell
+
+Configure the variables in the same process environment that launches Index
+Server, then restart the server:
+
+```powershell
+$env:INDEX_SERVER_HOOK_ON_CHANGE = 'pwsh -NoProfile -File "C:\automation\index-changed.ps1"'
+$env:INDEX_SERVER_HOOK_TIMEOUT_MS = '15000'
+$env:INDEX_SERVER_HOOK_MAX_CONCURRENT = '2'
+npm start
+```
+
+The hook script can deserialize the structured stdin or child-environment JSON
+without parsing shell arguments. The canonical PowerShell consumer example is
+in the [Hook Input Contract](lifecycle-hooks.md#hook-input-contract).
+
+#### MCP Client Launcher
+
+For an MCP-managed process, put the values in the server definition's `env`
+object. JSON environment values are strings:
+
+```json
+{
+  "servers": {
+    "index-server": {
+      "command": "node",
+      "args": ["C:\\path\\to\\index-server\\dist\\server\\index-server.js"],
+      "env": {
+        "INDEX_SERVER_HOOK_ON_CHANGE": "pwsh -NoProfile -File \"C:\\automation\\index-changed.ps1\"",
+        "INDEX_SERVER_HOOK_BLOCKING": "0",
+        "INDEX_SERVER_HOOK_TIMEOUT_MS": "15000",
+        "INDEX_SERVER_HOOK_MAX_CONCURRENT": "2"
+      }
+    }
+  }
+}
+```
+
+Restart the MCP client or the individual MCP server after changing the launch
+environment.
+
+#### Dashboard Visibility and Editing
+
+The existing dashboard **Configuration** tab includes a **Lifecycle hooks**
+summary with enabled/disabled state, configured-command count, blocking mode,
+timeout, and concurrency. Directly below it, **Manage lifecycle hooks** provides
+blank write-only fields for replacing the four command values. Existing command
+text is redacted by the server and never pre-populated. Use **Clear** to disable
+a configured hook. Commands can also be set through the launcher environment or
+a configuration manager.
+
+`INDEX_SERVER_HOOK_BLOCKING`, `INDEX_SERVER_HOOK_TIMEOUT_MS`, and
+`INDEX_SERVER_HOOK_MAX_CONCURRENT` are available in the same management card.
+All saved hook values require a server restart before taking effect.
+
+See [Lifecycle Hooks](lifecycle-hooks.md) for the architecture, exact event
+mapping, delivery guarantees, dashboard security model, and troubleshooting.
 
 Operational guidance:
 
@@ -1022,7 +1196,7 @@ Environment Flags:
 Design Rationale:
 
 * Central helper `attemptManifestUpdate()` now performs an immediate synchronous manifest write (Phase F simplification). Previous debounce logic was removed to guarantee determinism and eliminate timing races. (A future high‑churn mode could reintroduce batching behind an env flag if needed.)
-* Separation of concerns: instruction files validated by `instruction.schema.json` (schemaVersion `6`), manifest snapshot validated by its own schema (`manifest.schema.json`). No need to bump instruction `schemaVersion` when altering internal manifest representation.
+* Separation of concerns: instruction files validated by `instruction.schema.json` (schemaVersion `9` — see `src/versioning/schemaVersion.ts`, which is the source of truth; this line said `6` until #588), manifest snapshot validated by its own schema (`manifest.schema.json`). No need to bump instruction `schemaVersion` when altering internal manifest representation.
 * Additive only – no change in existing mutation semantics or instruction schema.
 
 ### Handshake Reliability (1.1.1)

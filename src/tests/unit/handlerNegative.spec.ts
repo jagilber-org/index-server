@@ -12,7 +12,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import fs from 'fs';
 import path from 'path';
-import { createTestClient, type TestClient } from '../helpers/mcpTestClient.js';
+import { createTestClient, callAllowingRejection, type TestClient } from '../helpers/mcpTestClient.js';
 
 function makeTempDir(label: string) {
   const dir = path.join(process.cwd(), 'tmp', `handler-neg-${label}-${Date.now()}`);
@@ -172,7 +172,7 @@ describe('Handler negative tests — remove, search, usage, feedback', () => {
 
   describe('usage_track', () => {
     it('rejects usage tracking with missing instruction ID', async () => {
-      const resp = await client.callToolJSON('usage_track', { id: '' });
+      const resp = await callAllowingRejection(() => client.callToolJSON('usage_track', { id: '' }));
       const errish = resp?.error || resp?.isError || resp?.status === 'error';
       expect(errish, 'empty id should fail: ' + JSON.stringify(resp)).toBeTruthy();
     });

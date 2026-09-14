@@ -3,6 +3,7 @@
  * Route: GET /embeddings/projection — PCA-project embeddings to 2D for visualization.
  */
 
+import { getEmbeddingStore } from '../../../services/storage/factory.js';
 import { Router, Request, Response } from 'express';
 import fs from 'node:fs';
 import { getRuntimeConfig } from '../../../config/runtimeConfig.js';
@@ -12,7 +13,8 @@ import type { IndexLocals } from '../middleware/ensureLoadedMiddleware.js';
 import { dashboardAdminAuth } from './adminAuth.js';
 
 interface EmbeddingsFile {
-  indexHash: string;
+  /** Absent on hand-written / legacy embedding files, hence optional. */
+  indexHash?: string;
   modelName: string;
   embeddings: Record<string, number[]>;
 }
@@ -23,6 +25,8 @@ interface ProjectedPoint {
   y: number;
   category: string;
   norm: number;
+  /** Entry title, when the instruction index is mounted on this request. */
+  title?: string;
 }
 
 interface SimilarPair {
@@ -187,6 +191,12 @@ export function createEmbeddingsRoutes(embeddingPathOverride?: string, embedding
 
   router.get('/embeddings/projection', (_req: Request, res: Response) => { // lgtm[js/missing-rate-limiting] — parent router applies rate-limit
     try {
+      // Entry metadata for classification (#534). ensureLoadedMiddleware puts
+      // the index state on res.locals for every request under /api, but this
+      // router is also mounted standalone (tests, embedded harnesses), so a
+      // missing state degrades to ID-only derivation rather than throwing.
+      const byId = (res.locals as Partial<IndexLocals>).indexState?.byId;
+
       let data: EmbeddingsFile;
 
       if (embeddingStore) {
@@ -215,6 +225,7 @@ export function createEmbeddingsRoutes(embeddingPathOverride?: string, embedding
           count: 0,
           dimensions: 0,
           model: data.modelName,
+          indexHash: data.indexHash ?? '',
           points: [],
           stats: { avgCosineSim: 0, minCosineSim: 0, maxCosineSim: 0, avgNorm: 0 },
           similarPairs: [],
@@ -224,13 +235,19 @@ export function createEmbeddingsRoutes(embeddingPathOverride?: string, embedding
       const dims = vectors[0].length;
       const projected = pcaProject(vectors);
 
-      const points: ProjectedPoint[] = ids.map((id, i) => ({
-        id,
-        x: Math.round(projected[i].x * 10000) / 10000,
-        y: Math.round(projected[i].y * 10000) / 10000,
-        category: deriveCategory(id),
-        norm: Math.round(norm(vectors[i]) * 10000) / 10000,
-      }));
+      const points: ProjectedPoint[] = ids.map((id, i) => {
+        // A stale embeddings cache can hold IDs the index no longer has; the
+        // join misses silently and deriveCategory falls back to the ID rules.
+        const entry = byId?.get(id);
+        return {
+          id,
+          x: Math.round(projected[i].x * 10000) / 10000,
+          y: Math.round(projected[i].y * 10000) / 10000,
+          category: deriveCategory(id, entry),
+          norm: Math.round(norm(vectors[i]) * 10000) / 10000,
+          ...(entry?.title ? { title: entry.title } : {}),
+        };
+      });
 
       const { stats, similarPairs } = computeStats(ids, vectors);
 
@@ -239,6 +256,7 @@ export function createEmbeddingsRoutes(embeddingPathOverride?: string, embedding
         count: ids.length,
         dimensions: dims,
         model: data.modelName,
+        indexHash: data.indexHash ?? '',
         points,
         stats,
         similarPairs,
@@ -401,7 +419,7 @@ export function createEmbeddingsRoutes(embeddingPathOverride?: string, embedding
       const start = performance.now();
       const embeddings = await getInstructionEmbeddings(
         state.list, state.hash, sem.embeddingPath, sem.model, sem.cacheDir, sem.device, sem.localOnly,
-        undefined, embeddingStore
+        undefined, embeddingStore ?? getEmbeddingStore()
       );
       const elapsed = (performance.now() - start).toFixed(0);
       const count = Object.keys(embeddings).length;

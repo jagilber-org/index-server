@@ -15,6 +15,7 @@
  */
 
 import { McpStdioLogger, type McpLoggingLevel } from '../lib/mcpStdioLogging';
+import { stderrBridgeEnabled } from '../config/serviceEnv';
 import type { LogLevel } from './logger';
 
 const LEVEL_MAP: Record<LogLevel, McpLoggingLevel> = {
@@ -39,8 +40,14 @@ const LEVEL_MAP: Record<LogLevel, McpLoggingLevel> = {
 //
 // The legacy INDEX_SERVER_DISABLE_STDERR_BRIDGE variable is now a no-op (the
 // new default already matches what setting it did).
-const STDERR_BRIDGE_ENABLED =
-  process.env.INDEX_SERVER_ENABLE_STDERR_BRIDGE === '1';
+//
+// Read through `config/serviceEnv` (#611) rather than `getRuntimeConfig()`:
+// this module is the FIRST import in `src/server/index-server.ts`, deliberately
+// above `applyOverlay()`, so materializing the config snapshot here would move
+// the whole snapshot in front of the overlay and invert the precedence
+// documented at `index-server.ts:34-45`. `stderrBridgeEnabled()` reads
+// `process.env` when called and loads nothing else.
+const STDERR_BRIDGE_ENABLED = stderrBridgeEnabled();
 
 // Singleton instance — intercepts stderr only when the bridge is opted in.
 const _logger = new McpStdioLogger({

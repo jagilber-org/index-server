@@ -36,7 +36,7 @@ Select a backup snapshot from the dropdown and click Restore to replace the curr
 
 | Variable | Default | Description |
 | -------- | ------- | ----------- |
-| INDEX_SERVER_BACKUPS_DIR | ./backups | Backup storage directory |
+| INDEX_SERVER_BACKUPS_DIR | `<INDEX_SERVER_DIR>/../backups` | Backup storage directory (derived from the instruction directory when unset) |
 | INDEX_SERVER_AUTO_BACKUP | 1 | Enable periodic auto-backup |
 | INDEX_SERVER_AUTO_BACKUP_INTERVAL_MS | 3600000 | Backup interval (default 1 hour) |
 | INDEX_SERVER_AUTO_BACKUP_MAX_COUNT | 10 | Maximum retained auto-backups |

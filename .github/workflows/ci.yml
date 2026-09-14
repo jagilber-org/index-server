@@ -15,15 +15,46 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Governance guards (#582). `guard:all` ran in no workflow whatsoever, and had
+  # been exit-1 on main for months without anyone seeing it.
+  #
+  # Owner-gated to match build-test below: on the public mirror this is the only
+  # lane, so the guards belong here. On the private jagilber-dev remote this job
+  # skips, and ci-self-hosted.yml's `guards` job -- which is deliberately NOT
+  # owner-gated -- carries the same `npm run guard:all` on the maintainer's own
+  # hardware. Both invoke the single composition in package.json rather than
+  # restating the list, so the two lanes cannot disagree.
+  guards:
+    if: ${{ github.repository_owner == 'jagilber-org' || github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6 # pii-allowlist: pinned action SHA
+        with:
+          # guard:changelog resolves the last v* tag and the commits since it.
+          # A shallow checkout has neither, and the gate treats a missing tag as
+          # a failure rather than a clean pass (#575) -- so it would go red for
+          # the wrong reason.
+          fetch-depth: 0
+      - name: Use Node.js 22
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6 # pii-allowlist: pinned action SHA
+        with:
+          node-version: 22
+          cache: 'npm'
+      - name: Install
+        run: npm ci
+      - name: Governance guards (guard:all)
+        run: npm run guard:all
+
   build-test:
     # Default CI/test spend belongs on the public mirror. The private dev repo
     # keeps leak/security gates in precommit.yml and can still run this manually.
     if: ${{ github.repository_owner == 'jagilber-org' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6 # pii-allowlist: pinned action SHA
       - name: Use Node.js 22
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6 # pii-allowlist: pinned action SHA
         with:
           node-version: 22
           cache: 'npm'
@@ -66,7 +97,7 @@ jobs:
             npm test --if-present 2>&1 | tee test-results/test-output.log
           else
             echo "Push/dispatch run: full coverage suite"
-            (npm run coverage:ci --if-present || npm test --if-present) 2>&1 | tee test-results/test-output.log
+            npm run coverage:ci --if-present 2>&1 | tee test-results/test-output.log
           fi
       - name: Validate test artifacts (no leakage, no oversized files)
         if: always()
@@ -86,7 +117,7 @@ jobs:
             --strict
       - name: Upload coverage to Codecov
         if: always()
-        uses: codecov/codecov-action@v7
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7 # pii-allowlist: pinned action SHA
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: ./coverage/cobertura-coverage.xml,./coverage/lcov.info
@@ -95,35 +126,35 @@ jobs:
           directory: ./coverage
       - name: Upload coverage (directory)
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7 # pii-allowlist: pinned action SHA
         with:
           name: coverage
           path: coverage
           if-no-files-found: warn
       - name: Upload coverage lcov
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7 # pii-allowlist: pinned action SHA
         with:
           name: coverage-lcov
           path: coverage/lcov.info
           if-no-files-found: warn
       - name: Upload test results to Codecov
         if: ${{ !cancelled() }}
-        uses: codecov/test-results-action@v1
+        uses: codecov/test-results-action@0fa95f0e1eeaafde2c782583b36b28ad0d8c77d3 # v1 # pii-allowlist: pinned action SHA
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: ./test-results/junit.xml
           fail_ci_if_error: false
       - name: Upload test results JSON
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7 # pii-allowlist: pinned action SHA
         with:
           name: test-results
           path: test-results
           if-no-files-found: warn
       - name: Upload server and trace logs
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7 # pii-allowlist: pinned action SHA
         with:
           name: server-logs
           path: |

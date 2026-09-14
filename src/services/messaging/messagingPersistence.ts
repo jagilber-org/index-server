@@ -13,6 +13,7 @@ import crypto from 'crypto';
 import type { AgentMessage } from './messagingTypes';
 
 const FILENAME = 'messages.jsonl';
+const VERSION_FILENAME = '.messages-version';
 
 /** Track appended IDs per directory to prevent cross-process duplicates within a session. */
 const appendedIds = new Map<string, Set<string>>();
@@ -20,6 +21,68 @@ const appendedIds = new Map<string, Set<string>>();
 /** Returns the path to messages.jsonl in the given directory. */
 export function getMessagingFilePath(dir: string): string {
   return path.join(dir, FILENAME);
+}
+
+/** Returns the path to the messaging version token file in the given directory. */
+export function getMessagingVersionFilePath(dir: string): string {
+  return path.join(dir, VERSION_FILENAME);
+}
+
+/** Touch the messaging version token after a successful on-disk mutation. */
+export function touchMessagesVersion(dir: string): void {
+  try {
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    const token = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    fs.writeFileSync(getMessagingVersionFilePath(dir), token, 'utf8');
+  } catch {
+    // Best-effort cache invalidation only; readers still fall back to file or
+    // directory mtimes when the version token cannot be written.
+  }
+}
+
+/** Read the messaging version marker mtime with safe fallbacks for legacy dirs. */
+export function readMessagesVersionMTime(dir: string): number {
+  try {
+    const versionFilePath = getMessagingVersionFilePath(dir);
+    if (fs.existsSync(versionFilePath)) {
+      return fs.statSync(versionFilePath).mtimeMs || 0;
+    }
+  } catch {
+    // Ignore version-token stat failures and fall back to the message file.
+  }
+
+  try {
+    const filePath = getMessagingFilePath(dir);
+    if (fs.existsSync(filePath)) {
+      return fs.statSync(filePath).mtimeMs || 0;
+    }
+  } catch {
+    // Ignore message-file stat failures and fall back to the directory.
+  }
+
+  try {
+    if (fs.existsSync(dir)) {
+      return fs.statSync(dir).mtimeMs || 0;
+    }
+  } catch {
+    // Ignore missing or unreadable directories and return the empty-state token.
+  }
+
+  return 0;
+}
+
+/** Read the current messaging version token. Returns empty string when absent. */
+export function readMessagesVersionToken(dir: string): string {
+  try {
+    const versionFilePath = getMessagingVersionFilePath(dir);
+    if (fs.existsSync(versionFilePath)) {
+      return fs.readFileSync(versionFilePath, 'utf8').trim();
+    }
+  } catch {
+    // Ignore token read failures; callers use mtime fallback plus empty token.
+  }
+
+  return '';
 }
 
 /**
@@ -36,6 +99,7 @@ export function appendMessage(msg: AgentMessage, dir: string): void {
 
   fs.appendFileSync(filePath, JSON.stringify(msg) + os.EOL, 'utf8'); // lgtm[js/http-to-file-access] — persistence path from config
   seen.add(msg.id);
+  touchMessagesVersion(dir);
 }
 
 /**
@@ -96,6 +160,7 @@ export function rewriteMessages(messages: AgentMessage[], dir: string): void {
   // Reset dedup set to match current state
   const seen = new Set(messages.map(m => m.id));
   appendedIds.set(dir, seen);
+  touchMessagesVersion(dir);
 }
 
 /** Reset dedup state (for testing). */

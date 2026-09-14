@@ -49,8 +49,26 @@
         "properties": {
           "from": {"type": "string"},
             "to": {"type": "string"},
-            "type": {"type": "string", "enum": ["primary","category","belongs"]},
-            "weight": {"type": "number"}
+            "type": {
+              "type": "string",
+              "enum": ["primary","category","belongs","link"],
+              "description": "primary: instruction -> its primaryCategory. category: undirected co-category pair between two instructions. belongs: instruction -> materialized category node (requires includeCategoryNodes). link: directed instruction -> instruction edge materialized from the source entry's structured `links` array."
+            },
+            "weight": {"type": "number"},
+            "rel": {
+              "type": "string",
+              "enum": ["related","prerequisite","sequel","part-of","see-also"],
+              "description": "Link relationship type. Present only when type='link'. Mirrors links.items.properties.rel on the instruction schema; absent `rel` on the stored link is materialized as 'related'."
+            },
+            "label": {
+              "type": "string",
+              "maxLength": 120,
+              "description": "Human-readable annotation copied from the stored link. Present only when type='link' and the stored link carried a non-empty label. Derived inverse edges carry the same label as the stored link they came from."
+            },
+            "inverse": {
+              "type": "boolean",
+              "description": "True when this edge was derived at query time by reversing a stored link rather than read from an entry's `links` array. Links are stored one-way only; inverse edges are materialized in enriched mode for the reversible rels (prerequisite, sequel, part-of, related) and never for see-also. Read the reversed direction through `rel`: (rel='prerequisite', inverse=true) on B->A means 'B is required by A'; likewise sequel means 'B follows A' and part-of means 'B contains A'. `related` is symmetric, so its inverse carries the same meaning in the opposite direction. When both A->B and B->A are stored for the same rel, the stored edges win and no inverse edge is added."
+            }
         },
         "additionalProperties": false
       }

@@ -69,7 +69,7 @@ Default is \`instruction\`.
       audience: 'all',
       requirement: 'recommended',
       priority: 94,
-      priorityTier: 'P1',
+      priorityTier: 'P4',
       contentType: 'knowledge',
       categories: ['bootstrap', 'content-types', 'schema'],
       primaryCategory: 'schema',

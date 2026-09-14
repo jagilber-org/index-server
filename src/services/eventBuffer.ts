@@ -10,6 +10,8 @@
  * Constitution alignment: OB-1, OB-3, OB-4, OB-5 (structured, severity-visible).
  */
 
+import { DEFAULT_EVENT_BUFFER_CAPACITY, eventBufferCapacity } from '../config/serviceEnv.js';
+
 export type EventLevel = 'WARN' | 'ERROR';
 
 export interface BufferedEvent {
@@ -27,20 +29,19 @@ export interface BufferedEvent {
   pid?: number;
 }
 
-const DEFAULT_CAPACITY = 500;
-
 class EventRing {
   private buf: BufferedEvent[] = [];
   private nextId = 1;
-  private capacity = DEFAULT_CAPACITY;
+  private capacity = DEFAULT_EVENT_BUFFER_CAPACITY;
 
-  /** Read the configured capacity (env: INDEX_SERVER_EVENT_BUFFER_SIZE, min 50, max 5000). */
+  /**
+   * Read the configured capacity (env: INDEX_SERVER_EVENT_BUFFER_SIZE, min 50,
+   * max 5000). Resolved by `config/serviceEnv` per call rather than from the
+   * memoized RuntimeConfig snapshot, so a capacity change still takes effect
+   * without a restart — see `add()` below.
+   */
   private resolveCapacity(): number {
-    const raw = process.env.INDEX_SERVER_EVENT_BUFFER_SIZE;
-    if (!raw) return DEFAULT_CAPACITY;
-    const n = parseInt(raw, 10);
-    if (!Number.isFinite(n) || n <= 0) return DEFAULT_CAPACITY;
-    return Math.min(5000, Math.max(50, n));
+    return eventBufferCapacity();
   }
 
   add(level: EventLevel, msg: string, detail?: string, pid?: number): void {

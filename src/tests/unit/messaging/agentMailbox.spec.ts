@@ -2,12 +2,13 @@
  * Unit tests for AgentMailbox core service.
  * TDD Phase: RED → GREEN
  */
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import { AgentMailbox } from '../../../services/messaging/agentMailbox';
 import { _resetDedupState } from '../../../services/messaging/messagingPersistence';
+import * as messagingPersistence from '../../../services/messaging/messagingPersistence';
 import type { AgentMessage } from '../../../services/messaging/messagingTypes';
 
 function makeTempDir(): string {
@@ -325,6 +326,144 @@ describe('AgentMailbox', () => {
       const msgs = mailbox2.read({ reader: '*' });
       expect(msgs).toHaveLength(1);
       expect(msgs[0].body).toBe('original');
+      mailbox2.destroy();
+    });
+
+    it('refreshes an already-loaded second mailbox on read/listChannels/stats after another instance writes', async () => {
+      const mailbox2 = new AgentMailbox({ dir: tmpDir, maxMessages: 1000, sweepIntervalMs: 0 });
+      mailbox2.ensureLoaded();
+
+      await mailbox.send({ channel: 'shared', sender: 'writer', recipients: ['*'], body: 'from mailbox 1' });
+
+      expect(mailbox2.read({ channel: 'shared', reader: '*' })).toHaveLength(1);
+      expect(mailbox2.listChannels()).toEqual([
+        {
+          channel: 'shared',
+          messageCount: 1,
+          latestAt: mailbox.read({ channel: 'shared', reader: '*' })[0].createdAt,
+        },
+      ]);
+      expect(mailbox2.getStats('*')).toMatchObject({ total: 1, unread: 1, channels: 1 });
+
+      mailbox2.destroy();
+    });
+
+    it('makes rapid sequential writes from two loaded mailboxes visible to both instances', async () => {
+      const mailbox2 = new AgentMailbox({ dir: tmpDir, maxMessages: 1000, sweepIntervalMs: 0 });
+      mailbox.ensureLoaded();
+      mailbox2.ensureLoaded();
+
+      await mailbox.send({ channel: 'shared', sender: 'a', recipients: ['*'], body: 'a-1' });
+      await mailbox2.send({ channel: 'shared', sender: 'b', recipients: ['*'], body: 'b-1' });
+      await mailbox.send({ channel: 'shared', sender: 'a', recipients: ['*'], body: 'a-2' });
+      await mailbox2.send({ channel: 'shared', sender: 'b', recipients: ['*'], body: 'b-2' });
+
+      expect(mailbox.read({ channel: 'shared', reader: '*' }).map(msg => msg.body)).toEqual([
+        'a-1',
+        'b-1',
+        'a-2',
+        'b-2',
+      ]);
+      expect(mailbox2.read({ channel: 'shared', reader: '*' }).map(msg => msg.body)).toEqual([
+        'a-1',
+        'b-1',
+        'a-2',
+        'b-2',
+      ]);
+
+      mailbox2.destroy();
+    });
+
+    it('preserves TTL sweep and persistent semantics after cross-instance reload', async () => {
+      const mailbox2 = new AgentMailbox({ dir: tmpDir, maxMessages: 1000, sweepIntervalMs: 0 });
+      mailbox2.ensureLoaded();
+
+      await mailbox.send({
+        channel: 'shared',
+        sender: 'writer',
+        recipients: ['*'],
+        body: 'expires',
+        ttlSeconds: 1,
+      });
+      await mailbox.send({
+        channel: 'shared',
+        sender: 'writer',
+        recipients: ['*'],
+        body: 'persists',
+        persistent: true,
+      });
+
+      const reloaded = mailbox2.read({ channel: 'shared', reader: '*' });
+      expect(reloaded).toHaveLength(2);
+
+      const expiring = reloaded.find(msg => msg.body === 'expires');
+      expect(expiring).toBeDefined();
+      (expiring as AgentMessage).createdAt = new Date(Date.now() - 2_000).toISOString();
+
+      expect(mailbox2.sweepExpired()).toBe(1);
+      expect(mailbox2.read({ channel: 'shared', reader: '*' }).map(msg => msg.body)).toEqual(['persists']);
+
+      mailbox2.destroy();
+    });
+
+    it('does not clobber local state while another instance reloads after an out-of-band stale disk rewrite', async () => {
+      const mailbox2 = new AgentMailbox({ dir: tmpDir, maxMessages: 1000, sweepIntervalMs: 0 });
+      mailbox.ensureLoaded();
+      mailbox2.ensureLoaded();
+      const staleSnapshot = fs.existsSync(path.join(tmpDir, 'messages.jsonl'))
+        ? fs.readFileSync(path.join(tmpDir, 'messages.jsonl'), 'utf8')
+        : '';
+
+      const messageId = await mailbox.send({
+        channel: 'shared',
+        sender: 'writer-a',
+        recipients: ['*'],
+        body: 'must survive',
+      });
+      const goodSnapshot = fs.readFileSync(path.join(tmpDir, 'messages.jsonl'), 'utf8');
+
+      fs.writeFileSync(path.join(tmpDir, 'messages.jsonl'), staleSnapshot, 'utf8');
+      fs.writeFileSync(path.join(tmpDir, '.messages-version'), `stale-${Date.now()}`, 'utf8');
+      expect(mailbox.read({ channel: 'shared', reader: '*' }).map(msg => msg.id)).toContain(messageId);
+
+      fs.writeFileSync(path.join(tmpDir, 'messages.jsonl'), goodSnapshot, 'utf8');
+      fs.writeFileSync(path.join(tmpDir, '.messages-version'), `good-${Date.now()}`, 'utf8');
+
+      expect(mailbox2.read({ channel: 'shared', reader: '*' }).map(msg => msg.id)).toContain(messageId);
+      expect(mailbox.getMessage(messageId)?.body).toBe('must survive');
+
+      mailbox2.destroy();
+    });
+
+    it('does not reload from disk repeatedly when the version token is unchanged, but does reload after a real write', async () => {
+      const loadSpy = vi.spyOn(messagingPersistence, 'loadMessages');
+      const mailbox2 = new AgentMailbox({ dir: tmpDir, maxMessages: 1000, sweepIntervalMs: 0 });
+
+      mailbox.ensureLoaded();
+      mailbox2.ensureLoaded();
+      loadSpy.mockClear();
+      mailbox2.read({ reader: '*' });
+      mailbox2.listChannels();
+      mailbox2.getStats('*');
+      expect(loadSpy).toHaveBeenCalledTimes(0);
+
+      await mailbox.send({ channel: 'shared', sender: 'writer', recipients: ['*'], body: 'new message' });
+      mailbox2.read({ channel: 'shared', reader: '*' });
+      expect(loadSpy).toHaveBeenCalledTimes(1);
+
+      mailbox2.destroy();
+    });
+
+    it('degrades gracefully when a corrupt partial JSONL line appears before a concurrent reload', async () => {
+      const mailbox2 = new AgentMailbox({ dir: tmpDir, maxMessages: 1000, sweepIntervalMs: 0 });
+      mailbox2.ensureLoaded();
+
+      await mailbox.send({ channel: 'shared', sender: 'writer', recipients: ['*'], body: 'good message' });
+      fs.appendFileSync(path.join(tmpDir, 'messages.jsonl'), '{"partial":true', 'utf8');
+
+      expect(() => mailbox2.read({ channel: 'shared', reader: '*' })).not.toThrow();
+      expect(mailbox2.read({ channel: 'shared', reader: '*' }).map(msg => msg.body)).toEqual(['good message']);
+
       mailbox2.destroy();
     });
   });

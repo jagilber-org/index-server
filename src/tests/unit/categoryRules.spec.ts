@@ -181,3 +181,129 @@ describe('categoryRules — deriveCategory', () => {
     }
   });
 });
+
+/**
+ * Issue #534 defect 1 — metadata-blind classification.
+ *
+ * `deriveCategory` was ID-only, so every entry whose ID happened not to match a
+ * rule landed in the 'Other' bucket even when its title / primaryCategory /
+ * categories[] said exactly what it was (382/1277 = 29.9% of the production
+ * index). These tests pin the metadata-aware fallback and — critically — the
+ * PRECEDENCE between the four sources, which must be deterministic.
+ *
+ * Constitution refs: TS-8 (red first), TS-9 (regression test first), TS-12 (>=5 cases).
+ */
+describe('#534 categoryRules — deriveCategory with metadata fallback', () => {
+
+  // ── Precedence rung 1: ID wins (backwards compatibility) ──────────────────
+
+  it('ID rules win over every metadata field when the ID matches', () => {
+    // 'azure-*' is rung 1; the metadata all point elsewhere and must be ignored.
+    expect(deriveCategory('azure-batch-pool-resize', {
+      title: 'Kusto query guide',
+      primaryCategory: 'testing',
+      categories: ['mermaid', 'docker'],
+    })).toBe('Azure');
+  });
+
+  it('omitting metadata is identical to the legacy ID-only call', () => {
+    const ids = [
+      'azure-batch-pool-resize', 'sf-deploy-troubleshooting', 'mcp-index-search-guide',
+      'generic-other-entry', 'alpha',
+    ];
+    for (const id of ids) {
+      expect(deriveCategory(id, undefined)).toBe(deriveCategory(id));
+      expect(deriveCategory(id, {})).toBe(deriveCategory(id));
+    }
+  });
+
+  // ── Precedence rung 2: primaryCategory ────────────────────────────────────
+
+  it('falls back to primaryCategory when the ID derives Other', () => {
+    expect(deriveCategory('alpha', { primaryCategory: 'kusto' })).toBe('Kusto');
+    expect(deriveCategory('beta', { primaryCategory: 'service-fabric' })).toBe('Service Fabric');
+    expect(deriveCategory('gamma', { primaryCategory: 'dotnet' })).toBe('.NET');
+  });
+
+  // ── Precedence rung 3: categories[] ───────────────────────────────────────
+
+  it('falls back to categories[] when ID and primaryCategory derive Other', () => {
+    expect(deriveCategory('alpha', { categories: ['misc', 'mermaid'] })).toBe('Mermaid');
+    expect(deriveCategory('beta', { primaryCategory: 'misc', categories: ['governance'] })).toBe('Governance');
+  });
+
+  it('scans categories[] in array order — first matching element wins', () => {
+    expect(deriveCategory('alpha', { categories: ['mermaid', 'kusto'] })).toBe('Mermaid');
+    expect(deriveCategory('alpha', { categories: ['kusto', 'mermaid'] })).toBe('Kusto');
+  });
+
+  // ── Precedence rung 4: title ──────────────────────────────────────────────
+
+  it('falls back to title last, when no ID/primaryCategory/categories match', () => {
+    expect(deriveCategory('alpha', { title: 'Troubleshooting the deployment' })).toBe('Debugging');
+    expect(deriveCategory('beta', { title: 'Incident response rotation' })).toBe('Operations');
+  });
+
+  it('matches metadata case-insensitively (titles are prose, IDs are slugs)', () => {
+    expect(deriveCategory('alpha', { title: 'Kusto Query Guide' })).toBe('Kusto');
+    expect(deriveCategory('alpha', { primaryCategory: 'Governance' })).toBe('Governance');
+    expect(deriveCategory('alpha', { categories: ['Mermaid'] })).toBe('Mermaid');
+  });
+
+  // ── Full precedence ladder, all four sources in conflict ──────────────────
+
+  it('resolves conflicts as ID > primaryCategory > categories[] > title', () => {
+    const meta = {
+      title: 'Docker container notes',   // Containers
+      primaryCategory: 'kusto',          // Kusto
+      categories: ['mermaid'],           // Mermaid
+    };
+    // rung 2 wins while primaryCategory matches
+    expect(deriveCategory('alpha', meta)).toBe('Kusto');
+    // drop rung 2 -> rung 3
+    expect(deriveCategory('alpha', { ...meta, primaryCategory: 'misc' })).toBe('Mermaid');
+    // drop rung 3 -> rung 4
+    expect(deriveCategory('alpha', { ...meta, primaryCategory: 'misc', categories: ['misc'] })).toBe('Containers');
+    // drop rung 4 -> Other
+    expect(deriveCategory('alpha', { title: 'misc', primaryCategory: 'misc', categories: ['misc'] })).toBe('Other');
+  });
+
+  // ── Closed label set — metadata must not invent new categories ────────────
+
+  it('never returns a label outside CATEGORY_RULES plus Other', () => {
+    // primaryCategory is a free-form slug on disk. It is matched THROUGH the
+    // rules, never surfaced verbatim — otherwise the legend and colour map
+    // would face an unbounded label set (see #534 defect 2).
+    const allowed = new Set([...CATEGORY_RULES.map(([, label]) => label), 'Other']);
+    const probes = [
+      { primaryCategory: 'performance' },
+      { primaryCategory: 'zzz-unknown-taxonomy' },
+      { categories: ['some-new-thing'] },
+      { title: 'A perfectly ordinary sentence' },
+      { primaryCategory: 'Kusto', categories: ['Mermaid'], title: 'Docker' },
+    ];
+    for (const meta of probes) {
+      expect(allowed.has(deriveCategory('alpha', meta))).toBe(true);
+    }
+    expect(deriveCategory('alpha', { primaryCategory: 'performance' })).toBe('Other');
+  });
+
+  // ── Edge / boundary / malformed input ─────────────────────────────────────
+
+  it('tolerates empty, blank, and malformed metadata without throwing', () => {
+    expect(deriveCategory('alpha', { categories: [] })).toBe('Other');
+    expect(deriveCategory('alpha', { title: '', primaryCategory: '', categories: [''] })).toBe('Other');
+    expect(deriveCategory('alpha', { categories: [undefined as unknown as string, 'kusto'] })).toBe('Kusto');
+    expect(deriveCategory('alpha', { title: undefined, primaryCategory: undefined })).toBe('Other');
+    expect(deriveCategory('alpha', { categories: undefined })).toBe('Other');
+  });
+
+  it('reclassifies the real-world Other-bucket shapes from #534', () => {
+    // Representative of the 297 entries the issue says become classifiable.
+    expect(deriveCategory('alpha', { title: 'Azure Batch pool resize' })).toBe('Azure');
+    expect(deriveCategory('performance', { primaryCategory: 'testing' })).toBe('Testing');
+    expect(deriveCategory('session-2025-08-15', { categories: ['kusto', 'dashboard'] })).toBe('Kusto');
+    expect(deriveCategory('notes', { title: 'OneNote to Markdown conversion' })).toBe('Documentation');
+    expect(deriveCategory('hardening', { primaryCategory: 'security' })).toBe('Security');
+  });
+});

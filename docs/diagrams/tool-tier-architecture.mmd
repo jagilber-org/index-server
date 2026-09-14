@@ -2,98 +2,100 @@
 config:
     layout: elk
 ---
+%% GENERATED FILE — do not edit by hand.
+%% Source: src/services/toolRegistry.ts. Regenerate: npm run docs:tools
 graph TD
-    subgraph Core Tier
+    subgraph Core["Core Tier (8)"]
+        direction TB
         bootstrap["bootstrap"]
-        feedback_dispatch["feedback_dispatch"]
+        feedback_submit["feedback_submit"]
         health_check["health_check"]
         help_overview["help_overview"]
-        index_dispatch["index_dispatch"]
-        index_search["index_search"]
+        subgraph Core_index["index_*"]
+            index_dispatch["index_dispatch"]
+            index_search["index_search"]
+        end
         prompt_review["prompt_review"]
+        usage_track["usage_track"]
     end
 
-    subgraph Extended Tier
+    subgraph Extended["Extended Tier (26)"]
         direction TB
-        subgraph Index Operations
+        feedback_manage["feedback_manage"]
+        gates_evaluate["gates_evaluate"]
+        graph_export["graph_export"]
+        subgraph Extended_index["index_*"]
             index_add["index_add"]
-            index_import["index_import"]
-            index_remove["index_remove"]
-            index_reload["index_reload"]
-            index_schema["index_schema"]
-        end
-        subgraph Governance
             index_governanceHash["index_governanceHash"]
             index_governanceUpdate["index_governanceUpdate"]
-            gates_evaluate["gates_evaluate"]
-            integrity_verify["integrity_verify"]
+            index_import["index_import"]
+            index_patch["index_patch"]
+            index_reload["index_reload"]
+            index_remove["index_remove"]
+            index_schema["index_schema"]
         end
-        subgraph Analytics
-            graph_export["graph_export"]
-            usage_track["usage_track"]
-            usage_hotset["usage_hotset"]
-            metrics_snapshot["metrics_snapshot"]
-            promote_from_repo["promote_from_repo"]
-        end
-        subgraph Messaging
-            messaging_send["messaging_send"]
-            messaging_read["messaging_read"]
-            messaging_list_channels["messaging_list_channels"]
+        integrity_verify["integrity_verify"]
+        subgraph Extended_messaging["messaging_*"]
             messaging_ack["messaging_ack"]
-            messaging_stats["messaging_stats"]
             messaging_get["messaging_get"]
-            messaging_update["messaging_update"]
+            messaging_list_channels["messaging_list_channels"]
+            messaging_manage["messaging_manage"]
             messaging_purge["messaging_purge"]
+            messaging_read["messaging_read"]
             messaging_reply["messaging_reply"]
+            messaging_send["messaging_send"]
+            messaging_stats["messaging_stats"]
             messaging_thread["messaging_thread"]
+            messaging_update["messaging_update"]
         end
+        metrics_snapshot["metrics_snapshot"]
+        promote_from_repo["promote_from_repo"]
+        usage_hotset["usage_hotset"]
     end
 
-    subgraph Admin Tier
-        subgraph Feedback
-            feedback_submit["feedback_submit"]
-            feedback_list["feedback_list"]
-            feedback_get["feedback_get"]
-            feedback_update["feedback_update"]
-            feedback_stats["feedback_stats"]
-            feedback_health["feedback_health"]
-        end
-        subgraph Index Management
-            index_health["index_health"]
-            index_diagnostics["index_diagnostics"]
-            index_repair["index_repair"]
-            index_groom["index_groom"]
-            index_enrich["index_enrich"]
-            index_normalize["index_normalize"]
-            index_inspect["index_inspect"]
-            index_debug["index_debug"]
-        end
-        subgraph Meta
-            meta_tools["meta_tools"]
-            meta_activation_guide["meta_activation_guide"]
-            meta_check_activation["meta_check_activation"]
-            feature_status["feature_status"]
-        end
-        subgraph Bootstrap Ops
-            bootstrap_request["bootstrap_request"]
+    subgraph Admin["Admin Tier (31)"]
+        direction TB
+        subgraph Admin_bootstrap["bootstrap_*"]
             bootstrap_confirmFinalize["bootstrap_confirmFinalize"]
+            bootstrap_request["bootstrap_request"]
             bootstrap_status["bootstrap_status"]
         end
-        subgraph Manifest
-            manifest_status["manifest_status"]
+        dashboard_config["dashboard_config"]
+        subgraph Admin_diagnostics["diagnostics_*"]
+            diagnostics_block["diagnostics_block"]
+            diagnostics_handshake["diagnostics_handshake"]
+            diagnostics_memoryPressure["diagnostics_memoryPressure"]
+            diagnostics_microtaskFlood["diagnostics_microtaskFlood"]
+        end
+        feature_status["feature_status"]
+        subgraph Admin_index["index_*"]
+            index_archive["index_archive"]
+            index_debug["index_debug"]
+            index_diagnostics["index_diagnostics"]
+            index_enrich["index_enrich"]
+            index_getArchived["index_getArchived"]
+            index_groom["index_groom"]
+            index_health["index_health"]
+            index_inspect["index_inspect"]
+            index_listArchived["index_listArchived"]
+            index_normalize["index_normalize"]
+            index_purgeArchive["index_purgeArchive"]
+            index_repair["index_repair"]
+            index_restore["index_restore"]
+        end
+        integrity_manifest["integrity_manifest"]
+        subgraph Admin_manifest["manifest_*"]
             manifest_refresh["manifest_refresh"]
             manifest_repair["manifest_repair"]
+            manifest_status["manifest_status"]
         end
-        subgraph Diagnostics
-            diagnostics_block["diagnostics_block"]
-            diagnostics_microtaskFlood["diagnostics_microtaskFlood"]
-            diagnostics_memoryPressure["diagnostics_memoryPressure"]
+        subgraph Admin_meta["meta_*"]
+            meta_activation_guide["meta_activation_guide"]
+            meta_check_activation["meta_check_activation"]
+            meta_tools["meta_tools"]
         end
-        subgraph Other
-            usage_flush["usage_flush"]
-            integrity_manifest["integrity_manifest"]
-            trace_dump["trace_dump"]
-        end
+        trace_dump["trace_dump"]
+        usage_flush["usage_flush"]
     end
 
     Client["MCP Client"] --> Core

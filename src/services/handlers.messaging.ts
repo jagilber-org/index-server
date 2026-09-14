@@ -102,6 +102,8 @@ registerHandler('messaging_read', (params: {
   markRead?: boolean;
   tags?: string[];
   sender?: string;
+  requiresAck?: boolean;
+  unacked?: boolean;
 } = {}) => {
   const parsed = ReadMessagesOptionsSchema.safeParse(params);
   if (!parsed.success) {
@@ -342,6 +344,7 @@ interface MessagingManageParams {
   unreadOnly?: boolean;
   limit?: number;
   markRead?: boolean;
+  unacked?: boolean;
   // ack / get / update / purge
   messageIds?: string[];
   messageId?: string;
@@ -398,6 +401,8 @@ registerHandler('messaging_manage', async (params: MessagingManageParams) => {
         markRead: params.markRead,
         tags: params.tags,
         sender: params.sender,
+        requiresAck: params.requiresAck,
+        unacked: params.unacked,
       });
       if (!parsed.success) {
         throw new Error(`messaging_manage[read]: ${parsed.error.issues.map(i => i.message).join(', ')}`);

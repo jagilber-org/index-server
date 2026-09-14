@@ -35,7 +35,12 @@
     ['path', 'path'], ['rect', 'rect'], ['circle', 'circle'], ['ellipse', 'ellipse'], ['polygon', 'polygon'], ['polyline', 'polyline'], ['line', 'line'],
     ['text', 'text'], ['tspan', 'tspan'], ['textpath', 'textPath'],
     ['marker', 'marker'], ['pattern', 'pattern'], ['clippath', 'clipPath'], ['mask', 'mask'], ['symbol', 'symbol'], ['use', 'use'],
-    ['lineargradient', 'linearGradient'], ['radialgradient', 'radialGradient'], ['stop', 'stop']
+    ['lineargradient', 'linearGradient'], ['radialgradient', 'radialGradient'], ['stop', 'stop'],
+    ['foreignobject', 'foreignObject']
+  ]);
+  // HTML tags Mermaid nests inside foreignObject for node labels
+  const HTML_ALLOWED_TAGS = new Set([
+    'div', 'span', 'p', 'br', 'i', 'b', 'em', 'strong', 'pre', 'code', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6'
   ]);
   const SVG_ALLOWED_ATTRS = new Set([
     'id', 'class', 'role',
@@ -79,6 +84,40 @@
     return css;
   }
 
+  const HTML_ALLOWED_ATTRS = new Set([
+    'id', 'class', 'style', 'xmlns',
+    'role', 'aria-hidden', 'aria-label', 'aria-labelledby', 'aria-describedby'
+  ]);
+
+  function sanitizeHtmlNode(node){
+    if(!node) return null;
+    if(node.nodeType === Node.TEXT_NODE){
+      return document.createTextNode(node.textContent || '');
+    }
+    if(node.nodeType !== Node.ELEMENT_NODE) return null;
+    const tag = String(node.localName || node.nodeName || '').toLowerCase();
+    if(!HTML_ALLOWED_TAGS.has(tag)) return null;
+    const clean = document.createElementNS('http://www.w3.org/1999/xhtml', tag);
+    Array.from(node.attributes || []).forEach((attr) => {
+      const name = String(attr.name || '').toLowerCase();
+      if(!name || name.startsWith('on') || !HTML_ALLOWED_ATTRS.has(name)) return;
+      const value = attr.value || '';
+      if(hasUnsafeUrlValue(value)) return;
+      if(name === 'style'){
+        const safeStyle = sanitizeSvgStyleText(value);
+        if(!safeStyle) return;
+        clean.setAttribute(attr.name, safeStyle);
+        return;
+      }
+      clean.setAttribute(attr.name, value);
+    });
+    Array.from(node.childNodes || []).forEach((child) => {
+      const cleanChild = sanitizeHtmlNode(child);
+      if(cleanChild) clean.appendChild(cleanChild);
+    });
+    return clean;
+  }
+
   function sanitizeSvgNode(node){
     if(!node) return null;
     if(node.nodeType === Node.TEXT_NODE){
@@ -114,7 +153,7 @@
       return clean;
     }
     Array.from(node.childNodes || []).forEach((child) => {
-      const cleanChild = sanitizeSvgNode(child);
+      const cleanChild = (canonicalTag === 'foreignObject') ? sanitizeHtmlNode(child) : sanitizeSvgNode(child);
       if(cleanChild) clean.appendChild(cleanChild);
     });
     return clean;

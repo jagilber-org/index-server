@@ -25,7 +25,7 @@ function makeTmpDir(): string {
   return d;
 }
 
-describe.skipIf(!hasSqliteVec)('Embedding scenario tests', () => {
+describe.skipIf(!hasSqliteVec)('Embedding scenario tests', () => { // SKIP_OK: environment-gated: requires sqlite-vec native module
   it('Scenario: start with JSON, migrate to SQLite, verify search works', () => {
     const tmpDir = makeTmpDir();
     const jsonPath = path.join(tmpDir, 'embeddings.json');

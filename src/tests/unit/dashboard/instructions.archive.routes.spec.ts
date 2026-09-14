@@ -24,10 +24,15 @@ import { invalidate } from '../../../services/indexContext';
 import { readAuditEntries, resetAuditLogCache } from '../../../services/auditLog';
 import { AUDIT_ACTIONS } from '../../../services/auditActions';
 import { reloadRuntimeConfig } from '../../../config/runtimeConfig';
+import { withTransientRetry } from '../../helpers/localhostRetry';
 
 interface HttpResult { status: number; body: string }
 
 function httpRequest(method: string, url: string, payload?: unknown): Promise<HttpResult> {
+  return withTransientRetry(() => sendOnce(method, url, payload));
+}
+
+function sendOnce(method: string, url: string, payload?: unknown): Promise<HttpResult> {
   return new Promise((resolve, reject) => {
     const data = payload === undefined ? undefined : JSON.stringify(payload);
     const headers: Record<string, string | number> = {};
@@ -35,13 +40,15 @@ function httpRequest(method: string, url: string, payload?: unknown): Promise<Ht
       headers['Content-Type'] = 'application/json';
       headers['Content-Length'] = Buffer.byteLength(data);
     }
-    const req = http.request(url, { method, headers }, (res) => {
+    // agent:false — http.globalAgent has keepAlive:true on Node >=19, so pooled
+    // sockets outlive the per-test server and later requests reuse a dead one.
+    const req = http.request(url, { method, headers, agent: false }, (res) => {
       let body = '';
       res.on('data', (chunk: Buffer) => { body += chunk.toString(); });
       res.on('end', () => resolve({ status: res.statusCode ?? 0, body }));
     });
     req.on('error', reject);
-    req.setTimeout(5000, () => req.destroy(new Error('timeout')));
+    req.setTimeout(15000, () => req.destroy(new Error('timeout')));
     if (data !== undefined) req.write(data);
     req.end();
   });
@@ -113,8 +120,10 @@ describe('dashboard archive routes', () => {
     resetAuditLogCache();
     await new Promise<void>((resolve, reject) => {
       if (!server) { resolve(); return; }
-      server.close((err) => err ? reject(err) : resolve());
+      const active = server;
       server = undefined;
+      active.close((err) => err ? reject(err) : resolve());
+      active.closeAllConnections?.();
     });
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });

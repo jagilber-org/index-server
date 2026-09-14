@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Generate Index manifest including body hashes, governance hash, and timestamp.
+// Generate Index manifest including body hashes and governance hash.
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
@@ -34,6 +34,6 @@ function project(e){
 const govHash = crypto.createHash('sha256');
 for(const e of entries){ govHash.update(JSON.stringify(project(e))+'\n'); }
 const governanceHash = govHash.digest('hex');
-const manifest = { generatedAt: new Date().toISOString(), count: entries.length, governanceHash, entries };
+const manifest = { count: entries.length, governanceHash, entries };
 fs.writeFileSync(path.join(snapshotDir,'index-manifest.json'), JSON.stringify(manifest,null,2));
 console.log('manifest generated', manifest.count, 'entries');

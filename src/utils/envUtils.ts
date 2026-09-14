@@ -1,5 +1,20 @@
 /**
- * Utility functions for environment variable parsing
+ * Utility functions for environment variable parsing.
+ *
+ * ## Why this file reads `process.env` directly (#611 / constitution S-4)
+ *
+ * This module is **below** the config layer, not outside it. `runtimeConfig.ts`
+ * imports `getBooleanEnv`, `parseBooleanEnv`, `isFalsy`, `isFalsyExtended`,
+ * `isTruthy`, `isDebugOrVerbose` and `TRUTHY_OR_DEFAULT` from here to do its own
+ * parsing, so routing these reads back through `runtimeConfig` would be a hard
+ * import cycle — and a self-referential one: the loader would have to be loaded
+ * to answer a question the loader asks while loading.
+ *
+ * `scripts/governance/config-usage-baseline.json` therefore records
+ * `INDEX_SERVER_DEBUG` and `INDEX_SERVER_VERBOSE_LOGGING` here as **permanent**
+ * exemptions with that justification, rather than as work still to do. The
+ * exemption is per `path::VAR`, not per file, so a NEW variable read added to
+ * this module still fails `guard:env`.
  */
 
 // ── Canonical truthy / falsy value sets ──────────────────────────────
@@ -75,6 +90,26 @@ export function parseBooleanEnv(envVar: string | undefined, defaultValue = false
  */
 export function getBooleanEnv(name: string, defaultValue = false): boolean {
   return parseBooleanEnv(process.env[name], defaultValue);
+}
+
+/**
+ * True when running under a test harness.
+ *
+ * `VITEST` covers in-process specs and any child that inherits the environment;
+ * `NODE_ENV=test` catches runners that set only that. A child spawned with a
+ * deliberately scrubbed environment still slips through — callers that must be
+ * certain have to be told explicitly.
+ *
+ * **This is deliberately not a runtime-config key**, and `VITEST` is instead
+ * allowlisted by name in `scripts/governance/enforce-config-usage.ts`. It is a
+ * fact about the process, not a setting: a config key would be writable through
+ * the dashboard overrides overlay, which means an admin-config write could tell
+ * a production server it is a test run — and `activityLog.isEnabled()` uses
+ * exactly this predicate to switch telemetry OFF. That would be a silent,
+ * persistent disable of the audit-adjacent activity trail.
+ */
+export function isTestEnvironment(): boolean {
+  return Boolean(process.env.VITEST) || process.env.NODE_ENV === 'test';
 }
 
 /**

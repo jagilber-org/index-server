@@ -8,7 +8,7 @@ workflows. Adding a new gate here means wiring it into one of those entry points
 
 | Script | Category | Purpose |
 |--------|----------|---------|
-| `baseline-sentinel.mjs` | baseline | Assert metric baselines have not regressed |
+| `check-constitution-enforcement.mjs` | governance | Fail if a `severity: error` constitution rule has no live enforcer, or if the CQ-1 size ratchet has rusted |
 | `check-coverage.mjs` | coverage | Fail if coverage drops below thresholds |
 | `check-no-skips.mjs` | coverage | Fail if any test uses `.skip` or `xit` |
 | `check-version-parity.mjs` | release | Assert `package.json` version matches `CHANGELOG.md` |
@@ -19,7 +19,6 @@ workflows. Adding a new gate here means wiring it into one of those entry points
 | `flake-gate.mjs` | flake | Block if flake rate exceeds baseline |
 | `flake-sentinel.mjs` | flake | Persist flake observations for trend analysis |
 | `flake-trend.mjs` | flake | Report flake trend over recent runs |
-| `guard-baseline.mjs` | baseline | Guard: fail if any baseline metric is missing |
 | `guard-declarations.mjs` | lint | Guard: ensure all exported symbols have JSDoc |
 | `lint-instructions.mjs` | lint | Lint instruction JSON files against the schema |
 | `purge-extra-decls.mjs` | lint | Remove orphaned declaration files from `dist/` |

@@ -1,0 +1,16 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$ref": "#/definitions/LinkRel",
+  "definitions": {
+    "LinkRel": {
+      "type": "string",
+      "enum": [
+        "related",
+        "prerequisite",
+        "sequel",
+        "part-of",
+        "see-also"
+      ]
+    }
+  }
+}

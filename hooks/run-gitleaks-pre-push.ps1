@@ -19,7 +19,7 @@ Push-Location $repoRoot
 try {
     $gitleaks = Get-Command gitleaks -ErrorAction SilentlyContinue
     if (-not $gitleaks) {
-        [Console]::Error.WriteLine('[gitleaks-pre-push] FAIL: gitleaks CLI not found. Install gitleaks or let pre-commit manage the hook environment.')
+        [Console]::Error.WriteLine('[gitleaks-pre-push] FAIL: gitleaks CLI not found on PATH. Install gitleaks (https://github.com/gitleaks/gitleaks/releases) -- CI pins 8.30.1. To bypass deliberately, set SKIP_GITLEAKS=1.')
         exit 1
     }
 

@@ -13,6 +13,10 @@ const TEST_ID = 'usage-gate-diag-test-entry';
 async function loadCtx(dir: string, features?: string) {
   if (features === undefined) delete process.env.INDEX_SERVER_FEATURES;
   else process.env.INDEX_SERVER_FEATURES = features;
+  // usage is on by default (#495), so the gated cases turn it off through the
+  // dedicated switch; the happy-path case leaves it on.
+  if (features?.split(',').includes('usage')) delete process.env.INDEX_SERVER_USAGE_ENABLED;
+  else process.env.INDEX_SERVER_USAGE_ENABLED = '0';
   process.env.INDEX_SERVER_DIR = dir;
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, TEST_ID + '.json'), JSON.stringify({
@@ -39,6 +43,7 @@ describe('usage_track gate diagnostic envelope', () => {
   afterEach(() => {
     if (origFeatures === undefined) delete process.env.INDEX_SERVER_FEATURES;
     else process.env.INDEX_SERVER_FEATURES = origFeatures;
+    delete process.env.INDEX_SERVER_USAGE_ENABLED;
     if (origDir === undefined) delete process.env.INDEX_SERVER_DIR;
     else process.env.INDEX_SERVER_DIR = origDir;
     try { fs.rmSync(tmp, { recursive: true, force: true }); } catch { /* ignore */ }

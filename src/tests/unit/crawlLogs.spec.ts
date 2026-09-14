@@ -122,4 +122,26 @@ describe('crawl-logs.mjs', () => {
     expect(tags.has('AUTO_MIGRATION_FAIL')).toBe(true);
     expect(tags.has('BROKEN_PIPE')).toBe(true);
   });
+
+  it('7) excludes threshold violations that occurred before --since', () => {
+    const lines: object[] = [];
+    for (let i = 0; i < 30; i++) {
+      lines.push({ ts: '2026-05-01T00:00:00Z', level: 'WARN', msg: `stale warning ${i}`, pid: 1 });
+    }
+    lines.push({ ts: '2026-05-02T00:00:00Z', level: 'INFO', msg: 'current run completed', pid: 1 });
+    writeLog('historical.log', lines);
+
+    const r = run([
+      '--dir', tmpDir,
+      '--json',
+      '--strict',
+      '--max-repeat', '5',
+      '--since', '2026-05-02T00:00:00Z',
+    ]);
+
+    expect(r.status).toBe(0);
+    const report = JSON.parse(r.stdout);
+    expect(report.violations).toEqual([]);
+    expect(report.uniqueWarnSignatures).toBe(0);
+  });
 });

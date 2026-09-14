@@ -122,7 +122,7 @@ Current guidance:
 
 - Assume internal-repo releases use `MCP_GITHUB_TOKEN` PAT fallback for MCP Registry publication.
 - Keep the legacy VSIX path documented only as a fallback, not as the default release/install story.
-- Track remaining migration follow-ups in issue #108 (prompts/resources) and issue #109 (pre-existing `build:verify` failures).
+- Track remaining migration follow-ups in issue #108 (prompts/resources). Issue #109 (pre-existing `build:verify` failures) was **closed on 2026-04-26**; this line asked readers to track a closed issue until #591.
 
 ## Automation Roadmap
 

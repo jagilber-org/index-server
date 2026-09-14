@@ -131,85 +131,132 @@ describe('npm publish readiness', () => {
   });
 
   describe('npm pack output', () => {
-    let packOutput: string;
+    interface PackEntry { path: string }
+    interface PackResult { files?: PackEntry[]; entryCount?: number; size?: number }
+
+    let packedPaths: string[];
+    let packEntryCount: number;
+    let packSizeBytes: number;
 
     // Run once for all sub-tests. `--ignore-scripts` skips the `prepare`
     // lifecycle hook (which runs scripts/hooks/setup-hooks.cjs and can fail in
     // CI Windows environments that lack git hooks dir). The test only cares
     // about the resulting file manifest, not the side-effect hooks.
-    try {
-      packOutput = execSync('npm pack --dry-run --ignore-scripts 2>&1', {
-        cwd: REPO_ROOT,
-        encoding: 'utf8',
-        timeout: 30000,
-      });
-    } catch (e) {
-      // On Windows, npm sometimes still exits non-zero and the file listing
-      // is written to stderr. Pull from both streams as a defensive fallback.
-      const err = e as { stdout?: Buffer | string; stderr?: Buffer | string };
-      const out = err.stdout ? err.stdout.toString() : '';
-      const errOut = err.stderr ? err.stderr.toString() : '';
-      packOutput = (out + '\n' + errOut).trim();
+    //
+    // Read as JSON rather than scraping `npm notice` text (#576). `npm run -s`
+    // exports npm_config_loglevel=silent to child processes, so the nested
+    // `npm pack` printed no notices at all and 8 assertions here failed on
+    // text that was never emitted -- a red gate with no code change, on any
+    // machine or CI lane with a silent loglevel. The explicit env override
+    // neutralises an inherited silent; --json makes the manifest data rather
+    // than a log line, so verbosity cannot change the verdict either way.
+    {
+      let raw: string;
+      try {
+        raw = execSync('npm pack --dry-run --ignore-scripts --json', {
+          cwd: REPO_ROOT,
+          encoding: 'utf8',
+          timeout: 30000,
+          env: { ...process.env, npm_config_loglevel: 'notice' },
+          stdio: ['ignore', 'pipe', 'pipe'],
+        });
+      } catch (e) {
+        // npm can exit non-zero on Windows while still emitting the manifest.
+        const err = e as { stdout?: Buffer | string };
+        raw = err.stdout ? err.stdout.toString() : '';
+      }
+
+      // npm occasionally prefixes stdout with a warning line; take the array.
+      const start = raw.indexOf('[');
+      const end = raw.lastIndexOf(']');
+      if (start === -1 || end === -1) {
+        throw new Error(
+          `npm pack --json produced no JSON array. This is a harness failure, not a packaging finding. Raw output:\n${raw.slice(0, 2000)}`,
+        );
+      }
+      const parsed = JSON.parse(raw.slice(start, end + 1)) as PackResult[];
+      const result = parsed[0];
+      if (!result || !Array.isArray(result.files)) {
+        throw new Error(`npm pack --json returned no file manifest: ${JSON.stringify(result).slice(0, 500)}`);
+      }
+
+      packedPaths = result.files.map(f => f.path.replace(/\\/g, '/'));
+      packEntryCount = result.entryCount ?? packedPaths.length;
+      packSizeBytes = result.size ?? 0;
     }
 
+    /** Paths under a directory prefix — for the "must not ship" assertions. */
+    const under = (prefix: string): string[] => packedPaths.filter(p => p.startsWith(prefix));
+
+    it('resolved a non-empty file manifest', () => {
+      // Guards every assertion below: an empty manifest would make each
+      // `not.toContain` pass vacuously, which is how #576 stayed invisible.
+      expect(packedPaths.length).toBeGreaterThan(0);
+    });
+
     it('pack includes dist/server/index-server.js', () => {
-      expect(packOutput).toContain('dist/server/index-server.js');
+      expect(packedPaths).toContain('dist/server/index-server.js');
     });
 
     it('pack includes schemas/', () => {
-      expect(packOutput).toContain('schemas/');
+      expect(under('schemas/')).not.toHaveLength(0);
     });
 
     it('pack includes README.md', () => {
-      expect(packOutput).toContain('README.md');
+      expect(packedPaths).toContain('README.md');
     });
 
     it('pack includes LICENSE', () => {
-      expect(packOutput).toContain('LICENSE');
+      expect(packedPaths).toContain('LICENSE');
     });
 
     it('pack does NOT include dist/tests/', () => {
-      expect(packOutput).not.toMatch(/dist\/tests\//);
+      expect(under('dist/tests/')).toEqual([]);
     });
 
     it('pack does NOT include src/', () => {
       // src/ should never be in the pack (only dist/)
-      expect(packOutput).not.toMatch(/\bsrc\//);
+      expect(under('src/')).toEqual([]);
     });
 
     it('pack does NOT include internal templates/', () => {
       // templates/spec-template.md is intentionally included for distribution;
       // only internal template directories should be excluded
-      expect(packOutput).not.toMatch(/\btemplates\/internal\//);
+      expect(under('templates/internal/')).toEqual([]);
     });
 
     it('pack does NOT include node_modules/', () => {
-      expect(packOutput).not.toMatch(/\bnode_modules\//);
+      expect(under('node_modules/')).toEqual([]);
     });
 
     // Regression: #239 — generate-certs.mjs must appear in npm pack output
     it('pack includes scripts/build/generate-certs.mjs (issue #239)', () => {
-      expect(packOutput).toContain('scripts/build/generate-certs.mjs');
+      expect(packedPaths).toContain('scripts/build/generate-certs.mjs');
     });
 
     it('pack includes scripts/build/setup-wizard.mjs', () => {
-      expect(packOutput).toContain('scripts/build/setup-wizard.mjs');
+      expect(packedPaths).toContain('scripts/build/setup-wizard.mjs');
+    });
+
+    // Regression: #592 — test scaffolding must not ship to consumers.
+    // test_primitive was a registered, callable handler returning 42; the
+    // Pester file is dev tooling inside the published client scripts.
+    it('pack excludes the test_primitive handler (issue #592)', () => {
+      expect(packedPaths.filter(p => p.includes('handlers.testPrimitive'))).toEqual([]);
+    });
+
+    it('pack excludes scripts/client/tests/ (issue #592)', () => {
+      expect(under('scripts/client/tests/')).toEqual([]);
     });
 
     it('total file count is under 800', () => {
-      const match = packOutput.match(/total files:\s*(\d+)/);
-      expect(match).not.toBeNull();
-      const count = parseInt(match![1], 10);
-      expect(count).toBeLessThan(800);
+      expect(packEntryCount).toBeGreaterThan(0);
+      expect(packEntryCount).toBeLessThan(800);
     });
 
     it('package size is under 5 MB', () => {
-      const match = packOutput.match(/package size:\s*([\d.]+)\s*(MB|kB)/);
-      expect(match).not.toBeNull();
-      const size = parseFloat(match![1]);
-      const unit = match![2];
-      const sizeMB = unit === 'kB' ? size / 1024 : size;
-      expect(sizeMB).toBeLessThan(5);
+      expect(packSizeBytes).toBeGreaterThan(0);
+      expect(packSizeBytes / (1024 * 1024)).toBeLessThan(5);
     });
   });
 });

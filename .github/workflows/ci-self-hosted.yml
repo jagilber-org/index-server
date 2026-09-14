@@ -1,0 +1,201 @@
+name: CI (Self-Hosted)
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test:
+    # Only runs when the self-hosted runner gate is enabled and a supervisor
+    # is actively running Start-Runner.ps1. Without the gate, jobs queue
+    # indefinitely and cancel-in-progress makes that look like broken CI.
+    if: vars.SELF_HOSTED_RUNNER == 'true'
+    runs-on: [self-hosted, linux, container]
+    # This job executes on the maintainer's own workstation, where the default
+    # 360-minute cap means a hung job holds real hardware, the supervisor slot
+    # (Start-Runner.ps1 -MaxJobs 1 never exits) and the concurrency group.
+    # cancel-in-progress does not cover this: it only fires when a NEW run
+    # arrives. Observed full run is ~5m36s; 20m sits inside the repo's own
+    # 10-25m band across the 17 existing timeout-minutes declarations.
+    timeout-minutes: 20
+    env:
+      # The runner image bakes Node 22 and npm — no setup-node needed.
+      # No dependency cache survives between ephemeral containers, so
+      # npm ci runs cold every time. That is the deliberate cost.
+      SKIP_PRETEST_BUILD: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6 # pii-allowlist: pinned action SHA
+
+      - name: Verify toolchain
+        run: |
+          echo "--- Runner toolchain ---"
+          node --version
+          npm --version
+          git --version
+          echo "--- Shell ---"
+          echo "SHELL=$SHELL"
+          bash --version | head -1
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint --if-present
+
+      - name: Build
+        run: npm run build --if-present
+
+      # Generated-artifact freshness gate (#558).
+      #
+      # `schemas/` and `docs/TOOLS-GENERATED.md` are tracked artifacts produced
+      # from source. Nothing looked at them: #558 tabulates seven plausible
+      # gates and why each is out of scope -- `check:dist` diffs `dist/` only,
+      # `governance-hash` hashes instruction metadata, `verify:manifest` reads
+      # the *instructions* manifest, and `contentTypeSourceOfTruth.spec.ts:367`
+      # explicitly allowlists the code schema. Three PRs (#549, #601, #616)
+      # merged with a stale artifact on a fully green board.
+      #
+      # Regenerating explicitly rather than leaning on the Build step above:
+      # the gate then stays honest if the build chain is ever reordered.
+      #
+      # This must stay AFTER any version-stamping step -- both artifacts embed
+      # package.json#version, so a release bump legitimately changes them.
+      - name: Generated artifact freshness (#558)
+        run: |
+          npm run schemas:generate
+          npm run docs:tools
+          tracked=$(git ls-files -- schemas docs/TOOLS-GENERATED.md | wc -l)
+          if [ "$tracked" -eq 0 ]; then
+            echo "::error::Freshness gate scanned 0 tracked files -- the paths moved; this gate is vacuous."
+            exit 1
+          fi
+          if ! git diff --quiet --exit-code -- schemas/ docs/TOOLS-GENERATED.md; then
+            echo "::error::Generated artifacts are stale. Run 'npm run build' (or 'npm run schemas:generate && npm run docs:tools') and commit the result."
+            git diff --stat -- schemas/ docs/TOOLS-GENERATED.md
+            git diff -- schemas/ docs/TOOLS-GENERATED.md | head -200
+            exit 1
+          fi
+          echo "Generated artifacts match source: $tracked tracked files checked, no drift."
+
+      - name: Validate npm package files
+        run: npm run validate:npm-files
+
+      - name: Ensure instructions directory
+        run: |
+          mkdir -p instructions
+          if [ ! "$(ls instructions/*.json 2>/dev/null)" ]; then
+            echo '{"id":"ci-seed","title":"CI Seed","body":"Seed instruction for CI.","priority":50,"audience":"all","requirement":"optional","categories":["ci"],"contentType":"instruction","version":"1.0.0","status":"approved"}' > instructions/ci-seed.json
+          fi
+
+      - name: Verify build artifacts
+        run: |
+          if [ ! -f dist/server/index-server.js ]; then
+            echo "ERROR: dist/server/index-server.js not found"
+            exit 1
+          fi
+          echo "Build artifacts verified"
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Test
+        run: |
+          mkdir -p test-results
+          set -o pipefail
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "PR run: fast suite"
+            npm test 2>&1 | tee test-results/test-output.log
+          else
+            echo "Push/dispatch run: full suite"
+            npm run coverage:ci 2>&1 | tee test-results/test-output.log
+          fi
+
+      - name: Contract tests
+        run: npm run test:contracts
+
+      - name: Crawl test logs
+        if: always()
+        run: |
+          node scripts/diagnostics/crawl-logs.mjs \
+            --dir logs \
+            --file test-results/test-output.log \
+            --allowlist .crawl-logs-allowlist \
+            --summary test-results/log-hygiene.json \
+            --max-stack-warn 15 \
+            --strict
+
+      - name: Validate no test artifacts leaked
+        if: always()
+        run: node scripts/governance/validate-no-test-artifacts.mjs
+
+      - name: Skip guard
+        run: npm run guard:skips
+
+  # Governance guards, on an automatic PR trigger (#583).
+  #
+  # These exist as npm scripts and in `guard:all`, but nothing ran them
+  # automatically on this remote: the 16 owner-gated workflows skip when
+  # `repository_owner != 'jagilber-org'`, and ci-enhanced.yml -- the workflow
+  # that carries `build:verify` -- is `workflow_dispatch` only. Constitution
+  # CD-1 requires CI to validate the same policy as local development.
+  #
+  # Deliberately NOT owner-gated. The gating in ci.yml is a spend decision
+  # ("default CI/test spend belongs on the public mirror"), and it is a
+  # reasonable one -- so this job runs on the maintainer's own hardware
+  # instead of hosted minutes, which honours that decision rather than
+  # overriding it.
+  #
+  # Separate job, not extra steps on build-test: a guard failure should be
+  # legible on its own and should not sit behind a ~5m build+test cycle.
+  guards:
+    if: vars.SELF_HOSTED_RUNNER == 'true'
+    runs-on: [self-hosted, linux, container]
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6 # pii-allowlist: pinned action SHA
+        with:
+          # guard:changelog needs the last v* tag and the commits since it.
+          # The default shallow checkout has neither, and the gate treats a
+          # missing tag as a failure rather than a clean pass (#575) -- so a
+          # shallow clone would turn it red for the wrong reason.
+          fetch-depth: 0
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Only guards that are GREEN on main and can actually fail are blocking
+      # here. Wiring a guard that is already red would make every PR red for a
+      # pre-existing reason; wiring one that cannot fail is worse than not
+      # wiring it at all. The exclusions are tracked in
+      # .instructions/local/ci-required-checks.md with an issue each -- written
+      # down rather than silently omitted, which is how they went dark.
+      #
+      # This is one step, not four, on purpose (#582). `guard:all` previously
+      # ran in no workflow at all and had been exit-1 on main for months
+      # (`guard:baseline` wanted an INTERNAL-BASELINE.md that does not exist),
+      # because nothing forced CI and the package script to agree. Composing
+      # the set in package.json and invoking it whole means a developer's
+      # `npm run guard:all` and the PR gate cannot drift -- constitution CD-1.
+      # npm prints a `> guard:<name>` header per script, so a failure still
+      # says which guard failed.
+      #
+      # Members: guard:env (#579, 684 files, 19 baselined), guard:skips,
+      # guard:decl, guard:constitution (#585), guard:changelog (#575),
+      # guard:docs (#586). Each was a separate step here until #582 folded them
+      # into the composite; adding a new guard is now a package.json edit, not
+      # a workflow edit.
+      - name: Governance guards (guard:all)
+        run: npm run guard:all
+
+      # Not in guard:all: PowerShell-only, so it would make the composite
+      # script unrunnable on a machine without pwsh.
+      - name: Template metadata guard
+        run: npm run validate:template

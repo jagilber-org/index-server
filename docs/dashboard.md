@@ -38,7 +38,7 @@ graph TD
     
     API --> Health["/api/health"]
     API --> GraphAPI["/api/graph/mermaid"]
-    API --> Config["/api/config"]
+    API --> Config["/api/admin/config"]
     API --> Tools["/api/tools.json"]
     
     WS --> LogStream["Log Tail Stream"]
@@ -56,6 +56,10 @@ graph TD
         Monitoring["Monitoring"]
         Instructions["Instructions"]
         Graph["Graph"]
+        Embeddings["Embeddings"]
+        Messaging["Messaging"]
+        Feedback["Feedback"]
+        SQLite["SQLite"]
     end
 
     Static --> Overview
@@ -65,6 +69,10 @@ graph TD
     Static --> Monitoring
     Static --> Instructions
     Static --> Graph
+    Static --> Embeddings
+    Static --> Messaging
+    Static --> Feedback
+    Static --> SQLite
 
     style Browser fill:#607d8b,stroke:#37474f,stroke-width:2px,color:#fff
     style Express fill:#ff9800,stroke:#e65100,stroke-width:2px,color:#fff
@@ -76,7 +84,9 @@ graph TD
 
 ## Dashboard Panels
 
-The admin dashboard features a Grafana-dark enterprise theme with seven navigation tabs:
+The admin dashboard features a Grafana-dark enterprise theme with up to eleven
+navigation tabs. Feature-gated tabs such as Messaging and SQLite are hidden when
+their subsystem is unavailable.
 
 ### Overview Panel
 
@@ -86,7 +96,10 @@ Server health metrics, uptime, and system status at a glance.
 
 ### Configuration
 
-Active environment flags, feature toggles, and runtime configuration.
+Registry-driven environment flags, feature toggles, runtime-overlay editing,
+reload-behavior guidance, and sensitive-value presence indicators. The panel
+also provides a dedicated lifecycle-hook status summary without exposing hook
+command text.
 
 ![Configuration Panel](screenshots/panel-config.png)
 
@@ -120,6 +133,50 @@ Mermaid-rendered dependency graph of instruction relationships.
 
 ![Graph Panel](screenshots/panel-graph.png)
 
+### Embeddings
+
+A 2D PCA projection of the instruction embeddings, coloured by category.
+`GET /api/embeddings/projection` returns:
+
+| Field | Meaning |
+|-------|---------|
+| `count`, `dimensions`, `model` | Size of the embedding set and the model that produced it |
+| `indexHash` | Hash of the index the embeddings were computed against; empty string when the store records none. Rendered as **Index Hash** in the STATISTICS panel so a stale cache is visible at a glance |
+| `points[]` | `{ id, x, y, category, norm, title? }` — `title` is present only for IDs that resolve against the currently loaded index |
+| `stats`, `similarPairs` | Cosine similarity summary and the top-K nearest pairs |
+
+#### Category derivation
+
+Point colours come from `deriveCategory` in `src/services/categoryRules.ts`,
+which resolves a label in a fixed, deterministic order:
+
+1. **instruction ID**
+2. **`primaryCategory`** — the governed, canonical field
+3. **`categories[]`** — in array order, first match wins
+4. **`title`** — prose, least authoritative
+5. `Other`
+
+The ID is deliberately rung 1, so any classification that was correct before
+metadata was consulted stays byte-identical; metadata only ever rescues entries
+that would otherwise fall into `Other`. Rungs 2-4 are matched case-insensitively.
+
+Metadata is matched *through* `CATEGORY_RULES` and never surfaced verbatim: a
+free-form `primaryCategory` such as `performance` yields `Other`, not a new
+`performance` label. The returned label is therefore always one of the
+`CATEGORY_RULES` labels or `Other` — a closed set, which is what lets the
+client's `CAT_COLORS` map stay complete and hand-maintained.
+
+`src/tests/unit/embeddingsCategoryColors.spec.ts` enforces that completeness:
+adding a rule to `CATEGORY_RULES` without a colour in
+`src/dashboard/client/js/admin.embeddings.js` fails the suite. Categories the
+taxonomy has no rule for legitimately render as `Other`; widening the taxonomy
+is a separate decision from fixing classification.
+
+### Messaging, Feedback, and SQLite
+
+These panels expose subsystem-specific diagnostics and administration. Messaging
+and SQLite may be hidden when disabled or unavailable.
+
 ### Dashboard Data Flow
 
 ```mermaid
@@ -142,8 +199,8 @@ sequenceDiagram
     E->>M: getSnapshot()
     E-->>B: health + metrics JSON
 
-    B->>E: GET /api/config
-    E->>R: getAllFlags()
+    B->>E: GET /api/admin/config
+    E->>R: getFlagRegistrySnapshot()
     E-->>B: configuration JSON
 
     B->>E: GET /api/graph/mermaid
@@ -175,6 +232,51 @@ Environment variables / CLI flags:
 - `INDEX_SERVER_DASHBOARD=1` or `--dashboard` – enable UI
 - `INDEX_SERVER_DASHBOARD_PORT` or `--dashboard-port` -- override port (default 8787)
 - `INDEX_SERVER_HTTP_METRICS=1` – (optional) exposes per-route counters shown in health panel (if implemented)
+
+## Configuration Panel
+
+The existing **Configuration** tab is the operator-facing runtime-configuration
+surface. It is generated from `FLAG_REGISTRY`, so metadata, validation,
+editability, and reload behavior stay aligned with the server API.
+
+### Read and Write Behavior
+
+- `GET /api/admin/config` returns the complete flag catalog and current runtime
+  state.
+- Editable changes are posted as `{ "updates": { "INDEX_SERVER_*": value } }`
+  to `POST /api/admin/config` and persisted to the runtime overrides file.
+- The panel labels flags that apply dynamically or on the next request. All
+  other saved changes require a server restart.
+- Read-only flags explain why they cannot be changed. Sensitive flags omit
+  `value`, `parsed`, and command/secret text at the API boundary.
+- When an overlay value shadows a different process environment value, the row
+  displays a warning so the effective source is visible.
+
+Dashboard configuration mutations follow the dashboard admin authorization
+policy. When `INDEX_SERVER_ADMIN_API_KEY` is set, send it as a Bearer token.
+Without a key, mutation access is limited to loopback requests.
+
+### Lifecycle Hook Management
+
+The lifecycle summary reports:
+
+- **Enabled/Disabled** — enabled when at least one non-empty create, update,
+  remove, or change command is configured.
+- **Commands configured** — a zero-to-four count; command text is never sent to
+  the browser.
+- **Blocking**, **Timeout**, and **Max concurrent** — the effective execution
+  controls.
+
+The **Manage lifecycle hooks** card appears directly below the summary. It has
+write-only password-style inputs for create, update, remove, and catch-all change
+commands plus blocking, timeout, and concurrency controls. Existing command text
+is never returned or pre-populated. Enter a replacement, or use **Clear** to stage
+an empty command that disables the hook, then save and restart. The process
+environment and MCP launcher remain supported configuration alternatives.
+
+See [Lifecycle Hooks](lifecycle-hooks.md) for command setup, event mapping,
+delivery semantics, security constraints, and troubleshooting. The concise
+panel reference is [Configuration Panel](panels/config.md).
 
 ### Enabling HTTPS for the Dashboard
 

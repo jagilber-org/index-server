@@ -4,7 +4,9 @@
 **Status:** Binding - Authoritative Project Governance Document  
 **Owner:** Project Maintainers & Governance Working Group  
 **Last Updated:** February 24, 2026  
-**Next Review:** May 24, 2026  
+**Next Review:** overdue — the May 24 2026 date passed unreviewed, and the
+footer of this same document still says "November 28, 2025" (#591). Two
+conflicting review dates, both in the past, is the same as none.  
 
 ---
 
@@ -47,7 +49,13 @@ All above changes are binding; earlier “pending ratification” addendum items
 
 ## ✳️ Addendum (Pending Ratification → 1.2.0) – Newly Formalized Requirements
 
-These requirements are already implemented in code/tests but lacked explicit PRD coverage. Upon ratification the version will bump to 1.2.0. Until then they are treated as binding interim policy.
+These requirements are already implemented in code/tests but lacked explicit PRD coverage. Until ratification they are treated as binding interim policy.
+
+> **The "→ 1.2.0" in this heading is dead** (#591). The package shipped 1.2.0 and
+> many versions beyond it without this addendum ever being ratified, so the
+> version it names cannot be the ratification target. The requirements below are
+> in force as interim policy; ratification needs a current version target chosen
+> when it actually happens.
 
 ### 1. Feedback / Emit System (No Change This Cycle)
 
@@ -130,7 +138,7 @@ Backups stored under `backups/instructions-<timestamp>`; non-fatal count warning
 | ID | Rule | Action |
 |----|------|--------|
 | DOC1 | `project_prd.md` is canonical PRD | Version bump on each ratified addendum |
-| DOC2 | Legacy `PRD.md` & `project_prd.md` remain stubs only | Do not add new technical content |
+| DOC2 | ~~Legacy `PRD.md` & `project_prd.md` remain stubs only~~ | **Void (#591).** This rule contradicted DOC1 directly above it — the same file cannot be both the canonical PRD and a stub. `PRD.md` no longer exists anywhere in the repo. DOC1 governs. |
 | DOC3 | README must link feedback system & governance hash plan | Verified during release checklist |
 | DOC4 | `content_guidance.md` must state NOT to embed MCP tool Indexs/schemas in instructions (protocol discovery only) | Explicit bullet retained |
 
