@@ -1,6 +1,6 @@
 {
   "name": "@jagilber-org/index-server",
-  "version": "1.42.0",
+  "version": "1.42.1",
   "sourceRoots": [
     "src",
     "scripts"
