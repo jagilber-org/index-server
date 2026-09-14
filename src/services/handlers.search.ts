@@ -19,6 +19,7 @@
  * - Input sanitization and limits
  */
 
+import { getEmbeddingStore } from './storage/factory.js';
 import { registerHandler } from '../server/registry';
 import { logDebug, logInfo, logWarn, logError } from './logger';
 import { InstructionEntry } from '../models/instruction';
@@ -30,6 +31,15 @@ import { CONTENT_TYPES } from '../models/instruction';
 import { SEARCH_MODES } from './protocolEnums';
 import { applyInstructionFieldFilter, compileInstructionFieldFilter, InstructionSearchFields } from './instructionFieldFilters';
 import { compileSafeUserRegex, MAX_REGEX_PATTERN_LENGTH } from './searchRegex';
+
+/**
+ * Default search result page size when the caller omits `limit`.
+ * Sourced from runtime config (env INDEX_SERVER_DEFAULT_PAGE_SIZE, default 50)
+ * so list/search/query share a single configurable default.
+ */
+function defaultSearchLimit(): number {
+  return getRuntimeConfig().instructions.defaultPageSize;
+}
 
 // Regression guard note for #61/#70: user regex construction is centralized in
 // searchRegex.ts and remains try/catch validated before use:
@@ -482,7 +492,7 @@ function performSearch(params: InternalSearchParams): SearchResponse {
   // Ensure defaults are explicitly applied
   const keywords = params.keywords;
   const mode = params.mode ?? (getRuntimeConfig().semantic.enabled ? 'semantic' : 'keyword');
-  const limit = params.limit ?? 50;
+  const limit = params.limit ?? defaultSearchLimit();
   const includeCategories = params.includeCategories ?? false;
   const caseSensitive = params.caseSensitive ?? false;
   const contentType = params.contentType;
@@ -569,7 +579,7 @@ async function performSemanticSearch(params: InternalSearchParams): Promise<Sear
 
   const cfg = getRuntimeConfig().semantic;
   const queryText = params.keywords.join(' ');
-  const limit = Math.min(params.limit ?? 50, 100);
+  const limit = Math.min(params.limit ?? defaultSearchLimit(), 100);
   const contentType = params.contentType;
   const candidates = params.candidates ?? state.list;
 
@@ -582,7 +592,10 @@ async function performSemanticSearch(params: InternalSearchParams): Promise<Sear
 
   const indexEmbedStart = performance.now();
   const instrEmbeddings = await getInstructionEmbeddings(
-    state.list, state.hash, cfg.embeddingPath, cfg.model, cfg.cacheDir, cfg.device, cfg.localOnly
+    state.list, state.hash, cfg.embeddingPath, cfg.model, cfg.cacheDir, cfg.device, cfg.localOnly,
+    // Issue #572: search must read the SAME store the trigger writes, or a
+    // backend switch silently splits reads from writes.
+    undefined, getEmbeddingStore()
   );
   logDebug(`[search] index embeddings ready in ${(performance.now() - indexEmbedStart).toFixed(1)}ms, entries=${Object.keys(instrEmbeddings).length}`);
 
@@ -638,7 +651,7 @@ function sortStructuralResults(entries: InstructionEntry[]): InstructionEntry[] 
 
 function performStructuralSearch(params: InternalSearchParams): SearchResponse {
   const startTime = performance.now();
-  const limit = Math.min(params.limit ?? 50, 100);
+  const limit = Math.min(params.limit ?? defaultSearchLimit(), 100);
   const candidates = sortStructuralResults(params.candidates ?? []);
   const limited = candidates.slice(0, limit);
   return {
@@ -698,6 +711,46 @@ export async function handleInstructionsSearch(params: SearchParams): Promise<Se
     // Input validation
     if (!params || typeof params !== 'object') {
       throw new Error('Invalid parameters: expected object');
+    }
+
+    // Ergonomic aliases: agents commonly use `q` or `query` as the search
+    // parameter name. When no canonical search input was supplied, map a
+    // string `q`/`query` onto `searchString` so the call succeeds instead of
+    // failing with "Invalid keywords: expected array".
+    const aliasSource = params as { q?: unknown; query?: unknown };
+    if (
+      params.keywords === undefined &&
+      params.searchString === undefined &&
+      params.fields === undefined
+    ) {
+      const aliasText = typeof aliasSource.q === 'string'
+        ? aliasSource.q
+        : typeof aliasSource.query === 'string'
+          ? aliasSource.query
+          : undefined;
+      if (typeof aliasText === 'string') {
+        params = { ...params, searchString: aliasText };
+      }
+    }
+
+    // Ergonomic coercion: accept a single string for `keywords`.
+    // If the string is a JSON-serialized array of strings (e.g. from Python
+    // json.dumps), parse it back to a real array (#535).  Otherwise treat it
+    // as a single keyword phrase; the auto-tokenize fallback at :894 then
+    // splits on whitespace if the phrase yields no results.
+    const rawKeywords: unknown = (params as { keywords?: unknown }).keywords;
+    if (typeof rawKeywords === 'string') {
+      const trimmed = rawKeywords.trim();
+      let parsed: string[] | undefined;
+      if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+        try {
+          const arr = JSON.parse(trimmed);
+          if (Array.isArray(arr) && arr.every((el: unknown) => typeof el === 'string')) {
+            parsed = arr as string[];
+          }
+        } catch { /* not valid JSON — fall through to single-keyword wrapping */ }
+      }
+      params = { ...params, keywords: parsed ?? (trimmed.length > 0 ? [trimmed] : []) };
     }
 
     const hasKeywords = params.keywords !== undefined;

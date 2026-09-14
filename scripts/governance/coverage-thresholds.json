@@ -1,0 +1,12 @@
+{
+  "comment": "Single source of truth for the coverage gate (#584). Env vars INDEX_SERVER_COVERAGE_HARD_MIN / _TARGET override for ad-hoc runs and for falsifying the gate. Raise hardMin only with a measurement in the PR that raises it.",
+  "hardMin": 80,
+  "target": 85,
+  "measured": {
+    "date": "2026-09-11",
+    "pct": 81.89,
+    "statements": "15925/19448",
+    "command": "npm run coverage:ci",
+    "note": "hardMin is set to the constitution's documented 80 (constitution.md:170), which the tree already clears with 1.89 points of headroom. Prior enforced values were 50 in package.json (ignored -- wrong env name, and out of cross-env scope), 46 in ci-enhanced.yml (correct name, but workflow_dispatch only) and 0 in coverage-ratchet.mjs (its default when unset). docs/project_prd.md asks for 95; that stays the aspiration, target tracks it stepwise."
+  }
+}

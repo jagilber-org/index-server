@@ -17,8 +17,22 @@ the index supports two operational modes for multi-instance environments where m
 INDEX_SERVER_MODE=standalone   →  Independent instance (default, production)
 INDEX_SERVER_MODE=auto         →  Attempt leader election; fallback to follower
 INDEX_SERVER_MODE=leader       →  Force leader role (error if port taken)
-INDEX_SERVER_MODE=follower     →  Force follower role (requires running leader)
+INDEX_SERVER_MODE=follower     →  NOT supported by the main entry point — see below
 ```
+
+> **`INDEX_SERVER_MODE=follower` does nothing on the main entry point.**
+> `src/server/multiInstanceStartup.ts:12-18` returns early for any mode that is
+> not `leader` or `auto`, printing
+> `[startup] Instance mode=follower (follower mode requires thin-client entry point)`
+> to stderr and then running as an ordinary standalone server — it loads the
+> full index, which is the cost the follower role exists to avoid.
+>
+> To actually run a follower, use the **thin client entry point**
+> (`src/server/thin-client.ts`), which is what `MODE=follower` was meant to
+> select. The remaining way to become a follower in-process is to lose an
+> `auto` election.
+>
+> This was documented as a supported forced role until #589.
 
 ---
 
@@ -223,7 +237,9 @@ flowchart TD
     BecomeFollower --> StartStdio2[Start stdio transport<br/>WITH proxy handlers]
     BecomeFollower --> Heartbeat[Start heartbeat<br/>monitor]
 
-    CheckMode -->|follower| DiscoverLeader[Read leader.lock<br/>Connect to leader]
+    CheckMode -->|follower| NotSupported[Log 'requires thin-client<br/>entry point' and continue<br/>as standalone]
+    NotSupported --> StartStdio1
+    ThinClient([thin-client entry point]) --> DiscoverLeader[Read leader.lock<br/>Connect to leader]
     DiscoverLeader -->|found| BecomeFollower
     DiscoverLeader -->|not found| WaitLeader[Wait for leader<br/>with backoff]
     WaitLeader --> DiscoverLeader
@@ -259,6 +275,8 @@ sequenceDiagram
 
     Client->>Follower: tools/call index_search
     Follower->>Leader: POST /mcp/rpc<br/>{"method":"index_search", "params":{...}}
+    Leader->>Leader: mcpTransportAuth<br/>(loopback or Bearer)
+    Leader->>Leader: guardToolInvocation<br/>(declared-tool gate + schema)
     Leader->>Index: ensureLoaded() + search
     Index->>Disk: Read if stale
     Index-->>Leader: Results
@@ -379,16 +397,69 @@ graph LR
 
 The thin client (`src/server/thin-client.ts`) is a separate entry point that skips index loading entirely. It reads JSON-RPC frames from stdin and forwards them to the leader's HTTP transport, writing responses back to stdout. This is the lightest-weight follower option.
 
+### Leader HTTP transport
+
+Three routes, mounted under `/mcp` on a bare express app of their own
+(`src/server/multiInstanceStartup.ts:38`) — **not** on the dashboard app, so
+they do not inherit dashboard middleware.
+
+| Route | Auth | Purpose |
+|---|---|---|
+| `POST /mcp/rpc` | **Yes** — see below | Tool invocation. The only route that can change state |
+| `GET /mcp/health` | No | Liveness for thin clients: status, pid, uptime |
+| `GET /mcp/leader` | No | Leader identity: pid, port, role |
+
+**`POST /mcp/rpc` authentication** (`mcpTransportAuth`, #605). Identical in
+policy to `dashboardAdminAuth`, and applied *before* the JSON body is parsed:
+
+- **No `INDEX_SERVER_ADMIN_API_KEY` set** — loopback callers pass; everyone
+  else gets **403** `-32001`. This matters because a leader bound to `0.0.0.0`
+  would otherwise expose unauthenticated tool invocation to the network.
+- **Key set** — a constant-time `Authorization: Bearer <key>` match is
+  required; **401** `-32001` otherwise.
+
+It fails closed: a caller that is neither loopback nor key-bearing is refused.
+
+**Request shapes.** Two reach this route, both produced by code in this repo,
+and both pass the same guard:
+
+| Shape | Producer | Result shape |
+|---|---|---|
+| `{"method": "<tool>", "params": {...}}` | the follower handler proxy | the handler's raw result |
+| `{"method": "tools/call", "params": {"name": "<tool>", "arguments": {...}}}` | the thin client, relaying an MCP frame verbatim | the MCP content-array, as stdio produces |
+
+The `tools/call` form **404'd unconditionally before #605**, so the thin-client
+bridge was broken for every tool call rather than merely unguarded.
+
+**Guards.** `guardToolInvocation` is shared verbatim with the stdio path rather
+than copied, so a third transport cannot quietly miss one:
+
+- the declared-tool gate (#592) — a handler with no registry entry is refused;
+- handler lookup;
+- `INPUT_SCHEMA` validation (#581).
+
+Status mapping: `-32602` (bad params for a declared tool) → **400**;
+`-32601` → **404**, byte-identical whether the tool is undeclared or simply
+absent, so the response cannot be used to enumerate hidden handlers.
+
 ### Configuration
 
 | Env Var | Default | Description |
 |---------|---------|-------------|
-| `INDEX_SERVER_MODE` | `standalone` | `standalone`, `auto`, `leader`, `follower` |
+| `INDEX_SERVER_MODE` | `standalone` | `standalone`, `auto`, `leader`. `follower` is accepted but not implemented here — see [Mode Selection](#mode-selection) |
 | `INDEX_SERVER_LEADER_PORT` | `9090` | TCP port for leader HTTP transport |
 | `INDEX_SERVER_HEARTBEAT_MS` | `5000` | Leader heartbeat write interval |
 | `INDEX_SERVER_STALE_THRESHOLD_MS` | `15000` | Threshold before follower considers leader dead |
 | `INDEX_SERVER_STATE_DIR` | `data/state` | Location for leader.lock and instance state files |
 | `INDEX_SERVER_LEADER_URL` | (discovered) | Explicit leader URL for thin client (overrides discovery) |
+| `INDEX_SERVER_ADMIN_API_KEY` | (unset) | When set, `POST /mcp/rpc` requires `Authorization: Bearer <key>`. When unset, that route is loopback-only. |
+
+> These seven are the complete set. `INDEX_SERVER_LEADER_HOST`,
+> `INDEX_SERVER_FOLLOWER_HEARTBEAT_MS`, `_FOLLOWER_HEARTBEAT_MISSES`,
+> `_FOLLOWER_RETRY_ATTEMPTS`, `_FOLLOWER_RETRY_BACKOFF_MS` and
+> `_LEADER_REQUEST_TIMEOUT_MS` appear in
+> [mcp-index-leader-follower-spec.md](mcp-index-leader-follower-spec.md) and
+> **do not exist in the code** (#589). Setting any of them does nothing.
 
 ---
 
@@ -530,10 +601,11 @@ graph TD
 | File | Lines | Purpose |
 |------|-------|---------|
 | `src/dashboard/server/LeaderElection.ts` | ~260 | Lock file + PID election, heartbeat, stale detection |
-| `src/dashboard/server/HttpTransport.ts` | ~90 | Express router: `/mcp/rpc`, `/mcp/health`, `/mcp/leader` |
+| `src/dashboard/server/HttpTransport.ts` | ~200 | Express router: `/mcp/rpc`, `/mcp/health`, `/mcp/leader`, plus transport auth and the shared tool-invocation guard |
+| `src/server/toolInvocationGuard.ts` | ~90 | Declared-tool gate, handler lookup and input-schema validation, shared by the stdio and HTTP paths |
 | `src/dashboard/server/ThinClient.ts` | ~240 | Stdin JSON-RPC → HTTP POST → stdout bridge |
 | `src/server/thin-client.ts` | ~30 | Thin client entry point (CLI) |
-| `src/server/index-server.ts` | ~475 | Election integration in main startup |
+| `src/server/index-server.ts` | ~900 | Election integration in main startup |
 | `src/config/runtimeConfig.ts` | ~4 | Config keys: `instanceMode`, `leaderPort`, `heartbeatIntervalMs`, `staleThresholdMs` |
 
 ---
@@ -576,7 +648,16 @@ flowchart TD
 ## Known Limitations (Experimental)
 
 1. **No automatic follower-to-leader Index sync** — if a follower promotes, it cold-loads the index from disk (~300ms gap)
-2. **Dashboard only on leader** — followers don't serve the admin UI
+2. **Every instance opens a dashboard, including followers.** This document
+   claimed the opposite ("dashboard only on leader") until #589. The dashboard
+   starts at `src/server/index-server.ts:803`, and leader election does not run
+   until `:840`, so by the time an instance learns it is a follower its
+   dashboard is already listening. Because the port is taken by the leader, the
+   follower **port-hops** (`INDEX_SERVER_DASHBOARD_TRIES`, default 10), so a
+   five-instance `auto` deployment opens five dashboards on five ports, four of
+   them backed by a proxying follower. Set `INDEX_SERVER_DASHBOARD=0` on
+   instances you do not want a UI for. Fixing the ordering is a behaviour
+   change and is deliberately not part of the documentation pass.
 3. **No request queuing during failover** — in-flight calls to a dead leader fail and must be retried by the client
 4. **Windows-specific socket behavior** — `SO_REUSEADDR` semantics differ; tested on Windows 10/11 only
 5. **No TLS on the HTTP transport** — localhost-only by design, but lacks mTLS for defense-in-depth

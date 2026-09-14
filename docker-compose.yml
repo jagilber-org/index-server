@@ -30,6 +30,10 @@ services:
       - index-logs:/app/logs
       - index-metrics:${INDEX_SERVER_CONTAINER_ROOT:-/app}/metrics
       - index-feedback:${INDEX_SERVER_CONTAINER_ROOT:-/app}/feedback
+      # Messaging derives from dirname(INDEX_SERVER_DIR) as the sibling
+      # `index-messaging`. Without this mount it lands on the container's
+      # writable layer and `docker compose down` discards persistent messages.
+      - index-messaging:${INDEX_SERVER_CONTAINER_ROOT:-/app}/index-messaging
     environment:
       - NODE_ENV=production
       - INDEX_SERVER_DIR=${INDEX_SERVER_CONTAINER_ROOT:-/app}/instructions
@@ -86,6 +90,9 @@ services:
       - index-logs:/app/logs
       - index-metrics:${INDEX_SERVER_CONTAINER_ROOT:-/app}/metrics
       - index-feedback:${INDEX_SERVER_CONTAINER_ROOT:-/app}/feedback
+      # See the note on the index-server service: the messaging store is a
+      # sibling of the catalog and needs its own named volume to survive.
+      - index-messaging:${INDEX_SERVER_CONTAINER_ROOT:-/app}/index-messaging
       - ./certs:/app/certs:ro
     environment:
       - NODE_ENV=production
@@ -133,3 +140,4 @@ volumes:
   index-logs:
   index-metrics:
   index-feedback:
+  index-messaging:

@@ -2,12 +2,11 @@ import { registerHandler, getMetricsRaw } from '../server/registry';
 import { getIndexStateAsync } from '../services/indexContext';
 import { featureStatus } from '../services/features';
 import { getActiveInstances } from '../dashboard/server/InstanceManager';
-import fs from 'fs';
-import path from 'path';
 
 import { getValidationMetrics } from './validationService';
 import { getAuditLogHealth } from './auditLog';
 import { getCounters, getFeatureFlagMap } from './features';
+import { findPackageVersion } from '../utils/version';
 registerHandler('metrics_snapshot', () => {
   const raw = getMetricsRaw();
   const methods = Object.entries(raw)
@@ -23,15 +22,11 @@ registerHandler('metrics_snapshot', () => {
   return { generatedAt: new Date().toISOString(), methods, features, validation };
 });
 // health_check retained here (meta_tools provided by shim for rich output)
-// Resolve version locally (mirrors transport logic) to avoid import cycles
-let VERSION = '0.0.0';
-try {
-  const pkgPath = path.join(process.cwd(), 'package.json');
-  if (fs.existsSync(pkgPath)) {
-    const raw = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
-    if (raw.version) VERSION = raw.version;
-  }
-} catch { /* ignore */ }
+// Version resolution goes through the shared candidate-list helper (#524, #506):
+// under MCP stdio launch process.cwd() is the *client's* directory, so a
+// cwd-only lookup silently reports 0.0.0. findPackageVersion() falls back to a
+// __dirname-relative path and WARNs when no candidate resolves (OB-5).
+const VERSION = findPackageVersion(__dirname);
 
 interface HealthIndexSummary {
   scanned: number;

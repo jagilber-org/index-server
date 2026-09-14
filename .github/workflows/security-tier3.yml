@@ -25,10 +25,10 @@ jobs:
       DASHBOARD_PORT: 8787
       CERT_DIR: /tmp/certs
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6 # pii-allowlist: pinned action SHA
 
       - name: Use Node.js 22
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6 # pii-allowlist: pinned action SHA
         with:
           node-version: 22
           cache: 'npm'
@@ -107,7 +107,7 @@ jobs:
 
       # --- ZAP Full Scan ---
       - name: ZAP Full Scan (HTTPS)
-        uses: zaproxy/action-full-scan@v0.13.0
+        uses: zaproxy/action-full-scan@3c58388149901b9a03b7718852c5ba889646c27c # v0.13.0 # pii-allowlist: pinned action SHA
         with:
           target: https://127.0.0.1:${{ env.DASHBOARD_PORT }}/
           rules_file_name: '.github/zap-baseline-rules.tsv'
@@ -138,7 +138,7 @@ jobs:
       # --- Upload all reports ---
       - name: Upload security reports
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7 # pii-allowlist: pinned action SHA
         with:
           name: security-tier3-reports
           path: |
@@ -149,7 +149,7 @@ jobs:
 
       - name: Upload server logs
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7 # pii-allowlist: pinned action SHA
         with:
           name: security-tier3-server-logs
           path: |
@@ -170,7 +170,7 @@ jobs:
       # --- Auto-create issue on failure ---
       - name: Create issue on security findings
         if: failure()
-        uses: actions/github-script@v9
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9 # pii-allowlist: pinned action SHA
         with:
           script: |
             const title = `🔒 Tier 3 Security Scan Findings — ${new Date().toISOString().split('T')[0]}`;

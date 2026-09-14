@@ -26,6 +26,7 @@
 // after the handshake, so VS Code shows proper [info]/[warning]/[error] levels
 // instead of tagging everything as [warning] [server stderr].
 import '../services/mcpLogBridge';
+import { findPackageVersion as findPackageVersionShared } from '../utils/version';
 // Install global stderr log prefix (timestamps, pid, ppid, seq, tid) before any diagnostic output.
 import '../services/logPrefix';
 // Ensure logger initializes early (file logging environment may auto-resolve)
@@ -42,14 +43,63 @@ import '../services/logger';
 // for runtime-config-state purposes is `applyOverlay()` — no
 // `getRuntimeConfig()` reader has run by the time we reach this line.
 // Do NOT move any module that calls getRuntimeConfig() above this line.
-import { applyOverlay } from '../config/runtimeOverrides';
+import { applyOverlay, revertOverlay } from '../config/runtimeOverrides';
 applyOverlay();
 import { getRuntimeConfig, reloadRuntimeConfig } from '../config/runtimeConfig';
+
+/**
+ * First materialization of the runtime config — and the first point at which a
+ * bad value can kill the process.
+ *
+ * Config parsing can throw (e.g. a messaging store resolving inside the
+ * instruction catalog). Because `applyOverlay()` above replays the persisted
+ * overlay into `process.env` on EVERY boot, such a value is not a transient
+ * failure: it is permanent, it happens during module evaluation before the MCP
+ * handshake — so the client sees only "server exited" — and it takes the
+ * dashboard down with it, which is the one surface that could delete the
+ * offending override.
+ *
+ * So: if the config cannot be built, revert the overlay in memory (the file is
+ * left intact) and retry. A config that then loads means the overlay was the
+ * culprit; the server boots degraded-but-reachable and says exactly which keys
+ * it ignored. If it still throws, the bad value came from the real environment
+ * — operator-controlled and visible — so the throw is genuine and propagates.
+ */
+let __overlayRecovered = false;
+function __configOrRecover(load: () => ReturnType<typeof getRuntimeConfig>): ReturnType<typeof getRuntimeConfig> {
+  try {
+    return load();
+  } catch (err) {
+    const first = err instanceof Error ? err.message : String(err);
+    try {
+      const reverted = revertOverlay();
+      const cfg = reloadRuntimeConfig();
+      if (!__overlayRecovered) {
+        __overlayRecovered = true;
+        try {
+          process.stderr.write(
+            `[startup] Runtime config failed to load; the persisted override overlay was ignored for this boot.\n` +
+            `[startup]   cause: ${first.split('\n')[0]}\n` +
+            `[startup]   ignored override keys: ${reverted.join(', ') || '(none)'}\n` +
+            `[startup] The overlay file is unchanged. Clear the offending key from the dashboard ` +
+            `(Admin -> Config) or delete it from the overrides file, then restart.\n`,
+          );
+        } catch { /* ignore */ }
+      }
+      return cfg;
+    } catch {
+      // Reverting did not help: the value is in the real environment, not the
+      // overlay. Surface the ORIGINAL error, which names the actual problem.
+      throw err;
+    }
+  }
+}
+
 const __earlyInitChunks: Buffer[] = [];
 let __earlyInitFirstLogged = false;
 let __sdkReady = false;
 // Allow opt-out (e.g., diagnostic comparison) via INDEX_SERVER_DISABLE_EARLY_STDIN_BUFFER=1
-const __bufferEnabled = !getRuntimeConfig().server.disableEarlyStdinBuffer;
+const __bufferEnabled = !__configOrRecover(getRuntimeConfig).server.disableEarlyStdinBuffer;
 // We attach the temporary listener immediately so even synchronous module load
 // time is covered.
 function __earlyCapture(chunk: Buffer){
@@ -84,8 +134,10 @@ import { DEFAULT_PORTS } from '../config/defaultValues';
 import fs from 'fs';
 import path from 'path';
 import { logError, logInfo } from '../services/logger';
+import { getMessagingStoreWarnings } from '../config/pathResolution';
 import { forceBootstrapConfirmForTests } from '../services/bootstrapGating';
 import { emitPreflightAndMaybeExit } from '../services/preflight';
+import { ensureStateDirectories } from '../config/configUtils';
 import { execFileSync } from 'child_process';
 import { createShutdownGuard } from './shutdownGuard';
 import { runCertInit, formatPrintEnv, validateOptions as validateCertOptions } from './certInit';
@@ -252,7 +304,12 @@ interface CliConfig {
 }
 
 function parseArgs(argv: string[]): CliConfig {
-  const runtimeCfg = reloadRuntimeConfig();
+  // Recovering here, not only at first materialization: by the time this runs
+  // the config cache is usually already warm (a module imported above
+  // applyOverlay() reads it), so THIS forced reload is the first call that
+  // actually rebuilds from the overlay-poisoned environment — and the one that
+  // used to kill boot.
+  const runtimeCfg = __configOrRecover(reloadRuntimeConfig);
   const http = runtimeCfg.dashboard.http;
   const config: CliConfig = {
     dashboard: http.enable,
@@ -513,19 +570,7 @@ IMPORTANT:
 }
 
 function findPackageVersion(): string {
-  const candidates = [
-    path.join(process.cwd(), 'package.json'),
-    path.join(__dirname, '..', '..', 'package.json')
-  ];
-  for(const p of candidates){
-    try {
-      if(fs.existsSync(p)){
-        const raw = JSON.parse(fs.readFileSync(p,'utf8'));
-        if(raw?.version) return raw.version;
-      }
-    } catch { /* ignore */ }
-  }
-  return '0.0.0';
+  return findPackageVersionShared(__dirname);
 }
 
 // Added close handle in return object for test coverage harness so unit tests can start and stop the dashboard
@@ -581,8 +626,24 @@ async function startDashboard(cfg: CliConfig): Promise<{ url: string; close: () 
 
 export async function main(){
   handleMcpConfigCli(process.argv);
+  ensureStateDirectories();
   // Run startup preflight (module/data presence). Non-fatal unless INDEX_SERVER_PREFLIGHT_STRICT=1
   try { emitPreflightAndMaybeExit(); } catch { /* ignore preflight wrapper errors */ }
+  // Deployment diagnostics for the messaging store (cwd-anchored store, orphaned
+  // legacy store). Emitted here, once per BOOT, rather than from the resolver:
+  // config is parsed in every process, and a test run spawns hundreds.
+  // Written as bare NDJSON rather than via logWarn: logWarn attaches a stack
+  // trace, and a stack on a WARN is both useless here (the "call site" is always
+  // this line) and a log-hygiene violation — only ERROR should carry traces.
+  try {
+    for (const w of getMessagingStoreWarnings()) {
+      try {
+        process.stderr.write(JSON.stringify({
+          ts: new Date().toISOString(), level: 'WARN', msg: `[messaging] ${w}`, pid: process.pid,
+        }) + '\n');
+      } catch { /* ignore */ }
+    }
+  } catch { /* diagnostics must never block startup */ }
   // -------------------------------------------------------------
   // Automatic bootstrap seeding (executes before any index load)
   // -------------------------------------------------------------

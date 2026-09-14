@@ -8,6 +8,7 @@ import { incrementCounter } from '../features';
 import { SCHEMA_VERSION } from '../../versioning/schemaVersion';
 import { ClassificationService } from '../classificationService';
 import { resolveOwner } from '../ownershipService';
+import { governanceDenylistError, isGovernanceDeniedId } from '../governanceDenylist';
 import { logAudit } from '../auditLog';
 import { logError } from '../logger';
 import { getToolRegistry } from '../toolRegistry';
@@ -17,7 +18,7 @@ import { writeManifestFromIndex, attemptManifestUpdate } from '../manifestManage
 import { emitTrace } from '../tracing';
 import { INSTRUCTION_INPUT_SCHEMA_REF, validateInstructionInputSurface, validateInstructionRecord, sanitizeLoadError, sanitizeErrorDetail, type SanitizedLoadError } from '../instructionRecordValidation';
 import { isInstructionValidationError } from '../instructionRecordValidation';
-import { guard, ImportEntry, traceVisibility, traceInstructionVisibility, traceEnvSnapshot, normalizeInputCategories, repairChangeLog, ADD_GOVERNANCE_KEYS, applyGovernanceKeys } from './instructions.shared';
+import { guard, ImportEntry, traceVisibility, traceInstructionVisibility, traceEnvSnapshot, normalizeInputCategories, repairChangeLog, ADD_GOVERNANCE_KEYS, applyGovernanceKeys, validateLinks } from './instructions.shared';
 
 interface AddParams { entry: ImportEntry & { lax?: boolean }; overwrite?: boolean; lax?: boolean }
 
@@ -206,6 +207,9 @@ registerHandler('index_add', guard('index_add', async (p: AddParams) => {
       { id: e.id },
     );
   }
+  // The loader denies these ids, so persisting one would report success and then
+  // vanish on the next load with nothing to explain it (#494).
+  if (isGovernanceDeniedId(e.id)) return fail(governanceDenylistError(e.id), { id: e.id });
   const dir = getInstructionsDir(); if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   const file = path.join(dir, `${e.id}.json`);
   if (p.overwrite && (!e.body || !e.title)) {
@@ -318,7 +322,10 @@ registerHandler('index_add', guard('index_add', async (p: AddParams) => {
     const bodyChanged = e.body ? (bodyTrimmed !== prevBody) : false;
     const titleChanged = e.title !== undefined && e.title !== existing.title;
     const eRec = e as unknown as Record<string, unknown>;
-    const mutableMetadataKeys = ['owner', 'status', 'priorityTier', 'classification', 'lastReviewedAt', 'nextReviewDue', 'semanticSummary', 'contentType', 'extensions'] as const;
+    // Derived from ADD_GOVERNANCE_KEYS (minus version, handled separately) so a field
+    // that can be merged is always a field that can defeat the noop-overwrite short
+    // circuit. Keeping a second hand-maintained list here is what let #492 skip writes.
+    const mutableMetadataKeys = ADD_GOVERNANCE_KEYS.filter(k => k !== 'version');
     const metadataChanged = mutableMetadataKeys.some((key) =>
       eRec[key] !== undefined && !metadataEquals(eRec[key], (existing as unknown as Record<string, unknown>)[key]),
     );
@@ -426,7 +433,7 @@ registerHandler('index_add', guard('index_add', async (p: AddParams) => {
       trailingSummary: bodyChanged ? 'body update (repaired)' : 'metadata update (repaired)'
     });
   } else {
-    base = { id: e.id, title: e.title, body: bodyTrimmed, rationale: e.rationale, priority: e.priority, audience: e.audience, requirement: e.requirement, categories, primaryCategory, sourceHash, schemaVersion: SCHEMA_VERSION, deprecatedBy: e.deprecatedBy, createdAt: now, updatedAt: now, riskScore: e.riskScore, createdByAgent: instructionsCfg.agentId, sourceWorkspace: instructionsCfg.workspaceId, extensions: e.extensions, teamIds: e.teamIds, workspaceId: e.workspaceId, userId: e.userId, supersedes: e.supersedes, reviewIntervalDays: e.reviewIntervalDays } as InstructionEntry;
+    base = { id: e.id, title: e.title, body: bodyTrimmed, rationale: e.rationale, priority: e.priority, audience: e.audience, requirement: e.requirement, categories, primaryCategory, sourceHash, schemaVersion: SCHEMA_VERSION, deprecatedBy: e.deprecatedBy, createdAt: now, updatedAt: now, riskScore: e.riskScore, createdByAgent: instructionsCfg.agentId, sourceWorkspace: instructionsCfg.workspaceId, extensions: e.extensions, teamIds: e.teamIds, workspaceId: e.workspaceId, userId: e.userId, supersedes: e.supersedes, reviewIntervalDays: e.reviewIntervalDays, links: e.links } as InstructionEntry;
     if (e.version !== undefined) {
       if (!SEMVER_REGEX.test(e.version)) return fail('invalid_semver', { id: e.id });
       base.version = e.version;
@@ -446,6 +453,17 @@ registerHandler('index_add', guard('index_add', async (p: AddParams) => {
     }
   }
   applyGovernanceKeys(base, e as ImportEntry, ADD_GOVERNANCE_KEYS);
+  // Link validation (spec 511, V1)
+  if (e.links !== undefined) {
+    const st = await ensureLoadedAsync();
+    const linkResult = validateLinks(e.id, e.links, st.byId);
+    if (linkResult.error) return fail('invalid_links', { id: e.id, message: linkResult.error });
+    base.links = linkResult.links.length > 0 ? linkResult.links : undefined;
+    if (linkResult.warnings.length) {
+      // warnings are included in the success response below
+      (base as unknown as Record<string, unknown>)._linkWarnings = linkResult.warnings;
+    }
+  }
   if (!base.sourceWorkspace) base.sourceWorkspace = instructionsCfg.workspaceId;
   if (!exists || base.body === bodyTrimmed) {
     base.sourceHash = sourceHash;
@@ -603,7 +621,9 @@ registerHandler('index_add', guard('index_add', async (p: AddParams) => {
       bodyLength: bodyTrimmed.length,
     };
   }
-  return {
+  const linkWarnings = (base as unknown as Record<string, unknown>)._linkWarnings as string[] | undefined;
+  delete (base as unknown as Record<string, unknown>)._linkWarnings;
+  const addResult: Record<string, unknown> = {
     id: e.id,
     success: true,
     created: createdNow,
@@ -616,6 +636,8 @@ registerHandler('index_add', guard('index_add', async (p: AddParams) => {
     strictMode,
     bodyLength: bodyTrimmed.length,
   };
+  if (linkWarnings?.length) addResult.linkWarnings = linkWarnings;
+  return addResult;
 }));
 
 export {};

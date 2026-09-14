@@ -19,6 +19,7 @@ Set-Location $repoRoot
 
 $logsDir = Join-Path $repoRoot 'logs'
 $logFile = Join-Path $repoRoot 'test-results/test-output.log'
+$latestMarkerPointer = Join-Path $repoRoot '.test-run-complete.latest'
 
 $hasLogs = $false
 if (Test-Path $logsDir) {
@@ -40,7 +41,30 @@ if (-not $node) {
   exit 0
 }
 
-Write-Host '[pre-push] log-hygiene: running crawl-logs.mjs --strict against local logs/' -ForegroundColor DarkCyan
+$since = $null
+if (Test-Path $latestMarkerPointer) {
+  try {
+    $markerName = (Get-Content -Raw $latestMarkerPointer).Trim()
+    if ($markerName -match '^\.test-run-complete\.\d+\.marker$' -and (Split-Path -Leaf $markerName) -eq $markerName) {
+      $markerPath = Join-Path $repoRoot $markerName
+      if (Test-Path $markerPath) {
+        $summary = Get-Content -Raw $markerPath | ConvertFrom-Json
+        $started = [long]$summary.started
+        if ($started -gt 0) {
+          $since = [DateTimeOffset]::FromUnixTimeMilliseconds($started).ToUniversalTime().ToString('o')
+        }
+      }
+    }
+  } catch {
+    Write-Host '[pre-push] log-hygiene: latest test sentinel is invalid; scanning all local logs.' -ForegroundColor DarkYellow
+  }
+}
+
+if ($since) {
+  Write-Host "[pre-push] log-hygiene: running crawl-logs.mjs --strict for the latest test run (since $since)." -ForegroundColor DarkCyan
+} else {
+  Write-Host '[pre-push] log-hygiene: no valid test sentinel; running crawl-logs.mjs --strict against all local logs.' -ForegroundColor DarkCyan
+}
 $args = @(
   'scripts/diagnostics/crawl-logs.mjs',
   '--dir', 'logs',
@@ -49,6 +73,9 @@ $args = @(
   '--summary', 'test-results/log-hygiene.json',
   '--strict'
 )
+if ($since) {
+  $args += @('--since', $since)
+}
 & $node.Source @args
 $code = $LASTEXITCODE
 if ($code -eq 2) {

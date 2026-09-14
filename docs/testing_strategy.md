@@ -77,6 +77,96 @@ Developer Workflow:
 
 Bypass (emergency only): set `BYPASS_PRE_PUSH=1` env var before `git push` (future enhancement) – not yet implemented; intentional friction maintained.
 
+### Fast Lane Semantics (#576, 2026-09-11)
+
+`npm run test:fast` runs in two stages: stateful HTTP/TLS specs one per process
+first, then the ~363-spec main batch.
+
+**Every stage runs before the verdict.** The lane used to `process.exit()` on
+the first isolated-spec failure, so the main batch never started and the
+visible result was "1 failed, 23 passed" with no evidence at all about the
+other ~3,400 tests. Failures are now collected across stages and reported
+together; the exit code is decided at the end. A lane that hides the suite it
+exists to run is worse than a slow one.
+
+**Verbosity must not change the verdict.** `npm run -s test:fast` and
+`npm run test:fast` must agree. `npm run -s` exports
+`npm_config_loglevel=silent` to child processes, which previously muted the
+`npm notice` output that `npmPackReadiness.spec.ts` parsed, turning 8
+assertions red on text that was never printed. That spec now reads
+`npm pack --json` as data. **Never gate on log output that a verbosity flag can
+suppress.**
+
+**Capability gates must probe the capability, not the executable.**
+`certInit.spec.ts` gated on `openssl version` exiting 0, then ran
+`openssl req -x509`. On a machine where the binary is on PATH but `openssl.cnf`
+is absent, `version` succeeds and `req` fails — five spurious failures, and a
+breadcrumb that printed its own contradiction:
+`opensslAvailable=true reason="openssl not detected"`. The probe now performs
+an actual certificate generation into a temp dir.
+
+#### Unhandled harness errors stay red (and this one is Windows-only)
+
+**It does not happen in CI.** The full Linux run (`coverage:ci`, 404 files,
+job 103396359729 and the push run after it) contains **0** occurrences of
+`onTaskUpdate`, **0** `Unhandled Error` blocks and **0** `Errors  N error`
+lines. On this Windows workstation it reproduces on **4 of 4** runs — serial,
+parallel, with custom reporters and without. So it is deterministic locally,
+absent remotely, and therefore a **developer-experience defect on Windows, not
+a CI gate defect**.
+
+That asymmetry is why the lane's error handling is left strict rather than
+loosened: relaxing it would weaken the gate everywhere in order to fix one
+platform where the gate is not actually failing. The Windows root cause is
+tracked separately.
+
+
+A long serial run intermittently ends with:
+
+```
+Error: [vitest-worker]: Timeout calling "onTaskUpdate"
+```
+
+reported as `Errors 1 error`, which makes the run exit non-zero even when no
+test failed. **The decision is to leave this failing rather than downgrade it
+to a warning.** Vitest reports unhandled errors precisely because they can
+invalidate the run ("This might cause false positive tests"), and a rule that
+swallows the whole class in order to silence one known instance would also
+swallow the unknown ones. Suppressing a harness error is indistinguishable
+from suppressing a real one.
+
+**Run length is not the cause — that hypothesis was tested and falsified.**
+The obvious suspect was `--fileParallelism=false` on the main batch, which
+serialised 363 specs into a ~560 s run. Removing it (safe, because the
+stateful HTTP/TLS specs already run in their own processes) cut the batch to
+**193 s — 2.9× faster, byte-identical results**:
+
+| | serial | parallel |
+|---|---|---|
+| duration | 559.8 s | 193.0 s |
+| files | 360 passed, 3 skipped | 360 passed, 3 skipped |
+| tests | 3501 passed, 19 skipped | 3501 passed, 19 skipped |
+| `Errors` | **1** | **1** |
+
+The error survived a 2.9× reduction in wall-clock, so it is not a
+duration-driven timeout. The parallelism change is kept on its own merits
+(speed), but it must not be described as the fix.
+
+**The custom-reporter hypothesis was also tested and falsified.** `onTaskUpdate`
+is a reporter callback, and this project registers two custom reporters —
+`runSentinelReporter.ts` and `jsonResultsReporter.ts` (`vitest.config.ts:7`) —
+so a reporter blocking on task updates was the obvious next suspect. Running
+the same batch with `--reporter=default` (both custom reporters out of the
+path) reproduces the error identically: 192.8 s, `360 passed | 3 skipped`,
+`3501 passed | 19 skipped`, `Errors 1 error`.
+
+So: **not duration, not the custom reporters.** Two measurements, two
+eliminations. Whatever holds the worker RPC open is elsewhere — most likely a
+single spec leaving a handle or timer live past teardown, which would be found
+by bisecting the 363-file batch rather than by reasoning about it. Recorded
+here so the next person starts from two closed doors instead of re-opening
+them.
+
 ### Environment-Gated RED Reproductions (Since 1.3.1)
 
 Some RED tests are high-friction (intermittent timeouts, deep diagnostics) and can block routine pushes while an upstream anomaly is under investigation. To preserve signal without halting velocity, we gate specific reproductions behind explicit environment variables. Current gating:

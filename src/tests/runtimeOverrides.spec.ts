@@ -208,4 +208,110 @@ describe('runtimeOverrides — T3 red', () => {
       expect(overrides.readOverlay()).toMatchObject({ INDEX_SERVER_VERBOSE_LOGGING: '1' });
     });
   });
+
+  // ── revert must not destroy variables the overlay never owned ───────────
+  //
+  // applyOverlay() recorded a prior value only when it DIFFERED from the
+  // overlay's:
+  //
+  //     if (prior !== undefined && prior !== v) shadowed[k] = prior;
+  //
+  // So when the operator's existing env value happened to EQUAL the overlay's,
+  // the key was absent from the snapshot — and revertOverlay()/clearOverride()
+  // then took their `else delete process.env[key]` branch, unsetting a variable
+  // the operator set and the overlay never owned.
+  //
+  // The equal-value case is the likely one in practice: the overlay is usually
+  // written from the same value the operator already has in the environment.
+  // It is also the case the existing boot-recovery spec could not reach, since
+  // its fixture never sets the same key in both places.
+
+  describe('revert restores the pre-overlay environment exactly', () => {
+    it('restores a prior value that was EQUAL to the overlay value', async () => {
+      const file = tmpOverlayPath();
+      overlayDir = path.dirname(file);
+      fs.writeFileSync(file, JSON.stringify({ [TEST_FLAG]: 'same-value' }), 'utf8');
+      process.env.INDEX_SERVER_OVERRIDES_FILE = file;
+
+      // The operator already has this set, to the same value the overlay holds.
+      process.env[TEST_FLAG] = 'same-value';
+
+      const { applyOverlay, revertOverlay } = await loadOverrides();
+      applyOverlay();
+      revertOverlay();
+
+      expect(
+        process.env[TEST_FLAG],
+        'revert deleted an operator-set variable the overlay never owned',
+      ).toBe('same-value');
+    });
+
+    it('still restores a prior value that DIFFERED from the overlay value', async () => {
+      const file = tmpOverlayPath();
+      overlayDir = path.dirname(file);
+      fs.writeFileSync(file, JSON.stringify({ [TEST_FLAG]: 'overlay-value' }), 'utf8');
+      process.env.INDEX_SERVER_OVERRIDES_FILE = file;
+      process.env[TEST_FLAG] = 'operator-value';
+
+      const { applyOverlay, revertOverlay } = await loadOverrides();
+      applyOverlay();
+      expect(process.env[TEST_FLAG]).toBe('overlay-value');
+      revertOverlay();
+
+      expect(process.env[TEST_FLAG]).toBe('operator-value');
+    });
+
+    it('still unsets a key the operator had NOT set', async () => {
+      const file = tmpOverlayPath();
+      overlayDir = path.dirname(file);
+      fs.writeFileSync(file, JSON.stringify({ [TEST_FLAG]: 'overlay-only' }), 'utf8');
+      process.env.INDEX_SERVER_OVERRIDES_FILE = file;
+      delete process.env[TEST_FLAG];
+
+      const { applyOverlay, revertOverlay } = await loadOverrides();
+      applyOverlay();
+      revertOverlay();
+
+      expect(
+        process.env[TEST_FLAG],
+        'a key the overlay introduced must be removed, not left behind',
+      ).toBeUndefined();
+    });
+
+    it('clearOverride restores an equal prior value rather than deleting it', async () => {
+      const file = tmpOverlayPath();
+      overlayDir = path.dirname(file);
+      fs.writeFileSync(file, JSON.stringify({ INDEX_SERVER_VERBOSE_LOGGING: '1' }), 'utf8');
+      process.env.INDEX_SERVER_OVERRIDES_FILE = file;
+      process.env.INDEX_SERVER_VERBOSE_LOGGING = '1';
+
+      const { applyOverlay, clearOverride } = await loadOverrides();
+      applyOverlay();
+      clearOverride('INDEX_SERVER_VERBOSE_LOGGING');
+
+      expect(
+        process.env.INDEX_SERVER_VERBOSE_LOGGING,
+        'clearOverride has the same equal-value bug as revertOverlay',
+      ).toBe('1');
+
+      delete process.env.INDEX_SERVER_VERBOSE_LOGGING;
+    });
+
+    it('overlayShadowsEnv still reports only genuine shadowing', async () => {
+      // The restore snapshot and the diagnostic answer different questions.
+      // Recording an equal prior value for restore must NOT make the dashboard
+      // claim the overlay is masking a different ENV value, because it is not.
+      const file = tmpOverlayPath();
+      overlayDir = path.dirname(file);
+      fs.writeFileSync(file, JSON.stringify({ [TEST_FLAG]: 'same-value' }), 'utf8');
+      process.env.INDEX_SERVER_OVERRIDES_FILE = file;
+      process.env[TEST_FLAG] = 'same-value';
+
+      const { applyOverlay, shadowedEnv } = await loadOverrides();
+      const result = applyOverlay();
+
+      expect(result.shadowed[TEST_FLAG], 'an identical value is not a shadowed value').toBeUndefined();
+      expect(shadowedEnv()[TEST_FLAG]).toBeUndefined();
+    });
+  });
 });

@@ -145,11 +145,12 @@ describe('WebSocketManager verifyClient', () => {
       } as ReturnType<typeof getRuntimeConfig>);
     });
 
-    it('accepts valid token as query parameter', () => {
+    it('rejects a valid token supplied via query parameter (SH-7: no URL credentials)', () => {
       const out = callVerifyClient(
         mockInfo({ url: `/ws?token=${ADMIN_KEY}` }),
       );
-      expect(out.result).toBe(true);
+      expect(out.result).toBe(false);
+      expect(out.code).toBe(401);
     });
 
     it('accepts valid token as Bearer authorization header', () => {
@@ -175,7 +176,7 @@ describe('WebSocketManager verifyClient', () => {
 
     it('rejects invalid token with 401', () => {
       const out = callVerifyClient(
-        mockInfo({ url: '/ws?token=wrong-key' }),
+        mockInfo({ headers: { Authorization: 'Bearer wrong-key' } }),
       );
       expect(out.result).toBe(false);
       expect(out.code).toBe(401);
@@ -197,7 +198,7 @@ describe('WebSocketManager verifyClient', () => {
       expect(out.code).toBe(401);
     });
 
-    it('prefers query token when both query and header are valid', () => {
+    it('authorizes via the Authorization header and ignores any query token', () => {
       const out = callVerifyClient(
         mockInfo({
           url: `/ws?token=${ADMIN_KEY}`,

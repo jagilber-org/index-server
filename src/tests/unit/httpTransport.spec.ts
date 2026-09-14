@@ -11,20 +11,28 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import express from 'express';
 import http from 'http';
 import { createMcpTransportRoutes } from '../../dashboard/server/HttpTransport';
+import { withTransientRetry } from '../helpers/localhostRetry';
 
 describe('HttpTransport', () => {
   let app: express.Express;
   let server: http.Server;
   let baseUrl: string;
 
-  // Mock handler lookup
+  // Mock handler lookup.
+  //
+  // Since #605 the route runs the same declared-tool gate as stdio, so every
+  // name here must be a real registry tool — a mock under an invented name is
+  // now refused with -32601 before it is ever called, which is the point.
+  // `index_dispatch` stands in for the throwing handler because it is the one
+  // tool that opts out of generic schema pre-validation (SELF_VALIDATING_TOOLS),
+  // so the request reaches the handler and exercises the -32603 path.
   const mockHandlers: Record<string, (params: unknown) => Promise<unknown>> = {
     'index_search': async (params: unknown) => {
       const p = params as { keywords?: string[] };
       return { matches: p?.keywords?.length ?? 0, results: [] };
     },
     'health_check': async () => ({ status: 'ok' }),
-    'error_handler': async () => { throw new Error('test error'); },
+    'index_dispatch': async () => { throw new Error('test error'); },
   };
 
   const handlerLookup = (method: string) => mockHandlers[method];
@@ -50,17 +58,17 @@ describe('HttpTransport', () => {
   });
 
   async function jsonRpc(method: string, params: unknown = {}, id: number = 1) {
-    const res = await fetch(`${baseUrl}/mcp/rpc`, {
+    const res = await withTransientRetry(() => fetch(`${baseUrl}/mcp/rpc`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ jsonrpc: '2.0', method, params, id }),
-    });
+    }));
     return { status: res.status, body: await res.json() };
   }
 
   describe('GET /mcp/health', () => {
     it('should return ok status', async () => {
-      const res = await fetch(`${baseUrl}/mcp/health`);
+      const res = await withTransientRetry(() => fetch(`${baseUrl}/mcp/health`));
       expect(res.status).toBe(200);
       const data = await res.json();
       expect(data.status).toBe('ok');
@@ -71,7 +79,7 @@ describe('HttpTransport', () => {
 
   describe('GET /mcp/leader', () => {
     it('should return leader info', async () => {
-      const res = await fetch(`${baseUrl}/mcp/leader`);
+      const res = await withTransientRetry(() => fetch(`${baseUrl}/mcp/leader`));
       expect(res.status).toBe(200);
       const data = await res.json();
       expect(data.pid).toBe(process.pid);
@@ -96,27 +104,27 @@ describe('HttpTransport', () => {
     });
 
     it('should return -32600 for invalid JSON-RPC (no method)', async () => {
-      const res = await fetch(`${baseUrl}/mcp/rpc`, {
+      const res = await withTransientRetry(() => fetch(`${baseUrl}/mcp/rpc`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ jsonrpc: '2.0' }),
-      });
+      }));
       expect(res.status).toBe(400);
       const body = await res.json();
       expect(body.error.code).toBe(-32600);
     });
 
     it('should return -32600 for wrong jsonrpc version', async () => {
-      const res = await fetch(`${baseUrl}/mcp/rpc`, {
+      const res = await withTransientRetry(() => fetch(`${baseUrl}/mcp/rpc`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ jsonrpc: '1.0', method: 'test' }),
-      });
+      }));
       expect(res.status).toBe(400);
     });
 
     it('should return -32603 for handler errors', async () => {
-      const { status, body } = await jsonRpc('error_handler');
+      const { status, body } = await jsonRpc('index_dispatch', { action: 'list' });
       expect(status).toBe(500);
       expect(body.error.code).toBe(-32603);
       expect(body.error.message).toBe('test error');

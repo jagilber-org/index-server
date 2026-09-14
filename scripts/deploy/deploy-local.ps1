@@ -582,7 +582,14 @@ try {
   $serverHash2 = $null; if(Test-Path $manifestServerPath){ try { $serverHash2 = (Get-FileHash -Algorithm SHA256 -Path $manifestServerPath).Hash } catch { $serverHash2 = '<hash-error>' } }
   $schemaHash2 = $null; if(Test-Path $manifestSchemaPath){ try { $schemaHash2 = (Get-FileHash -Algorithm SHA256 -Path $manifestSchemaPath).Hash } catch { $schemaHash2 = '<hash-error>' } }
   $nodeVersion = $null; try { $nodeVersion = (node -v) } catch { $nodeVersion = '<node-unavailable>' }
-  $gitCommit = $null; if(Test-Path (Join-Path $PSScriptRoot '..' '.git')){ try { $gitCommit = (git rev-parse HEAD) } catch { $gitCommit = '<git-error>' } } else { $gitCommit = '<no-git-dir>' }
+  # Repo root is two levels up from scripts/deploy — the previous single '..'
+  # pointed at scripts/, which never contains .git, so every manifest recorded
+  # '<no-git-dir>' and the dashboard could not show the deployed commit.
+  $repoRootForGit = (Resolve-Path (Join-Path $PSScriptRoot '..' '..')).Path
+  $gitCommit = $null
+  if(Test-Path (Join-Path $repoRootForGit '.git')){
+    try { $gitCommit = (git -C $repoRootForGit rev-parse HEAD) } catch { $gitCommit = '<git-error>' }
+  } else { $gitCommit = '<no-git-dir>' }
   $deployManifest = [ordered]@{
     name = $runtime.name
     version = $runtime.version

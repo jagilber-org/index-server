@@ -219,11 +219,24 @@ export async function bootFromConfig(options: BootOptions): Promise<void> {
   // the test runner's cwd (the repo root, which contains dist/), masking
   // unlaunchable relative-no-cwd entries for copilot-cli/claude.
   const spawnCwd = entry.cwd ?? os.tmpdir();
+  // The child is launched with ONLY the generated config's env block — that is
+  // the property under test, and it means the child does NOT inherit VITEST.
+  // Activity telemetry therefore sees a plain production process and enables
+  // itself, and since no database path is set it resolves to the installation's
+  // own metrics/activity.db. This test adds and removes an `issue-317-*` entry,
+  // so every run wrote two rows of fixture churn into the real catalog's
+  // telemetry: a full suite run moved one such database from 861 to 885 rows,
+  // and 902 of its 907 rows referenced ids that exist nowhere in the catalog.
+  // The dashboard's Catalog Activity chart was rendering the test suite.
+  //
+  // Switching telemetry off in the child keeps the launch spec exactly as
+  // generated in every respect that this test actually asserts.
+  const childEnv = { ...(entry.env ?? {}), INDEX_SERVER_ACTIVITY_LOG: '0' };
   const transport = new StdioClientTransport({
     command: entry.command ?? 'node',
     args: entry.args ?? [],
     cwd: spawnCwd,
-    env: entry.env,
+    env: childEnv,
     stderr: 'pipe',
   });
   transport.stderr?.on('data', chunk => stderr.push(String(chunk)));

@@ -170,9 +170,11 @@ export function createMessagingRoutes(): Router {
       const markRead = req.query.markRead === 'true';
       const tags = req.query.tags ? (req.query.tags as string).split(',').map(t => t.trim()).filter(Boolean) : undefined;
       const sender = (req.query.sender as string) || undefined;
+      const requiresAck = req.query.requiresAck === 'true' ? true : req.query.requiresAck === 'false' ? false : undefined;
+      const unacked = req.query.unacked === 'true';
 
       const mailbox = getMailbox();
-      const messages = mailbox.read({ channel, reader, unreadOnly, limit, markRead, tags, sender });
+      const messages = mailbox.read({ channel, reader, unreadOnly, limit, markRead, tags, sender, requiresAck, unacked });
       res.json({ success: true, channel, reader, count: messages.length, messages });
     } catch (error) {
       logError('[Messaging] Failed to read messages:', error);

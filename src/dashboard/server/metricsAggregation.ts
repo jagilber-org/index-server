@@ -236,6 +236,27 @@ export interface ResourceSample {
   rss: number;
 }
 
+export interface CatalogSample {
+  timestamp: number;
+  indexCount: number;
+  usageTotal: number;
+  /**
+   * Entries carrying any signal. Counts only ids present in the index — the
+   * usage snapshot outlives removed entries, and counting its keys directly
+   * let signalCount exceed indexCount (an unclamped >100% "signal share").
+   */
+  signalCount: number;
+  /** Signalled entries split by signal value; sums to signalCount. */
+  sigApplied: number;
+  sigHelpful: number;
+  sigNotRelevant: number;
+  sigOutdated: number;
+  /** Retrieved or applied at least once, but carrying no signal. */
+  retrievedOnly: number;
+  /** Never retrieved, never signalled. */
+  neverUsed: number;
+}
+
 // ── Pure Aggregation Functions ──────────────────────────────────────────────
 
 export function getTotalRequests(tools: Map<string, ToolMetrics>): number {

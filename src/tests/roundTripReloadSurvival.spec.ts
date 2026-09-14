@@ -22,6 +22,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 import { createTestClient } from './helpers/mcpTestClient.js';
+import { interfaceFieldNames } from './helpers/modelFields.js';
 
 function makeTempDir() {
   const dir = path.join(process.cwd(), 'tmp', 'round-trip-reload-survival');
@@ -191,13 +192,10 @@ describe('JSON schema / TS schema property parity', () => {
     const modelPath = path.join(process.cwd(), 'src', 'models', 'instruction.ts');
     const modelSource = fs.readFileSync(modelPath, 'utf8');
 
-    // Extract field names from the interface (lines matching `fieldName:` or `fieldName?:`)
-    const fieldRegex = /^\s+(\w+)\??:\s/gm;
-    const modelFields = new Set<string>();
-    let match;
-    while ((match = fieldRegex.exec(modelSource)) !== null) {
-      modelFields.add(match[1]);
-    }
+    // Scoped to InstructionEntry: an unscoped scrape also picks up sibling interfaces
+    // such as InstructionLink, whose fields are nested under `links` rather than root
+    // properties of the schema.
+    const modelFields = interfaceFieldNames(modelSource, 'InstructionEntry');
 
     // Load JSON schema
     const jsonSchemaPath = path.join(process.cwd(), 'schemas', 'instruction.schema.json');

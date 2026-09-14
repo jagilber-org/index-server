@@ -52,6 +52,9 @@ const zDispatch = z.object({
   categoriesAll: z.array(z.string()).optional(),
   clientHash: z.string().optional(),
   metaOnly: z.boolean().optional(),
+  includeBody: z.boolean().optional(),
+  bodyOffset: z.number().optional(),
+  bodyLimit: z.number().optional(),
   limit: z.number().optional(),
   offset: z.number().optional(),
   entry: z.object({}).passthrough().optional(),
@@ -217,7 +220,37 @@ const zGovernanceUpdate = z.object({
   status: z.enum(['approved','draft','deprecated']).optional(),
   lastReviewedAt: z.string().optional(),
   nextReviewDue: z.string().optional(),
+  riskScore: z.number().optional(),
+  priority: z.number().int().min(1).max(100).optional(),
+  priorityTier: z.string().optional(),
+  requirement: z.string().optional(),
+  categories: z.array(z.string()).optional(),
   bump: z.enum(['patch','minor','major','none']).optional()
+}).strict();
+
+// ── Body patch ───────────────────────────────────────────────────────────────
+// Mirrors the Ajv INPUT_SCHEMA for index_patch. Operand pairing (append needs
+// text, replace needs find, ...) is enforced by the handler rather than here so
+// that the failure carries the handler's actionable hint instead of a bare
+// union error.
+const zIndexPatch = z.object({
+  id: z.string().min(1),
+  op: z.enum(['splice','append','prepend','replace','metadata']),
+  text: z.string().optional(),
+  bodyOffset: z.number().optional(),
+  bodyLength: z.number().optional(),
+  find: z.string().optional(),
+  replaceWith: z.string().optional(),
+  replaceAll: z.boolean().optional(),
+  expectedSourceHash: z.string().optional(),
+  bump: z.enum(['patch','minor','major','none']).optional(),
+  summary: z.string().optional(),
+  dryRun: z.boolean().optional(),
+  title: z.string().optional(),
+  semanticSummary: z.string().optional(),
+  categories: z.array(z.string()).optional(),
+  primaryCategory: z.string().optional(),
+  contentType: z.string().optional()
 }).strict();
 
 // ── Search ───────────────────────────────────────────────────────────────────
@@ -226,8 +259,13 @@ const zSearchFields = z.record(z.string(), z.unknown()).refine((fields) => Objec
 });
 
 const zSearch = z.object({
-  keywords: z.array(z.string().min(1).max(100)).min(1).max(10).optional(),
+  keywords: z.union([
+    z.array(z.string().min(1).max(100)).min(1).max(10),
+    z.string().min(1).max(500)
+  ]).optional(),
   searchString: z.string().min(1).max(500).optional(),
+  q: z.string().min(1).max(500).optional(),
+  query: z.string().min(1).max(500).optional(),
   mode: z.enum(SEARCH_MODES).optional(),
   limit: z.number().int().min(1).max(100).default(50).optional(),
   includeCategories: z.boolean().default(false).optional(),
@@ -235,8 +273,9 @@ const zSearch = z.object({
   contentType: z.enum(CONTENT_TYPES).optional(),
   fields: zSearchFields.optional()
 }).strict().superRefine((value, ctx) => {
-  if (!value.keywords && !value.searchString && !value.fields) {
-    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Provide keywords, searchString, or fields' });
+  const hasSearchInput = value.keywords || value.searchString || value.fields || value.q || value.query;
+  if (!hasSearchInput) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Provide keywords, searchString, q, query, or fields' });
   }
   if (value.keywords && value.searchString) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'keywords and searchString are mutually exclusive' });
@@ -298,6 +337,7 @@ const zMessagingManage = z.object({
   unreadOnly: z.boolean().optional(),
   limit: z.number().optional(),
   markRead: z.boolean().optional(),
+  unacked: z.boolean().optional(),
   messageIds: z.array(z.string()).optional(),
   messageId: z.string().optional(),
   all: z.boolean().optional(),
@@ -306,11 +346,16 @@ const zMessagingManage = z.object({
 
 // ── Usage ────────────────────────────────────────────────────────────────────
 const zUsageTrack = z.object({
-  id: z.string().min(1),
+  id: z.string().min(1).optional(),
+  instructionId: z.string().min(1).optional(),
   action: z.enum(USAGE_ACTIONS).optional(),
   signal: z.enum(USAGE_SIGNALS).optional(),
   comment: z.string().max(256).optional()
-}).strict();
+}).strict().superRefine((value, ctx) => {
+  if (!value.id && !value.instructionId) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Provide id (or instructionId)' });
+  }
+});
 
 const zHotset = z.object({
   limit: z.number().int().min(1).max(100).optional()
@@ -323,7 +368,7 @@ const zUsageFlush = z.object({
 
 // ── Graph ────────────────────────────────────────────────────────────────────
 const zGraphExport = z.object({
-  includeEdgeTypes: z.array(z.enum(['primary','category','belongs'])).max(3).optional(),
+  includeEdgeTypes: z.array(z.enum(['primary','category','belongs','link'])).max(4).optional(),
   maxEdges: z.number().int().min(0).optional(),
   format: z.enum(['json','dot','mermaid']).optional(),
   enrich: z.boolean().optional(),
@@ -405,6 +450,7 @@ const zodMap: Record<string, z.ZodTypeAny> = {
   'usage_track': zUsageTrack,
   'usage_hotset': zHotset,
   'index_remove': zRemove,
+  'index_patch': zIndexPatch,
   'index_reload': zEmpty,
   'index_governanceHash': zEmpty,
   'index_governanceUpdate': zGovernanceUpdate,

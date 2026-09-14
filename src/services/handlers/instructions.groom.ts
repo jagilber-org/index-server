@@ -11,7 +11,7 @@ import { migrateInstructionRecord } from '../../versioning/schemaVersion';
 import { deriveCategory, slugifyCategory } from '../categoryRules';
 import { hashBody as canonicalHashBody } from '../canonical';
 import { InstructionEntry, PRIORITY_TIERS, ArchiveReason } from '../../models/instruction';
-import { guard, computeSourceHash, normalizeCategories } from './instructions.shared';
+import { guard, computeSourceHash, normalizeCategories, looksLikeInstruction } from './instructions.shared';
 import { validateForDisk, getSchemaPropertyNames } from '../loaderSchemaValidator';
 import { sanitizeErrorDetail } from '../instructionRecordValidation';
 import { migrateLegacyInstructionEntry, SchemaMigrationResult } from '../schemaMigrationService';
@@ -127,7 +127,7 @@ registerHandler('index_repair', guard('index_repair', (_p: unknown) => {
       const filePath = path.join(dir, file);
       try {
         const raw = JSON.parse(fs.readFileSync(filePath, 'utf8')) as Record<string, unknown>;
-        if (!raw.id || !raw.body) { skippedErrors.push({ id, error: 'missing required fields (id or body)' }); continue; }
+        if (!looksLikeInstruction(raw)) { continue; }
 
         const keys = Object.keys(raw);
         let stripped = false;
@@ -268,6 +268,26 @@ registerHandler('index_groom', guard('index_groom', (p: { ids?: string[]; force?
     const normCats = normalizeCategories(e.categories || []);
     if (JSON.stringify(normCats) !== JSON.stringify(e.categories)) { e.categories = normCats; normalizedCategories++; e.updatedAt = new Date().toISOString(); updated.add(e.id); }
   }
+  // Dangling link cleanup (spec 511, V3): remove links whose targets are not in
+  // the active index AND not in the archive.
+  let danglingLinksRemoved = 0;
+  const danglingLinkDetails: Array<{ id: string; target: string; rel: string }> = [];
+  for (const e of byId.values()) {
+    if (!Array.isArray(e.links) || !e.links.length) continue;
+    const before = e.links.length;
+    const kept = e.links.filter(link => {
+      if (byId.has(link.target)) return true;
+      if (getArchivedEntry(link.target)) return true;
+      danglingLinkDetails.push({ id: e.id, target: link.target, rel: link.rel || 'related' });
+      return false;
+    });
+    if (kept.length < before) {
+      e.links = kept.length > 0 ? kept : undefined;
+      danglingLinksRemoved += before - kept.length;
+      e.updatedAt = new Date().toISOString();
+      updated.add(e.id);
+    }
+  }
   const duplicateBodies = new Set<string>();
   if (mergeDuplicates) { const groups = new Map<string, InstructionEntry[]>(); for (const e of byId.values()) { const key = e.sourceHash || computeSourceHash(e.body); const arr = groups.get(key) || []; arr.push(e); groups.set(key, arr); } for (const group of groups.values()) { if (group.length <= 1) continue; let primary = group[0]; for (const candidate of group) { if (candidate.createdAt && primary.createdAt) { if (candidate.createdAt < primary.createdAt) primary = candidate; } else if (!primary.createdAt && candidate.createdAt) { primary = candidate; } else if (candidate.id < primary.id) { primary = candidate; } } for (const dup of group) { if (dup.id === primary.id) continue; if (dup.priority < primary.priority) { primary.priority = dup.priority; updated.add(primary.id); } if (typeof dup.riskScore === 'number') { if (typeof primary.riskScore !== 'number' || dup.riskScore > primary.riskScore) { primary.riskScore = dup.riskScore; updated.add(primary.id); } } const mergedCats = Array.from(new Set([...(primary.categories || []), ...(dup.categories || [])])).sort(); if (JSON.stringify(mergedCats) !== JSON.stringify(primary.categories)) { primary.categories = mergedCats; updated.add(primary.id); } if (removeDeprecated) { duplicateBodies.add(dup.id); } else { if (dup.deprecatedBy !== primary.id) { dup.deprecatedBy = primary.id; dup.requirement = 'deprecated'; dup.updatedAt = new Date().toISOString(); updated.add(dup.id); } } duplicatesMerged++; } } }
   const archiveReasonById = new Map<string, ArchiveReason>();
@@ -359,7 +379,8 @@ registerHandler('index_groom', guard('index_groom', (p: { ids?: string[]; force?
     if (toRetire.length) notes.push(`would-archive:${toRetire.length}`);
   }
   const stAfter = ensureLoaded();
-  const resp: Record<string, unknown> = { previousHash, hash: stAfter.hash, scanned, repairedHashes, normalizedCategories, deprecatedRemoved, duplicatesMerged, signalApplied, filesRewritten, purgedScopes, migrated, remappedCategories, dryRun, notes };
+  const resp: Record<string, unknown> = { previousHash, hash: stAfter.hash, scanned, repairedHashes, normalizedCategories, deprecatedRemoved, duplicatesMerged, signalApplied, filesRewritten, purgedScopes, migrated, remappedCategories, danglingLinksRemoved, dryRun, notes };
+  if (danglingLinkDetails.length) resp.danglingLinkDetails = danglingLinkDetails;
   if (errors.length) resp.errors = errors;
   if (dryRun) {
     resp.wouldArchive = toRetire.length;
@@ -370,8 +391,8 @@ registerHandler('index_groom', guard('index_groom', (p: { ids?: string[]; force?
     if (archiveErrors.length) resp.archiveErrors = archiveErrors;
     resp.archiveLocation = resolveArchiveLocation();
   }
-  if (!dryRun && (repairedHashes || normalizedCategories || deprecatedRemoved || duplicatesMerged || signalApplied || filesRewritten || purgedScopes || migrated || remappedCategories)) {
-    logAudit('groom', undefined, { repairedHashes, normalizedCategories, deprecatedRemoved, duplicatesMerged, signalApplied, filesRewritten, purgedScopes, migrated, remappedCategories, errors: errors.length, archived: archivedIds.length, archiveErrors: archiveErrors.length });
+  if (!dryRun && (repairedHashes || normalizedCategories || deprecatedRemoved || duplicatesMerged || signalApplied || filesRewritten || purgedScopes || migrated || remappedCategories || danglingLinksRemoved)) {
+    logAudit('groom', undefined, { repairedHashes, normalizedCategories, deprecatedRemoved, duplicatesMerged, signalApplied, filesRewritten, purgedScopes, migrated, remappedCategories, danglingLinksRemoved, errors: errors.length, archived: archivedIds.length, archiveErrors: archiveErrors.length });
     attemptManifestUpdate();
   }
   return resp;

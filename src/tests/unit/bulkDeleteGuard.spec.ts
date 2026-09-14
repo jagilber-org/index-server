@@ -59,14 +59,14 @@ describe('bulk delete safety guards', () => {
 
   it('allows deletion at or below maxBulkDelete without force', async () => {
     const remove = getHandler('index_remove')!;
-    const result = await remove({ ids: ['test-1', 'test-2', 'test-3'], _viaDispatcher: true }) as Record<string, unknown>;
+    const result = await remove({ ids: ['test-1', 'test-2', 'test-3'] }) as Record<string, unknown>;
     expect(result.removed).toBe(3);
     expect(result.bulkBlocked).toBeUndefined();
   });
 
   it('blocks deletion exceeding maxBulkDelete without force', async () => {
     const remove = getHandler('index_remove')!;
-    const result = await remove({ ids: ['test-1', 'test-2', 'test-3', 'test-4'], _viaDispatcher: true }) as Record<string, unknown>;
+    const result = await remove({ ids: ['test-1', 'test-2', 'test-3', 'test-4'] }) as Record<string, unknown>;
     expect(result.removed).toBe(0);
     expect(result.bulkBlocked).toBe(true);
     expect(result.maxBulkDelete).toBe(3);
@@ -78,7 +78,7 @@ describe('bulk delete safety guards', () => {
 
   it('allows bulk deletion with force=true and creates backup', async () => {
     const remove = getHandler('index_remove')!;
-    const result = await remove({ ids: ['test-1', 'test-2', 'test-3', 'test-4'], force: true, _viaDispatcher: true }) as Record<string, unknown>;
+    const result = await remove({ ids: ['test-1', 'test-2', 'test-3', 'test-4'], force: true }) as Record<string, unknown>;
     expect(result.removed).toBe(4);
     expect(result.backupDir).toBeDefined();
     expect(typeof result.backupDir).toBe('string');
@@ -93,7 +93,7 @@ describe('bulk delete safety guards', () => {
 
   it('dryRun reports what would be deleted without deleting', async () => {
     const remove = getHandler('index_remove')!;
-    const result = await remove({ ids: ['test-1', 'test-2', 'test-nonexistent'], dryRun: true, _viaDispatcher: true }) as Record<string, unknown>;
+    const result = await remove({ ids: ['test-1', 'test-2', 'test-nonexistent'], dryRun: true }) as Record<string, unknown>;
     expect(result.dryRun).toBe(true);
     expect(result.wouldRemove).toBe(2);
     expect(result.wouldMiss).toEqual(['test-nonexistent']);
@@ -105,7 +105,7 @@ describe('bulk delete safety guards', () => {
 
   it('dryRun works even for bulk requests without requiring force', async () => {
     const remove = getHandler('index_remove')!;
-    const result = await remove({ ids: ['test-1', 'test-2', 'test-3', 'test-4', 'test-5'], dryRun: true, _viaDispatcher: true }) as Record<string, unknown>;
+    const result = await remove({ ids: ['test-1', 'test-2', 'test-3', 'test-4', 'test-5'], dryRun: true }) as Record<string, unknown>;
     expect(result.dryRun).toBe(true);
     expect(result.wouldRemove).toBe(5);
     expect(result.removed).toBe(0);
@@ -113,7 +113,7 @@ describe('bulk delete safety guards', () => {
 
   it('error message in bulk block mentions the threshold', async () => {
     const remove = getHandler('index_remove')!;
-    const result = await remove({ ids: ['test-1', 'test-2', 'test-3', 'test-4', 'test-5', 'test-6'], _viaDispatcher: true }) as Record<string, unknown>;
+    const result = await remove({ ids: ['test-1', 'test-2', 'test-3', 'test-4', 'test-5', 'test-6'] }) as Record<string, unknown>;
     expect(result.bulkBlocked).toBe(true);
     const errors = result.errors as string[];
     expect(errors[0]).toContain('INDEX_SERVER_MAX_BULK_DELETE=3');

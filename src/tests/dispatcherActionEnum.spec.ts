@@ -62,6 +62,7 @@ function createCleanEnv() {
   const env = { ...process.env };
   delete env.INDEX_SERVER_MUTATION;
   delete env.INDEX_SERVER_MUTATION;
+  for (const k of Object.keys(env)) { if (k.startsWith('npm_package_')) delete env[k]; }
   env.FORCE_COLOR = '0';
   env.NODE_ENV = 'test';
   return env;
@@ -117,7 +118,7 @@ describe('Dispatcher Action Enum Validation', () => {
 
     // Wait for initialization
     send({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'test', version: '1.0.0' } } });
-    await waitForResponse(1);
+    await waitForResponse(1, TIMEOUT);
 
     // Send initialized notification (no response expected)
     if (proc.stdin) {
@@ -135,40 +136,58 @@ describe('Dispatcher Action Enum Validation', () => {
     }
   });
 
-  it('capabilities action returns all 21 supported actions', async () => {
+  it('capabilities version matches package.json, not 0.0.0 zombie sentinel (#506)', async () => {
     send({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: {
       name: 'index_dispatch',
       arguments: { action: 'capabilities' }
     }});
 
     const resp = await waitForResponse(2);
-
     expect(resp.error).toBeUndefined();
-    expect(resp.result).toBeDefined();
 
-    const result = extractToolResult(resp) as { supportedActions: string[]; mutationEnabled: boolean; version: string };
+    const result = extractToolResult(resp) as { version: string };
+    const pkgVersion = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../../package.json'), 'utf8')).version;
+    expect(result.version).toBe(pkgVersion);
+    expect(result.version).not.toBe('0.0.0');
+  }, TIMEOUT);
 
-    expect(result.supportedActions).toBeInstanceOf(Array);
-    expect(result.supportedActions.length).toBeGreaterThanOrEqual(21);
+  it('capabilities supportedActions has no duplicates (#507)', async () => {
+    send({ jsonrpc: '2.0', id: 3, method: 'tools/call', params: {
+      name: 'index_dispatch',
+      arguments: { action: 'capabilities' }
+    }});
 
-    // Verify all expected actions are present
-    const expectedActions = [
-      // Queries
-      'list', 'get', 'search', 'query', 'categories', 'diff', 'export',
-      // Mutations
-      'add', 'import', 'remove', 'reload', 'groom', 'repair', 'enrich',
-      // Governance
-      'governanceHash', 'governanceUpdate',
-      // Utilities
-      'health', 'inspect', 'dir', 'capabilities', 'batch'
-    ];
+    const resp = await waitForResponse(3);
+    expect(resp.error).toBeUndefined();
 
-    for (const action of expectedActions) {
-      expect(result.supportedActions).toContain(action);
-    }
+    const result = extractToolResult(resp) as { supportedActions: string[] };
+    const unique = [...new Set(result.supportedActions)];
+    expect(result.supportedActions).toHaveLength(unique.length);
+  }, TIMEOUT);
 
+  it('capabilities supportedActions matches handler registry exactly', async () => {
+    send({ jsonrpc: '2.0', id: 4, method: 'tools/call', params: {
+      name: 'index_dispatch',
+      arguments: { action: 'capabilities' }
+    }});
+
+    const resp = await waitForResponse(4);
+    expect(resp.error).toBeUndefined();
+
+    const result = extractToolResult(resp) as { supportedActions: string[]; mutationEnabled: boolean };
     expect(result.mutationEnabled).toBe(true);
-    expect(result.version).toBeDefined();
+
+    const expectedActions = [
+      // Query handlers (instructionActions keys)
+      'list', 'listScoped', 'get', 'getEnhanced', 'search', 'diff', 'export', 'query', 'categories', 'dir',
+      // Mutation/governance handlers (methodMap keys)
+      'add', 'import', 'patch', 'remove', 'reload', 'groom', 'repair', 'enrich',
+      'governanceHash', 'governanceUpdate', 'health', 'inspect',
+      'archive', 'restore', 'purgeArchive', 'listArchived', 'getArchived',
+      // Special-cased dispatcher actions
+      'capabilities', 'batch', 'manifestStatus', 'manifestRefresh', 'manifestRepair'
+    ].sort();
+    expect([...result.supportedActions].sort()).toEqual(expectedActions);
   }, TIMEOUT);
 
   it('invalid action returns enhanced error with capabilities hint', async () => {
@@ -366,7 +385,7 @@ describe('Dispatcher Tool Schema Validation', () => {
     proc.stdout?.on('data', (chunk: string) => parser.push(chunk));
 
     send({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'test', version: '1.0.0' } } });
-    await waitForResponse(1);
+    await waitForResponse(1, TIMEOUT);
 
     // Send initialized notification (no response expected)
     if (proc.stdin) {

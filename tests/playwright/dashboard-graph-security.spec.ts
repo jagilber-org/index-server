@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { test, expect } from '@playwright/test';
 
-test('admin.graph.js strips script, event handlers, unsafe URLs, and foreignObject nodes from Mermaid SVG output', async ({
+test('admin.graph.js strips script, event handlers, and unsafe URLs from Mermaid SVG output while preserving foreignObject labels', async ({
   page,
 }) => {
   await page.setContent(`
@@ -97,7 +97,7 @@ test('admin.graph.js strips script, event handlers, unsafe URLs, and foreignObje
 
   expect(sanitized.hasSvg).toBe(true);
   expect(sanitized.scriptCount).toBe(0);
-  expect(sanitized.foreignObjectCount).toBe(0);
+  expect(sanitized.foreignObjectCount).toBe(1);
   expect(sanitized.inlineHandlerNames).toHaveLength(0);
   expect(sanitized.unsafeHrefs).toHaveLength(0);
   expect(sanitized.unsafeStyles).toHaveLength(0);

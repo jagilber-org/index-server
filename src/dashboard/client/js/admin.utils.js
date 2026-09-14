@@ -21,6 +21,39 @@
     return Math.round(bytes / Math.pow(1024, i) * 100) / 100 + ' ' + sizes[i];
   }
 
+  /**
+   * Resolve a CSS custom property from :root, so JS-drawn surfaces (canvas
+   * charts) track the theme instead of duplicating its hex literals.
+   *
+   * Two non-obvious behaviours, both load-bearing (issue #525, ADR Q7):
+   *  - getPropertyValue() returns the declaration text verbatim, which for
+   *    `--admin-accent: #3b82f6;` includes the leading space. Untrimmed, that
+   *    string is rejected by some canvas colour parsers.
+   *  - It returns '' for an unset property, and jsdom returns '' for ALL custom
+   *    properties. The fallback is therefore the real path exercised under
+   *    test, not defensive dead code.
+   *
+   * Deliberately uncached: callers resolve their palette once per render pass
+   * (see admin.performance.chart.js). Caching here would freeze the theme
+   * process-wide and defeat any future light/dark toggle.
+   *
+   * @param {string} name Custom property name, including the leading `--`.
+   * @param {string} fallback Value used when the property resolves empty.
+   * @returns {string} Trimmed property value, or fallback.
+   */
+  function themeVar(name, fallback){
+    try {
+      var raw = getComputedStyle(document.documentElement).getPropertyValue(name);
+      var value = (raw == null ? '' : String(raw)).trim();
+      return value || fallback;
+    } catch {
+      // getComputedStyle throws on a detached/destroyed document. Returning the
+      // fallback IS the handling (CQ-6): the caller gets a usable colour and the
+      // chart still draws, which is strictly better than propagating.
+      return fallback;
+    }
+  }
+
   function showError(message){
     const container = document.querySelector('.admin-container');
     if(!container) return;
@@ -85,6 +118,7 @@
     showError,
     showSuccess,
     showRateLimitBanner,
+    themeVar,
     clearRateLimitBanner
   });
   if (!window.escapeHtml) window.escapeHtml = escapeHtml;

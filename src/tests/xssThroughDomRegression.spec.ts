@@ -57,7 +57,7 @@ describe('#352 XSS-through-DOM regression (admin.graph.js sanitizeGraphSvg)', ()
     const allowlistBlock = SRC.match(/const SVG_ALLOWED_TAGS = new Map\(\[([\s\S]*?)\]\);/);
     expect(allowlistBlock, 'SVG_ALLOWED_TAGS map must exist').toBeTruthy();
     const body = allowlistBlock![1].toLowerCase();
-    for (const banned of ['script', 'foreignobject', 'iframe', 'object', 'embed', 'animate', 'set', 'handler']) {
+    for (const banned of ['script', 'iframe', 'object', 'embed', 'animate', 'set', 'handler']) {
       expect(body, `tag "${banned}" must NOT be allowlisted`).not.toMatch(
         new RegExp(`['"]${banned}['"]`)
       );
@@ -135,7 +135,26 @@ describe('#352 XSS-through-DOM regression (admin.graph.js sanitizeGraphSvg)', ()
     expect(parserErrorGates.length, 'expect ≥2 parser-error gates (first + reparse)').toBeGreaterThanOrEqual(2);
   });
 
-  it('case 10 — IIFE encapsulation: sanitizer internals are not leaked to global scope', () => {
+  it('case 10 — foreignObject children use a separate HTML sanitizer that strips event handlers', () => {
+    expect(SRC).toContain('HTML_ALLOWED_TAGS');
+    expect(SRC).toContain('HTML_ALLOWED_ATTRS');
+    expect(SRC).toContain('sanitizeHtmlNode');
+    // foreignObject children are routed through the HTML sanitizer, not the SVG one
+    expect(SRC).toMatch(/canonicalTag === ['"]foreignObject['"].*sanitizeHtmlNode/s);
+    // HTML sanitizer also rejects on* event handlers
+    expect(SRC).toMatch(/sanitizeHtmlNode[\s\S]*?name\.startsWith\(['"]on['"]\)/);
+    // HTML allowed tags must NOT include script, iframe, object, embed
+    const htmlTagBlock = SRC.match(/const HTML_ALLOWED_TAGS = new Set\(\[([\s\S]*?)\]\);/);
+    expect(htmlTagBlock, 'HTML_ALLOWED_TAGS set must exist').toBeTruthy();
+    const htmlBody = htmlTagBlock![1].toLowerCase();
+    for (const banned of ['script', 'iframe', 'object', 'embed', 'link', 'meta', 'form', 'input', 'textarea', 'button']) {
+      expect(htmlBody, `HTML tag "${banned}" must NOT be allowlisted`).not.toMatch(
+        new RegExp(`['"]${banned}['"]`)
+      );
+    }
+  });
+
+  it('case 11 — IIFE encapsulation: sanitizer internals are not leaked to global scope', () => {
     // The file is wrapped `(function(){ ... })();` — sanitizer functions
     // remain module-private so adversaries can't monkey-patch them from a
     // sibling script. (This is also why we can't unit-test the function

@@ -19,7 +19,7 @@
  *   - getArchived() hit + miss byte-identical between backends.
  *   - purgeArchive removes only from archive side; active store untouched.
  *   - computeArchiveHash() stable across no-op reads.
- *   - migration of a v6 entry through JSON + SQLite ends up at schemaVersion '7'.
+ *   - migration of a v6 entry through JSON + SQLite ends up at the current SCHEMA_VERSION.
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
@@ -30,7 +30,7 @@ import { JsonFileStore } from '../../../services/storage/jsonFileStore.js';
 import { SqliteStore } from '../../../services/storage/sqliteStore.js';
 import type { IInstructionStore, ArchiveMeta } from '../../../services/storage/types.js';
 import type { InstructionEntry, ArchiveReason, ArchiveSource } from '../../../models/instruction.js';
-import { migrateInstructionRecord } from '../../../versioning/schemaVersion.js';
+import { migrateInstructionRecord, SCHEMA_VERSION } from '../../../versioning/schemaVersion.js';
 
 function makeEntry(id: string, over: Partial<InstructionEntry> = {}): InstructionEntry {
   const now = '2025-01-01T00:00:00.000Z';
@@ -44,7 +44,7 @@ function makeEntry(id: string, over: Partial<InstructionEntry> = {}): Instructio
     categories: ['general'],
     contentType: 'instruction',
     sourceHash: 'h',
-    schemaVersion: '7',
+    schemaVersion: SCHEMA_VERSION,
     createdAt: now,
     updatedAt: now,
     ...over,
@@ -285,7 +285,7 @@ describe('cross-backend parity expansion (Phase G1)', () => {
   });
 
   describe('v6 → v7 migration parity', () => {
-    it('a v6 raw record migrates to v7 and writes successfully into both backends', () => {
+    it('a v6 raw record migrates to the current version and writes successfully into both backends', () => {
       const v6 = {
         id: 'old',
         title: 'Old entry',
@@ -303,15 +303,15 @@ describe('cross-backend parity expansion (Phase G1)', () => {
 
       const result = migrateInstructionRecord(v6);
       expect(result.changed).toBe(true);
-      expect(v6.schemaVersion).toBe('7');
+      expect(v6.schemaVersion).toBe(SCHEMA_VERSION);
 
       d.json.write(v6 as unknown as InstructionEntry);
       d.sqlite.write(v6 as unknown as InstructionEntry);
 
       const aj = d.json.get('old');
       const as = d.sqlite.get('old');
-      expect(aj?.schemaVersion).toBe('7');
-      expect(as?.schemaVersion).toBe('7');
+      expect(aj?.schemaVersion).toBe(SCHEMA_VERSION);
+      expect(as?.schemaVersion).toBe(SCHEMA_VERSION);
       // Active hashes must match across backends for the migrated record
       expect(d.sqlite.computeHash()).toBe(d.json.computeHash());
     });

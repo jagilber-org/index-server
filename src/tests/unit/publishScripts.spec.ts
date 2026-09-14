@@ -134,7 +134,7 @@ function cleanupStagingDir() {
 
 describe('publish script hardening', () => {
 
-  describe.skipIf(!HAS_PS1_SCRIPT || !HAS_PUBLISH_EXCLUDE)('forbidden list consistency', () => {
+  describe.skipIf(!HAS_PS1_SCRIPT || !HAS_PUBLISH_EXCLUDE)('forbidden list consistency', () => { // SKIP_OK: environment-gated: requires publish scripts on PATH
     let cjsList: string[];
     let ps1List: string[];
 
@@ -169,7 +169,7 @@ describe('publish script hardening', () => {
     });
   });
 
-  describe.skipIf(!HAS_PUBLISH_EXCLUDE)('dotfile stripping behavior', () => {
+  describe.skipIf(!HAS_PUBLISH_EXCLUDE)('dotfile stripping behavior', () => { // SKIP_OK: environment-gated: requires .publish-exclude file
     let fakeRoot: string;
     let outputDir: string;
 
@@ -232,7 +232,7 @@ describe('publish script hardening', () => {
     expect(gitignoreLines).not.toContain('governance/');
   });
 
-  describe.skipIf(!HAS_PUBLISH_EXCLUDE)('--verify-only flag', () => {
+  describe.skipIf(!HAS_PUBLISH_EXCLUDE)('--verify-only flag', () => { // SKIP_OK: environment-gated: requires .publish-exclude file
     let verifyOutput: string;
 
     beforeAll(() => {
@@ -255,7 +255,7 @@ describe('publish script hardening', () => {
     });
   });
 
-  describe.skipIf(!HAS_CLEANROOM_SCRIPT)('New-CleanRoomCopy.ps1 blocklist coverage', () => {
+  describe.skipIf(!HAS_CLEANROOM_SCRIPT)('New-CleanRoomCopy.ps1 blocklist coverage', () => { // SKIP_OK: environment-gated: requires New-CleanRoomCopy.ps1 script
     let dotfileBlocklist: string[];
     let builtinForbidden: string[];
 

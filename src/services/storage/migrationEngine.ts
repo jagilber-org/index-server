@@ -9,16 +9,32 @@ import path from 'path';
 import { JsonFileStore } from './jsonFileStore.js';
 import { JsonEmbeddingStore } from './jsonEmbeddingStore.js';
 import { SqliteStore } from './sqliteStore.js';
+import { SqliteUsageStore } from './sqliteUsageStore.js';
 import type { IEmbeddingStore } from './types.js';
+import {
+  resolveUsageSnapshotPath,
+  readUsageSnapshotFile,
+  writeUsageSnapshotFile,
+  mergeUsageRecord,
+  type UsageSnapshotRecord,
+} from './usageSnapshotFile.js';
 
 export interface MigrationOptions {
   onProgress?: (current: number, total: number) => void;
+  /**
+   * Path to the usage snapshot file (the authoritative counter store for the
+   * JSON backend). Defaults to the process-resolved path. Set to `null` to skip
+   * usage merging entirely.
+   */
+  usageSnapshotPath?: string | null;
 }
 
 export interface MigrationResult {
   migrated: number;
   /** Number of archived entries also migrated (Phase B5 / spec 006). */
   archivedMigrated: number;
+  /** Number of entries that had usage counters merged from the snapshot. */
+  usageMerged: number;
   errors: { file: string; error: string }[];
 }
 
@@ -26,6 +42,8 @@ export interface ExportResult {
   exported: number;
   /** Number of archived entries also exported (Phase B5 / spec 006). */
   archivedExported: number;
+  /** Number of entries written into the exported usage snapshot. */
+  usageExported: number;
   errors: { id: string; error: string }[];
 }
 
@@ -51,6 +69,25 @@ export function migrateJsonToSqlite(
   const archived = jsonStore.listArchived();
   const total = entries.length + archived.length;
   const errors = [...loadResult.errors];
+
+  // Usage counters live in the usage snapshot, NOT in the entry files —
+  // incrementUsage flushes to the snapshot and never rewrites the entry. Reading
+  // only the entry files (as this function used to) dropped every counter.
+  const snapshotPath = opts?.usageSnapshotPath === undefined
+    ? resolveUsageSnapshotPath()
+    : opts.usageSnapshotPath;
+  const usageSnapshot: Record<string, UsageSnapshotRecord> =
+    snapshotPath == null ? {} : readUsageSnapshotFile(snapshotPath);
+  let usageMerged = 0;
+  for (const entry of [...entries, ...archived]) {
+    const rec = Object.prototype.hasOwnProperty.call(usageSnapshot, entry.id)
+      ? usageSnapshot[entry.id]
+      : undefined;
+    if (rec) {
+      mergeUsageRecord(entry as unknown as Record<string, unknown>, rec);
+      usageMerged++;
+    }
+  }
 
   // Ensure DB directory exists
   const dbDir = path.dirname(dbPath);
@@ -115,7 +152,53 @@ export function migrateJsonToSqlite(
     jsonStore.close();
   }
 
-  return { migrated, archivedMigrated, errors };
+  // With the SQLite backend, the `usage` table — not usage-snapshot.json — is
+  // the authoritative counter store at runtime. Seed it from the same merged
+  // records so counters are live immediately after migration, not just embedded
+  // in the instructions rows.
+  if (usageMerged > 0 || Object.keys(usageSnapshot).length > 0) {
+    let usageStore: SqliteUsageStore | undefined;
+    try {
+      usageStore = new SqliteUsageStore(dbPath);
+      const existing = usageStore.readAll();
+      const merged: Record<string, UsageSnapshotRecord> = { ...existing };
+      for (const entry of [...entries, ...archived]) {
+        const hasUsage =
+          entry.usageCount != null || entry.retrievedCount != null ||
+          entry.appliedCount != null || entry.firstSeenTs != null || entry.lastUsedAt != null;
+        if (!hasUsage) continue;
+        const prev = Object.prototype.hasOwnProperty.call(merged, entry.id)
+          ? merged[entry.id]
+          : undefined;
+        const rec: UsageSnapshotRecord = { ...(prev ?? {}) };
+        mergeUsageRecord(rec as unknown as Record<string, unknown>, {
+          usageCount: entry.usageCount,
+          retrievedCount: entry.retrievedCount,
+          appliedCount: entry.appliedCount,
+          firstSeenTs: entry.firstSeenTs,
+          lastUsedAt: entry.lastUsedAt,
+          lastRetrievedAt: entry.lastRetrievedAt,
+          lastAppliedAt: entry.lastAppliedAt,
+        });
+        // Carry signal metadata straight across — it has no monotonic ordering.
+        const src = usageSnapshot[entry.id];
+        if (src?.lastAction) rec.lastAction = src.lastAction;
+        if (src?.lastSignal) rec.lastSignal = src.lastSignal;
+        if (src?.lastComment) rec.lastComment = src.lastComment;
+        merged[entry.id] = rec;
+      }
+      usageStore.writeAll(merged);
+    } catch (err) {
+      errors.push({
+        file: '<usage-table>',
+        error: err instanceof Error ? err.message : 'Usage table seed failed',
+      });
+    } finally {
+      try { usageStore?.close(); } catch { /* already closed */ }
+    }
+  }
+
+  return { migrated, archivedMigrated, usageMerged, errors };
 }
 
 /**
@@ -196,7 +279,65 @@ export function migrateSqliteToJson(
     jsonStore.close();
   }
 
-  return { exported, archivedExported, errors };
+  // The JSON backend reads counters from the usage snapshot, not from the entry
+  // files, so exporting entries alone would leave usage invisible at runtime.
+  // Merge onto any existing snapshot rather than clobbering it.
+  const snapshotPath = opts?.usageSnapshotPath === undefined
+    ? resolveUsageSnapshotPath()
+    : opts.usageSnapshotPath;
+  let usageExported = 0;
+  if (snapshotPath != null) {
+    const snapshot = readUsageSnapshotFile(snapshotPath);
+    const touched = new Set<string>();
+    // The SQLite `usage` table is authoritative for that backend and may hold
+    // counters (and signal metadata) that never made it onto the instruction
+    // rows, so fold it in before writing the JSON snapshot.
+    let sqliteUsage: Record<string, UsageSnapshotRecord> = {};
+    let usageStore: SqliteUsageStore | undefined;
+    try {
+      usageStore = new SqliteUsageStore(dbPath);
+      sqliteUsage = usageStore.readAll();
+    } catch {
+      sqliteUsage = {};
+    } finally {
+      try { usageStore?.close(); } catch { /* already closed */ }
+    }
+    for (const [id, rec] of Object.entries(sqliteUsage)) {
+      const existing = Object.prototype.hasOwnProperty.call(snapshot, id) ? snapshot[id] : undefined;
+      const target: UsageSnapshotRecord = { ...(existing ?? {}) };
+      mergeUsageRecord(target as unknown as Record<string, unknown>, rec);
+      if (rec.lastAction) target.lastAction = rec.lastAction;
+      if (rec.lastSignal) target.lastSignal = rec.lastSignal;
+      if (rec.lastComment) target.lastComment = rec.lastComment;
+      snapshot[id] = target;
+      touched.add(id);
+    }
+    for (const entry of [...entries, ...archived]) {
+      const hasUsage =
+        entry.usageCount != null || entry.retrievedCount != null ||
+        entry.appliedCount != null || entry.firstSeenTs != null || entry.lastUsedAt != null;
+      if (!hasUsage) continue;
+      const existing = Object.prototype.hasOwnProperty.call(snapshot, entry.id)
+        ? snapshot[entry.id]
+        : undefined;
+      const rec: UsageSnapshotRecord = { ...(existing ?? {}) };
+      mergeUsageRecord(rec as unknown as Record<string, unknown>, {
+        usageCount: entry.usageCount,
+        retrievedCount: entry.retrievedCount,
+        appliedCount: entry.appliedCount,
+        firstSeenTs: entry.firstSeenTs,
+        lastUsedAt: entry.lastUsedAt,
+        lastRetrievedAt: entry.lastRetrievedAt,
+        lastAppliedAt: entry.lastAppliedAt,
+      });
+      snapshot[entry.id] = rec;
+      touched.add(entry.id);
+    }
+    usageExported = touched.size;
+    if (usageExported > 0) writeUsageSnapshotFile(snapshotPath, snapshot);
+  }
+
+  return { exported, archivedExported, usageExported, errors };
 }
 
 export interface EmbeddingMigrationResult {

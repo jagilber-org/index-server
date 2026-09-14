@@ -12,17 +12,24 @@ import path from 'path';
 // ─── #131: invariant repair summary export ──────────────────────
 describe('#131: invariant repair summary surfaced', () => {
   it('indexContext exports getInvariantRepairSummary', () => {
-    const src = fs.readFileSync(
+    // The invariant-repair subsystem lives in indexUsage.ts (split for CQ-1, #461 F-003)
+    // and is re-exported from indexContext.ts for backward compatibility.
+    const usageSrc = fs.readFileSync(
+      path.join(process.cwd(), 'src/services/indexUsage.ts'),
+      'utf8'
+    );
+    expect(usageSrc).toContain('export function getInvariantRepairSummary');
+    expect(usageSrc).toContain('trackInvariantRepair');
+    const contextSrc = fs.readFileSync(
       path.join(process.cwd(), 'src/services/indexContext.ts'),
       'utf8'
     );
-    expect(src).toContain('export function getInvariantRepairSummary');
-    expect(src).toContain('trackInvariantRepair');
+    expect(contextSrc).toContain('getInvariantRepairSummary');
   });
 
   it('repair functions call trackInvariantRepair for each source', () => {
     const src = fs.readFileSync(
-      path.join(process.cwd(), 'src/services/indexContext.ts'),
+      path.join(process.cwd(), 'src/services/indexUsage.ts'),
       'utf8'
     );
     // firstSeen repair sources
@@ -138,6 +145,10 @@ describe('#139: backgroundServicesStartup error surfacing', () => {
     // Should push to started array on success
     expect(src).toContain("started.push('indexVersionPoller')");
     expect(src).toContain("started.push('autoBackup')");
+    // #485 review: startAutoBackup() returns null when auto-backup is disabled or
+    // the implicit-source guard refuses. Reporting it as started in that case makes
+    // a refusal indistinguishable from a successful start in startup diagnostics.
+    expect(src).toMatch(/if\s*\(startAutoBackup\(\)\)\s*started\.push\('autoBackup'\)/);
     // Should push to errors array on failure
     expect(src).toContain("errors.push({ service: 'indexVersionPoller'");
     expect(src).toContain("errors.push({ service: 'autoBackup'");

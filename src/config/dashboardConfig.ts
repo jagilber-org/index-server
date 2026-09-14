@@ -4,8 +4,9 @@
 import path from 'path';
 import { getBooleanEnv, parseBooleanEnv } from '../utils/envUtils';
 import { DEFAULT_SESSION_PERSISTENCE_CONFIG, SESSION_PERSISTENCE_ENV_VARS } from '../models/SessionPersistence.js';
-import { CWD, toAbsolute, numberFromEnv, stringFromEnv } from './configUtils';
+import { toAbsolute, toStateAbsolute, numberFromEnv, stringFromEnv } from './configUtils';
 import { DIR } from './dirConstants';
+import { resolveStateDir } from './serviceEnv';
 import { DEFAULT_TIMEOUTS_MS, DEFAULT_LIMITS, DEFAULT_PORTS } from './defaultValues';
 
 function isDevMode(): boolean {
@@ -75,10 +76,39 @@ export function parseDashboardConfig(mutationEnabled: boolean, instructionsBaseD
   const persistenceDefaults = DEFAULT_SESSION_PERSISTENCE_CONFIG;
   const persistenceEnv = SESSION_PERSISTENCE_ENV_VARS;
   const persistenceEnabled = parseBooleanEnv(process.env[persistenceEnv.ENABLED], persistenceDefaults.enabled);
-  const persistenceDir = toAbsolute(process.env[persistenceEnv.PERSISTENCE_DIR], persistenceDefaults.persistenceDir);
+  const persistenceDir = toStateAbsolute(process.env[persistenceEnv.PERSISTENCE_DIR], persistenceDefaults.persistenceDir);
   const persistenceInterval = numberFromEnv(persistenceEnv.PERSISTENCE_INTERVAL_MS, persistenceDefaults.persistence.intervalMs);
-  const backupsDir = toAbsolute(process.env.INDEX_SERVER_BACKUPS_DIR, path.join(CWD, DIR.BACKUPS));
-  const stateDir = toAbsolute(process.env.INDEX_SERVER_STATE_DIR, path.join(CWD, DIR.DATA_STATE));
+  // Backup target, in precedence order:
+  //
+  //   1. INDEX_SERVER_BACKUPS_DIR           — explicit operator choice
+  //   2. <INDEX_SERVER_DIR>/../backups      — sibling of the CONFIGURED catalog
+  //   3. <STATE_ROOT>/backups               — no catalog configured
+  //
+  // Rule 2 is deliberate and stays: a backup should sit next to the thing it
+  // backs up, which is what `getAutoBackupSourceMismatch()` exists to police.
+  // When the operator has named a catalog, that relationship is meaningful.
+  //
+  // Rule 3 is the #577 fix. Previously rule 2 applied unconditionally, and with
+  // INDEX_SERVER_DIR unset the "source" is itself only a cwd fallback
+  // (`<cwd>/instructions`) — so the sibling resolved to `<cwd>/backups`, and
+  // auto-backup wrote a rotating, hourly, ten-deep copy of the whole catalog
+  // into whatever directory the MCP client happened to be launched from. One
+  // private copy per client project folder, none of them the one the dashboard
+  // reads. There is no meaningful source to follow in that case, so it anchors
+  // to STATE_ROOT like every other artifact in #577's table. This artifact is
+  // absent from that issue's own list, which is how it survived the change.
+  //
+  // A RELATIVE INDEX_SERVER_BACKUPS_DIR resolves against STATE_ROOT rather than
+  // cwd, matching the other state paths — a relative value anchored to cwd is
+  // the same defect wearing an override.
+  const catalogConfigured = !!process.env.INDEX_SERVER_DIR?.trim();
+  const backupsDir = toStateAbsolute(
+    process.env.INDEX_SERVER_BACKUPS_DIR,
+    catalogConfigured ? path.resolve(instructionsBaseDir, '..', DIR.BACKUPS) : DIR.BACKUPS,
+  );
+  // Shared with the thin client, which reads the lock file this directory holds
+  // (#611). One definition so the writer and the reader cannot drift apart.
+  const stateDir = resolveStateDir();
   return {
     http: {
       enable: getBooleanEnv('INDEX_SERVER_DASHBOARD'),

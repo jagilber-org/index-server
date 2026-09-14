@@ -23,6 +23,11 @@ vi.mock('../../server/registry', async (importOriginal) => {
 
 vi.mock('../../services/indexContext', () => ({
   ensureLoadedAsync,
+  // No-op guard seam: instructions.import.ts opens a bulk-mutation scope so
+  // background samplers skip the partially-rebuilt index. Irrelevant to this
+  // spec's assertions, but the mock is exhaustive, so it must be declared.
+  beginBulkMutation: () => undefined,
+  endBulkMutation: () => undefined,
   getInstructionsDir: () => instructionsDir,
   invalidate,
   touchIndexVersion,

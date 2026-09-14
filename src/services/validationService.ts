@@ -77,7 +77,13 @@ function buildValidator(method: string): ValidatorEntry | null {
       } as CompositeValidator;
       return v;
     }
-    return { validate: (d: unknown) => compiled(d), errors: null } as unknown as ValidatorEntry;
+    // Ajv-only arm: taken when the tool has no Zod schema, or when
+    // INDEX_SERVER_VALIDATION_MODE=ajv forces it. `compiled` must be carried on
+    // `ajvFn` so `validateParams` can reach the errors Ajv writes onto it —
+    // they land on `compiled`, which the arrow below merely closes over and
+    // would otherwise never expose, yielding an empty `errors` array and a
+    // contentless `-32602`.
+    return { validate: (d: unknown) => compiled(d), errors: null, ajvFn: compiled } as CompositeValidator;
   } catch { return null; }
 }
 
@@ -100,8 +106,8 @@ export function validateParams(method: string, params: unknown): { ok: true } | 
     return { ok: true };
   }
   if(hasZod){ validationCounters.zodFailure++; } else { validationCounters.ajvFailure++; }
-  const v: unknown = entry.validate;
-  const errors = (v && typeof v === 'object' && 'errors' in (v as Record<string,unknown>)) ? (v as { errors?: ErrorObject[] }).errors || [] : [];
+  const cv = entry as CompositeValidator;
+  const errors = cv.ajvFn?.errors || (entry.validate as unknown as { errors?: ErrorObject[] }).errors || [];
   return { ok: false, errors };
 }
 

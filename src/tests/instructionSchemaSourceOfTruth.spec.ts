@@ -12,6 +12,7 @@ import {
   validateRecord,
   validateInput,
 } from '../schemas/instructionSchema';
+import { interfaceFieldNames } from './helpers/modelFields.js';
 
 /**
  * Source-of-truth contract guardrails.
@@ -123,10 +124,10 @@ describe('instruction schema — single source of truth', () => {
   it('TypeScript InstructionEntry interface keys are a subset of RECORD_PROPERTY_KEYS (or transient extras)', () => {
     const modelPath = path.join(process.cwd(), 'src', 'models', 'instruction.ts');
     const source = fs.readFileSync(modelPath, 'utf8');
-    const fieldRegex = /^\s+(\w+)\??:\s/gm;
-    const modelFields = new Set<string>();
-    let m: RegExpExecArray | null;
-    while ((m = fieldRegex.exec(source)) !== null) modelFields.add(m[1]);
+    // Scoped to InstructionEntry: an unscoped scrape also picks up sibling interfaces
+    // such as InstructionLink, whose fields are nested under `links` rather than root
+    // properties of the schema.
+    const modelFields = interfaceFieldNames(source, 'InstructionEntry');
     const missing = [...modelFields].filter((f) => !RECORD_PROPERTY_KEYS.has(f));
     // Drift here means the TS interface added a field that isn't in the canonical
     // schema. Add it to schemas/instruction.schema.json with the right

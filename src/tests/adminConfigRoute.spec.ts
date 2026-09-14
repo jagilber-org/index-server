@@ -20,12 +20,12 @@
  * Refs #359
  */
 import { describe, it, expect, beforeEach, afterEach, expectTypeOf } from 'vitest';
-import http from 'http';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import type { AdminConfig } from '../dashboard/server/AdminPanelConfig';
 import { DashboardServer } from '../dashboard/server/DashboardServer.js';
+import { requestLoopback } from './util/loopbackHttp';
 
 interface FlagRuntime {
   name: string;
@@ -57,38 +57,22 @@ function serverUrl(s: DashboardServer): string {
   return `http://${info.host}:${info.port}`;
 }
 
-function request(opts: { url: string; method?: string; body?: unknown; headers?: Record<string, string> }): Promise<{ status: number; json: unknown; raw: string }> {
-  return new Promise((resolve, reject) => {
-    const u = new URL(opts.url);
-    const data = opts.body !== undefined ? JSON.stringify(opts.body) : undefined;
-    const headers: Record<string, string | number> = { ...(opts.headers ?? {}) };
-    if (data) {
-      headers['content-type'] = 'application/json';
-      headers['content-length'] = Buffer.byteLength(data);
-    }
-    const req = http.request(
-      {
-        host: u.hostname,
-        port: u.port,
-        path: u.pathname + u.search,
-        method: opts.method ?? 'GET',
-        headers,
-      },
-      (res) => {
-        let raw = '';
-        res.on('data', (c) => { raw += c; });
-        res.on('end', () => {
-          let json: unknown = null;
-          try { json = JSON.parse(raw); } catch { /* leave null */ }
-          resolve({ status: res.statusCode ?? 0, json, raw });
-        });
-        res.on('error', reject);
-      }
-    );
-    req.on('error', reject);
-    if (data) req.write(data);
-    req.end();
+async function request(opts: { url: string; method?: string; body?: unknown; headers?: Record<string, string> }): Promise<{ status: number; json: unknown; raw: string }> {
+  const data = opts.body !== undefined ? JSON.stringify(opts.body) : undefined;
+  const headers: Record<string, string | number> = { ...(opts.headers ?? {}) };
+  if (data) {
+    headers['content-type'] = 'application/json';
+    headers['content-length'] = Buffer.byteLength(data);
+  }
+  const response = await requestLoopback({
+    url: opts.url,
+    method: opts.method,
+    body: data,
+    headers,
   });
+  let json: unknown = null;
+  try { json = JSON.parse(response.body); } catch { /* leave null */ }
+  return { status: response.status, json, raw: response.body };
 }
 
 describe('/api/admin/config — T4 + T6 red', () => {
@@ -96,7 +80,17 @@ describe('/api/admin/config — T4 + T6 red', () => {
   let url: string;
   let overlayDir: string;
   const saved: Record<string, string | undefined> = {};
-  const KEYS = ['INDEX_SERVER_OVERRIDES_FILE', 'INDEX_SERVER_VERBOSE_LOGGING', 'INDEX_SERVER_MUTATION', 'INDEX_SERVER_ADMIN_API_KEY', 'INDEX_SERVER_DISABLE_OVERRIDES'];
+  const KEYS = [
+    'INDEX_SERVER_OVERRIDES_FILE',
+    'INDEX_SERVER_VERBOSE_LOGGING',
+    'INDEX_SERVER_MUTATION',
+    'INDEX_SERVER_ADMIN_API_KEY',
+    'INDEX_SERVER_DISABLE_OVERRIDES',
+    'INDEX_SERVER_HOOK_ON_CREATE',
+    'INDEX_SERVER_HOOK_ON_UPDATE',
+    'INDEX_SERVER_HOOK_ON_REMOVE',
+    'INDEX_SERVER_HOOK_ON_CHANGE',
+  ];
 
   beforeEach(async () => {
     for (const k of KEYS) {
@@ -214,6 +208,49 @@ describe('/api/admin/config — T4 + T6 red', () => {
       expect(body.results.INDEX_SERVER_VERBOSE_LOGGING.applied).toBe(true);
       expect(body.results.INDEX_SERVER_DASHBOARD_PORT.applied).toBe(false);
       expect(body.results.INDEX_SERVER_DASHBOARD_PORT.error).toBeTruthy();
+    });
+
+    it('refuses to persist a value that cannot be loaded, instead of 200-then-brick', async () => {
+      // Regression: INDEX_SERVER_MESSAGING_DIR is editable, and per-field
+      // validation (type/range/enum/pattern) cannot express "must not resolve
+      // inside INDEX_SERVER_DIR". The value used to be written to the overlay,
+      // the follow-on reload threw and was swallowed, and the caller still got
+      // HTTP 200 — while the overlay was replayed into process.env on every
+      // later boot, killing the server during module evaluation and taking
+      // this dashboard down with it.
+      const catalog = fs.mkdtempSync(path.join(os.tmpdir(), 'idx-catalog-'));
+      const priorDir = process.env.INDEX_SERVER_DIR;
+      process.env.INDEX_SERVER_DIR = catalog;
+      try {
+        const poisoned = path.join(catalog, 'messages'); // INSIDE the catalog
+        const res = await request({
+          url: `${url}/api/admin/config`,
+          method: 'POST',
+          body: { updates: { INDEX_SERVER_MESSAGING_DIR: poisoned } },
+        });
+
+        const body = res.json as AdminConfigPostResponse;
+        const entry = body.results.INDEX_SERVER_MESSAGING_DIR;
+        expect(entry).toBeDefined();
+        expect(entry.applied).toBe(false);
+        expect(entry.error).toMatch(/inside the instruction catalog/i);
+        expect(res.status).not.toBe(200);
+        expect(body.success).toBe(false);
+
+        // The overlay must be untouched — that file is what bricks the next boot.
+        const overlayFile = process.env.INDEX_SERVER_OVERRIDES_FILE!;
+        const overlay = fs.existsSync(overlayFile)
+          ? JSON.parse(fs.readFileSync(overlayFile, 'utf8'))
+          : {};
+        expect(overlay.INDEX_SERVER_MESSAGING_DIR).toBeUndefined();
+
+        // And the probe must not leak its trial value into the live process.
+        expect(process.env.INDEX_SERVER_MESSAGING_DIR).toBeUndefined();
+      } finally {
+        if (priorDir === undefined) delete process.env.INDEX_SERVER_DIR;
+        else process.env.INDEX_SERVER_DIR = priorDir;
+        fs.rmSync(catalog, { recursive: true, force: true });
+      }
     });
 
     it('T6 clean-break: legacy { serverSettings:{…} } → 400 USE_FLAG_KEYS', async () => {
@@ -375,6 +412,86 @@ describe('/api/admin/config — T4 + T6 red', () => {
         entry!.present === undefined && entry!.hasValue === undefined && entry!.configured === undefined,
       ];
       expect(absenceSignals.some(Boolean)).toBe(true);
+    });
+  });
+
+  describe('lifecycle hook command security', () => {
+    const COMMAND_FLAGS = [
+      'INDEX_SERVER_HOOK_ON_CREATE',
+      'INDEX_SERVER_HOOK_ON_UPDATE',
+      'INDEX_SERVER_HOOK_ON_REMOVE',
+      'INDEX_SERVER_HOOK_ON_CHANGE',
+    ];
+    const COMMAND = 'operator-command-must-never-cross-admin-api';
+
+    it('returns presence only for every configured lifecycle command', async () => {
+      await server.stop();
+      for (const flag of COMMAND_FLAGS) process.env[flag] = COMMAND;
+      server = new DashboardServer({ host: '127.0.0.1', port: 0, enableWebSockets: false, enableCors: false });
+      await server.start();
+      url = serverUrl(server);
+
+      const res = await request({ url: `${url}/api/admin/config` });
+      expect(res.status).toBe(200);
+      expect(res.raw).not.toContain(COMMAND);
+      const body = res.json as { allFlags: Array<Record<string, unknown>> };
+      for (const name of COMMAND_FLAGS) {
+        const entry = body.allFlags.find(flag => flag.name === name);
+        expect(entry).toMatchObject({
+          name,
+          category: 'lifecycle-hooks',
+          editable: true,
+          sensitive: true,
+          writeOnly: true,
+          present: true,
+        });
+        expect(entry).not.toHaveProperty('value');
+        expect(entry).not.toHaveProperty('parsed');
+      }
+    });
+
+    it('accepts write-only lifecycle commands without echoing them in API responses', async () => {
+      const res = await request({
+        url: `${url}/api/admin/config`,
+        method: 'POST',
+        body: { updates: { INDEX_SERVER_HOOK_ON_CHANGE: COMMAND } },
+      });
+      const body = res.json as AdminConfigPostResponse;
+      expect(res.status).toBe(200);
+      expect(body.results.INDEX_SERVER_HOOK_ON_CHANGE).toMatchObject({ applied: true });
+      expect(res.raw).not.toContain(COMMAND);
+      const overlayFile = process.env.INDEX_SERVER_OVERRIDES_FILE!;
+      const overlay = fs.existsSync(overlayFile) ? fs.readFileSync(overlayFile, 'utf8') : '';
+      expect(overlay).toContain('INDEX_SERVER_HOOK_ON_CHANGE');
+      expect(overlay).toContain(COMMAND);
+
+      const getRes = await request({ url: `${url}/api/admin/config` });
+      expect(getRes.raw).not.toContain(COMMAND);
+      const getBody = getRes.json as { allFlags: Array<Record<string, unknown>> };
+      expect(getBody.allFlags.find(flag => flag.name === 'INDEX_SERVER_HOOK_ON_CHANGE')).toMatchObject({
+        present: true,
+        editable: true,
+        sensitive: true,
+        writeOnly: true,
+      });
+    });
+
+    it('accepts an empty write-only command to disable a configured hook', async () => {
+      process.env.INDEX_SERVER_HOOK_ON_CHANGE = COMMAND;
+      const res = await request({
+        url: `${url}/api/admin/config`,
+        method: 'POST',
+        body: { updates: { INDEX_SERVER_HOOK_ON_CHANGE: '' } },
+      });
+      expect(res.status).toBe(200);
+      const body = res.json as AdminConfigPostResponse;
+      expect(body.results.INDEX_SERVER_HOOK_ON_CHANGE).toMatchObject({ applied: true });
+
+      const getRes = await request({ url: `${url}/api/admin/config` });
+      const getBody = getRes.json as { allFlags: Array<Record<string, unknown>> };
+      expect(getBody.allFlags.find(flag => flag.name === 'INDEX_SERVER_HOOK_ON_CHANGE')).toMatchObject({
+        present: false,
+      });
     });
   });
 

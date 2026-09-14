@@ -38,7 +38,7 @@ function createStore(dims: number = 4): { store: SqliteEmbeddingStore; tmpDir: s
   return { store, tmpDir };
 }
 
-describe.skipIf(!hasSqliteVec)('SqliteEmbeddingStore-specific', () => {
+describe.skipIf(!hasSqliteVec)('SqliteEmbeddingStore-specific', () => { // SKIP_OK: environment-gated: requires sqlite-vec native module
   it('vec0 KNN returns correct ordering for known vectors', () => {
     const { store } = createStore(3);
     store.save({

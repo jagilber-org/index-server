@@ -42,8 +42,10 @@ export function startDeferredBackgroundServices(runtime: RuntimeConfig): { start
 
   setImmediate(() => {
     try {
-      startAutoBackup();
-      started.push('autoBackup');
+      // startAutoBackup() returns null when auto-backup is disabled or the
+      // implicit-source guard refuses; only record it as started when a timer
+      // actually exists, so a refusal is not reported as a healthy start.
+      if (startAutoBackup()) started.push('autoBackup');
     } catch (err) {
       const detail = (err as Error).message;
       log('ERROR', `[startup] autoBackup failed to start: ${detail}`, { detail: (err as Error).stack });

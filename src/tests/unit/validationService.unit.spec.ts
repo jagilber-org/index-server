@@ -112,4 +112,41 @@ describe('validationService (unit)', () => {
     });
     expect(res.ok).toBe(false);
   });
+
+  // ── usage_track: id / instructionId alias (boundary acceptance) ──────────────
+  it('accepts usage_track with canonical id', () => {
+    const ok = validateParams('usage_track', { id: 'some-entry', signal: 'helpful' });
+    expect(ok).toEqual({ ok: true });
+  });
+
+  it('accepts usage_track with instructionId alias (as returned by search/query)', () => {
+    const ok = validateParams('usage_track', { instructionId: 'some-entry', signal: 'helpful' });
+    expect(ok).toEqual({ ok: true });
+  });
+
+  it('rejects usage_track when neither id nor instructionId is provided', () => {
+    const res = validateParams('usage_track', { signal: 'helpful' });
+    expect(res.ok).toBe(false);
+  });
+
+  // ── index_search: q / query alias + string keywords (boundary acceptance) ────
+  it('accepts index_search with q alias', () => {
+    const ok = validateParams('index_search', { q: 'NRP network resource provider Kusto cluster database' });
+    expect(ok).toEqual({ ok: true });
+  });
+
+  it('accepts index_search with query alias', () => {
+    const ok = validateParams('index_search', { query: 'managed cluster deployment' });
+    expect(ok).toEqual({ ok: true });
+  });
+
+  it('accepts index_search with a single string for keywords', () => {
+    const ok = validateParams('index_search', { keywords: 'IPTags' });
+    expect(ok).toEqual({ ok: true });
+  });
+
+  it('rejects index_search with no search input', () => {
+    const res = validateParams('index_search', { mode: 'keyword' });
+    expect(res.ok).toBe(false);
+  });
 });

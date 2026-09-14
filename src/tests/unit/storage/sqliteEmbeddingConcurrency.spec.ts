@@ -49,7 +49,7 @@ function sampleData(count: number, dims: number): EmbeddingCacheData {
 
 // ── Concurrency Tests ────────────────────────────────────────────────────────
 
-describe.skipIf(!hasSqliteVec)('SqliteEmbeddingStore concurrency', () => {
+describe.skipIf(!hasSqliteVec)('SqliteEmbeddingStore concurrency', () => { // SKIP_OK: environment-gated: requires sqlite-vec native module
   it('concurrent reads from separate instances on same WAL DB', () => {
     const dir = makeTmpDir();
     const dbPath = path.join(dir, 'wal-read.db');
@@ -150,7 +150,7 @@ describe.skipIf(!hasSqliteVec)('SqliteEmbeddingStore concurrency', () => {
 
 // ── Corrupt DB Recovery Tests ────────────────────────────────────────────────
 
-describe.skipIf(!hasSqliteVec)('SqliteEmbeddingStore corrupt DB recovery', () => {
+describe.skipIf(!hasSqliteVec)('SqliteEmbeddingStore corrupt DB recovery', () => { // SKIP_OK: environment-gated: requires sqlite-vec native module
   it('recovers from a truncated/corrupt database file', () => {
     const dir = makeTmpDir();
     const dbPath = path.join(dir, 'corrupt.db');
@@ -226,7 +226,7 @@ describe.skipIf(!hasSqliteVec)('SqliteEmbeddingStore corrupt DB recovery', () =>
 
 // ── Buffer Bounds & Dimension Validation Tests ───────────────────────────────
 
-describe.skipIf(!hasSqliteVec)('SqliteEmbeddingStore buffer bounds', () => {
+describe.skipIf(!hasSqliteVec)('SqliteEmbeddingStore buffer bounds', () => { // SKIP_OK: environment-gated: requires sqlite-vec native module
   it('constructor rejects dims < 1', () => {
     const dir = makeTmpDir();
     expect(() => new SqliteEmbeddingStore(path.join(dir, 'bad.db'), 0)).toThrow(/Invalid vector dimensions/);
@@ -268,7 +268,7 @@ describe.skipIf(!hasSqliteVec)('SqliteEmbeddingStore buffer bounds', () => {
 
 // ── Degenerate Input Tests ───────────────────────────────────────────────────
 
-describe.skipIf(!hasSqliteVec)('SqliteEmbeddingStore degenerate inputs', () => {
+describe.skipIf(!hasSqliteVec)('SqliteEmbeddingStore degenerate inputs', () => { // SKIP_OK: environment-gated: requires sqlite-vec native module
   it('save() rejects vector containing NaN', () => {
     const dir = makeTmpDir();
     const store = createStore(dir, 'nan.db', 3);

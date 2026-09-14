@@ -6,7 +6,7 @@
 import { Express } from 'express';
 import { Server as HttpServer, createServer } from 'http';
 import { createServer as createHttpsServer } from 'https';
-import { logInfo } from '../../services/logger.js';
+import { logInfo, logWarn } from '../../services/logger.js';
 
 export interface TlsOptions {
   cert: string;
@@ -33,12 +33,34 @@ export function bindToPort(server: HttpServer, port: number, host: string): Prom
   });
 }
 
-/** Wraps `server.close` in a promise for graceful shutdown. */
-export function closeHttpServer(server: HttpServer): Promise<void> {
+/**
+ * Stop accepting connections and wait briefly for active requests to finish.
+ * Idle sockets are closed immediately; stalled connections are terminated after
+ * the grace period so shutdown cannot wait forever on a half-open client.
+ */
+export function closeHttpServer(server: HttpServer, gracePeriodMs = 1_000): Promise<void> {
   return new Promise((resolve) => {
-    server.close(() => {
+    let settled = false;
+    let forceTimer: NodeJS.Timeout | undefined;
+    const finish = (): void => {
+      if (settled) return;
+      settled = true;
+      if (forceTimer) clearTimeout(forceTimer);
       logInfo('[httpLifecycle] Server stopped');
       resolve();
-    });
+    };
+
+    try {
+      server.close(finish);
+      server.closeIdleConnections();
+      if (settled) return;
+      forceTimer = setTimeout(() => {
+        logWarn('[httpLifecycle] Graceful shutdown timed out; closing active connections', { gracePeriodMs });
+        server.closeAllConnections();
+        finish();
+      }, Math.max(0, gracePeriodMs));
+    } catch {
+      finish();
+    }
   });
 }

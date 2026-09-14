@@ -11,7 +11,6 @@ export default defineConfig({
         'snapshots/**',
         'tmp/**',
   'src/perf/**',
-  'src/server/transport.ts',
         '**/*.d.ts'
       ]
     }

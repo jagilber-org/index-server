@@ -17,9 +17,9 @@ jobs:
     name: Lint & Type Check
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6 # pii-allowlist: pinned action SHA
       - name: Cache node_modules
-        uses: actions/cache@v5
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v5 # pii-allowlist: pinned action SHA
         with:
           path: |
             ~/.npm
@@ -28,7 +28,7 @@ jobs:
           restore-keys: |
             lint-${{ runner.os }}-node22-
       - name: Use Node.js 22
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6 # pii-allowlist: pinned action SHA
         with:
           node-version: 22
           cache: 'npm'
@@ -50,9 +50,9 @@ jobs:
         os: [ubuntu-latest, windows-latest]
         node-version: [22]
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6 # pii-allowlist: pinned action SHA
       - name: Cache node_modules
-        uses: actions/cache@v5
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v5 # pii-allowlist: pinned action SHA
         with:
           path: |
             ~/.npm
@@ -61,7 +61,7 @@ jobs:
           restore-keys: |
             build-${{ runner.os }}-node${{ matrix.node-version }}-
       - name: Use Node.js ${{ matrix.node-version }}
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6 # pii-allowlist: pinned action SHA
         with:
           node-version: ${{ matrix.node-version }}
           cache: 'npm'
@@ -149,14 +149,15 @@ jobs:
         env:
           INDEX_SERVER_EVENT_SILENT: '1'
           INDEX_SERVER_LOG_SYNC: '1'
-          # Ratchet Stage 0: set hard floor just below current baseline (46.83) to prevent regressions; advisory target 60.
-          INDEX_SERVER_COVERAGE_HARD_MIN: '46'
-          INDEX_SERVER_COVERAGE_TARGET: '60'
+          # Thresholds come from scripts/governance/coverage-thresholds.json, so
+          # there is one number rather than five (#584). The floor pinned here
+          # was 46, "just below current baseline (46.83)" -- a baseline that had
+          # since moved to 81.89, leaving a 35-point gap the gate could not see.
         run: npm run coverage:ci
 
       - name: Upload coverage
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7 # pii-allowlist: pinned action SHA
         with:
           name: coverage-report-${{ matrix.os }}-node${{ matrix.node-version }}
           path: coverage/coverage.xml
@@ -164,7 +165,7 @@ jobs:
 
       - name: Upload to Codecov
         if: always() && matrix.os == 'ubuntu-latest'
-        uses: codecov/codecov-action@v7
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7 # pii-allowlist: pinned action SHA
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: coverage/coverage.xml,coverage/lcov.info
@@ -173,7 +174,7 @@ jobs:
 
       - name: Upload test results to Codecov
         if: ${{ !cancelled() }} && matrix.os == 'ubuntu-latest'
-        uses: codecov/test-results-action@v1
+        uses: codecov/test-results-action@0fa95f0e1eeaafde2c782583b36b28ad0d8c77d3 # v1 # pii-allowlist: pinned action SHA
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: ./test-results/junit.xml
@@ -181,7 +182,7 @@ jobs:
 
       - name: Upload flakiness artifacts
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7 # pii-allowlist: pinned action SHA
         with:
           name: flake-analysis-${{ matrix.os }}
           path: |
@@ -197,7 +198,7 @@ jobs:
 
       - name: Upload manifest (PR only)
         if: github.event_name == 'pull_request' && always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7 # pii-allowlist: pinned action SHA
         with:
           name: Index-manifest
           path: snapshots/Index-manifest.json
@@ -208,33 +209,19 @@ jobs:
 
       - name: Upload SBOM (PR only)
         if: github.event_name == 'pull_request' && always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7 # pii-allowlist: pinned action SHA
         with:
           name: sbom
           path: sbom.json
 
-  dist-freshness:
-    name: Dist Freshness Check
-    runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
-    steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
-        with:
-          node-version: 22
-          cache: 'npm'
-      - name: Install dependencies
-        run: npm ci
-      - name: Check dist freshness
-        run: npm run check:dist
 
   performance-baseline:
     name: Performance Baseline
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6 # pii-allowlist: pinned action SHA
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6 # pii-allowlist: pinned action SHA
         with:
           node-version: 22
           cache: 'npm'
@@ -245,7 +232,7 @@ jobs:
       - name: Run performance baseline
         run: npm run perf:baseline
       - name: Upload performance results
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7 # pii-allowlist: pinned action SHA
         with:
           name: performance-baseline
           path: perf-results.json
@@ -256,8 +243,8 @@ jobs:
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6 # pii-allowlist: pinned action SHA
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6 # pii-allowlist: pinned action SHA
         with:
           node-version: 22
           cache: 'npm'
@@ -268,7 +255,7 @@ jobs:
       - name: Generate manifest
         run: npm run manifest:generate
       - name: Upload release artifacts
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7 # pii-allowlist: pinned action SHA
         with:
           name: release-artifacts
           path: |

@@ -413,8 +413,25 @@ describe('Instructions Search Tool', () => {
       await expect(handleInstructionsSearch({} as any)).rejects.toThrow('Invalid keywords: expected array');
     });
 
-    it('should require keywords to be an array', async () => {
-      await expect(handleInstructionsSearch({ keywords: 'not-array' } as any)).rejects.toThrow('Invalid keywords: expected array');
+    it('should accept a single string for keywords (coerced to one keyword)', async () => {
+      const result = await handleInstructionsSearch({ keywords: 'JavaScript' } as any);
+      expect(result.query.keywords).toEqual(['JavaScript']);
+    });
+
+    it('should accept `q` as an alias for searchString', async () => {
+      const result = await handleInstructionsSearch({ q: 'JavaScript' } as any);
+      expect((result.query as any).searchString).toBe('JavaScript');
+      expect(result.query.keywords).toEqual(['JavaScript']);
+    });
+
+    it('should accept `query` as an alias for searchString', async () => {
+      const result = await handleInstructionsSearch({ query: 'JavaScript' } as any);
+      expect((result.query as any).searchString).toBe('JavaScript');
+      expect(result.query.keywords).toEqual(['JavaScript']);
+    });
+
+    it('should reject an empty/whitespace string for keywords', async () => {
+      await expect(handleInstructionsSearch({ keywords: '   ' } as any)).rejects.toThrow('At least one keyword is required');
     });
 
     it('should reject empty keywords array', async () => {
@@ -614,6 +631,20 @@ describe('Instructions Search Tool', () => {
       expect(result.autoTokenized).toBe(true);
       expect(result.query.keywords).toEqual(
         expect.arrayContaining(['React', 'authentication'])
+      );
+    });
+
+    it('should auto-tokenize a multi-word STRING input (string coerced, phrase first, then split)', async () => {
+      // Passing a raw string (not an array): "React hooks" is searched as a
+      // phrase first (no contiguous match), then split into ["React","hooks"].
+      const result = await handleInstructionsSearch({
+        keywords: 'React hooks'
+      } as any);
+
+      expect(result.results.length).toBeGreaterThan(0);
+      expect(result.autoTokenized).toBe(true);
+      expect(result.query.keywords).toEqual(
+        expect.arrayContaining(['React', 'hooks'])
       );
     });
   });
@@ -2132,6 +2163,86 @@ describe('Instructions Search Tool', () => {
 
     it('FL-60: inverted date range on lastUsed is rejected', async () => {
       await expect(handleInstructionsSearch({ fields: { lastUsedAfter: '2026-06-01T00:00:00Z', lastUsedBefore: '2026-01-01T00:00:00Z' } } as any)).rejects.toThrow();
+    });
+  });
+
+  // ── Issue #535: JSON-serialized array string keywords ──────────────
+  // A client may send keywords as a JSON-serialized string (e.g. Python
+  // json.dumps) instead of a native array.  The handler must parse it
+  // back rather than treating the entire JSON text as one keyword.
+  describe('JSON-serialized array string keywords (#535)', () => {
+    it('#535-1: JSON array string produces same results as native array', async () => {
+      const arrayResult = await handleInstructionsSearch({
+        keywords: ['TypeScript', 'interface']
+      });
+      const jsonStringResult = await handleInstructionsSearch({
+        keywords: '["TypeScript", "interface"]' as any
+      });
+
+      expect(jsonStringResult.results.map((r: any) => r.instructionId))
+        .toEqual(arrayResult.results.map((r: any) => r.instructionId));
+      expect(jsonStringResult.query.keywords).toEqual(['TypeScript', 'interface']);
+    });
+
+    it('#535-2: JSON array string with extra whitespace is parsed correctly', async () => {
+      const result = await handleInstructionsSearch({
+        keywords: '[ "JavaScript" ]' as any
+      });
+
+      expect(result.query.keywords).toEqual(['JavaScript']);
+      expect(result.results.length).toBeGreaterThan(0);
+      expect(result.results[0].instructionId).toBe('test-001');
+    });
+
+    it('#535-3: JSON array string equivalence with space-separated q string', async () => {
+      const jsonResult = await handleInstructionsSearch({
+        keywords: '["TypeScript", "interface"]' as any
+      });
+      const qResult = await handleInstructionsSearch({
+        q: 'TypeScript interface'
+      } as any);
+
+      expect(jsonResult.results.map((r: any) => r.instructionId))
+        .toEqual(qResult.results.map((r: any) => r.instructionId));
+    });
+
+    it('#535-4: plain string keyword is NOT parsed as JSON (no brackets)', async () => {
+      const result = await handleInstructionsSearch({
+        keywords: 'JavaScript' as any
+      });
+
+      expect(result.query.keywords).toEqual(['JavaScript']);
+      expect(result.results.length).toBeGreaterThan(0);
+    });
+
+    it('#535-5: string starting with [ but invalid JSON is not parsed as array', async () => {
+      const result = await handleInstructionsSearch({
+        keywords: '[not-valid-json' as any
+      });
+
+      expect(result.query.keywords).toEqual(['[not-valid-json']);
+    });
+
+    it('#535-6: JSON array of non-strings falls back to single keyword', async () => {
+      const result = await handleInstructionsSearch({
+        keywords: '[123,456]' as any
+      });
+
+      expect(result.query.keywords).toEqual(['[123,456]']);
+    });
+
+    it('#535-7: empty JSON array string yields empty keywords (rejected)', async () => {
+      await expect(handleInstructionsSearch({
+        keywords: '[]' as any
+      })).rejects.toThrow('At least one keyword is required');
+    });
+
+    it('#535-8: nested JSON (array of arrays) falls back to single keyword', async () => {
+      const result = await handleInstructionsSearch({
+        keywords: '[["nested"],"value"]' as any
+      });
+
+      expect(result.query.keywords).toEqual(['[["nested"],"value"]']);
     });
   });
 });

@@ -100,6 +100,61 @@
         btn.addEventListener('click', function(){ saveAllChanges(); });
     }
 
+    function effectiveSnapshotValue(key, fallback) {
+        var flag = _lastSnapshot.byKey[key] || {};
+        if (flag.value !== undefined && flag.value !== null && String(flag.value) !== '') return flag.value;
+        if (flag.default !== undefined && flag.default !== null && String(flag.default) !== '') return flag.default;
+        return fallback;
+    }
+
+    function collectLifecycleHookEdits() {
+        var edits = {};
+        document.querySelectorAll('.cfg-hook-command-input').forEach(function(input){
+            var key = input.getAttribute('data-hook-key');
+            if (!key) return;
+            if (input.getAttribute('data-clear-pending') === 'true') {
+                edits[key] = '';
+                return;
+            }
+            var value = String(input.value || '').trim();
+            if (value) edits[key] = value;
+        });
+        document.querySelectorAll('[data-hook-setting-key]').forEach(function(input){
+            var key = input.getAttribute('data-hook-setting-key');
+            var type = input.getAttribute('data-hook-setting-type') || 'string';
+            if (!key) return;
+            var value = coerceForType(input.value, type);
+            var prior = effectiveSnapshotValue(key, type === 'boolean' ? false : '');
+            if (String(value) !== String(coerceForType(prior, type))) edits[key] = value;
+        });
+        return edits;
+    }
+
+    function attachLifecycleHookManager() {
+        document.querySelectorAll('.cfg-hook-command-input').forEach(function(input){
+            input.addEventListener('input', function(){
+                input.setAttribute('data-clear-pending', 'false');
+                var key = input.getAttribute('data-hook-key');
+                var btn = key ? document.querySelector('[data-hook-clear="' + key + '"]') : null;
+                if (btn) btn.textContent = 'Clear';
+            });
+        });
+        document.querySelectorAll('.cfg-hook-clear-btn').forEach(function(btn){
+            btn.addEventListener('click', function(){
+                var key = btn.getAttribute('data-hook-clear');
+                var input = key ? document.querySelector('.cfg-hook-command-input[data-hook-key="' + key + '"]') : null;
+                if (!input) return;
+                var pending = input.getAttribute('data-clear-pending') === 'true';
+                input.value = '';
+                input.setAttribute('data-clear-pending', pending ? 'false' : 'true');
+                input.placeholder = pending ? 'Enter a replacement command' : 'Will be disabled when saved';
+                btn.textContent = pending ? 'Clear' : 'Undo clear';
+            });
+        });
+        var save = document.getElementById('cfg-hook-save-btn');
+        if (save) save.addEventListener('click', function(){ saveLifecycleHooks(); });
+    }
+
     function attachResetButtons() {
         // Per-row reset is not currently rendered — handled by the POST
         // /api/admin/config/reset/:flag endpoint. Reserved for follow-up UI work.
@@ -119,6 +174,7 @@
             attachFilter();
             attachSectionToggles();
             attachSaveAll();
+            attachLifecycleHookManager();
             attachResetButtons();
         } catch (e) {
             console.error('[admin.config] load failed', e);
@@ -175,6 +231,35 @@
         }
     }
 
+    async function saveLifecycleHooks() {
+        var edits = collectLifecycleHookEdits();
+        if (!Object.keys(edits).length) {
+            if (typeof showSuccess === 'function') showSuccess('No hook changes to save.');
+            return;
+        }
+        try {
+            var res = await adminAuth.adminFetch('/api/admin/config', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ updates: edits })
+            });
+            var data = await res.json();
+            if (!data || !data.success) {
+                if (typeof showError === 'function') showError((data && data.error) || 'Hook update failed');
+                return;
+            }
+            var summary = summarizeResults(data.results);
+            var msg = summary.applied + ' hook setting' + (summary.applied === 1 ? '' : 's') + ' saved';
+            if (summary.restart) msg += '; restart required';
+            if (summary.errors && typeof showError === 'function') showError(msg + '\n' + summary.errLines.join('\n'));
+            else if (typeof showSuccess === 'function') showSuccess(msg);
+            loadConfiguration();
+        } catch (e) {
+            console.error('[admin.config] hook save failed', e);
+            if (typeof showError === 'function') showError('Hook save failed: ' + (e && e.message ? e.message : String(e)));
+        }
+    }
+
     async function resetFlag(key) {
         if (!key) return;
         try {
@@ -205,6 +290,7 @@
 
     window.loadConfiguration = loadConfiguration;
     window.saveAllChanges = saveAllChanges;
+    window.saveLifecycleHooks = saveLifecycleHooks;
     window.resetFlag = resetFlag;
     window.startConfigAutoRefresh = startConfigAutoRefresh;
     window.stopConfigAutoRefresh = stopConfigAutoRefresh;

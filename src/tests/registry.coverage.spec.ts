@@ -23,6 +23,7 @@ import {
   listRegisteredMethods,
   getMetricsRaw,
 } from '../server/registry';
+import { reloadRuntimeConfig } from '../config/runtimeConfig';
 
 // Use unique method names per test to avoid cross-test pollution via the
 // module-level handlers map (module is singleton across the test file).
@@ -217,6 +218,7 @@ describe('registry - handler registration and dispatch', () => {
 
     const prev = process.env.INDEX_SERVER_ADD_TIMING;
     process.env.INDEX_SERVER_ADD_TIMING = '1';
+    reloadRuntimeConfig();
     try {
       const handler = getHandler(method);
       const result = await handler!({}) as Record<string, unknown>;
@@ -227,6 +229,7 @@ describe('registry - handler registration and dispatch', () => {
     } finally {
       if (prev === undefined) delete process.env.INDEX_SERVER_ADD_TIMING;
       else process.env.INDEX_SERVER_ADD_TIMING = prev;
+      reloadRuntimeConfig();
     }
   });
 

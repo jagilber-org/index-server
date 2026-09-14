@@ -1,4 +1,4 @@
-name: Coverage & Dist Freshness
+name: Coverage
 on:
   # Runs on org PRs by default; the job owner gate keeps this skipped in
   # jagilber-dev unless manually dispatched.
@@ -20,8 +20,8 @@ jobs:
     if: ${{ github.repository_owner == 'jagilber-org' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6 # pii-allowlist: pinned action SHA
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6 # pii-allowlist: pinned action SHA
         with:
           node-version: 22
           cache: 'npm'
@@ -29,14 +29,11 @@ jobs:
         run: npm ci
       - name: Build
         run: npm run build
-      - name: Dist Freshness
-        run: npm run check:dist
       - name: Coverage
         run: npm run coverage:ci
-        continue-on-error: true
       - name: Upload coverage to Codecov
         if: always()
-        uses: codecov/codecov-action@v7
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7 # pii-allowlist: pinned action SHA
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: ./coverage/cobertura-coverage.xml,./coverage/lcov.info
@@ -45,14 +42,14 @@ jobs:
           directory: ./coverage
       - name: Upload Coverage
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7 # pii-allowlist: pinned action SHA
         with:
           name: coverage-report
           path: coverage
       - name: Generate Manifest
         run: npm run manifest:generate
       - name: Upload Manifest
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7 # pii-allowlist: pinned action SHA
         with:
           name: Index-manifest
           path: snapshots/Index-manifest.json
@@ -60,7 +57,7 @@ jobs:
         run: npm run sbom || true
       - name: Upload SBOM
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7 # pii-allowlist: pinned action SHA
         with:
           name: sbom
           path: sbom.json

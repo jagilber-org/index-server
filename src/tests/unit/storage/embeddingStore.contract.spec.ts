@@ -78,7 +78,7 @@ const backends: StoreFactory[] = [
 ];
 
 for (const backend of backends) {
-  describe.skipIf(backend.name === 'SqliteEmbeddingStore' && !hasSqliteVec)(`IEmbeddingStore contract: ${backend.name}`, () => {
+  describe.skipIf(backend.name === 'SqliteEmbeddingStore' && !hasSqliteVec)(`IEmbeddingStore contract: ${backend.name}`, () => { // SKIP_OK: environment-gated: requires sqlite-vec native module for SqliteEmbeddingStore
     let store: IEmbeddingStore;
     let cleanup: () => void;
 

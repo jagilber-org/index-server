@@ -186,6 +186,17 @@ try {
         git --no-pager diff --check HEAD
     } -Remediation 'Run `npm run format` or fix flagged trailing whitespace / mixed indentation.'
 
+    # 4b. Changelog freshness (#575)
+    #
+    # docs/release-checklist.md already required [Unreleased] to cover every
+    # commit since the last release, but nothing enforced it, so the
+    # requirement was advisory -- and 1.41.2 shipped with an empty section
+    # above six commits and +3,840 lines. #561 fixed one instance of this by
+    # hand and asked for exactly this gate.
+    Invoke-Gate 'Changelog freshness ([Unreleased] covers feat/fix since last tag)' {
+        npm run guard:changelog --silent 2>&1 | Out-Host
+    } -Remediation 'Add a CHANGELOG [Unreleased] entry citing the issue or PR number for each listed commit.'
+
     # 5. Typecheck
     Invoke-Gate 'TypeScript typecheck' {
         npm run typecheck --silent 2>&1 | Out-Host

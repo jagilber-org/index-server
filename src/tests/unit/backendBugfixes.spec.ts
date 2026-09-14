@@ -24,9 +24,14 @@ describe('#122: HttpTransport error logging', () => {
   const origWrite = process.stderr.write.bind(process.stderr);
   const origConsoleError = console.error.bind(console);
 
+  // Since #605 the RPC route gates on the declared tool registry, so these
+  // stand-ins must be real tool names or they are refused with -32601 before
+  // the handler runs and the error-logging path under test is never reached.
+  // `index_dispatch` opts out of generic schema validation; `health_check`
+  // accepts an empty object.
   const mockHandlers: Record<string, (params: unknown) => Promise<unknown>> = {
-    'error_handler': async () => { throw new Error('simulated_crash_122'); },
-    'non_error_throw': async () => { throw 'string-error-122'; },
+    'index_dispatch': async () => { throw new Error('simulated_crash_122'); },
+    'health_check': async () => { throw 'string-error-122'; },
   };
 
   const handlerLookup = (method: string) => mockHandlers[method];
@@ -65,7 +70,7 @@ describe('#122: HttpTransport error logging', () => {
     const resp = await fetch(`${baseUrl}/mcp/rpc`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ jsonrpc: '2.0', method: 'error_handler', id: 1 }),
+      body: JSON.stringify({ jsonrpc: '2.0', method: 'index_dispatch', params: { action: 'list' }, id: 1 }),
     });
     expect(resp.status).toBe(500);
     const body = await resp.json();
@@ -82,7 +87,7 @@ describe('#122: HttpTransport error logging', () => {
     const resp = await fetch(`${baseUrl}/mcp/rpc`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ jsonrpc: '2.0', method: 'non_error_throw', id: 2 }),
+      body: JSON.stringify({ jsonrpc: '2.0', method: 'health_check', params: {}, id: 2 }),
     });
     expect(resp.status).toBe(500);
     const body = await resp.json();

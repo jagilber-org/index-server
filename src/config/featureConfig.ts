@@ -2,15 +2,14 @@
  * Feature domain config: feature flags, feedback, messaging, semantic search,
  * minimal mode, bootstrap seed, validation, dynamic config, and graph settings.
  */
-import path from 'path';
 import { getBooleanEnv, parseBooleanEnv } from '../utils/envUtils';
 import {
-  CWD,
-  toAbsolute,
+  toStateAbsolute,
   numberFromEnv,
   parseCsvEnv,
 } from './configUtils';
 import { DIR } from './dirConstants';
+import { resolveMessagingDir } from './pathResolution';
 import { DEFAULT_LIMITS, DEFAULT_TIMEOUTS_MS, DEFAULT_SEMANTIC } from './defaultValues';
 
 export interface FeatureFlagsConfig {
@@ -50,6 +49,8 @@ export interface SemanticConfig {
   embeddingPath: string;
   device: SemanticDevice;
   localOnly: boolean;
+  /** Auto-compute embeddings after import/restore when semantic is enabled (INDEX_SERVER_AUTO_EMBED_ON_IMPORT, default true). */
+  autoEmbedOnImport: boolean;
 }
 
 export interface MinimalConfig {
@@ -78,6 +79,20 @@ export interface GraphConfig {
   signature: string;
 }
 
+/**
+ * The raw, unparsed `INDEX_SERVER_FEATURES` value, or null when unset.
+ *
+ * Diagnostic only (#611). `incrementUsage()` reports it verbatim when it
+ * refuses a call because the `usage` feature is off, so the operator can see
+ * what the gate actually observed. The parsed `indexFeatures` set is the wrong
+ * thing to echo there: it has already had `usage` added or removed by
+ * `INDEX_SERVER_USAGE_ENABLED`, so it would show a value nobody configured.
+ */
+export function rawIndexFeaturesSetting(): string | null {
+  const raw = process.env.INDEX_SERVER_FEATURES;
+  return raw === undefined ? null : raw;
+}
+
 export function parseFeatureFlagsConfig(): FeatureFlagsConfig {
   const envNamespace: Record<string, string> = {};
   for(const [key, value] of Object.entries(process.env)){
@@ -85,24 +100,49 @@ export function parseFeatureFlagsConfig(): FeatureFlagsConfig {
       envNamespace[key.substring('INDEX_SERVER_FLAG_'.length).toLowerCase()] = value;
     }
   }
+  // Usage tracking is on for every profile (#495). It is local-only — see PRIVACY.md —
+  // and its history cannot be backfilled, so a silent default-off is unrecoverable.
+  // INDEX_SERVER_USAGE_ENABLED is the dedicated switch and wins over the CSV list.
+  const indexFeatures = new Set(parseCsvEnv('INDEX_SERVER_FEATURES'));
+  if (parseBooleanEnv(process.env.INDEX_SERVER_USAGE_ENABLED, true)) indexFeatures.add('usage');
+  else indexFeatures.delete('usage');
   return {
-    file: toAbsolute(process.env.INDEX_SERVER_FLAGS_FILE, path.join(CWD, DIR.FLAGS)),
+    file: toStateAbsolute(process.env.INDEX_SERVER_FLAGS_FILE, DIR.FLAGS),
     envNamespace,
-    indexFeatures: new Set(parseCsvEnv('INDEX_SERVER_FEATURES')),
+    indexFeatures,
   };
 }
 
 export function parseFeedbackConfig(): FeedbackConfig {
   return {
-    dir: toAbsolute(process.env.INDEX_SERVER_FEEDBACK_DIR, path.join(CWD, DIR.FEEDBACK)),
+    dir: toStateAbsolute(process.env.INDEX_SERVER_FEEDBACK_DIR, DIR.FEEDBACK),
     maxEntries: numberFromEnv('INDEX_SERVER_FEEDBACK_MAX_ENTRIES', DEFAULT_LIMITS.MAX_FEEDBACK_ENTRIES),
   };
 }
 
 export function parseMessagingConfig(): MessagingConfig {
+  const enabled = parseBooleanEnv(process.env.INDEX_SERVER_MESSAGING_ENABLED, true);
   return {
-    enabled: parseBooleanEnv(process.env.INDEX_SERVER_MESSAGING_ENABLED, true),
-    dir: toAbsolute(process.env.INDEX_SERVER_MESSAGING_DIR, path.join(CWD, DIR.DATA_MESSAGING)),
+    enabled,
+    // Anchored to STATE_ROOT (#577), never to CWD: every MCP client launches the
+    // server from a different working directory, so a cwd-relative default gives
+    // each client a private store and messages silently stop crossing between
+    // them. STATE_ROOT is per-user and machine-wide, so every client converges on
+    // one store — which also closes this PR's own residual, where an unset
+    // INDEX_SERVER_DIR still put the store at `<cwd>/index-messaging`.
+    //
+    // resolveMessagingDir() rather than a bare toStateAbsolute() because the
+    // containment guard is still load-bearing: the DEFAULT can no longer land
+    // inside the catalog, but an explicit INDEX_SERVER_MESSAGING_DIR still can,
+    // and message files inside the catalog are loaded as malformed instructions
+    // and corrupt the index.
+    //
+    // Validation is gated on `enabled` so the kill-switch actually works. The
+    // guard throws, and this literal is evaluated during getRuntimeConfig() at
+    // boot — ungated, a bad messaging path exits the process before the MCP
+    // handshake, so the client sees a bare "server exited" and
+    // INDEX_SERVER_MESSAGING_ENABLED=0 could not rescue it.
+    dir: resolveMessagingDir(enabled),
     maxMessages: numberFromEnv('INDEX_SERVER_MESSAGING_MAX', DEFAULT_LIMITS.MAX_MESSAGES),
     sweepIntervalMs: numberFromEnv('INDEX_SERVER_MESSAGING_SWEEP_MS', DEFAULT_TIMEOUTS_MS.MESSAGING_SWEEP),
   };
@@ -115,16 +155,59 @@ export function parseSemanticConfig(): SemanticConfig {
   return {
     enabled: getBooleanEnv('INDEX_SERVER_SEMANTIC_ENABLED'),
     model: process.env.INDEX_SERVER_SEMANTIC_MODEL || DEFAULT_SEMANTIC.MODEL,
-    cacheDir: toAbsolute(process.env.INDEX_SERVER_SEMANTIC_CACHE_DIR, path.join(CWD, DIR.DATA_MODELS)),
-    embeddingPath: toAbsolute(process.env.INDEX_SERVER_EMBEDDING_PATH, path.join(CWD, DIR.DATA_EMBEDDINGS)),
+    cacheDir: toStateAbsolute(process.env.INDEX_SERVER_SEMANTIC_CACHE_DIR, DIR.DATA_MODELS),
+    embeddingPath: toStateAbsolute(process.env.INDEX_SERVER_EMBEDDING_PATH, DIR.DATA_EMBEDDINGS),
     device,
     localOnly: getBooleanEnv('INDEX_SERVER_SEMANTIC_LOCAL_ONLY', true),
+    autoEmbedOnImport: getBooleanEnv('INDEX_SERVER_AUTO_EMBED_ON_IMPORT', true),
   };
 }
 
 export function parseMinimalConfig(): MinimalConfig {
   return {
     debugOrdering: getBooleanEnv('INDEX_SERVER_MINIMAL_DEBUG'),
+  };
+}
+
+/**
+ * Optional lifecycle hooks (#447): operator-configured commands run after a
+ * committed instruction CRUD mutation. Off by default; enabled only when at
+ * least one hook command is set. Commands come from trusted operator env only
+ * (never from instruction content or tool params).
+ */
+export interface LifecycleHooksConfig {
+  /** True when at least one hook command is configured. */
+  enabled: boolean;
+  /** Command run when a new instruction is created (index_add of a new id). */
+  onCreate?: string;
+  /** Command run when an existing instruction is updated (index_add overwrite). */
+  onUpdate?: string;
+  /** Command run when instructions are removed (index_remove). */
+  onRemove?: string;
+  /** Catch-all command run for any committed mutation (incl. import/promote). */
+  onChange?: string;
+  /** When true, await hook completion before the mutation returns (default false = fire-and-forget). */
+  blocking: boolean;
+  /** Per-hook wall-clock timeout (ms). */
+  timeoutMs: number;
+  /** Max concurrent in-flight hook processes; excess dispatches are dropped with a WARN. */
+  maxConcurrent: number;
+}
+
+export function parseLifecycleHooksConfig(): LifecycleHooksConfig {
+  const onCreate = process.env.INDEX_SERVER_HOOK_ON_CREATE?.trim() || undefined;
+  const onUpdate = process.env.INDEX_SERVER_HOOK_ON_UPDATE?.trim() || undefined;
+  const onRemove = process.env.INDEX_SERVER_HOOK_ON_REMOVE?.trim() || undefined;
+  const onChange = process.env.INDEX_SERVER_HOOK_ON_CHANGE?.trim() || undefined;
+  return {
+    enabled: Boolean(onCreate || onUpdate || onRemove || onChange),
+    onCreate,
+    onUpdate,
+    onRemove,
+    onChange,
+    blocking: getBooleanEnv('INDEX_SERVER_HOOK_BLOCKING'),
+    timeoutMs: Math.max(1, numberFromEnv('INDEX_SERVER_HOOK_TIMEOUT_MS', 10_000)),
+    maxConcurrent: Math.max(1, numberFromEnv('INDEX_SERVER_HOOK_MAX_CONCURRENT', 4)),
   };
 }
 
@@ -190,7 +273,7 @@ export function parseStorageConfig(): StorageConfig {
   }
   return {
     backend,
-    sqlitePath: toAbsolute(process.env.INDEX_SERVER_SQLITE_PATH, path.join(CWD, DIR.DATA_SQLITE)),
+    sqlitePath: toStateAbsolute(process.env.INDEX_SERVER_SQLITE_PATH, DIR.DATA_SQLITE),
     sqliteWal: parseBooleanEnv(process.env.INDEX_SERVER_SQLITE_WAL, true),
     sqliteMigrateOnStart: parseBooleanEnv(process.env.INDEX_SERVER_SQLITE_MIGRATE_ON_START, true),
     sqliteVecEnabled: parseBooleanEnv(

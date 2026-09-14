@@ -6,10 +6,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 describe('usageGating', () => {
 	beforeEach(() => {
 		vi.resetModules();
+		delete process.env.INDEX_SERVER_USAGE_ENABLED;
 	});
 
 	it('hasFeature returns false when INDEX_SERVER_FEATURES is empty', async () => {
 		delete process.env.INDEX_SERVER_FEATURES;
+		// usage is on by default (#495); the dedicated switch is how it is turned off.
+		process.env.INDEX_SERVER_USAGE_ENABLED = '0';
 		const { hasFeature } = await import('../services/features.js');
 		expect(hasFeature('usage')).toBe(false);
 	});

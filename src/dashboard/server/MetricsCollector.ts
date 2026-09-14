@@ -707,6 +707,7 @@ export class MetricsCollector {
     this.collectTimer = setInterval(() => {
       this.takeSnapshot();
     }, this.options.collectInterval);
+    this.collectTimer.unref();
   }
 
   private takeSnapshot(): void {

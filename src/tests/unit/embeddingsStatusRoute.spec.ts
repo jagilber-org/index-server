@@ -39,10 +39,14 @@ function makeApp(semantic: { enabled: boolean; localOnly: boolean; model: string
     }),
   }));
   // Dynamic import after mock so the route factory binds to mocked config.
-  return import('../../dashboard/server/routes/embeddings.routes.js').then((mod) => {
+  return import('../../dashboard/server/routes/embeddings.routes.js').then(async (mod) => {
     const app = express();
     app.use('/api', mod.createEmbeddingsRoutes());
-    const server = app.listen(0);
+    // Bind IPv4 explicitly: listen(0) on all interfaces plus a dual-stack client
+    // makes the connect race between ::1 and 127.0.0.1.
+    const server = await new Promise<ReturnType<typeof app.listen>>((resolve) => {
+      const s = app.listen(0, '127.0.0.1', () => resolve(s));
+    });
     const port = (server.address() as { port: number }).port;
     return { port, close: () => server.close() };
   });
@@ -67,7 +71,7 @@ describe('GET /api/embeddings/status', () => {
       embeddingPath: path.join(tmpDir, 'no-emb.json'),
     });
     try {
-      const res = await httpGet(`http://localhost:${port}/api/embeddings/status`);
+      const res = await httpGet(`http://127.0.0.1:${port}/api/embeddings/status`);
       expect(res.status).toBe(200);
       const json = JSON.parse(res.body);
       expect(json.success).toBe(true);
@@ -87,7 +91,7 @@ describe('GET /api/embeddings/status', () => {
       embeddingPath: path.join(tmpDir, 'no-emb.json'),
     });
     try {
-      const res = await httpGet(`http://localhost:${port}/api/embeddings/status`);
+      const res = await httpGet(`http://127.0.0.1:${port}/api/embeddings/status`);
       expect(res.status).toBe(200);
       const json = JSON.parse(res.body);
       expect(json.state).toBe('missing');
@@ -107,7 +111,7 @@ describe('GET /api/embeddings/status', () => {
       embeddingPath: path.join(tmpDir, 'no-emb.json'),
     });
     try {
-      const res = await httpGet(`http://localhost:${port}/api/embeddings/status`);
+      const res = await httpGet(`http://127.0.0.1:${port}/api/embeddings/status`);
       const json = JSON.parse(res.body);
       expect(json.state).toBe('will-download');
       expect(json.modelCached).toBe(false);
@@ -126,7 +130,7 @@ describe('GET /api/embeddings/status', () => {
       embeddingPath: path.join(tmpDir, 'still-missing.json'),
     });
     try {
-      const res = await httpGet(`http://localhost:${port}/api/embeddings/status`);
+      const res = await httpGet(`http://127.0.0.1:${port}/api/embeddings/status`);
       const json = JSON.parse(res.body);
       expect(json.state).toBe('no-embeddings');
       expect(json.modelCached).toBe(true);
@@ -152,7 +156,7 @@ describe('GET /api/embeddings/status', () => {
       embeddingPath: embPath,
     });
     try {
-      const res = await httpGet(`http://localhost:${port}/api/embeddings/status`);
+      const res = await httpGet(`http://127.0.0.1:${port}/api/embeddings/status`);
       const json = JSON.parse(res.body);
       expect(json.state).toBe('ready');
       expect(json.ready).toBe(true);

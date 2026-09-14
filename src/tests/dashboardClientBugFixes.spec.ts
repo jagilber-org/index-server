@@ -12,8 +12,35 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 const CLIENT_DIR = path.resolve(__dirname, '..', 'dashboard', 'client');
+const PANEL_DOCS_DIR = path.resolve(__dirname, '..', '..', 'docs', 'panels');
 
 describe('Dashboard Client Bug Fixes', () => {
+  describe('bug-12: Dashboard documentation links', () => {
+    it('backs every /api/docs link with a panel document', () => {
+      const clientFiles = [
+        path.join(CLIENT_DIR, 'admin.html'),
+        ...fs.readdirSync(path.join(CLIENT_DIR, 'js'))
+          .filter(file => file.endsWith('.js'))
+          .map(file => path.join(CLIENT_DIR, 'js', file)),
+      ];
+      const references = clientFiles.flatMap(file => {
+        const source = fs.readFileSync(file, 'utf8');
+        return Array.from(source.matchAll(/href=["']\/api\/docs\/([a-z0-9_-]+)(?:#[^"']*)?["']/gi), match => ({
+          slug: match[1],
+          source: path.relative(CLIENT_DIR, file),
+        }));
+      });
+
+      expect(references.length, 'expected the dashboard to contain documentation links').toBeGreaterThan(0);
+      for (const reference of references) {
+        expect(
+          fs.existsSync(path.join(PANEL_DOCS_DIR, `${reference.slug}.md`)),
+          `${reference.source} links to missing panel documentation: ${reference.slug}.md`,
+        ).toBe(true);
+      }
+    });
+  });
+
   describe('bug-8: Backup file export/import format mismatch', () => {
     it('should preserve zip export filenames instead of forcing a .json download', () => {
       const src = fs.readFileSync(path.join(CLIENT_DIR, 'js', 'admin.maintenance.js'), 'utf8');

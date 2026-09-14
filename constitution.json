@@ -1,10 +1,10 @@
 {
   "schemaVersion": 2,
-  "version": "2.10.0",
+  "version": "2.11.0",
   "name": "Index",
   "ratifiedAt": "2026-02-16",
-  "lastAmendedAt": "2026-05-10",
-  "description": "Index Server — Enterprise instruction indexing platform for AI assistant governance. Aligned to the layered hook security template v1.31.0 (constitution v2.9.0).",
+  "lastAmendedAt": "2026-09-12",
+  "description": "Index Server — Enterprise instruction indexing platform for AI assistant governance. Aligned to the layered hook security template v1.31.0.",
   "articles": {
     "governance": {
       "title": "Template Governance And Change Control",
@@ -27,7 +27,7 @@
             "Versioned adoption update in .template-adoption.json when migration completes"
           ],
           "enforcedBy": [
-            "scripts/Compare-TemplateSpec.ps1",
+            "scripts/build/Compare-TemplateSpec.ps1",
             ".instructions/shared/template-adoption-workflow.md",
             "README.md"
           ]
@@ -49,7 +49,7 @@
             "Updated documentation and helper script diffs in the same branch"
           ],
           "enforcedBy": [
-            "scripts/validate-template-metadata.ps1",
+            "scripts/governance/validate-template-metadata.ps1",
             "template-manifest.json",
             ".github/copilot-instructions.md"
           ]
@@ -69,7 +69,7 @@
             "Adoption marker version matches the reviewed target state"
           ],
           "enforcedBy": [
-            "scripts/Compare-TemplateSpec.ps1",
+            "scripts/build/Compare-TemplateSpec.ps1",
             ".instructions/shared/template-adoption-workflow.md"
           ]
         }
@@ -238,7 +238,7 @@
             "Decision record provenance object matching .squad/templates/decision-record.json schema"
           ],
           "enforcedBy": [
-            "scripts/append-agent-provenance.ps1",
+            "scripts/build/append-agent-provenance.ps1",
             "hooks/validate-agent-trailers.ps1",
             ".instructions/shared/agent-attestation.md",
             ".squad/templates/agent-charter.json",
@@ -321,7 +321,7 @@
         {
           "id": "SH-4",
           "severity": "error",
-          "rule": "File-system operations influenced by user input MUST validate that resolved paths stay within an intended base directory; unchecked path traversal is prohibited.",
+          "rule": "File-system operations influenced by user input MUST validate that resolved paths stay within an intended base directory; unchecked path traversal is prohibited. [Review-only: no mechanical enforcement exists; see #585.]",
           "rationale": "User-controlled path handling is a recurring source of read, write, and delete vulnerabilities when containment is assumed instead of verified.",
           "required": [
             "Resolve candidate paths against a known base directory and verify normalized containment before file-system reads, writes, or deletes.",
@@ -337,12 +337,13 @@
           "enforcedBy": [
             "repo-local file-system handlers",
             "security review"
-          ]
+          ],
+          "enforcement": "review"
         },
         {
           "id": "SH-5",
           "severity": "error",
-          "rule": "Administrative servers, dashboards, and control-plane endpoints MUST default to loopback-only binding unless broader exposure is an explicit documented opt-in.",
+          "rule": "Administrative servers, dashboards, and control-plane endpoints MUST default to loopback-only binding unless broader exposure is an explicit documented opt-in. [Review-only: no mechanical enforcement exists; see #585.]",
           "rationale": "Control-plane and admin surfaces become materially riskier when broad network exposure is the default rather than a deliberate deployment choice.",
           "required": [
             "Default local admin surfaces to 127.0.0.1, ::1, or an equivalent loopback-only binding when the runtime supports it.",
@@ -358,12 +359,13 @@
           "enforcedBy": [
             "server configuration defaults",
             "deployment review"
-          ]
+          ],
+          "enforcement": "review"
         },
         {
           "id": "SH-6",
           "severity": "error",
-          "rule": "Production code MUST keep TLS certificate verification enabled; self-signed or private-CA scenarios MUST use explicit trust configuration rather than disabling verification.",
+          "rule": "Production code MUST keep TLS certificate verification enabled; self-signed or private-CA scenarios MUST use explicit trust configuration rather than disabling verification. [Review-only: no mechanical enforcement exists; see #585.]",
           "rationale": "Disabling certificate verification turns transport encryption into an integrity illusion and enables trivial interception on hostile networks.",
           "required": [
             "Use trusted CA bundles, platform trust stores, or equivalent runtime configuration for private certificate chains.",
@@ -379,12 +381,13 @@
           "enforcedBy": [
             "repo-local network clients",
             "security review"
-          ]
+          ],
+          "enforcement": "review"
         },
         {
           "id": "SH-7",
           "severity": "error",
-          "rule": "API keys, admin tokens, and similar bearer credentials MUST be accepted through Authorization or other non-URL secret-bearing headers; query-parameter authentication is prohibited.",
+          "rule": "API keys, admin tokens, and similar bearer credentials MUST be accepted through Authorization or other non-URL secret-bearing headers; query-parameter authentication is prohibited. [Review-only: no mechanical enforcement exists; see #585.]",
           "rationale": "Query-string credentials leak into logs, browser history, caches, and proxies even when application code handles them carefully.",
           "required": [
             "Accept bearer or key credentials through headers or another transport that does not expose them in URLs.",
@@ -400,7 +403,8 @@
           "enforcedBy": [
             "auth middleware",
             "API route handlers"
-          ]
+          ],
+          "enforcement": "review"
         },
         {
           "id": "SH-8",
@@ -485,7 +489,7 @@
             "Evasion variant coverage for each active scanner category"
           ],
           "enforcedBy": [
-            "tests/ hook regression suite",
+            "scripts/testing/test-hook-regressions.ps1",
             "CI pre-commit replay with adversarial fixtures",
             "Security pattern review ceremony"
           ]
@@ -494,13 +498,21 @@
           "id": "S-3",
           "severity": "error",
           "rule": "Mutation tools are enabled by default but still require bootstrap gating, and operators MUST use INDEX_SERVER_MUTATION=0 when they need an explicit read-only runtime.",
-          "rationale": "Write operations remain subject to bootstrap safeguards while allowing operators to force a read-only runtime when they need stricter protection."
+          "rationale": "Write operations remain subject to bootstrap safeguards while allowing operators to force a read-only runtime when they need stricter protection.",
+          "enforcedBy": [
+            "src/tests/bootstrapGating.spec.ts",
+            "src/tests/mcpConfigImperativeDirective.spec.ts"
+          ]
         },
         {
           "id": "S-4",
           "severity": "error",
           "rule": "All environment configuration must flow through src/config/runtimeConfig.ts.",
-          "rationale": "Centralized config prevents hardcoded paths and secrets."
+          "rationale": "Centralized config prevents hardcoded paths and secrets.",
+          "enforcedBy": [
+            "scripts/governance/enforce-config-usage.ts",
+            "scripts/governance/config-usage-baseline.json"
+          ]
         }
       ]
     },
@@ -511,7 +523,7 @@
         {
           "id": "AR-1",
           "severity": "error",
-          "rule": "Designs MUST default to the simplest structure that satisfies the current requirement set and documented enterprise constraints.",
+          "rule": "Designs MUST default to the simplest structure that satisfies the current requirement set and documented enterprise constraints. [Review-only: no mechanical enforcement exists; see #585.]",
           "rationale": "Template repos should bias toward reusable fundamentals, not complexity that assumes future needs.",
           "required": [
             "Use existing framework and platform primitives directly when they already solve the current problem.",
@@ -526,7 +538,8 @@
           "enforcedBy": [
             "plan review",
             "constitution review"
-          ]
+          ],
+          "enforcement": "review"
         },
         {
           "id": "AR-2",
@@ -552,43 +565,67 @@
           "id": "A-1",
           "severity": "error",
           "rule": "Handler registration uses side-effect imports in src/services/toolHandlers.ts.",
-          "rationale": "Consistent registration keeps the handler catalog discoverable."
+          "rationale": "Consistent registration keeps the handler catalog discoverable.",
+          "enforcedBy": [
+            "src/tests/serverEntrypointImportOwnership.spec.ts"
+          ]
         },
         {
           "id": "A-2",
           "severity": "error",
           "rule": "Tool registry (INPUT_SCHEMAS, STABLE, MUTATION sets) must be updated for new tools.",
-          "rationale": "Missing registry entries cause silent tool invisibility."
+          "rationale": "Missing registry entries cause silent tool invisibility.",
+          "enforcedBy": [
+            "src/tests/toolRegistryConformance.spec.ts"
+          ]
         },
         {
           "id": "A-3",
           "severity": "error",
-          "rule": "IndexContext is the single source of truth for instruction state (writeEntry + ensureLoaded).",
-          "rationale": "Bypassing IndexContext creates state divergence."
+          "rule": "IndexContext is the single source of truth for instruction state (writeEntry + ensureLoaded). [Review-only: no mechanical enforcement exists; see #585.]",
+          "rationale": "Bypassing IndexContext creates state divergence.",
+          "enforcement": "review",
+          "enforcedBy": [
+            "Code review"
+          ]
         },
         {
           "id": "A-4",
           "severity": "warning",
           "rule": "Schema version must be tracked via src/versioning/schemaVersion.ts.",
-          "rationale": "Version tracking enables safe migrations."
+          "rationale": "Version tracking enables safe migrations.",
+          "enforcedBy": [
+            "src/tests/instructionsGovernanceVersion.spec.ts"
+          ]
         },
         {
           "id": "A-5",
           "severity": "error",
-          "rule": "Audit logging (logAudit) is required for all mutation operations.",
-          "rationale": "Mutation audit trail is required for governance compliance."
+          "rule": "Audit logging (logAudit) is required for all mutation operations. [Review-only: no mechanical enforcement exists; see #585.]",
+          "rationale": "Mutation audit trail is required for governance compliance.",
+          "enforcement": "review",
+          "enforcedBy": [
+            "Code review"
+          ]
         },
         {
           "id": "A-6",
           "severity": "error",
           "rule": "Instruction body size must be enforced at write-time: index_add and index_import must reject bodies exceeding bodyWarnLength with actionable split/cross-link guidance.",
-          "rationale": "Unbounded bodies degrade search and transport reliability."
+          "rationale": "Unbounded bodies degrade search and transport reliability.",
+          "enforcedBy": [
+            "src/tests/bodySizeEnforcement.spec.ts"
+          ]
         },
         {
           "id": "A-7",
           "severity": "error",
-          "rule": "Canonical seeds in seedBootstrap.ts must contain only generalized, public-safe content about the index server, Index operations, and bootstrapping — no environment-specific, org-specific, or custom configuration data.",
-          "rationale": "Seeds are published to public repos; org-specific content leaks sensitive context."
+          "rule": "Canonical seeds in seedBootstrap.ts must contain only generalized, public-safe content about the index server, Index operations, and bootstrapping — no environment-specific, org-specific, or custom configuration data. [Review-only: no mechanical enforcement exists; see #585.]",
+          "rationale": "Seeds are published to public repos; org-specific content leaks sensitive context.",
+          "enforcement": "review",
+          "enforcedBy": [
+            "Code review"
+          ]
         }
       ]
     },
@@ -644,7 +681,7 @@
         {
           "id": "OB-3",
           "severity": "error",
-          "rule": "Exceptions, failed operations, and unexpected states MUST be logged with enough stack or call-site context to support direct troubleshooting when the runtime can provide it.",
+          "rule": "Exceptions, failed operations, and unexpected states MUST be logged with enough stack or call-site context to support direct troubleshooting when the runtime can provide it. [Review-only: no mechanical enforcement exists; see #585.]",
           "rationale": "Error records without stack or call-site detail force slow reproduction work and weaken agent-assisted debugging.",
           "required": [
             "Capture and log stack traces for exceptions when the runtime supports them.",
@@ -662,7 +699,8 @@
           "enforcedBy": [
             "repo-local exception handling",
             "review and production incident analysis"
-          ]
+          ],
+          "enforcement": "review"
         },
         {
           "id": "OB-4",
@@ -731,8 +769,8 @@
             "scripts/validate-no-test-artifacts.mjs enforces size limits on test-controlled directories"
           ],
           "enforcedBy": [
-            "scripts/crawl-logs.mjs",
-            "scripts/validate-no-test-artifacts.mjs",
+            "scripts/diagnostics/crawl-logs.mjs",
+            "scripts/governance/validate-no-test-artifacts.mjs",
             ".github/workflows/ci.yml",
             ".github/workflows/ci-enhanced.yml"
           ]
@@ -837,49 +875,81 @@
           "id": "TS-5",
           "severity": "error",
           "rule": "All tests MUST pass before commit.",
-          "rationale": "Broken tests committed to the repo erode trust in the test suite."
+          "rationale": "Broken tests committed to the repo erode trust in the test suite.",
+          "enforcedBy": [
+            ".github/workflows/ci-self-hosted.yml",
+            ".pre-commit-config.yaml"
+          ]
         },
         {
           "id": "TS-6",
           "severity": "error",
-          "rule": "New features MUST include test coverage.",
-          "rationale": "Untested features become invisible regressions."
+          "rule": "New features MUST include test coverage. [Review-only: no mechanical enforcement exists; see #585.]",
+          "rationale": "Untested features become invisible regressions.",
+          "enforcement": "review",
+          "enforcedBy": [
+            "Code review"
+          ]
         },
         {
           "id": "TS-7",
           "severity": "error",
-          "rule": "Functional tests MUST validate full pipeline round-trips.",
-          "rationale": "Pipeline round-trips catch integration failures that unit tests miss."
+          "rule": "Functional tests MUST validate full pipeline round-trips. [Review-only: no mechanical enforcement exists; see #585.]",
+          "rationale": "Pipeline round-trips catch integration failures that unit tests miss.",
+          "enforcement": "review",
+          "enforcedBy": [
+            "Code review"
+          ]
         },
         {
           "id": "TS-8",
           "severity": "error",
-          "rule": "TDD red/green is NON-NEGOTIABLE: tests MUST be written and verified FAILING before implementation code; failing test first, fix second (red-green-refactor).",
-          "rationale": "Red-green-refactor prevents tests that pass by accident."
+          "rule": "TDD red/green is NON-NEGOTIABLE: tests MUST be written and verified FAILING before implementation code; failing test first, fix second (red-green-refactor). [Review-only: no mechanical enforcement exists; see #585.]",
+          "rationale": "Red-green-refactor prevents tests that pass by accident.",
+          "enforcement": "review",
+          "enforcedBy": [
+            "Code review"
+          ]
         },
         {
           "id": "TS-9",
           "severity": "error",
-          "rule": "Every bug fix MUST start with a failing regression test: write a test that reproduces the failure, then fix and verify pass.",
-          "rationale": "Regression tests prevent recurrence and prove the fix addresses the reported failure."
+          "rule": "Every bug fix MUST start with a failing regression test: write a test that reproduces the failure, then fix and verify pass. [Review-only: no mechanical enforcement exists; see #585.]",
+          "rationale": "Regression tests prevent recurrence and prove the fix addresses the reported failure.",
+          "enforcement": "review",
+          "enforcedBy": [
+            "Code review"
+          ]
         },
         {
           "id": "TS-10",
           "severity": "error",
-          "rule": "Tests MUST exercise the REAL production code; toy reimplementations and stub copies of the code under test are prohibited.",
-          "rationale": "Testing stubs instead of real code creates false confidence."
+          "rule": "Tests MUST exercise the REAL production code; toy reimplementations and stub copies of the code under test are prohibited. [Review-only: no mechanical enforcement exists; see #585.]",
+          "rationale": "Testing stubs instead of real code creates false confidence.",
+          "enforcement": "review",
+          "enforcedBy": [
+            "Code review"
+          ]
         },
         {
           "id": "TS-11",
           "severity": "error",
-          "rule": "Playwright e2e tests MUST cover dashboard UI, instruction CRUD lifecycle, and search functionality.",
-          "rationale": "The dashboard is a primary user surface and needs E2E coverage."
+          "rule": "Playwright e2e tests MUST cover dashboard UI, instruction CRUD lifecycle, and search functionality. [Review-only: no mechanical enforcement exists; see #585.]",
+          "rationale": "The dashboard is a primary user surface and needs E2E coverage.",
+          "enforcement": "review",
+          "enforcedBy": [
+            "Code review"
+          ]
         },
         {
           "id": "TS-12",
           "severity": "error",
-          "rule": "Bug-prone handlers and complex code paths MUST have >= 5 test cases covering normal, edge, error, boundary, and concurrent scenarios.",
-          "rationale": "Complex paths need comprehensive coverage to catch interaction effects."
+          "rule": "Bug-prone handlers and complex code paths MUST have >= 5 test cases covering normal, edge, error, boundary, and concurrent scenarios. [Review-only: no mechanical enforcement exists; see #585.]",
+          "rationale": "Complex paths need comprehensive coverage to catch interaction effects.",
+          "enforcement": "review",
+          "enforcedBy": [
+            "Code review"
+          ]
         }
       ]
     },
@@ -1209,26 +1279,42 @@
         {
           "id": "PB-1",
           "severity": "error",
-          "rule": "All active repos MUST follow the dual-repo pattern: private dev repo for all development, public pub repo as read-only mirror.",
-          "rationale": "Separation prevents accidental exposure of internal artifacts."
+          "rule": "All active repos MUST follow the dual-repo pattern: private dev repo for all development, public pub repo as read-only mirror. [Review-only: no mechanical enforcement exists; see #585.]",
+          "rationale": "Separation prevents accidental exposure of internal artifacts.",
+          "enforcement": "review",
+          "enforcedBy": [
+            "Code review"
+          ]
         },
         {
           "id": "PB-2",
           "severity": "error",
           "rule": "Public publication repos MUST NOT receive direct pushes; all updates MUST flow through the publish script (scripts/publish-direct-to-remote.cjs) from the dev repo.",
-          "rationale": "Centralized publish prevents ad-hoc content leaks."
+          "rationale": "Centralized publish prevents ad-hoc content leaks.",
+          "enforcedBy": [
+            "scripts/hooks/pre-push-public-guard.cjs",
+            "src/tests/prePushPublicGuard.spec.ts"
+          ]
         },
         {
           "id": "PB-3",
           "severity": "error",
           "rule": "Internal artifacts (.specify/, specs/, issue templates, state/, logs/) MUST be excluded from publication via .publish-exclude.",
-          "rationale": "Internal artifacts contain sensitive operational context."
+          "rationale": "Internal artifacts contain sensitive operational context.",
+          "enforcedBy": [
+            ".publish-exclude",
+            "src/tests/unit/publishScripts.spec.ts"
+          ]
         },
         {
           "id": "PB-6",
           "severity": "error",
           "rule": "Dev repos MUST have a pre-push hook that queries GitHub API for repo visibility and blocks pushes to public remotes; bypass requires a SHA-256 token computed by the publish scripts (PUBLISH_OVERRIDE=1 is NOT sufficient).",
-          "rationale": "Public push guard prevents accidental exposure of the dev repo."
+          "rationale": "Public push guard prevents accidental exposure of the dev repo.",
+          "enforcedBy": [
+            "scripts/hooks/pre-push-public-guard.cjs",
+            "src/tests/prePushPublicGuard.spec.ts"
+          ]
         }
       ]
     },
@@ -1267,6 +1353,9 @@
             "sync-constitution check output"
           ],
           "enforcedBy": [
+            "sync-constitution.cjs",
+            ".github/workflows/precommit.yml",
+            "scripts/governance/check-constitution-enforcement.mjs",
             "scripts/build/sync-constitution.ps1",
             ".github/copilot-instructions.md"
           ]
@@ -1298,27 +1387,43 @@
       "rules": [
         {
           "id": "CQ-1",
-          "severity": "warning",
+          "severity": "error",
           "rule": "Source files SHOULD target <=600 lines; MUST NOT exceed 1000 (template literals exempt).",
-          "rationale": "Long files obscure ownership and make reviews harder."
+          "rationale": "Long files obscure ownership and make reviews harder.",
+          "enforcedBy": [
+            "eslint.config.mjs",
+            "scripts/governance/check-constitution-enforcement.mjs"
+          ]
         },
         {
           "id": "CQ-2",
           "severity": "error",
-          "rule": "Each module MUST have a single primary responsibility; god-modules that mix unrelated concerns are prohibited.",
-          "rationale": "Single responsibility keeps modules discoverable and testable."
+          "rule": "Each module MUST have a single primary responsibility; god-modules that mix unrelated concerns are prohibited. [Review-only: no mechanical enforcement exists; see #585.]",
+          "rationale": "Single responsibility keeps modules discoverable and testable.",
+          "enforcement": "review",
+          "enforcedBy": [
+            "Code review"
+          ]
         },
         {
           "id": "CQ-3",
           "severity": "error",
-          "rule": "Source code MUST follow the project declared layered architecture; cross-layer imports MUST flow downward only.",
-          "rationale": "Layered imports prevent circular coupling."
+          "rule": "Source code MUST follow the project declared layered architecture; cross-layer imports MUST flow downward only. [Review-only: no mechanical enforcement exists; see #585.]",
+          "rationale": "Layered imports prevent circular coupling.",
+          "enforcement": "review",
+          "enforcedBy": [
+            "Code review"
+          ]
         },
         {
           "id": "CQ-4",
           "severity": "error",
-          "rule": "Circular dependencies are prohibited; module dependency graphs MUST be acyclic.",
-          "rationale": "Cycles create unpredictable initialization and test isolation failures."
+          "rule": "Circular dependencies are prohibited; module dependency graphs MUST be acyclic. [Review-only: no mechanical enforcement exists; see #585.]",
+          "rationale": "Cycles create unpredictable initialization and test isolation failures.",
+          "enforcement": "review",
+          "enforcedBy": [
+            "Code review"
+          ]
         },
         {
           "id": "CQ-5",
@@ -1329,8 +1434,12 @@
         {
           "id": "CQ-6",
           "severity": "error",
-          "rule": "Error handling MUST be explicit; swallowed exceptions (empty catch blocks) are prohibited — errors MUST be logged, re-thrown, or handled with documented rationale.",
-          "rationale": "Swallowed exceptions hide failures and break agent-assisted debugging."
+          "rule": "Error handling MUST be explicit; swallowed exceptions (empty catch blocks) are prohibited — errors MUST be logged, re-thrown, or handled with documented rationale. [Review-only: no mechanical enforcement exists; see #585.]",
+          "rationale": "Swallowed exceptions hide failures and break agent-assisted debugging.",
+          "enforcement": "review",
+          "enforcedBy": [
+            "Code review"
+          ]
         },
         {
           "id": "CQ-7",
@@ -1347,14 +1456,22 @@
         {
           "id": "DI-1",
           "severity": "error",
-          "rule": "All stateful data MUST persist to disk; startup MUST auto-restore.",
-          "rationale": "Loss of state on restart degrades operational continuity."
+          "rule": "All stateful data MUST persist to disk; startup MUST auto-restore. [Review-only: no mechanical enforcement exists; see #585.]",
+          "rationale": "Loss of state on restart degrades operational continuity.",
+          "enforcement": "review",
+          "enforcedBy": [
+            "Code review"
+          ]
         },
         {
           "id": "DI-2",
           "severity": "error",
-          "rule": "Corrupted or empty files MUST result in safe empty state, not crashes.",
-          "rationale": "Crash-on-corruption makes recovery impossible without manual intervention."
+          "rule": "Corrupted or empty files MUST result in safe empty state, not crashes. [Review-only: no mechanical enforcement exists; see #585.]",
+          "rationale": "Crash-on-corruption makes recovery impossible without manual intervention.",
+          "enforcement": "review",
+          "enforcedBy": [
+            "Code review"
+          ]
         },
         {
           "id": "DI-3",
@@ -1380,6 +1497,7 @@
             "Shared migration/validation module used by both read and write paths"
           ],
           "enforcedBy": [
+            "src/tests/unit/di4WritePathSymmetry.spec.ts",
             "Integration tests",
             "Code review"
           ]
@@ -1421,6 +1539,7 @@
     "tools": "docs/tools.md",
     "changelog": "CHANGELOG.md",
     "precommitWorkflow": ".github/workflows/precommit.yml",
-    "license": "LICENSE"
+    "license": "LICENSE",
+    "constitutionSyncEngine": "sync-constitution.cjs"
   }
 }

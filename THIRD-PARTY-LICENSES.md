@@ -11,7 +11,7 @@ This file documents the licenses of third-party dependencies included in or used
 - **License:** Apache License 2.0
 - **Repository:** https://github.com/huggingface/transformers.js
 - **Usage:** Optional local ML inference for semantic search (embedding generation)
-- **Note:** Disabled by default (`INDEX_SERVER_SEMANTIC_ENABLED=0`). When enabled, all inference runs locally on-device.
+- **Note:** Profile-dependent — disabled on the `default` profile (`INDEX_SERVER_SEMANTIC_ENABLED=0`), enabled on `enhanced` and `experimental`. When enabled, all inference runs locally on-device; only the one-time model download is remote.
 
 > Licensed under the Apache License, Version 2.0 (the "License");
 > you may not use this file except in compliance with the License.

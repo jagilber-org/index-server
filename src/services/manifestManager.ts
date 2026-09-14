@@ -6,6 +6,7 @@ import { traceEnabled, emitTrace } from './tracing';
 import { incrementCounter } from './features';
 import { logInfo, logWarn } from './logger';
 import { getRuntimeConfig } from '../config/runtimeConfig';
+import { resolveManifestPath } from '../config/serviceEnv';
 
 /**
  * Runtime manifest management.
@@ -36,16 +37,28 @@ export interface ManifestEntry { id: string; sourceHash?: string; bodyHash?: str
 // to schemas/manifest.schema.json (one directory up then into schemas/).
 export interface IndexManifest { $schema?: string; version: 1; generatedAt: string; count: number; entries: ManifestEntry[] }
 
-const MANIFEST_RELATIVE = path.join('snapshots','index-manifest.json');
-function getManifestPath(){
+/**
+ * Resolve the on-disk manifest location.
+ *
+ * Exported so the reader (`integrity_manifest`) and the writers share ONE
+ * definition. They previously each built the path themselves, which is how the
+ * reader could move to STATE_ROOT while the writer stayed on cwd without
+ * anything failing to compile.
+ *
+ * @returns Absolute path to `index-manifest.json` under the state root
+ */
+export function getManifestPath(){
   // Tests run in parallel forks (vitest pool=forks, maxWorkers=4) and each fork
   // shares the same process.cwd(); without an override, multiple test files that
   // enable manifest write race on the same on-disk file. Honor an explicit path
   // override so test setup can isolate per-spec output. Production leaves this
   // unset and continues to use the canonical snapshot path.
-  const override = process.env.INDEX_SERVER_MANIFEST_PATH;
-  if(override && override.trim()) return path.isAbsolute(override) ? override : path.join(process.cwd(), override);
-  return path.join(process.cwd(), MANIFEST_RELATIVE);
+  //
+  // Resolution lives in `config/serviceEnv` (#611) and is re-read per call:
+  // the specs above set INDEX_SERVER_MANIFEST_PATH after boot, so a memoized
+  // snapshot would send every fork back to the shared file this override exists
+  // to avoid.
+  return resolveManifestPath();
 }
 
 /**

@@ -26,7 +26,7 @@ function writeJsonEmbeddings(dir: string, data: EmbeddingCacheData): string {
   return fp;
 }
 
-describe.skipIf(!hasSqliteVec)('migrateJsonEmbeddingsToStore', () => {
+describe.skipIf(!hasSqliteVec)('migrateJsonEmbeddingsToStore', () => { // SKIP_OK: environment-gated: requires sqlite-vec native module
   it('migrates JSON embeddings to SqliteEmbeddingStore', () => {
     const tmpDir = makeTmpDir();
     const jsonPath = writeJsonEmbeddings(tmpDir, {

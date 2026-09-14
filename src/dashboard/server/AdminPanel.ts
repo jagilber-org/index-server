@@ -15,7 +15,7 @@ import { getRuntimeConfig } from '../../config/runtimeConfig';
 import { getMetricsCollector, ToolMetrics } from './MetricsCollector';
 import type { TrendDirection } from '../../lib/trendDirection';
 import type { HealthStatus } from '../types/healthStatus';
-import { getIndexState, ensureLoaded, invalidate, touchIndexVersion } from '../../services/indexContext';
+import { getIndexState, ensureLoaded, invalidate, touchIndexVersion, beginBulkMutation, endBulkMutation } from '../../services/indexContext';
 import { AdminPanelConfig } from './AdminPanelConfig';
 import type { AdminConfig } from './AdminPanelConfig';
 import { AdminPanelState } from './AdminPanelState';
@@ -91,7 +91,16 @@ export class AdminPanel {
   private lastUptimeSeconds = 0;
 
   private get backupRoot(): string {
-    return getRuntimeConfig().dashboard.admin.backupsDir || path.join(process.cwd(), 'backups');
+    // No cwd fallback. `backupsDir` is always populated by parseDashboardConfig
+    // (it resolves under STATE_ROOT), so the old `|| path.join(process.cwd(),
+    // 'backups')` was unreachable in practice — but it is exactly the kind of
+    // dormant default that silently reintroduces #577 the moment the config
+    // shape changes, and it reads as sanctioned behaviour to anyone copying it.
+    // If it is ever genuinely empty, that is a config bug worth surfacing
+    // rather than papering over with a directory in the client's project.
+    const dir = getRuntimeConfig().dashboard.admin.backupsDir;
+    if (!dir) throw new Error('dashboard.admin.backupsDir is unset; runtime config failed to resolve the backup root');
+    return dir;
   }
   private get instructionsRoot(): string {
     return getRuntimeConfig().index.baseDir || path.join(process.cwd(), 'instructions');
@@ -299,6 +308,13 @@ export class AdminPanel {
   }
 
   restoreBackup(backupId: string): { success: boolean; message: string; restored?: number } {
+    // Restore rewrites the whole instructions directory — unlinking JSON files
+    // and re-ingesting — so between the first unlink and the closing reload the
+    // index can be read at any partial size. Hold the bulk-mutation guard for
+    // the duration so the catalog sampler does not persist one of those counts.
+    // Tracked with a local flag rather than an unconditional release, so the
+    // finally cannot decrement a scope opened by a concurrent importer.
+    let bulkGuardHeld = false;
     try {
       const safeId = this.validateBackupId(backupId);
       const backupRoot = this.backupRoot;
@@ -328,6 +344,9 @@ export class AdminPanel {
         });
         logInfo('[admin] pre-restore safety backup created', { safetyId, originalCount: existing.length });
       }
+
+      beginBulkMutation();
+      bulkGuardHeld = true;
 
       let restored = 0;
       if (isZip) {
@@ -422,6 +441,8 @@ export class AdminPanel {
       logError('[admin] backup restore failed', { backupId, error: errMsg, stack });
       logAudit('admin/backup/restore_failed', backupId ? [String(backupId)] : undefined, { error: errMsg }, 'mutation');
       return { success: false, message: `Restore failed: ${errMsg}` };
+    } finally {
+      if (bulkGuardHeld) endBulkMutation();
     }
   }
 

@@ -67,7 +67,7 @@ function call(name: string, params: unknown): unknown {
 // SUITE 1: SQLite mode — NO instruction .json files on disk
 // ═══════════════════════════════════════════════════════════════════════════════
 
-describe.skipIf(!hasSqlite)('Backend Isolation — SQLite mode (no instruction .json on disk)', () => {
+describe.skipIf(!hasSqlite)('Backend Isolation — SQLite mode (no instruction .json on disk)', () => { // SKIP_OK: environment-gated: requires better-sqlite3 native module
   const TMP_ROOT = path.join(os.tmpdir(), `iso-sqlite-${Date.now()}`);
   const INST_DIR = path.join(TMP_ROOT, 'instructions');
   const DB_PATH = path.join(TMP_ROOT, 'isolation-test.db');

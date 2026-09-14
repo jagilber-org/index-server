@@ -1,0 +1,30 @@
+{
+  "_readme": [
+    "Deliberate exclusions for scripts/governance/check-config-parity.mjs (#588).",
+    "Keyed per variable with a reason each. Not a waiver: the gate FAILS on an",
+    "entry that no longer applies, so this file cannot outlive its contents.",
+    "'undocumented' = read by code, intentionally absent from docs/configuration.md.",
+    "'dead' = documented, read nowhere, kept for a stated reason.",
+    "A new variable belongs in the doc, not here, unless one of these shapes fits."
+  ],
+  "undocumented": {
+    "INDEX_SERVER_ALLOW_INSECURE_TLS": "Build-time only: scripts/governance/validate-security-headers.mjs. Never read by the server.",
+    "INDEX_SERVER_BODY_MAX_LENGTH": "Removed setting. The one remaining read (runtimeConfig.ts:343-345) exists solely to WARN that it is no longer recognized, so it must not be listed as a live setting -- it is in the 'Removed / not implemented' table instead.",
+    "INDEX_SERVER_COVERAGE_ALLOW_MISSING": "Coverage-gate knob for scripts/governance/check-coverage.mjs. CI plumbing, not operator configuration.",
+    "INDEX_SERVER_COVERAGE_FAST": "Coverage-gate knob. CI plumbing.",
+    "INDEX_SERVER_COVERAGE_HARD_MIN": "Coverage-gate knob. CI plumbing.",
+    "INDEX_SERVER_COVERAGE_STRICT": "Coverage-gate knob. CI plumbing.",
+    "INDEX_SERVER_COVERAGE_TARGET": "Coverage-gate knob. CI plumbing.",
+    "INDEX_SERVER_DASHBOARD_URL": "Target URL for scripts/diagnostics/sqlite-validate.ps1. A diagnostic script's argument, not server configuration.",
+    "INDEX_SERVER_DATA_DIR": "Read only by scripts/dev/diagnostic/info-probe.mjs, which reports whatever is set. The server does not consult it.",
+    "INDEX_SERVER_INSTRUCTIONS_DIR": "Same: reported by info-probe.mjs only. INDEX_SERVER_DIR is the real setting and is documented.",
+    "INDEX_SERVER_LOG_DIR": "Same: reported by info-probe.mjs only. Log location follows STATE_ROOT.",
+    "INDEX_SERVER_OPENSSL_BIN": "Build-time override for scripts/build/generate-certs.mjs. Documented in docs/cert_init.md where it is relevant.",
+    "INDEX_SERVER_PRECOMMIT_DOTENV": "Pre-commit hook plumbing (scripts/hooks/pre-commit.*). Documented in docs/security_guards.md.",
+    "INDEX_SERVER_PROD_ROOT": "One migration test script, scripts/migration/test-contenttype-migration.ps1.",
+    "INDEX_SERVER_SETUP_INSTALL_TIMEOUT_MS": "Setup-wizard timeout. Belongs to the installer, not the running server.",
+    "INDEX_SERVER_SETUP_PACK_TIMEOUT_MS": "Setup-wizard timeout. Belongs to the installer, not the running server.",
+    "INDEX_SERVER_URL": "Target URL for the REST client scripts. Documented in docs/client_scripts.md where it is used."
+  },
+  "dead": {}
+}

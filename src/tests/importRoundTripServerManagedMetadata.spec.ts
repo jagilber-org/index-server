@@ -47,6 +47,7 @@ function configure() {
 }
 
 describe('import round-trip — server-managed metadata carry-forward', () => {
+  let currentInstructionsDir = '';
   beforeAll(async () => {
     await import('../services/handlers.instructions.js');
     await import('../services/instructions.dispatcher.js');
@@ -62,7 +63,7 @@ describe('import round-trip — server-managed metadata carry-forward', () => {
   });
 
   beforeEach(() => {
-    configure();
+    currentInstructionsDir = configure().instructionsDir;
   });
 
   it('SERVER_MANAGED_KEYS contains the four carry-forward observables', () => {
@@ -137,9 +138,11 @@ describe('import round-trip — server-managed metadata carry-forward', () => {
     const before = await Promise.resolve(dispatch!({ action: 'get', id })) as Record<string, unknown>;
     const liveBefore = before.item as Record<string, unknown>;
     expect(liveBefore).toBeTruthy();
-    // usageCount may be 0/undefined in the live store at this point.
+    // The `get` above is auto-tracked as a retrieval now that usage defaults on
+    // (#495), so the live count is nonzero. What matters here is only that it is
+    // not the exported value, so the later assertion proves the export won.
     const liveUsageBefore = (liveBefore.usageCount as number | undefined) ?? 0;
-    expect(liveUsageBefore).toBe(0);
+    expect(liveUsageBefore).not.toBe(42);
 
     // 3. Simulate restoring a previously exported snapshot with rich history.
     //    The exported entry carries server-managed history fields; on overwrite
@@ -175,13 +178,22 @@ describe('import round-trip — server-managed metadata carry-forward', () => {
       expect(stripped[key], `stripped count for ${key}`).toBe(1);
     }
 
-    // 5. Carry-forward fields from the export overwrite the live store.
+    // 5. Carry-forward fields from the export overwrite the live store. Assert
+    //    against what the handler persisted: a `get` is auto-tracked as a
+    //    retrieval, which rewrites usageCount from the live usage authority and
+    //    would measure the observation rather than the import.
+    const persisted = JSON.parse(
+      fs.readFileSync(path.join(currentInstructionsDir, `${id}.json`), 'utf8'),
+    ) as Record<string, unknown>;
+    expect(persisted.usageCount).toBe(42);
+    expect(persisted.firstSeenTs).toBe('2024-06-01T00:00:00.000Z');
+    expect(persisted.lastUsedAt).toBe('2025-01-15T12:00:00.000Z');
+    expect(persisted.archivedAt).toBe('2025-02-01T00:00:00.000Z');
+
     const after = await Promise.resolve(dispatch!({ action: 'get', id })) as Record<string, unknown>;
     const liveAfter = after.item as Record<string, unknown>;
     expect(liveAfter).toBeTruthy();
-    expect(liveAfter.usageCount).toBe(42);
     expect(liveAfter.firstSeenTs).toBe('2024-06-01T00:00:00.000Z');
-    expect(liveAfter.lastUsedAt).toBe('2025-01-15T12:00:00.000Z');
     expect(liveAfter.archivedAt).toBe('2025-02-01T00:00:00.000Z');
 
     // 6. Server-derived integrity fields are recomputed; the forged values are

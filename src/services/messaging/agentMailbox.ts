@@ -2,7 +2,7 @@
  * Core messaging service — AgentMailbox.
  *
  * In-memory message store with JSONL persistence, TTL sweep,
- * recipient visibility filtering, and cross-process file watching.
+ * recipient visibility filtering, and lazy cross-process token-based reloads.
  *
  * Messages are NOT stored in the instruction index (A-3).
  * Config via runtimeConfig (S-4).
@@ -20,6 +20,8 @@ import {
 import {
   appendMessage,
   loadMessages,
+  readMessagesVersionMTime,
+  readMessagesVersionToken,
   rewriteMessages,
 } from './messagingPersistence';
 import type { MessagingConfig } from '../../config/runtimeConfig';
@@ -33,6 +35,8 @@ export class AgentMailbox {
   private readonly config: MessagingConfig;
   private sweepTimer: ReturnType<typeof setInterval> | null = null;
   private loaded = false;
+  private versionMTime = 0;
+  private versionToken = '';
 
   constructor(config: MessagingConfig) {
     this.config = config;
@@ -41,16 +45,29 @@ export class AgentMailbox {
     }
   }
 
-  /** Load messages from disk if not already loaded. */
+  /** Load messages from disk when the backing version token changes. */
   ensureLoaded(): void {
-    if (this.loaded) return;
-    this.loaded = true;
-    const msgs = loadMessages(this.config.dir);
-    for (const msg of msgs) {
-      const key = this.makeKey(msg);
-      this.store.set(key, msg);
-      this.idIndex.set(msg.id, key);
+    const currentVersionMTime = readMessagesVersionMTime(this.config.dir);
+    const currentVersionToken = readMessagesVersionToken(this.config.dir);
+    if (
+      this.loaded
+      && currentVersionMTime === this.versionMTime
+      && currentVersionToken === this.versionToken
+    ) {
+      return;
     }
+
+    const msgs = loadMessages(this.config.dir);
+    this.mergeDiskSnapshot(msgs);
+
+    // Read the version marker AFTER reload. Like indexContext's RCA 2026-05-01,
+    // caching the pre-load token can cause spurious reload loops when the load
+    // path itself observes or triggers file-system side effects.
+    const postLoadVersionMTime = readMessagesVersionMTime(this.config.dir);
+    const postLoadVersionToken = readMessagesVersionToken(this.config.dir);
+    this.loaded = true;
+    this.versionMTime = postLoadVersionMTime || currentVersionMTime;
+    this.versionToken = postLoadVersionToken || currentVersionToken;
   }
 
   /** Send a message. Returns the message ID. */
@@ -87,6 +104,7 @@ export class AgentMailbox {
 
     // Persist to JSONL
     appendMessage(msg, this.config.dir);
+    this.syncVersionState();
 
     return id;
   }
@@ -120,6 +138,16 @@ export class AgentMailbox {
     // Filter by sender
     if (opts.sender) {
       messages = messages.filter(m => m.sender === opts.sender);
+    }
+
+    // Filter by requiresAck flag
+    if (opts.requiresAck !== undefined) {
+      messages = messages.filter(m => (m.requiresAck ?? false) === opts.requiresAck);
+    }
+
+    // Filter unacknowledged only (requiresAck=true AND not read by reader)
+    if (opts.unacked && opts.reader) {
+      messages = messages.filter(m => m.requiresAck && !m.readBy?.includes(opts.reader!));
     }
 
     // Sort by createdAt (oldest first)
@@ -245,7 +273,7 @@ export class AgentMailbox {
     const count = this.store.size;
     this.store.clear();
     this.idIndex.clear();
-    rewriteMessages([], this.config.dir);
+    this.persistAll();
     return count;
   }
 
@@ -385,6 +413,23 @@ export class AgentMailbox {
     return `msg/${msg.channel}/${new Date(msg.createdAt).getTime()}-${msg.id}`;
   }
 
+  /**
+   * No-clobber reload merge design:
+   * Never replace the in-memory map with a disk snapshot. A reload can observe
+   * a slightly stale file while this process still holds newer local messages.
+   * Blind replacement would silently drop those in-memory records. Instead,
+   * merge by message ID and only materialize disk-only messages; existing
+   * in-memory messages always win for the lifetime of this process.
+   */
+  private mergeDiskSnapshot(messages: AgentMessage[]): void {
+    for (const msg of messages) {
+      if (this.idIndex.has(msg.id)) continue;
+      const key = this.makeKey(msg);
+      this.store.set(key, msg);
+      this.idIndex.set(msg.id, key);
+    }
+  }
+
   private isRecipient(msg: AgentMessage, reader: string): boolean {
     if (reader === '*') return true;
     if (msg.recipients.includes('*')) return true;
@@ -395,6 +440,13 @@ export class AgentMailbox {
   private persistAll(): void {
     const messages = Array.from(this.store.values());
     rewriteMessages(messages, this.config.dir);
+    this.syncVersionState();
+  }
+
+  private syncVersionState(): void {
+    this.loaded = true;
+    this.versionMTime = readMessagesVersionMTime(this.config.dir);
+    this.versionToken = readMessagesVersionToken(this.config.dir);
   }
 
   private startSweep(): void {

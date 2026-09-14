@@ -94,12 +94,16 @@ Set `INDEX_SERVER_FILE_TRACE=1` to emit per-file decisions:
 Schema and classification rejections are also logged to stderr at info level:
 
 ```text
-[Index:skip] example.json: schema: /body: must NOT have more than 100000 characters
+[Index:skip] example.json: schema: /body: must NOT have more than 1000000 characters
 ```
 
 This trace plus the JSON `Index-summary` log event enables external dashboards & health endpoints.
 
 ## Future Improvements
+
+- Optional endpoint `/instructions/skipped` enumerating skipped file + reason
+- Dashboard panel showing salvage trend over time (detect rising drift)
+- Adaptive author feedback: surface salvage corrections as suggestions in tooling
 
 ## Manifest
 
@@ -124,10 +128,6 @@ Guarantees:
 4. `count == entries.length == accepted`.
 5. Hash matches `computeIndexHash` aggregate.
 6. Body hash is SHA-256 of stored `body` post-normalization.
-
-- Optional endpoint `/instructions/skipped` enumerating skipped file + reason
-- Dashboard panel showing salvage trend over time (detect rising drift)
-- Adaptive author feedback: surface salvage corrections as suggestions in tooling
 
 ---
 Maintainer Note: updating salvage rules requires updating both code and this document. Treat salvage keys as part of the

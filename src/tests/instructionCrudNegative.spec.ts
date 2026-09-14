@@ -19,7 +19,7 @@ import path from 'path';
 import Ajv from 'ajv';
 import addFormats from 'ajv-formats';
 import draft7MetaSchema from 'ajv/dist/refs/json-schema-draft-07.json'; // hallucination-allowlist: AJV publishes this draft-07 meta-schema path.
-import { createTestClient } from './helpers/mcpTestClient.js';
+import { createTestClient, callAllowingRejection } from './helpers/mcpTestClient.js';
 import schema from '../../schemas/instruction.schema.json';
 
 // Compile the SAME loader schema for direct disk validation in tests
@@ -263,17 +263,17 @@ describe('instruction CRUD: varied negative inputs', () => {
   });
 
   it('rejects add with empty body', async () => {
-    const resp = await client.callToolJSON('index_add', {
+    const resp = await callAllowingRejection(() => client.callToolJSON('index_add', {
       entry: { id: 'empty-body-' + Date.now(), title: 'Empty Body', body: '' },
-    });
+    }));
     expect(resp?.error || resp?.validationErrors).toBeTruthy();
   });
 
   it('rejects add with invalid priority type', async () => {
-    const resp = await client.callToolJSON('index_add', {
+    const resp = await callAllowingRejection(() => client.callToolJSON('index_add', {
       entry: { id: 'bad-priority-' + Date.now(), title: 'Bad Priority', body: 'Valid body.', priority: 'high' },
       lax: true,
-    });
+    }));
     // Either errors or accepted with coerced value — but disk must be valid
     if (!resp?.error && !resp?.validationErrors) {
       const disk = readDiskEntry(instructionsDir, 'bad-priority-' + Date.now());
@@ -285,26 +285,26 @@ describe('instruction CRUD: varied negative inputs', () => {
   });
 
   it('rejects add with invalid status enum', async () => {
-    const resp = await client.callToolJSON('index_add', {
+    const resp = await callAllowingRejection(() => client.callToolJSON('index_add', {
       entry: { id: 'bad-status-' + Date.now(), title: 'Bad Status', body: 'Valid body.', status: 'invalid-status' },
       lax: true,
-    });
+    }));
     expect(resp?.error || resp?.validationErrors).toBeTruthy();
   });
 
   it('rejects add with invalid classification enum', async () => {
-    const resp = await client.callToolJSON('index_add', {
+    const resp = await callAllowingRejection(() => client.callToolJSON('index_add', {
       entry: { id: 'bad-class-' + Date.now(), title: 'Bad Classification', body: 'Valid body.', classification: 'top-secret' },
       lax: true,
-    });
+    }));
     expect(resp?.error || resp?.validationErrors).toBeTruthy();
   });
 
   it('rejects add with invalid priorityTier enum', async () => {
-    const resp = await client.callToolJSON('index_add', {
+    const resp = await callAllowingRejection(() => client.callToolJSON('index_add', {
       entry: { id: 'bad-tier-' + Date.now(), title: 'Bad Tier', body: 'Valid body.', priorityTier: 'P99' },
       lax: true,
-    });
+    }));
     expect(resp?.error || resp?.validationErrors).toBeTruthy();
   });
 

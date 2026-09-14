@@ -4,6 +4,8 @@ import { AsyncLocalStorage } from 'async_hooks';
 import { getRuntimeConfig } from '../config/runtimeConfig';
 import { logWarn } from './logger';
 import { MUTATION } from './toolRegistry';
+import { notifyLifecycleHooks } from './lifecycleHooks';
+import { recordActivityFromAudit } from './activityLog';
 
 // Append-only JSONL audit log for all server operations.
 // Each line: { ts, kind, action, ids?, meta? }
@@ -159,11 +161,28 @@ export function getAuditLogHealth(): AuditLogHealth {
  * @param kind - Entry classification; defaults to `'mutation'`
  */
 export function logAudit(action: string, ids?: string[] | string, meta?: Record<string, unknown>, kind?: AuditKind) {
+  const entryKind: AuditKind = kind ?? 'mutation';
+  const idArr = ids ? (Array.isArray(ids) ? ids : [ids]) : undefined;
+
+  // Lifecycle hooks (#447): fire for committed instruction-CRUD mutations,
+  // independent of whether the audit *file* is enabled. Never throws — a hook
+  // failure must not corrupt index state or the mutation result.
+  if (entryKind === 'mutation') {
+    try { void notifyLifecycleHooks(action, idArr, meta, getCurrentCorrelationId()); }
+    catch { /* lifecycle hooks must never break the mutation */ }
+
+    // Activity telemetry (#525 follow-up): record semantic catalog changes to
+    // the persistent activity store. Independent of whether the audit *file*
+    // is enabled, and — like lifecycle hooks — never allowed to throw.
+    try { recordActivityFromAudit(action, idArr, meta, getCurrentCorrelationId()); }
+    catch { /* activity telemetry must never break the mutation */ }
+  }
+
   const file = resolveLogPath();
   if (!file) return; // silent no-op when logging is disabled
 
-  const entry: AuditEntry = { ts: new Date().toISOString(), kind: kind ?? 'mutation', action };
-  if (ids) entry.ids = Array.isArray(ids) ? ids : [ids];
+  const entry: AuditEntry = { ts: new Date().toISOString(), kind: entryKind, action };
+  if (idArr) entry.ids = idArr;
 
   // Auto-inject correlationId from async context if not already present in meta
   const ctxCorr = getCurrentCorrelationId();

@@ -1,4 +1,6 @@
 import path from 'path';
+import { DIR } from '../../config/dirConstants';
+import { STATE_ROOT } from '../../config/configUtils.js';
 
 /** Canonical MCP profile names — single source of truth. */
 export const MCP_PROFILES = ['default', 'enhanced', 'experimental'] as const;
@@ -61,6 +63,9 @@ export interface McpProfileConfig {
 }
 
 export const DOCUMENTED_INDEX_SERVER_FLAGS = [
+  'INDEX_SERVER_ACTIVITY_DB',
+  'INDEX_SERVER_ACTIVITY_LOG',
+  'INDEX_SERVER_ACTIVITY_RETENTION_DAYS',
   'INDEX_SERVER_ADD_TIMING',
   'INDEX_SERVER_ADMIN_API_KEY',
   'INDEX_SERVER_ADMIN_MAX_SESSION_HISTORY',
@@ -73,10 +78,12 @@ export const DOCUMENTED_INDEX_SERVER_FLAGS = [
   'INDEX_SERVER_AUTO_BACKUP',
   'INDEX_SERVER_AUTO_BACKUP_INTERVAL_MS',
   'INDEX_SERVER_AUTO_BACKUP_MAX_COUNT',
+  'INDEX_SERVER_AUTO_BACKUP_ALLOW_IMPLICIT_DIR',
   'INDEX_SERVER_AUTO_EMBED_ON_IMPORT',
   'INDEX_SERVER_AUTO_SEED',
   'INDEX_SERVER_AUTO_SPLIT_OVERSIZED',
   'INDEX_SERVER_AUTO_USAGE_TRACK',
+  'INDEX_SERVER_USAGE_ENABLED',
   'INDEX_SERVER_BACKUP_BEFORE_BULK_DELETE',
   'INDEX_SERVER_BACKUPS_DIR',
   'INDEX_SERVER_BODY_MAX_LENGTH',
@@ -97,6 +104,7 @@ export const DOCUMENTED_INDEX_SERVER_FLAGS = [
   'INDEX_SERVER_DASHBOARD_TLS_KEY',
   'INDEX_SERVER_DASHBOARD_TRIES',
   'INDEX_SERVER_DEBUG',
+  'INDEX_SERVER_DEFAULT_PAGE_SIZE',
   'INDEX_SERVER_DIR',
   'INDEX_SERVER_DISABLE_EARLY_STDIN_BUFFER',
   'INDEX_SERVER_DISABLE_PPID_WATCHDOG',
@@ -127,6 +135,13 @@ export const DOCUMENTED_INDEX_SERVER_FLAGS = [
   'INDEX_SERVER_HEALTH_MEMORY_THRESHOLD',
   'INDEX_SERVER_HEALTH_MIN_UPTIME',
   'INDEX_SERVER_HEARTBEAT_MS',
+  'INDEX_SERVER_HOOK_BLOCKING',
+  'INDEX_SERVER_HOOK_MAX_CONCURRENT',
+  'INDEX_SERVER_HOOK_ON_CHANGE',
+  'INDEX_SERVER_HOOK_ON_CREATE',
+  'INDEX_SERVER_HOOK_ON_REMOVE',
+  'INDEX_SERVER_HOOK_ON_UPDATE',
+  'INDEX_SERVER_HOOK_TIMEOUT_MS',
   'INDEX_SERVER_HTTP_METRICS',
   'INDEX_SERVER_IDLE_KEEPALIVE_MS',
   'INDEX_SERVER_IDLE_READY_SENTINEL',
@@ -205,6 +220,7 @@ export const DOCUMENTED_INDEX_SERVER_FLAGS = [
   'INDEX_SERVER_SQLITE_WAL',
   'INDEX_SERVER_STALE_THRESHOLD_MS',
   'INDEX_SERVER_STATE_DIR',
+  'INDEX_SERVER_STATE_ROOT',
   'INDEX_SERVER_STORAGE_BACKEND',
   'INDEX_SERVER_STRESS_DIAG',
   'INDEX_SERVER_STRESS_MODE',
@@ -259,7 +275,10 @@ export function resolveDataPaths(root: string): McpDataPaths {
     auditLog: resolveUnder('logs', 'instruction-transactions.log.jsonl'),
     logFile: resolveUnder('logs', 'mcp-server.log'),
     metrics: resolveUnder('metrics'),
-    messaging: resolveUnder('data', 'messaging'),
+    // Sibling of the instruction catalog, mirroring resolveMessagingDir(). Must
+    // stay outside `instructions/` — message files inside the catalog are read
+    // back as malformed instructions.
+    messaging: resolveUnder(DIR.MESSAGING),
     embeddings: resolveUnder('data', 'embeddings.json'),
     modelCache: resolveUnder('data', 'models'),
     sqliteDb: resolveUnder('data', 'index.db'),
@@ -280,11 +299,29 @@ export function buildEnvCatalog(config: McpProfileConfig, paths: McpDataPaths): 
     { section: 'Core Paths - where your data lives' },
     { key: 'INDEX_SERVER_PROFILE', desc: 'Configuration profile: default | enhanced | experimental', active: true, value: config.profile },
     { key: 'INDEX_SERVER_ALWAYS_RELOAD', desc: 'Reload index on each read for generated config verification', active: true, value: '1' },
-    { key: 'INDEX_SERVER_DIR', desc: 'Instruction catalog directory', active: false, value: paths.instructions },
+    // ACTIVE on purpose. The messaging store is validated AGAINST this
+    // directory, so if it is not pinned the guard's PARENT operand varies per
+    // client: one process sees a store as outside the catalog and writes to it
+    // while another sees the same store as inside and refuses to boot. Pinning
+    // it makes containment a property of the layout rather than of who
+    // launched. Still true after the store moved to STATE_ROOT (#577) — the
+    // guard's parent operand is unchanged.
+    { key: 'INDEX_SERVER_DIR', desc: 'Instruction catalog directory', active: true, value: paths.instructions },
+    // Inactive by contrast: STATE_ROOT is derived per-user from the OS
+    // user-data dir, so every client on one account already converges on the
+    // same value without being told. Emitting it would pin a path that is
+    // correct by construction, and pinning it in a generated config would
+    // freeze a machine-specific absolute path into a file that gets copied.
+    { key: 'INDEX_SERVER_STATE_ROOT', desc: 'Root for all mutable state (logs, metrics, data)', active: false, value: STATE_ROOT },
     { key: 'INDEX_SERVER_FEEDBACK_DIR', desc: 'Feedback entries storage directory', active: false, value: paths.feedback },
     { key: 'INDEX_SERVER_BACKUPS_DIR', desc: 'Backup snapshots directory', active: backupsCustom, value: backupsDir },
     { key: 'INDEX_SERVER_STATE_DIR', desc: 'Runtime state files directory', active: false, value: paths.state },
-    { key: 'INDEX_SERVER_MESSAGING_DIR', desc: 'Message queue storage directory', active: false, value: paths.messaging },
+    // ACTIVE on purpose: only `active` entries are emitted into the generated
+    // client env (see activeEnvFromCatalog). Left inactive, each client fell
+    // back to a cwd-relative default and silently got its own private store, so
+    // a broadcast from VS Code was invisible to Claude Code. Pinning the same
+    // absolute path in every generated config is what makes them one store.
+    { key: 'INDEX_SERVER_MESSAGING_DIR', desc: 'Message queue storage directory (shared across all clients)', active: true, value: paths.messaging },
     { section: 'Dashboard - HTTP/HTTPS admin interface' },
     { key: 'INDEX_SERVER_DASHBOARD', desc: 'Enable the web dashboard', active: true, value: '1' },
     { key: 'INDEX_SERVER_DASHBOARD_PORT', desc: 'Dashboard listen port', active: true, value: String(config.port) },
@@ -320,6 +357,7 @@ export function buildEnvCatalog(config: McpProfileConfig, paths: McpDataPaths): 
     { key: 'INDEX_SERVER_AUTO_BACKUP', desc: 'Enable instruction backups', active: false, value: config.mutation ? '1' : '0' },
     { key: 'INDEX_SERVER_AUTO_BACKUP_INTERVAL_MS', desc: 'Backup interval in ms', active: false, value: '3600000' },
     { key: 'INDEX_SERVER_AUTO_BACKUP_MAX_COUNT', desc: 'Max instruction backups retained', active: false, value: '10' },
+    { key: 'INDEX_SERVER_AUTO_BACKUP_ALLOW_IMPLICIT_DIR', desc: 'Allow auto-backup when INDEX_SERVER_DIR is unset', active: false, value: '0' },
     { key: 'INDEX_SERVER_BACKUP_BEFORE_BULK_DELETE', desc: 'Backup before bulk delete', active: false, value: '1' },
     { section: 'Features and flags' },
     { key: 'INDEX_SERVER_FEATURES', desc: 'Comma-separated feature flags', active: isEnhanced, value: isEnhanced ? 'usage' : '' },

@@ -38,7 +38,14 @@ export class ClassificationService {
   const reviewIntervalDays = entry.reviewIntervalDays ?? this.reviewIntervalDays(priorityTier, entry.requirement);
   const nextReviewDue = entry.nextReviewDue || new Date(Date.now() + reviewIntervalDays*86400_000).toISOString();
   const changeLog = entry.changeLog && entry.changeLog.length ? entry.changeLog : [{ version, changedAt: entry.createdAt || now, summary: 'initial import' }];
-  const semanticSummary = entry.semanticSummary || this.deriveSummary(entry.body);
+  const rawSummary = entry.semanticSummary;
+  const normalizeForComparison = (s: string) => s.replace(/[^a-z0-9]/gi, '').toLowerCase();
+  const isDegenerateHeading = rawSummary && /^\s*#{1,6}\s/.test(rawSummary);
+  const isTitleDuplicate = rawSummary && trimmedTitle &&
+    normalizeForComparison(rawSummary) === normalizeForComparison(trimmedTitle);
+  const semanticSummary = (rawSummary && !isDegenerateHeading && !isTitleDuplicate)
+    ? rawSummary
+    : this.deriveSummary(entry.body, trimmedTitle);
   const contentType = entry.contentType || 'instruction'; // Default to 'instruction' for backward compatibility
     const norm: NormalizedInstruction = {
       ...entry,
@@ -149,10 +156,33 @@ export class ClassificationService {
     return this.reviewIntervalDays(tier, requirement);
   }
 
-  private deriveSummary(body: string): string {
+  private deriveSummary(body: string, title?: string): string {
     const trimmed = body.trim();
-    const firstLine = trimmed.split(/\r?\n/)[0];
-    // Keep it short (~160 chars)
-    return firstLine.length > 160 ? firstLine.slice(0,157)+'...' : firstLine;
+    const lines = trimmed.split(/\r?\n/);
+    const normalizeText = (s: string) => s.replace(/[^a-z0-9]/gi, '').toLowerCase();
+    const normalizedTitle = title ? normalizeText(title) : '';
+
+    let fallbackHeading = '';
+    for (const line of lines) {
+      const stripped = line.trim();
+      if (!stripped) continue;
+      // Check if line is a markdown heading
+      const headingMatch = stripped.match(/^#{1,6}\s+(.*)/);
+      if (headingMatch) {
+        if (!fallbackHeading) fallbackHeading = headingMatch[1].trim();
+        continue;
+      }
+      // Skip lines that restate the title
+      if (normalizedTitle && normalizeText(stripped) === normalizedTitle) continue;
+      // First real prose line
+      return stripped.length > 160 ? stripped.slice(0, 157) + '...' : stripped;
+    }
+    // No prose found - fall back to first heading with markers stripped
+    if (fallbackHeading) {
+      return fallbackHeading.length > 160 ? fallbackHeading.slice(0, 157) + '...' : fallbackHeading;
+    }
+    // Absolute fallback: first line trimmed
+    const firstLine = lines[0]?.trim() || '';
+    return firstLine.length > 160 ? firstLine.slice(0, 157) + '...' : firstLine;
   }
 }

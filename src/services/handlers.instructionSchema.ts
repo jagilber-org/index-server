@@ -19,7 +19,7 @@ import {
   INPUT_KEYS,
   SERVER_MANAGED_KEYS,
 } from '../schemas/instructionSchema';
-import { CONTENT_TYPES } from '../models/instruction';
+import { CONTENT_TYPES, LINK_RELS } from '../models/instruction';
 import { SCHEMA_VERSION as INSTRUCTION_RECORD_SCHEMA_VERSION } from '../versioning/schemaVersion';
 
 const SCHEMA_VERSION = '1.0.0';
@@ -88,7 +88,11 @@ function buildMinimalExample(): unknown {
     requirement: "recommended",
     categories: ["example", "documentation"],
     primaryCategory: "example",
-    contentType: "instruction"
+    contentType: "instruction",
+    links: [
+      { target: "related-instruction-id", rel: "related" },
+      { target: "prerequisite-instruction-id", rel: "prerequisite", label: "Must read first" }
+    ]
   };
 }
 
@@ -245,7 +249,9 @@ function defineValidationRules(): {
     { field: 'status', rule: 'Enum', constraint: 'One of: draft, review, approved, deprecated' },
     { field: 'priorityTier', rule: 'Enum', constraint: 'One of: P1, P2, P3, P4' },
     { field: 'classification', rule: 'Enum', constraint: 'One of: public, internal, restricted' },
-    { field: 'reviewIntervalDays', rule: 'Range', constraint: '1-365 days' }
+    { field: 'reviewIntervalDays', rule: 'Range', constraint: '1-365 days' },
+    { field: 'links', rule: 'Array', constraint: `0-25 items, each: {target: instruction ID (required), rel: one of ${LINK_RELS.join(', ')} (default: related), label: max 120 chars}` },
+    { field: 'links', rule: 'Validation', constraint: 'Self-referencing links rejected; duplicate target+rel silently deduped; dead-link targets produce warnings (not rejections); cycles in prerequisite/sequel/part-of rels rejected' }
   ];
   return raw.map((r) => ({
     ...r,

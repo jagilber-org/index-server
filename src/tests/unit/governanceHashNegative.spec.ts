@@ -13,7 +13,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import fs from 'fs';
 import path from 'path';
-import { createTestClient, type TestClient } from '../helpers/mcpTestClient.js';
+import { createTestClient, callAllowingRejection, type TestClient } from '../helpers/mcpTestClient.js';
 
 function makeTempDir(label: string) {
   const dir = path.join(process.cwd(), 'tmp', `gov-hash-${label}-${Date.now()}`);
@@ -101,10 +101,10 @@ describe('Governance hash — negative & behavioral tests', () => {
     const id = `gov-invalid-status-${Date.now()}`;
     await client.create({ id, title: 'Status Test', body: 'test' });
 
-    const resp = await client.governanceUpdate({
+    const resp = await callAllowingRejection(() => client.governanceUpdate({
       id,
       status: 'NOT_A_REAL_STATUS' as string,
-    });
+    }));
     // Should either error or not apply the invalid status
     const errish = resp?.error || resp?.isError || (typeof resp === 'string' && resp.toLowerCase().includes('error'));
     if (!errish) {

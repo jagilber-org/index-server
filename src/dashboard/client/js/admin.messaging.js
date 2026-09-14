@@ -5,12 +5,15 @@
  * Rich card-based messaging UI with channel/sender sidebar,
  * toolbar filters, sort, view modes, multi-select, edit, and detail modals.
  */
-/* global dashboardSocket */
-
 (function () {
   'use strict';
 
   const PAGE_SIZE = 50;
+  // Poll cadence. Messages written by *other* processes (agents talking to the
+  // stdio MCP server) never produce a WebSocket event in this process, so
+  // polling — not the socket — is what actually keeps this tab current.
+  const AUTO_REFRESH_MS = 15000;
+  const AUTO_REFRESH_STORAGE_KEY = 'msgAutoRefresh';
   let _loaded = false;
   let _allMessages = [];
   let _channels = [];
@@ -22,17 +25,32 @@
   let _sortMode = 'newest';
   let _viewMode = 'list';
   let _selected = new Set();
+  let _autoRefreshEnabled = readAutoRefreshPref();
+  let _autoRefreshTimer = null;
+  let _immediateTimer = null;
+  let _refreshInFlight = false;
+  let _signature = '';
+  let _lastRefreshAt = 0;
+  let _lastBlockedReason = null;
 
   // ── Public API ──────────────────────────────────────────────────────────
 
   window.initMessaging = async function () {
-    if (_loaded) return;
+    if (_loaded) {
+      // Re-entering the tab: pull anything that landed while we were away.
+      scheduleImmediateRefresh(0);
+      return;
+    }
     _loaded = true;
     setupDelegation();
     await loadChannels();
-    await loadAllMessages();
+    _allMessages = await fetchAllMessages();
+    _signature = computeSignature();
+    _lastRefreshAt = Date.now();
     renderSidebar();
     renderMessages();
+    syncAutoRefreshToggle();
+    startAutoRefreshLoop();
   };
 
   // ── Event Delegation (CSP-safe — no inline handlers) ───────────────────
@@ -102,6 +120,10 @@
         window.msgDownload();
         return;
       }
+      if (action === 'delete-selected') {
+        window.msgDeleteSelected();
+        return;
+      }
       if (action === 'send') {
         window.msgSend();
         return;
@@ -130,6 +152,9 @@
       if (el.dataset.action === 'sort') {
         window.msgSort(el.value);
       }
+      if (el.dataset.action === 'toggle-auto-refresh') {
+        window.msgSetAutoRefresh(el.checked);
+      }
     });
 
     section.addEventListener('input', function (e) {
@@ -154,8 +179,16 @@
     }
   }
 
-  async function loadAllMessages() {
-    _allMessages = [];
+  /**
+   * Fetch every channel's messages and return them as a new sorted array.
+   *
+   * Deliberately returns instead of assigning: the auto-refresh path must be
+   * able to fetch, then re-check the user-activity guards, and only *then*
+   * commit the result. Assigning here would mutate the model out from under
+   * an open modal or an in-progress edit.
+   */
+  async function fetchAllMessages() {
+    const collected = [];
     try {
       const fetches = _channels.map(ch =>
         adminAuth.adminFetch(`/api/messages/${encodeURIComponent(ch.channel)}?reader=*&limit=500`)
@@ -164,11 +197,16 @@
           .catch(() => [])
       );
       const results = await Promise.all(fetches);
-      for (const msgs of results) _allMessages.push(...msgs);
-      _allMessages.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      for (const msgs of results) collected.push(...msgs);
+      collected.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     } catch (e) {
       console.warn('Failed to load messages', e);
     }
+    return collected;
+  }
+
+  async function loadAllMessages() {
+    _allMessages = await fetchAllMessages();
   }
 
   // ── Sidebar ─────────────────────────────────────────────────────────────
@@ -389,6 +427,7 @@
     for (const m of page) {
       if (checked) _selected.add(m.id); else _selected.delete(m.id);
     }
+    syncDeleteSelectedBtn();
     renderMessages();
   };
 
@@ -397,6 +436,7 @@
     // Update select-all checkbox state
     const cb = document.getElementById('msg-select-all');
     if (cb) cb.checked = false;
+    syncDeleteSelectedBtn();
   };
 
   window.msgDetail = function (id) {
@@ -502,6 +542,27 @@
       });
       _allMessages = _allMessages.filter(m => !ids.includes(m.id));
       for (const mid of ids) _selected.delete(mid);
+      syncDeleteSelectedBtn();
+      renderSidebar();
+      renderMessages();
+    } catch (e) {
+      alert('Delete failed: ' + e.message);
+    }
+  };
+
+  window.msgDeleteSelected = async function () {
+    if (_selected.size === 0) return;
+    const ids = [..._selected];
+    if (!confirm(`Delete ${ids.length} selected message${ids.length > 1 ? 's' : ''}?`)) return;
+    try {
+      await adminAuth.adminFetch('/api/messages', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messageIds: ids }),
+      });
+      _allMessages = _allMessages.filter(m => !ids.includes(m.id));
+      _selected.clear();
+      syncDeleteSelectedBtn();
       renderSidebar();
       renderMessages();
     } catch (e) {
@@ -547,11 +608,15 @@
   window.msgRefresh = async function () {
     _loaded = false;
     _selected.clear();
+    syncDeleteSelectedBtn();
     await loadChannels();
     await loadAllMessages();
     _loaded = true;
+    _signature = computeSignature();
+    _lastRefreshAt = Date.now();
     renderSidebar();
     renderMessages();
+    updateRefreshStatus();
   };
 
   window.msgDownload = function () {
@@ -564,7 +629,204 @@
     URL.revokeObjectURL(url);
   };
 
+  // ── Auto refresh ────────────────────────────────────────────────────────
+  //
+  // The rule: a background refresh must never move, clear, or steal anything
+  // the user is currently working with. It is therefore gated twice — once
+  // before the fetch (so we don't even spend the requests) and once after it
+  // (so a modal opened *during* the fetch still wins) — and it repaints only
+  // when the data genuinely changed.
+
+  function readAutoRefreshPref() {
+    try {
+      return window.localStorage.getItem(AUTO_REFRESH_STORAGE_KEY) !== '0';
+    } catch { return true; }
+  }
+
+  function writeAutoRefreshPref(enabled) {
+    try { window.localStorage.setItem(AUTO_REFRESH_STORAGE_KEY, enabled ? '1' : '0'); } catch { /* non-fatal */ }
+  }
+
+  /**
+   * Why an auto refresh must not run right now, or null if it may.
+   * Exposed on window for tests and for the status line.
+   */
+  function autoRefreshBlockedReason() {
+    if (!_loaded) return 'loading';
+    if (_refreshInFlight) return 'in-flight';
+
+    // Tab not in front — nothing to update and no reason to poll.
+    if (typeof document.hidden === 'boolean' && document.hidden) return 'background';
+
+    const section = document.getElementById('messaging-section');
+    if (!section || section.classList.contains('hidden')) return 'section-hidden';
+
+    // A detail / edit modal is open. Re-rendering underneath it would drop
+    // whatever is typed in the edit textarea.
+    const detail = document.getElementById('messaging-detail');
+    if (detail && detail.childElementCount > 0) return 'editing';
+
+    // Focus is in a messaging input (search box, compose fields, edit form).
+    const active = document.activeElement;
+    if (active && section.contains(active)) {
+      const tag = (active.tagName || '').toLowerCase();
+      if (tag === 'input' || tag === 'textarea' || tag === 'select' || active.isContentEditable) {
+        return 'typing';
+      }
+    }
+
+    // An unsent compose draft: repainting the list above it shifts the
+    // compose box under the user's cursor.
+    const composeBody = document.getElementById('msg-compose-body');
+    if (composeBody && composeBody.value.trim()) return 'composing';
+
+    // The user is selecting text inside the message list (i.e. copying).
+    try {
+      const sel = window.getSelection();
+      if (sel && !sel.isCollapsed && sel.rangeCount > 0) {
+        const list = document.getElementById('messaging-message-list');
+        if (list && list.contains(sel.getRangeAt(0).commonAncestorContainer)) return 'selecting';
+      }
+    } catch { /* selection API unavailable — not a reason to block */ }
+
+    return null;
+  }
+
+  /** Content fingerprint — repaint only when this actually changes. */
+  function computeSignature() {
+    const msgs = _allMessages.map(m =>
+      `${m.id}:${m.updatedAt || m.createdAt}:${(m.body || '').length}:${(m.readBy || []).length}`
+    );
+    const chans = _channels.map(c => `${c.channel}=${c.messageCount}`);
+    return `${msgs.join('|')}##${chans.join('|')}`;
+  }
+
+  /** Drop selections for messages that no longer exist; keep the rest. */
+  function pruneSelection() {
+    if (_selected.size === 0) return;
+    const live = new Set(_allMessages.map(m => m.id));
+    for (const id of [..._selected]) if (!live.has(id)) _selected.delete(id);
+  }
+
+  /** Repaint without moving the page or the sidebar under the user. */
+  function renderPreservingViewport() {
+    const scrollX = window.scrollX;
+    const scrollY = window.scrollY;
+    const sidebar = document.querySelector('#messaging-section .msg-sidebar');
+    const sidebarTop = sidebar ? sidebar.scrollTop : 0;
+
+    renderSidebar();
+    renderMessages();
+
+    if (sidebar) sidebar.scrollTop = sidebarTop;
+    window.scrollTo(scrollX, scrollY);
+  }
+
+  function updateRefreshStatus() {
+    const el = document.getElementById('msg-refresh-status');
+    if (!el) return;
+    if (!_autoRefreshEnabled) { el.textContent = 'auto-refresh off'; el.title = 'Enable Auto to poll for new messages'; return; }
+    const stamp = _lastRefreshAt ? new Date(_lastRefreshAt).toLocaleTimeString() : '—';
+    if (_lastBlockedReason && _lastBlockedReason !== 'in-flight') {
+      el.textContent = `paused (${_lastBlockedReason}) · ${stamp}`;
+      el.title = 'Auto-refresh pauses while you are viewing, editing, composing, or selecting text';
+    } else {
+      el.textContent = `updated ${stamp}`;
+      el.title = `Auto-refreshing every ${Math.round(AUTO_REFRESH_MS / 1000)}s`;
+    }
+  }
+
+  async function autoRefreshTick() {
+    if (!_autoRefreshEnabled) { updateRefreshStatus(); return; }
+
+    const blockedBefore = autoRefreshBlockedReason();
+    _lastBlockedReason = blockedBefore;
+    if (blockedBefore) { updateRefreshStatus(); return; }
+
+    _refreshInFlight = true;
+    let channels;
+    let messages;
+    try {
+      const res = await adminAuth.adminFetch('/api/messages/channels');
+      const data = await res.json();
+      channels = data.channels || [];
+      const prevChannels = _channels;
+      _channels = channels;              // fetchAllMessages() fans out over _channels
+      try {
+        messages = await fetchAllMessages();
+      } finally {
+        _channels = prevChannels;        // restore until we decide to commit
+      }
+    } catch (e) {
+      console.warn('Auto refresh failed', e);
+      return;
+    } finally {
+      _refreshInFlight = false;
+    }
+
+    // Re-check: the user may have opened a message or started typing while
+    // the fetch was in flight. If so, drop this result and try again later.
+    const blockedAfter = autoRefreshBlockedReason();
+    _lastBlockedReason = blockedAfter;
+    if (blockedAfter) { updateRefreshStatus(); return; }
+
+    const prevMessages = _allMessages;
+    const prevChannelList = _channels;
+    _allMessages = messages;
+    _channels = channels;
+    const sig = computeSignature();
+    _lastRefreshAt = Date.now();
+    if (sig === _signature) {
+      // Nothing changed — restore the previous object identities and leave the
+      // DOM completely untouched (no flicker, no lost hover/selection).
+      _allMessages = prevMessages;
+      _channels = prevChannelList;
+      updateRefreshStatus();
+      return;
+    }
+    _signature = sig;
+    pruneSelection();
+    renderPreservingViewport();
+    updateRefreshStatus();
+  }
+
+  function startAutoRefreshLoop() {
+    if (_autoRefreshTimer) return;
+    _autoRefreshTimer = setInterval(autoRefreshTick, AUTO_REFRESH_MS);
+    // Coming back to a backgrounded tab should feel instant.
+    document.addEventListener('visibilitychange', function () {
+      if (!document.hidden) scheduleImmediateRefresh(250);
+    });
+  }
+
+  /** Debounced out-of-band refresh (tab switch, websocket event). */
+  function scheduleImmediateRefresh(delayMs) {
+    if (_immediateTimer) clearTimeout(_immediateTimer);
+    _immediateTimer = setTimeout(() => { _immediateTimer = null; autoRefreshTick(); }, delayMs == null ? 500 : delayMs);
+  }
+
+  function syncAutoRefreshToggle() {
+    const cb = document.getElementById('msg-auto-refresh');
+    if (cb) cb.checked = _autoRefreshEnabled;
+    updateRefreshStatus();
+  }
+
+  window.msgSetAutoRefresh = function (enabled) {
+    _autoRefreshEnabled = !!enabled;
+    writeAutoRefreshPref(_autoRefreshEnabled);
+    updateRefreshStatus();
+    if (_autoRefreshEnabled) scheduleImmediateRefresh(0);
+  };
+
+  window.msgAutoRefreshBlockedReason = autoRefreshBlockedReason;
+  window.msgAutoRefreshTick = autoRefreshTick;
+
   // ── Helpers ─────────────────────────────────────────────────────────────
+
+  function syncDeleteSelectedBtn() {
+    const btn = document.getElementById('msg-delete-selected');
+    if (btn) btn.disabled = _selected.size === 0;
+  }
 
   const esc = window.adminUtils.escapeHtml;
 
@@ -617,17 +879,22 @@
   }
 
   // ── WebSocket live updates ──────────────────────────────────────────────
-
-  if (typeof dashboardSocket !== 'undefined' && dashboardSocket) {
-    const origHandler = dashboardSocket.onmessage;
-    dashboardSocket.onmessage = function (ev) {
-      if (origHandler) origHandler.call(dashboardSocket, ev);
-      try {
-        const msg = JSON.parse(ev.data);
-        if (msg.type === 'message_received' || msg.type === 'message_purged') {
-          window.msgRefresh();
-        }
-      } catch { /* ignore */ }
-    };
-  }
+  //
+  // Registers with the shared listener list rather than monkey-patching
+  // dashboardSocket.onmessage. The old approach was dead code twice over: this
+  // deferred script runs before initDashboardSocket() creates the socket (so
+  // the handler was never installed), and the socket's onclose/reconnect
+  // reassigns onmessage (so any wrapper would be dropped anyway).
+  //
+  // Note this only fires for messages posted through the dashboard's own REST
+  // API. Messages written by agents over the stdio MCP server land in a
+  // different process and never reach this socket — the poll above is what
+  // covers those.
+  window.dashboardSocketListeners = window.dashboardSocketListeners || [];
+  window.dashboardSocketListeners.push(function (msg) {
+    if (!msg) return;
+    if (msg.type === 'message_received' || msg.type === 'message_purged') {
+      scheduleImmediateRefresh();
+    }
+  });
 })();

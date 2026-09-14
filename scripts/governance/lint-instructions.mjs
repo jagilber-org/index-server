@@ -18,6 +18,12 @@ try {
 
 const base = path.join(process.cwd(), 'instructions');
 let errors = 0; let warnings = 0;
+// #582: this linter reported "Passed with 0 errors, 0 warnings" when
+// `instructions/` did not exist -- indistinguishable from a clean catalog.
+// An empty catalog is legitimate here (the real one lives outside the repo and
+// CI seeds a single entry), so this counts rather than fails, but the count is
+// printed on every run so a zero-scan is visible instead of silent.
+let scanned = 0; let skippedNonEntries = 0;
 function log(kind, id, msg){
   const line = `[${kind}] ${id}: ${msg}`;
   if(kind === 'ERROR') errors++; else if(kind === 'WARN') warnings++;
@@ -34,7 +40,8 @@ for(const file of (fs.existsSync(base)? fs.readdirSync(base): [])){
   // Skip non-instruction meta/state files (e.g. _manifest.json, _skipped.json,
   // bootstrap.confirmed.json). These have no instruction body and are not governed
   // catalog entries, so the governance-field checks below do not apply to them.
-  if(typeof raw.body !== 'string'){ continue; }
+  if(typeof raw.body !== 'string'){ skippedNonEntries++; continue; }
+  scanned++;
   // Required governance fields (post 0.7.0) - treat missing as error
   for(const f of ['owner','status','version','priorityTier','classification']){
     if(!raw[f]) log('ERROR', id, `missing field ${f}`);
@@ -58,7 +65,7 @@ for(const file of (fs.existsSync(base)? fs.readdirSync(base): [])){
   }
   // integrity quick check
   if(typeof raw.body === 'string' && raw.sourceHash){
-    const hash = crypto.createHash('sha256').update(raw.body,'utf8').digest('hex');
+    const hash = crypto.createHash('sha256').update(raw.body.trim(),'utf8').digest('hex');
     if(hash !== raw.sourceHash) log('ERROR', id, 'sourceHash mismatch');
   }
   // schema validation (warn mode for new tightened constraints)
@@ -72,5 +79,8 @@ for(const file of (fs.existsSync(base)? fs.readdirSync(base): [])){
     }
   }
 }
-if(errors){ console.error(`Failed with ${errors} errors, ${warnings} warnings.`); process.exit(1); }
-console.error(`Passed with 0 errors, ${warnings} warnings.`);
+const scope = `${scanned} instruction entr${scanned === 1 ? 'y' : 'ies'} scanned in ${path.relative(process.cwd(), base) || 'instructions'}/` +
+  (skippedNonEntries ? ` (${skippedNonEntries} non-entry file(s) skipped)` : '') +
+  (fs.existsSync(base) ? '' : ' -- directory absent');
+if(errors){ console.error(`Failed with ${errors} errors, ${warnings} warnings. ${scope}`); process.exit(1); }
+console.error(`Passed with 0 errors, ${warnings} warnings. ${scope}`);

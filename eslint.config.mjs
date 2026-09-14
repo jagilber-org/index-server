@@ -6,6 +6,7 @@ export default tseslint.config(
   // Global ignores (replaces ignorePatterns + .eslintignore)
   {
     ignores: [
+      '.claude/**',
       'dist/**',
       'node_modules/**',
       'release/**',
@@ -54,6 +55,33 @@ export default tseslint.config(
       ],
     },
   },
+
+  // ── CQ-1: file size ────────────────────────────────────────────────
+  //
+  // Constitution CQ-1 says source files "SHOULD target <=600 lines; MUST NOT
+  // exceed 1000". Nothing enforced it (#585), so four files had drifted past
+  // the hard limit and twelve more sat in the 600-1000 warning band.
+  //
+  // Tests are excluded: a spec's length is table-driven, and truncating one
+  // to satisfy a style rule trades coverage for tidiness.
+  {
+    files: ['src/**/*.ts', 'src/dashboard/client/js/**/*.js', 'scripts/**/*.mjs', 'scripts/**/*.cjs', 'scripts/**/*.js', 'scripts/**/*.ts'],
+    ignores: ['src/tests/**'],
+    rules: {
+      'max-lines': ['error', { max: 1000, skipBlankLines: false, skipComments: false }],
+    },
+  },
+
+  // CQ-1 ratchet. These five predate the rule. Each cap is the file's EXACT
+  // current length, so the file cannot grow by a single line -- the same
+  // shrink-only shape as scripts/governance/config-usage-baseline.json.
+  // `check-constitution-enforcement.mjs` fails if one of these files shrinks
+  // and the cap is left behind, so the ratchet cannot rust into a waiver.
+  { files: ['src/dashboard/server/AdminPanel.ts'], rules: { 'max-lines': ['error', { max: 1190, skipBlankLines: false, skipComments: false }] } },
+  { files: ['src/dashboard/server/MetricsCollector.ts'], rules: { 'max-lines': ['error', { max: 1086, skipBlankLines: false, skipComments: false }] } },
+  { files: ['src/services/indexContext.ts'], rules: { 'max-lines': ['error', { max: 1021, skipBlankLines: false, skipComments: false }] } },
+  { files: ['src/services/handlers.search.ts'], rules: { 'max-lines': ['error', { max: 1012, skipBlankLines: false, skipComments: false }] } },
+  { files: ['src/dashboard/client/js/admin.instructions.js'], rules: { 'max-lines': ['error', { max: 1234, skipBlankLines: false, skipComments: false }] } },
 
   // Parked legacy tests: disable typed project parsing
   {

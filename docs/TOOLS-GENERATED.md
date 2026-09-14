@@ -2,41 +2,80 @@
 
 Registry Version: 2026-06-01
 
-| Method | Stable | Mutation | Description |
-|--------|--------|----------|-------------|
-| bootstrap | yes |  | Unified bootstrap dispatcher. Actions: request, confirm, status. |
-| feedback_manage |  | yes | Manage feedback entries through a single action dispatcher. Actions: submit, list, get, update, delete, stats. |
-| feedback_submit | yes |  | Submit feedback entry (issue, status report, security alert, feature request, etc.). |
-| gates_evaluate | yes |  | Evaluate configured gating criteria over current index. |
-| graph_export | yes |  | Export instruction relationship graph (schema v1 minimal or v2 enriched). |
-| health_check | yes |  | Returns server health status &amp; version. |
-| help_overview | yes |  | Structured onboarding guidance for new agents (tool discovery, index lifecycle, promotion workflow). |
-| index_add |  | yes | Add a single instruction (lax mode fills defaults; overwrite optional). |
-| index_dispatch | yes |  | Unified dispatcher for instruction index operations. Required: "action". Key params by action: get/getEnhanced(id), search(q/searchString/keywords/fields, includeCategories, caseSensitive, limit, mode), query(text,categoriesAny,limit,offset), list(category), diff(clientHash), export(ids,metaOnly), remove(id or ids, mode:"archive"\|"purge"), archive(ids, reason), restore(ids, restoreMode), listArchived/getArchived/purgeArchive. Read actions accept includeArchived/onlyArchived flags (mutually exclusive). Use action="capabilities" to discover all supported actions. |
-| index_governanceHash | yes |  | Return governance projection &amp; deterministic governance hash. |
-| index_governanceUpdate |  | yes | Patch limited governance fields (owner/status/review dates + optional version bump). |
-| index_import |  | yes | Import instruction entries from: inline array (entries), stringified JSON array, file path to JSON array (entries as string), or directory of .json files (source). |
-| index_reload |  | yes | Force reload of instruction index from disk. |
-| index_remove |  | yes | Delete one or more instruction entries by id. Bulk deletes exceeding INDEX_SERVER_MAX_BULK_DELETE (default 5) require force=true and auto-create a backup first. Use dryRun=true to preview. NOTE: spec 006-archive-lifecycle introduces a new mode parameter ("archive" \| "purge"). Today the omitted-mode default remains destructive ("purge") for backwards compatibility, but the response includes defaultBehaviorChangeWarning — pass mode:"archive" to opt into the upcoming default (move to archive store, restorable) or mode:"purge" (or purge:true alias) to keep destructive behavior. The default WILL change to "archive" in a future release. |
-| index_schema | yes |  | Return instruction JSON schema, examples, validation rules, and promotion workflow guidance for self-documentation. |
-| index_search | yes |  | 🔍 PRIMARY: Search instructions by keywords, searchString phrase input, and/or structural fields — returns instruction IDs for targeted retrieval. Supports mode: "keyword" (substring match), "regex" (patterns like "deploy\|release"), or "semantic" (embedding similarity). Default mode is semantic when INDEX_SERVER_SEMANTIC_ENABLED=1, otherwise keyword. Omit the mode parameter to let the server choose the best default. Use this FIRST to discover relevant instructions, then use index_dispatch get for details. |
-| integrity_verify | yes |  | Verify each instruction body hash against stored sourceHash. |
-| messaging_ack |  | yes | Acknowledge (mark as read) one or more messages by ID. |
-| messaging_get | yes |  | Get a single message by ID with full details. |
-| messaging_list_channels | yes |  | List all active messaging channels with message counts and latest timestamps. |
-| messaging_manage |  | yes | Dispatcher consolidating all 10 messaging_&lt;action&gt; tools into a single MCP surface. Pick the underlying operation with action= (send/read/list_channels/ack/stats/get/update/purge/reply/thread). Mirrors the individual tools 1:1; the standalone messaging_&lt;action&gt; tools remain available but messaging_manage is the recommended entry-point (#373). |
-| messaging_purge |  | yes | Delete messages: all, by channel, or by specific IDs. |
-| messaging_read | yes |  | Read messages from a channel with visibility filtering. Supports unread-only, limit, mark-as-read, tag filtering, and sender filtering. |
-| messaging_reply |  | yes | Reply to a message with auto-populated channel and parentId. Supports reply-all (all original recipients) or reply-to-sender. |
-| messaging_send |  | yes | Send a message to a channel with recipient targeting. Supports broadcast (*), directed, priority, TTL, threading, and structured payloads. |
-| messaging_stats | yes |  | Get messaging statistics for a reader: total, unread, channel count. |
-| messaging_thread | yes |  | Retrieve a full message thread by root parentId. Returns parent + all nested replies sorted chronologically. |
-| messaging_update |  | yes | Update mutable fields of a message (body, recipients, payload, persistent flag). |
-| metrics_snapshot | yes |  | Performance metrics summary for handled methods. |
-| promote_from_repo |  | yes | Scan a local Git repository and promote its knowledge content (constitutions, docs, instructions, specs) into the instruction index. Reads .specify/config/promotion-map.json and instructions/*.json from the target repo. |
-| prompt_review | yes |  | Static analysis of a prompt returning issues &amp; summary. |
-| usage_hotset | yes |  | Return the most-used instruction entries (hot set). |
-| usage_track | yes |  | Track instruction usage with optional qualitative signal. Params: id (required), action (retrieved\|applied\|cited), signal (helpful\|not-relevant\|outdated\|applied), comment (short text, max 256 chars). |
+Tier: **admin** — the full declared surface, 65 tools (core 8, extended 26, admin 31).
+A running server advertises fewer: `core` only, unless `INDEX_SERVER_FLAG_TOOLS_EXTENDED=1`
+or `INDEX_SERVER_FLAG_TOOLS_ADMIN=1` is set. Tiers control what `tools/list` shows, not what
+may be called. The `diagnostics_*` tools additionally require `INDEX_SERVER_STRESS_DIAG=1` or
+`INDEX_SERVER_DEBUG=1`, and the `messaging_*` tools `INDEX_SERVER_MESSAGING_ENABLED=1`; without
+those they are not registered at all, at any tier.
+
+| Method | Tier | Stable | Mutation | Description |
+|--------|------|--------|----------|-------------|
+| bootstrap | core | yes |  | Unified bootstrap dispatcher. Actions: request, confirm, status. |
+| bootstrap_confirmFinalize | admin |  | yes | Finalize bootstrap by submitting issued token; enables guarded mutations. |
+| bootstrap_request | admin |  | yes | Request a human confirmation bootstrap token (hash persisted, raw returned once). |
+| bootstrap_status | admin | yes |  | Return bootstrap gating status (referenceMode, confirmed, requireConfirmation). |
+| dashboard_config | admin | yes |  | Deterministic snapshot of every recognized environment / feature flag with metadata (category, stability, default, reload behavior). Flags marked sensitive return only a present boolean, never the value. |
+| diagnostics_block | admin |  | yes | Intentionally CPU blocks the event loop for N ms (diagnostic stress). |
+| diagnostics_handshake | admin | yes |  | Return recent handshake events (ordering/ready/list_changed trace). |
+| diagnostics_memoryPressure | admin |  | yes | Allocate &amp; release transient memory to induce GC / memory pressure. |
+| diagnostics_microtaskFlood | admin |  | yes | Flood the microtask queue with many Promise resolutions to probe event loop starvation. |
+| feature_status | admin | yes |  | Report active index feature flags and counters. |
+| feedback_manage | extended |  | yes | Manage feedback entries through a single action dispatcher. Actions: submit, list, get, update, delete, stats. |
+| feedback_submit | core | yes |  | Submit feedback entry (issue, status report, security alert, feature request, etc.). |
+| gates_evaluate | extended | yes |  | Evaluate configured gating criteria over current index. |
+| graph_export | extended | yes |  | Export instruction relationship graph (schema v1 minimal or v2 enriched). |
+| health_check | core | yes |  | Returns server health status &amp; version. |
+| help_overview | core | yes |  | Structured onboarding guidance for new agents (tool discovery, index lifecycle, promotion workflow). |
+| index_add | extended |  | yes | Add a single instruction (lax mode fills defaults; overwrite optional). |
+| index_archive | admin |  | yes | Archive one or more active instructions (move to archive store, atomically). Closed-enum reason taxonomy (deprecated\|superseded\|duplicate-merge\|manual\|legacy-scope). Restorable unless restoreEligible:false. Surfaced via index_dispatch action:"archive". |
+| index_debug | admin | yes |  | Dump raw index state for debugging (entry count, keys, load status). |
+| index_diagnostics | admin | yes |  | Summarize loader diagnostics: scanned vs accepted, skipped reasons, missing IDs, optional trace sample. |
+| index_dispatch | core | yes |  | Unified dispatcher for instruction index operations. Required: "action". Key params by action: get/getEnhanced(id, bodyOffset?, bodyLimit?), search(q/searchString/keywords/fields, includeCategories, caseSensitive, limit, mode, includeBody?), query(text,categoriesAny,limit,offset), list(category, limit?, offset?, includeBody?), diff(clientHash), export(ids,metaOnly), patch(id, op:"splice"\|"append"\|"prepend"\|"replace", text?/find?/replaceWith?, bodyOffset?, bodyLength?, expectedSourceHash?, dryRun?), remove(id or ids, mode:"archive"\|"purge"), archive(ids, reason), restore(ids, restoreMode), listArchived/getArchived/purgeArchive. Use patch to edit an instruction body in place instead of resending the whole body via add+overwrite. list/search return body-light items by default (bodyPreview+bodyLength); pass includeBody:true for full bodies or use get (supports bodyOffset/bodyLimit pagination). list/search default to INDEX_SERVER_DEFAULT_PAGE_SIZE results (default 50) when limit is omitted; pass limit:0 on list to return all. Read actions accept includeArchived/onlyArchived flags (mutually exclusive). Use action="capabilities" to discover all supported actions. |
+| index_enrich | admin |  | yes | Persist normalization of placeholder governance fields to disk. |
+| index_getArchived | admin | yes |  | Read a single archived entry by id. Surfaced via index_dispatch action:"getArchived". Returns null when not present. |
+| index_governanceHash | extended | yes |  | Return governance projection &amp; deterministic governance hash. |
+| index_governanceUpdate | extended |  | yes | Patch governance fields (owner/status/review dates/riskScore/priority/priorityTier/requirement + optional version bump). |
+| index_groom | admin |  | yes | Groom index: normalize, repair hashes, merge duplicates, ARCHIVE deprecated (was: remove), remap categories, apply usage signal feedback (outdated/not-relevant/helpful/applied) to instruction priority and requirement. Spec 006 Phase D: retirement paths now archive instead of permanently delete; pass mode.purgeArchive=true (mutually exclusive with retirement flags) to permanently purge archived entries. |
+| index_health | admin | yes |  | Compare live index to canonical snapshot for drift. |
+| index_import | extended |  | yes | Import instruction entries from: inline array (entries), stringified JSON array, file path to JSON array (entries as string), or directory of .json files (source). |
+| index_inspect | admin | yes |  | Return raw instruction entry by ID for debugging (full JSON). |
+| index_listArchived | admin | yes |  | List archived entries with optional filters (category, contentType, reason, source, archivedBy, restoreEligible). Set includeContent:true to include bodies. Surfaced via index_dispatch action:"listArchived". |
+| index_normalize | admin |  | yes | Normalize instruction JSON files (hash repair, version hydrate, timestamps) with optional dryRun. |
+| index_patch | extended |  | yes | Patch an instruction body in place (splice/append/prepend/replace) or update metadata fields (title/semanticSummary/categories/primaryCategory/contentType) via op:metadata without touching the body; supports an expectedSourceHash precondition for lost-update protection. |
+| index_purgeArchive | admin |  | yes | Permanently delete archived entries. IRREVERSIBLE. Subject to bootstrap mutation gating, INDEX_SERVER_MAX_BULK_DELETE bulk limit, and auto-backup. Surfaced via index_dispatch action:"purgeArchive". |
+| index_reload | extended |  | yes | Force reload of instruction index from disk. |
+| index_remove | extended |  | yes | Delete one or more instruction entries by id. Bulk deletes exceeding INDEX_SERVER_MAX_BULK_DELETE (default 5) require force=true and auto-create a backup first. Use dryRun=true to preview. NOTE: spec 006-archive-lifecycle introduces a new mode parameter ("archive" \| "purge"). Today the omitted-mode default remains destructive ("purge") for backwards compatibility, but the response includes defaultBehaviorChangeWarning — pass mode:"archive" to opt into the upcoming default (move to archive store, restorable) or mode:"purge" (or purge:true alias) to keep destructive behavior. The default WILL change to "archive" in a future release. |
+| index_repair | admin |  | yes | Repair out-of-sync sourceHash fields (noop if none drifted). |
+| index_restore | admin |  | yes | Restore archived entries back to the active store. restoreMode:"reject" (default) fails on id collision; restoreMode:"overwrite" replaces the active entry. Entries marked restoreEligible:false cannot be restored. Surfaced via index_dispatch action:"restore". |
+| index_schema | extended | yes |  | Return instruction JSON schema, examples, validation rules, and promotion workflow guidance for self-documentation. |
+| index_search | core | yes |  | 🔍 PRIMARY: Search instructions by keywords, searchString phrase input, and/or structural fields — returns instruction IDs for targeted retrieval. Supports mode: "keyword" (substring match), "regex" (patterns like "deploy\|release"), or "semantic" (embedding similarity). Default mode is semantic when INDEX_SERVER_SEMANTIC_ENABLED=1, otherwise keyword. Omit the mode parameter to let the server choose the best default. Use this FIRST to discover relevant instructions, then use index_dispatch get for details. |
+| integrity_manifest | admin | yes |  | Verify integrity of index manifest entries against stored sourceHash values. |
+| integrity_verify | extended | yes |  | Verify each instruction body hash against stored sourceHash. |
+| manifest_refresh | admin |  | yes | Rewrite manifest from current index state. |
+| manifest_repair | admin |  | yes | Repair manifest by reconciling drift with index. |
+| manifest_status | admin | yes |  | Report index manifest presence and drift summary. |
+| messaging_ack | extended |  | yes | Acknowledge (mark as read) one or more messages by ID. |
+| messaging_get | extended | yes |  | Get a single message by ID with full details. |
+| messaging_list_channels | extended | yes |  | List all active messaging channels with message counts and latest timestamps. |
+| messaging_manage | extended |  | yes | Dispatcher consolidating all 10 messaging_&lt;action&gt; tools into a single MCP surface. Pick the underlying operation with action= (send/read/list_channels/ack/stats/get/update/purge/reply/thread). Mirrors the individual tools 1:1; the standalone messaging_&lt;action&gt; tools remain available but messaging_manage is the recommended entry-point (#373). |
+| messaging_purge | extended |  | yes | Delete messages: all, by channel, or by specific IDs. |
+| messaging_read | extended | yes |  | Read messages from a channel with visibility filtering. Supports unread-only, limit, mark-as-read, tag filtering, and sender filtering. |
+| messaging_reply | extended |  | yes | Reply to a message with auto-populated channel and parentId. Supports reply-all (all original recipients) or reply-to-sender. |
+| messaging_send | extended |  | yes | Send a message to a channel with recipient targeting. Supports broadcast (*), directed, priority, TTL, threading, and structured payloads. |
+| messaging_stats | extended | yes |  | Get messaging statistics for a reader: total, unread, channel count. |
+| messaging_thread | extended | yes |  | Retrieve a full message thread by root parentId. Returns parent + all nested replies sorted chronologically. |
+| messaging_update | extended |  | yes | Update mutable fields of a message (body, recipients, payload, persistent flag). |
+| meta_activation_guide | admin | yes |  | Comprehensive guide for activating Index Server tools in VSCode. Explains why settings.json alone is insufficient and provides activation function reference for all tool categories. |
+| meta_check_activation | admin | yes |  | Check activation requirements for a specific tool. Returns the VSCode activation function needed and step-by-step instructions. |
+| meta_tools | admin | yes |  | Enumerate available tools &amp; their metadata. |
+| metrics_snapshot | extended | yes |  | Performance metrics summary for handled methods. |
+| promote_from_repo | extended |  | yes | Scan a local Git repository and promote its knowledge content (constitutions, docs, instructions, specs) into the instruction index. Reads .specify/config/promotion-map.json and instructions/*.json from the target repo. |
+| prompt_review | core | yes |  | Static analysis of a prompt returning issues &amp; summary. |
+| trace_dump | admin | yes |  | Write the in-memory trace ring buffer to a file and return a summary (records count, bytes, env). Requires tracing to be enabled. |
+| usage_flush | admin |  | yes | Reset usage counters for a specific instruction (by id) or for entries with lastUsedAt before a given date. |
+| usage_hotset | extended | yes |  | Return the most-used instruction entries (hot set). |
+| usage_track | core | yes |  | Track instruction usage with optional qualitative signal. Params: id (required), action (retrieved\|applied\|cited), signal (helpful\|not-relevant\|outdated\|applied), comment (short text, max 256 chars). |
 
 ## Schemas
 ### bootstrap
@@ -67,6 +106,125 @@ Registry Version: 2026-06-01
       "description": "Token for confirm action."
     }
   }
+}
+```
+
+### bootstrap_confirmFinalize
+**Input Schema**
+```json
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "token"
+  ],
+  "properties": {
+    "token": {
+      "type": "string"
+    }
+  }
+}
+```
+
+### bootstrap_request
+**Input Schema**
+```json
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "rationale": {
+      "type": "string"
+    }
+  }
+}
+```
+
+### bootstrap_status
+**Input Schema**
+```json
+{
+  "type": "object",
+  "additionalProperties": true
+}
+```
+
+### dashboard_config
+**Input Schema**
+```json
+{
+  "type": "object",
+  "additionalProperties": true
+}
+```
+
+### diagnostics_block
+**Input Schema**
+```json
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "ms"
+  ],
+  "properties": {
+    "ms": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1000
+    }
+  }
+}
+```
+
+### diagnostics_handshake
+**Input Schema**
+```json
+{
+  "type": "object",
+  "additionalProperties": true
+}
+```
+
+### diagnostics_memoryPressure
+**Input Schema**
+```json
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "mb": {
+      "type": "number",
+      "minimum": 1,
+      "maximum": 64
+    }
+  }
+}
+```
+
+### diagnostics_microtaskFlood
+**Input Schema**
+```json
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "count": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 25000
+    }
+  }
+}
+```
+
+### feature_status
+**Input Schema**
+```json
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {}
 }
 ```
 
@@ -416,10 +574,11 @@ Registry Version: 2026-06-01
         "enum": [
           "primary",
           "category",
-          "belongs"
+          "belongs",
+          "link"
         ]
       },
-      "maxItems": 3
+      "maxItems": 4
     },
     "maxEdges": {
       "type": "number",
@@ -1029,6 +1188,43 @@ Registry Version: 2026-06-01
           "maxLength": 200,
           "description": "Identifier of the MCP agent or client that created or promoted this entry"
         },
+        "links": {
+          "type": "array",
+          "maxItems": 25,
+          "items": {
+            "type": "object",
+            "required": [
+              "target"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "target": {
+                "type": "string",
+                "pattern": "^[a-z0-9](?:[a-z0-9-_]{0,118}[a-z0-9])?$",
+                "maxLength": 120,
+                "description": "Target instruction ID"
+              },
+              "rel": {
+                "type": "string",
+                "enum": [
+                  "related",
+                  "prerequisite",
+                  "sequel",
+                  "part-of",
+                  "see-also"
+                ],
+                "default": "related",
+                "description": "Relationship type"
+              },
+              "label": {
+                "type": "string",
+                "maxLength": 120,
+                "description": "Human-readable annotation"
+              }
+            }
+          },
+          "description": "Structured cross-references to other instruction entries"
+        },
         "extensions": {
           "type": "object",
           "description": "Future-proof vendor / experimental fields",
@@ -1124,6 +1320,70 @@ Registry Version: 2026-06-01
 }
 ```
 
+### index_archive
+**Input Schema**
+```json
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "ids"
+  ],
+  "properties": {
+    "ids": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string"
+      },
+      "description": "Active instruction IDs to archive."
+    },
+    "reason": {
+      "type": "string",
+      "enum": [
+        "deprecated",
+        "superseded",
+        "duplicate-merge",
+        "manual",
+        "legacy-scope"
+      ],
+      "description": "Archive reason (closed taxonomy from REQ-3)."
+    },
+    "archivedBy": {
+      "type": "string",
+      "description": "Identity of the agent/operator performing the archive (optional)."
+    },
+    "dryRun": {
+      "type": "boolean",
+      "description": "Preview what would be archived without writing."
+    }
+  }
+}
+```
+
+### index_debug
+**Input Schema**
+```json
+{
+  "type": "object",
+  "additionalProperties": true
+}
+```
+
+### index_diagnostics
+**Input Schema**
+```json
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "includeTrace": {
+      "type": "boolean"
+    }
+  }
+}
+```
+
 ### index_dispatch
 **Input Schema**
 ```json
@@ -1154,6 +1414,7 @@ Registry Version: 2026-06-01
         "export",
         "add",
         "import",
+        "patch",
         "remove",
         "reload",
         "groom",
@@ -1186,11 +1447,20 @@ Registry Version: 2026-06-01
       "description": "Single-string query for search action. The dispatcher searches the full q phrase first and, if needed, retries with split-word keywords."
     },
     "keywords": {
-      "type": "array",
-      "items": {
-        "type": "string"
-      },
-      "description": "Explicit keyword array for search action when the caller wants direct token control."
+      "anyOf": [
+        {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        }
+      ],
+      "description": "Keywords for search action: an array of tokens, OR a single string (one or many words). A string is searched as-is first, then split on spaces if no match."
     },
     "searchString": {
       "type": "string",
@@ -1427,7 +1697,9 @@ Registry Version: 2026-06-01
               "type": "string",
               "enum": [
                 "6",
-                "7"
+                "7",
+                "8",
+                "9"
               ],
               "x-fieldClass": "server-managed",
               "description": "Internal schema version for migration"
@@ -1439,7 +1711,9 @@ Registry Version: 2026-06-01
                 "type": "string",
                 "enum": [
                   "6",
-                  "7"
+                  "7",
+                  "8",
+                  "9"
                 ],
                 "x-fieldClass": "server-managed",
                 "description": "Internal schema version for migration"
@@ -2091,6 +2365,152 @@ Registry Version: 2026-06-01
             }
           ]
         },
+        "links": {
+          "oneOf": [
+            {
+              "type": "object",
+              "required": [
+                "target"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "target": {
+                  "type": "string",
+                  "pattern": "^[a-z0-9](?:[a-z0-9-_]{0,118}[a-z0-9])?$",
+                  "maxLength": 120,
+                  "description": "Target instruction ID"
+                },
+                "rel": {
+                  "type": "string",
+                  "enum": [
+                    "related",
+                    "prerequisite",
+                    "sequel",
+                    "part-of",
+                    "see-also"
+                  ],
+                  "default": "related",
+                  "description": "Relationship type"
+                },
+                "label": {
+                  "type": "string",
+                  "maxLength": 120,
+                  "description": "Human-readable annotation"
+                }
+              }
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "object",
+                "required": [
+                  "target"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "target": {
+                    "type": "string",
+                    "pattern": "^[a-z0-9](?:[a-z0-9-_]{0,118}[a-z0-9])?$",
+                    "maxLength": 120,
+                    "description": "Target instruction ID"
+                  },
+                  "rel": {
+                    "type": "string",
+                    "enum": [
+                      "related",
+                      "prerequisite",
+                      "sequel",
+                      "part-of",
+                      "see-also"
+                    ],
+                    "default": "related",
+                    "description": "Relationship type"
+                  },
+                  "label": {
+                    "type": "string",
+                    "maxLength": 120,
+                    "description": "Human-readable annotation"
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "signalHistory": {
+          "oneOf": [
+            {
+              "type": "object",
+              "required": [
+                "signal",
+                "ts"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "signal": {
+                  "type": "string",
+                  "description": "Signal value (e.g. helpful, outdated, applied)"
+                },
+                "ts": {
+                  "type": "string",
+                  "format": "date-time",
+                  "description": "When the signal arrived (ISO 8601)"
+                },
+                "comment": {
+                  "type": "string",
+                  "description": "Optional freeform comment accompanying the signal"
+                }
+              }
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "object",
+                "required": [
+                  "signal",
+                  "ts"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "signal": {
+                    "type": "string",
+                    "description": "Signal value (e.g. helpful, outdated, applied)"
+                  },
+                  "ts": {
+                    "type": "string",
+                    "format": "date-time",
+                    "description": "When the signal arrived (ISO 8601)"
+                  },
+                  "comment": {
+                    "type": "string",
+                    "description": "Optional freeform comment accompanying the signal"
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "lastSignaledAt": {
+          "oneOf": [
+            {
+              "type": "string",
+              "format": "date-time",
+              "x-fieldClass": "server-managed",
+              "description": "Timestamp of the most recent signal event (ISO 8601)"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "format": "date-time",
+                "x-fieldClass": "server-managed",
+                "description": "Timestamp of the most recent signal event (ISO 8601)"
+              }
+            }
+          ]
+        },
         "extensions": {
           "type": "object",
           "additionalProperties": true
@@ -2309,9 +2729,56 @@ Registry Version: 2026-06-01
       "type": "boolean",
       "description": "Return metadata only (omit body) for export action."
     },
+    "includeBody": {
+      "type": "boolean",
+      "description": "Include the full body in list/search items. Default false: items are body-light (bodyPreview + bodyLength, full body omitted) to keep responses within MCP client limits. Use the get action for full content."
+    },
+    "bodyOffset": {
+      "type": "number",
+      "description": "Start character offset for paginated body retrieval (get action). Supplying bodyOffset or bodyLimit returns a body window plus a bodyPagination envelope; omit both to get the full body."
+    },
+    "bodyLimit": {
+      "type": "number",
+      "description": "Maximum number of body characters to return per page (get action). Pairs with bodyOffset for deterministic, surrogate-safe pagination."
+    },
+    "op": {
+      "type": "string",
+      "enum": [
+        "splice",
+        "append",
+        "prepend",
+        "replace",
+        "metadata"
+      ],
+      "description": "Patch operation (patch action). splice=replace a character window at bodyOffset; append/prepend=concatenate text; replace=literal substring substitution; metadata=update title/semanticSummary/categories/primaryCategory/contentType without touching the body."
+    },
+    "bodyLength": {
+      "type": "number",
+      "description": "Number of body characters to remove at bodyOffset (patch action, splice op). Defaults to 0, making the splice a pure insertion."
+    },
+    "find": {
+      "type": "string",
+      "description": "Literal substring to find (patch action, replace op). Never interpreted as a regular expression."
+    },
+    "replaceWith": {
+      "type": "string",
+      "description": "Replacement text (patch action, replace op). Defaults to empty string."
+    },
+    "replaceAll": {
+      "type": "boolean",
+      "description": "Replace every occurrence instead of only the first (patch action, replace op)."
+    },
+    "expectedSourceHash": {
+      "type": "string",
+      "description": "Optimistic-concurrency precondition (patch action). When it does not match the stored sourceHash the patch is refused with precondition_failed and nothing is written."
+    },
+    "summary": {
+      "type": "string",
+      "description": "Changelog summary recorded when patch is combined with bump."
+    },
     "limit": {
       "type": "number",
-      "description": "Maximum number of results to return (search or query action)."
+      "description": "Maximum number of results to return (list, search, or query action). When omitted, list/search default to INDEX_SERVER_DEFAULT_PAGE_SIZE (default 50). Pass limit:0 on list to return all items."
     },
     "offset": {
       "type": "number",
@@ -2388,6 +2855,36 @@ Registry Version: 2026-06-01
         "restricted"
       ]
     },
+    "links": {
+      "type": "array",
+      "maxItems": 25,
+      "items": {
+        "type": "object",
+        "properties": {
+          "target": {
+            "type": "string"
+          },
+          "rel": {
+            "type": "string",
+            "enum": [
+              "related",
+              "prerequisite",
+              "sequel",
+              "part-of",
+              "see-also"
+            ]
+          },
+          "label": {
+            "type": "string",
+            "maxLength": 120
+          }
+        },
+        "required": [
+          "target"
+        ]
+      },
+      "description": "Structured cross-references to other instruction entries (add action)."
+    },
     "overwrite": {
       "type": "boolean",
       "description": "Allow overwriting existing instruction (add action)."
@@ -2434,7 +2931,7 @@ Registry Version: 2026-06-01
     },
     "bump": {
       "type": "string",
-      "description": "Version bump level for governanceUpdate action.",
+      "description": "Version bump level for governanceUpdate or patch actions.",
       "enum": [
         "patch",
         "minor",
@@ -2572,6 +3069,62 @@ Registry Version: 2026-06-01
 }
 ```
 
+### index_enrich
+**Input Schema**
+```json
+{
+  "type": "object",
+  "additionalProperties": true
+}
+```
+**Output Schema (Result)**
+```json
+{
+  "type": "object",
+  "required": [
+    "rewritten",
+    "updated",
+    "skipped"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "rewritten": {
+      "type": "number"
+    },
+    "updated": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "skipped": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}
+```
+
+### index_getArchived
+**Input Schema**
+```json
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Archived instruction id."
+    }
+  }
+}
+```
+
 ### index_governanceHash
 **Input Schema**
 ```json
@@ -2674,6 +3227,37 @@ Registry Version: 2026-06-01
     "nextReviewDue": {
       "type": "string"
     },
+    "riskScore": {
+      "type": "number"
+    },
+    "priority": {
+      "type": "number"
+    },
+    "priorityTier": {
+      "type": "string",
+      "enum": [
+        "P1",
+        "P2",
+        "P3",
+        "P4"
+      ]
+    },
+    "requirement": {
+      "type": "string",
+      "enum": [
+        "mandatory",
+        "critical",
+        "recommended",
+        "optional",
+        "deprecated"
+      ]
+    },
+    "categories": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
     "bump": {
       "type": "string",
       "enum": [
@@ -2684,6 +3268,222 @@ Registry Version: 2026-06-01
       ]
     }
   }
+}
+```
+
+### index_groom
+**Input Schema**
+```json
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "mode": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "dryRun": {
+          "type": "boolean"
+        },
+        "removeDeprecated": {
+          "type": "boolean"
+        },
+        "mergeDuplicates": {
+          "type": "boolean"
+        },
+        "purgeLegacyScopes": {
+          "type": "boolean"
+        },
+        "remapCategories": {
+          "type": "boolean"
+        },
+        "purgeArchive": {
+          "type": "boolean",
+          "description": "Permanently delete archived entries (spec 006 Phase D). Cannot be combined with retirement flags (removeDeprecated/mergeDuplicates/purgeLegacyScopes)."
+        }
+      }
+    },
+    "ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Optional subset of archive IDs to purge when mode.purgeArchive=true. Omit to purge all archived entries."
+    },
+    "force": {
+      "type": "boolean",
+      "description": "Required for bulk purgeArchive operations exceeding INDEX_SERVER_MAX_BULK_DELETE."
+    }
+  }
+}
+```
+**Output Schema (Result)**
+```json
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "previousHash",
+    "hash",
+    "scanned",
+    "repairedHashes",
+    "normalizedCategories",
+    "deprecatedRemoved",
+    "duplicatesMerged",
+    "signalApplied",
+    "filesRewritten",
+    "purgedScopes",
+    "dryRun",
+    "notes"
+  ],
+  "properties": {
+    "previousHash": {
+      "type": "string"
+    },
+    "hash": {
+      "type": "string"
+    },
+    "scanned": {
+      "type": "number"
+    },
+    "repairedHashes": {
+      "type": "number"
+    },
+    "normalizedCategories": {
+      "type": "number"
+    },
+    "deprecatedRemoved": {
+      "type": "number"
+    },
+    "duplicatesMerged": {
+      "type": "number"
+    },
+    "signalApplied": {
+      "type": "number"
+    },
+    "filesRewritten": {
+      "type": "number"
+    },
+    "purgedScopes": {
+      "type": "number"
+    },
+    "migrated": {
+      "type": "number"
+    },
+    "remappedCategories": {
+      "type": "number"
+    },
+    "dryRun": {
+      "type": "boolean"
+    },
+    "notes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}
+```
+
+### index_health
+**Input Schema**
+```json
+{
+  "type": "object",
+  "additionalProperties": true
+}
+```
+**Output Schema (Result)**
+```json
+{
+  "anyOf": [
+    {
+      "type": "object",
+      "required": [
+        "snapshot",
+        "hash",
+        "count"
+      ],
+      "additionalProperties": true,
+      "properties": {
+        "snapshot": {
+          "const": "missing"
+        },
+        "hash": {
+          "type": "string"
+        },
+        "count": {
+          "type": "number"
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "snapshot",
+        "hash",
+        "count",
+        "missing",
+        "changed",
+        "extra",
+        "drift"
+      ],
+      "additionalProperties": true,
+      "properties": {
+        "snapshot": {
+          "const": "present"
+        },
+        "hash": {
+          "type": "string"
+        },
+        "count": {
+          "type": "number"
+        },
+        "missing": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "changed": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "extra": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "drift": {
+          "type": "number"
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "snapshot",
+        "hash",
+        "error"
+      ],
+      "additionalProperties": true,
+      "properties": {
+        "snapshot": {
+          "const": "error"
+        },
+        "hash": {
+          "type": "string"
+        },
+        "error": {
+          "type": "string"
+        }
+      }
+    }
+  ]
 }
 ```
 
@@ -2915,6 +3715,43 @@ Registry Version: 2026-06-01
                 "maxLength": 200,
                 "description": "Identifier of the MCP agent or client that created or promoted this entry"
               },
+              "links": {
+                "type": "array",
+                "maxItems": 25,
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "target"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "target": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9](?:[a-z0-9-_]{0,118}[a-z0-9])?$",
+                      "maxLength": 120,
+                      "description": "Target instruction ID"
+                    },
+                    "rel": {
+                      "type": "string",
+                      "enum": [
+                        "related",
+                        "prerequisite",
+                        "sequel",
+                        "part-of",
+                        "see-also"
+                      ],
+                      "default": "related",
+                      "description": "Relationship type"
+                    },
+                    "label": {
+                      "type": "string",
+                      "maxLength": 120,
+                      "description": "Human-readable annotation"
+                    }
+                  }
+                },
+                "description": "Structured cross-references to other instruction entries"
+              },
               "extensions": {
                 "type": "object",
                 "description": "Future-proof vendor / experimental fields",
@@ -3068,6 +3905,240 @@ Registry Version: 2026-06-01
 }
 ```
 
+### index_inspect
+**Input Schema**
+```json
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id"
+  ],
+  "properties": {
+    "id": {
+      "type": "string"
+    }
+  }
+}
+```
+
+### index_listArchived
+**Input Schema**
+```json
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "category": {
+      "type": "string",
+      "description": "Filter by category."
+    },
+    "contentType": {
+      "type": "string",
+      "enum": [
+        "agent",
+        "skill",
+        "instruction",
+        "prompt",
+        "workflow",
+        "knowledge",
+        "template",
+        "integration"
+      ],
+      "description": "Filter by content type."
+    },
+    "reason": {
+      "type": "string",
+      "enum": [
+        "deprecated",
+        "superseded",
+        "duplicate-merge",
+        "manual",
+        "legacy-scope"
+      ],
+      "description": "Filter by archive reason."
+    },
+    "source": {
+      "type": "string",
+      "enum": [
+        "groom",
+        "remove",
+        "archive",
+        "import-migration"
+      ],
+      "description": "Filter by archive source."
+    },
+    "archivedBy": {
+      "type": "string",
+      "description": "Filter by archivedBy identity."
+    },
+    "restoreEligible": {
+      "type": "boolean",
+      "description": "Filter by restore eligibility flag."
+    },
+    "includeContent": {
+      "type": "boolean",
+      "description": "Include full body in each entry (default: false)."
+    },
+    "limit": {
+      "type": "number",
+      "minimum": 1,
+      "maximum": 1000
+    },
+    "offset": {
+      "type": "number",
+      "minimum": 0
+    }
+  }
+}
+```
+
+### index_normalize
+**Input Schema**
+```json
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "dryRun": {
+      "type": "boolean"
+    },
+    "forceCanonical": {
+      "type": "boolean"
+    }
+  }
+}
+```
+
+### index_patch
+**Input Schema**
+```json
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "op"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Instruction id to patch."
+    },
+    "op": {
+      "type": "string",
+      "enum": [
+        "splice",
+        "append",
+        "prepend",
+        "replace",
+        "metadata"
+      ],
+      "description": "Patch operation. splice=replace a character window; append/prepend=concatenate; replace=literal substring substitution; metadata=update title/semanticSummary/categories/primaryCategory/contentType without touching the body."
+    },
+    "text": {
+      "type": "string",
+      "description": "Text to insert (splice) or concatenate (append/prepend)."
+    },
+    "bodyOffset": {
+      "type": "number",
+      "description": "Splice window start in UTF-16 code units. Mirrors the bodyOffset used by the get action, so a windowed read can be written straight back. Clamped into range; never splits a surrogate pair."
+    },
+    "bodyLength": {
+      "type": "number",
+      "description": "Number of code units to remove at bodyOffset (splice). Defaults to 0, which makes the splice a pure insertion."
+    },
+    "find": {
+      "type": "string",
+      "description": "Literal substring to find (replace op). Never interpreted as a regular expression."
+    },
+    "replaceWith": {
+      "type": "string",
+      "description": "Replacement text for the replace op. Defaults to an empty string (deletion)."
+    },
+    "replaceAll": {
+      "type": "boolean",
+      "description": "Replace every occurrence instead of only the first (replace op)."
+    },
+    "expectedSourceHash": {
+      "type": "string",
+      "description": "Optimistic-concurrency precondition. When supplied and it does not match the stored sourceHash, the patch is refused with precondition_failed and nothing is written."
+    },
+    "bump": {
+      "type": "string",
+      "enum": [
+        "patch",
+        "minor",
+        "major",
+        "none"
+      ],
+      "description": "Optional semver bump applied alongside the body change."
+    },
+    "summary": {
+      "type": "string",
+      "description": "Changelog summary recorded when bump is supplied."
+    },
+    "dryRun": {
+      "type": "boolean",
+      "description": "Compute and report the result without writing."
+    },
+    "title": {
+      "type": "string",
+      "description": "New title (op: metadata only)."
+    },
+    "semanticSummary": {
+      "type": "string",
+      "description": "New semantic summary, max 600 chars (op: metadata only)."
+    },
+    "categories": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "New categories (op: metadata only)."
+    },
+    "primaryCategory": {
+      "type": "string",
+      "description": "New primary category (op: metadata only)."
+    },
+    "contentType": {
+      "type": "string",
+      "description": "New content type (op: metadata only)."
+    }
+  }
+}
+```
+
+### index_purgeArchive
+**Input Schema**
+```json
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "ids"
+  ],
+  "properties": {
+    "ids": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string"
+      },
+      "description": "Archived instruction IDs to permanently delete."
+    },
+    "dryRun": {
+      "type": "boolean",
+      "description": "Preview what would be purged without deleting."
+    },
+    "force": {
+      "type": "boolean",
+      "description": "Required when purging more than INDEX_SERVER_MAX_BULK_DELETE items. A backup is created first."
+    }
+  }
+}
+```
+
 ### index_reload
 **Input Schema**
 ```json
@@ -3192,6 +4263,97 @@ Registry Version: 2026-06-01
           }
         }
       }
+    }
+  }
+}
+```
+
+### index_repair
+**Input Schema**
+```json
+{
+  "type": "object",
+  "additionalProperties": true
+}
+```
+**Output Schema (Result)**
+```json
+{
+  "type": "object",
+  "required": [
+    "repaired",
+    "updated",
+    "migrationCount",
+    "migrationDetails"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "repaired": {
+      "type": "number"
+    },
+    "updated": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "skippedRepaired": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "errors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": true
+      }
+    },
+    "migrationCount": {
+      "type": "number"
+    },
+    "migrationDetails": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": true
+      }
+    }
+  }
+}
+```
+
+### index_restore
+**Input Schema**
+```json
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "ids"
+  ],
+  "properties": {
+    "ids": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string"
+      },
+      "description": "Archived instruction IDs to restore."
+    },
+    "restoreMode": {
+      "type": "string",
+      "enum": [
+        "reject",
+        "overwrite"
+      ],
+      "default": "reject",
+      "description": "Collision behaviour when an active entry with the same id exists."
+    },
+    "dryRun": {
+      "type": "boolean",
+      "description": "Preview what would be restored without writing."
     }
   }
 }
@@ -3332,6 +4494,16 @@ Registry Version: 2026-06-01
       "required": [
         "fields"
       ]
+    },
+    {
+      "required": [
+        "q"
+      ]
+    },
+    {
+      "required": [
+        "query"
+      ]
     }
   ],
   "not": {
@@ -3342,21 +4514,42 @@ Registry Version: 2026-06-01
   },
   "properties": {
     "keywords": {
-      "type": "array",
-      "items": {
-        "type": "string",
-        "minLength": 1,
-        "maxLength": 100
-      },
-      "minItems": 1,
-      "maxItems": 10,
-      "description": "Search keywords to match against instruction titles, bodies, and categories"
+      "anyOf": [
+        {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "minItems": 1,
+          "maxItems": 10
+        },
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        }
+      ],
+      "description": "Search keywords: an array of tokens, OR a single string (one or many words). A string is searched as-is first, then split on spaces if no match."
     },
     "searchString": {
       "type": "string",
       "minLength": 1,
       "maxLength": 500,
       "description": "Phrase input for search. Mutually exclusive with keywords."
+    },
+    "q": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500,
+      "description": "Alias for searchString (accepts the common `q` search parameter name)."
+    },
+    "query": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500,
+      "description": "Alias for searchString (accepts the common `query` search parameter name)."
     },
     "mode": {
       "type": "string",
@@ -3628,7 +4821,9 @@ Registry Version: 2026-06-01
               "type": "string",
               "enum": [
                 "6",
-                "7"
+                "7",
+                "8",
+                "9"
               ],
               "x-fieldClass": "server-managed",
               "description": "Internal schema version for migration"
@@ -3640,7 +4835,9 @@ Registry Version: 2026-06-01
                 "type": "string",
                 "enum": [
                   "6",
-                  "7"
+                  "7",
+                  "8",
+                  "9"
                 ],
                 "x-fieldClass": "server-managed",
                 "description": "Internal schema version for migration"
@@ -4292,6 +5489,152 @@ Registry Version: 2026-06-01
             }
           ]
         },
+        "links": {
+          "oneOf": [
+            {
+              "type": "object",
+              "required": [
+                "target"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "target": {
+                  "type": "string",
+                  "pattern": "^[a-z0-9](?:[a-z0-9-_]{0,118}[a-z0-9])?$",
+                  "maxLength": 120,
+                  "description": "Target instruction ID"
+                },
+                "rel": {
+                  "type": "string",
+                  "enum": [
+                    "related",
+                    "prerequisite",
+                    "sequel",
+                    "part-of",
+                    "see-also"
+                  ],
+                  "default": "related",
+                  "description": "Relationship type"
+                },
+                "label": {
+                  "type": "string",
+                  "maxLength": 120,
+                  "description": "Human-readable annotation"
+                }
+              }
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "object",
+                "required": [
+                  "target"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "target": {
+                    "type": "string",
+                    "pattern": "^[a-z0-9](?:[a-z0-9-_]{0,118}[a-z0-9])?$",
+                    "maxLength": 120,
+                    "description": "Target instruction ID"
+                  },
+                  "rel": {
+                    "type": "string",
+                    "enum": [
+                      "related",
+                      "prerequisite",
+                      "sequel",
+                      "part-of",
+                      "see-also"
+                    ],
+                    "default": "related",
+                    "description": "Relationship type"
+                  },
+                  "label": {
+                    "type": "string",
+                    "maxLength": 120,
+                    "description": "Human-readable annotation"
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "signalHistory": {
+          "oneOf": [
+            {
+              "type": "object",
+              "required": [
+                "signal",
+                "ts"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "signal": {
+                  "type": "string",
+                  "description": "Signal value (e.g. helpful, outdated, applied)"
+                },
+                "ts": {
+                  "type": "string",
+                  "format": "date-time",
+                  "description": "When the signal arrived (ISO 8601)"
+                },
+                "comment": {
+                  "type": "string",
+                  "description": "Optional freeform comment accompanying the signal"
+                }
+              }
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "object",
+                "required": [
+                  "signal",
+                  "ts"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "signal": {
+                    "type": "string",
+                    "description": "Signal value (e.g. helpful, outdated, applied)"
+                  },
+                  "ts": {
+                    "type": "string",
+                    "format": "date-time",
+                    "description": "When the signal arrived (ISO 8601)"
+                  },
+                  "comment": {
+                    "type": "string",
+                    "description": "Optional freeform comment accompanying the signal"
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "lastSignaledAt": {
+          "oneOf": [
+            {
+              "type": "string",
+              "format": "date-time",
+              "x-fieldClass": "server-managed",
+              "description": "Timestamp of the most recent signal event (ISO 8601)"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "format": "date-time",
+                "x-fieldClass": "server-managed",
+                "description": "Timestamp of the most recent signal event (ISO 8601)"
+              }
+            }
+          ]
+        },
         "extensions": {
           "type": "object",
           "additionalProperties": true
@@ -4542,6 +5885,15 @@ Registry Version: 2026-06-01
 }
 ```
 
+### integrity_manifest
+**Input Schema**
+```json
+{
+  "type": "object",
+  "additionalProperties": true
+}
+```
+
 ### integrity_verify
 **Input Schema**
 ```json
@@ -4595,6 +5947,33 @@ Registry Version: 2026-06-01
       "type": "number"
     }
   }
+}
+```
+
+### manifest_refresh
+**Input Schema**
+```json
+{
+  "type": "object",
+  "additionalProperties": true
+}
+```
+
+### manifest_repair
+**Input Schema**
+```json
+{
+  "type": "object",
+  "additionalProperties": true
+}
+```
+
+### manifest_status
+**Input Schema**
+```json
+{
+  "type": "object",
+  "additionalProperties": true
 }
 ```
 
@@ -4738,6 +6117,10 @@ Registry Version: 2026-06-01
     "markRead": {
       "type": "boolean"
     },
+    "unacked": {
+      "type": "boolean",
+      "description": "Only return unacknowledged messages (action=read, requires reader)."
+    },
     "messageIds": {
       "type": "array",
       "items": {
@@ -4823,6 +6206,14 @@ Registry Version: 2026-06-01
     "sender": {
       "type": "string",
       "description": "Filter by sender name"
+    },
+    "requiresAck": {
+      "type": "boolean",
+      "description": "Filter to messages that require/do not require acknowledgment"
+    },
+    "unacked": {
+      "type": "boolean",
+      "description": "Only return unacknowledged messages (requires reader)"
     }
   }
 }
@@ -5052,6 +6443,188 @@ Registry Version: 2026-06-01
 }
 ```
 
+### meta_activation_guide
+**Input Schema**
+```json
+{
+  "type": "object",
+  "additionalProperties": true
+}
+```
+
+### meta_check_activation
+**Input Schema**
+```json
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "toolName": {
+      "type": "string",
+      "description": "Tool name to check activation requirements for (e.g., \"index_search\")"
+    }
+  }
+}
+```
+
+### meta_tools
+**Input Schema**
+```json
+{
+  "type": "object",
+  "additionalProperties": true
+}
+```
+**Output Schema (Result)**
+```json
+{
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "stable",
+    "dynamic",
+    "tools"
+  ],
+  "properties": {
+    "tools": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "method"
+        ],
+        "additionalProperties": true,
+        "properties": {
+          "method": {
+            "type": "string"
+          },
+          "stable": {
+            "type": "boolean"
+          },
+          "mutation": {
+            "type": "boolean"
+          },
+          "disabled": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    "stable": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tools"
+      ],
+      "properties": {
+        "tools": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "method",
+              "stable",
+              "mutation"
+            ],
+            "additionalProperties": true,
+            "properties": {
+              "method": {
+                "type": "string"
+              },
+              "stable": {
+                "type": "boolean"
+              },
+              "mutation": {
+                "type": "boolean"
+              }
+            }
+          }
+        }
+      }
+    },
+    "dynamic": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "generatedAt",
+        "mutationEnabled",
+        "disabled"
+      ],
+      "properties": {
+        "generatedAt": {
+          "type": "string"
+        },
+        "mutationEnabled": {
+          "type": "boolean"
+        },
+        "disabled": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "method"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "method": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "mcp": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "registryVersion",
+        "tools"
+      ],
+      "properties": {
+        "registryVersion": {
+          "type": "string"
+        },
+        "tools": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "name",
+              "description",
+              "stable",
+              "mutation",
+              "inputSchema"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              },
+              "stable": {
+                "type": "boolean"
+              },
+              "mutation": {
+                "type": "boolean"
+              },
+              "inputSchema": {
+                "type": "object"
+              },
+              "outputSchema": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+```
+
 ### metrics_snapshot
 **Input Schema**
 ```json
@@ -5219,6 +6792,55 @@ Registry Version: 2026-06-01
 }
 ```
 
+### trace_dump
+**Input Schema**
+```json
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "file": {
+      "type": "string",
+      "description": "Optional path to write the trace buffer JSON file"
+    }
+  }
+}
+```
+
+### usage_flush
+**Input Schema**
+```json
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Instruction ID to reset usage for"
+    },
+    "before": {
+      "type": "string",
+      "description": "ISO date — reset usage for entries with lastUsedAt before this date"
+    }
+  }
+}
+```
+**Output Schema (Result)**
+```json
+{
+  "type": "object",
+  "required": [
+    "flushed"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "flushed": {
+      "const": true
+    }
+  }
+}
+```
+
 ### usage_hotset
 **Input Schema**
 ```json
@@ -5310,12 +6932,25 @@ Registry Version: 2026-06-01
 {
   "type": "object",
   "additionalProperties": false,
-  "required": [
-    "id"
+  "anyOf": [
+    {
+      "required": [
+        "id"
+      ]
+    },
+    {
+      "required": [
+        "instructionId"
+      ]
+    }
   ],
   "properties": {
     "id": {
       "type": "string"
+    },
+    "instructionId": {
+      "type": "string",
+      "description": "Alias for id (accepts the instructionId field returned by search/query/get)."
     },
     "action": {
       "type": "string",

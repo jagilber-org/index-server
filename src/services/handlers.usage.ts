@@ -9,8 +9,11 @@ function invalidParam(message: string): Error & { code: number } {
   return Object.assign(new Error(message), { code: -32602 });
 }
 
-registerHandler('usage_track', (p: { id: string; action?: string; signal?: string; comment?: string }) => {
-  if (!p.id) return { error: 'missing id' };
+registerHandler('usage_track', (p: { id?: string; instructionId?: string; action?: string; signal?: string; comment?: string }) => {
+  // Ergonomic alias: search/query results expose the identifier as
+  // `instructionId`, so accept it as a synonym for the canonical `id`.
+  const id = p.id ?? p.instructionId;
+  if (!id) return { error: 'missing id' };
   if (p.action !== undefined && !VALID_ACTIONS.has(p.action)) {
     throw invalidParam(`Invalid usage action "${p.action}". Expected one of: retrieved, applied, cited.`);
   }
@@ -18,7 +21,7 @@ registerHandler('usage_track', (p: { id: string; action?: string; signal?: strin
     throw invalidParam(`Invalid usage signal "${p.signal}". Expected one of: helpful, not-relevant, outdated, applied.`);
   }
   const opts = { action: p.action, signal: p.signal, comment: p.comment };
-  const r = incrementUsage(p.id, opts);
+  const r = incrementUsage(id, opts);
   if (!r) return { notFound: true };
   return r;
 });
@@ -54,6 +57,8 @@ registerHandler('usage_hotset', (p: { limit?: number }) => {
       if (e.lastAppliedAt) item.lastAppliedAt = e.lastAppliedAt;
       if (rec.lastSignal) item.lastSignal = rec.lastSignal;
       if (rec.lastComment) item.lastComment = rec.lastComment;
+      if (e.signalHistory?.length) item.signalHistory = e.signalHistory;
+      if (e.lastSignaledAt) item.lastSignaledAt = e.lastSignaledAt;
       return item;
     });
 

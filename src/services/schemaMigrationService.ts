@@ -1,5 +1,5 @@
 import { SCHEMA_VERSION } from '../versioning/schemaVersion';
-import { REQUIREMENTS } from '../models/instruction';
+import { AUDIENCES, REQUIREMENTS } from '../models/instruction';
 import { log } from './logger';
 
 export interface SchemaMigrationChange {
@@ -75,8 +75,15 @@ function normalizeLegacyId(id: string): string | undefined {
 
 function migrateAudience(entry: Record<string, unknown>, changes: SchemaMigrationChange[]): void {
   if (typeof entry.audience !== 'string') {
-    if (entry.audience === undefined || entry.audience === null) {
-      recordChange(changes, 'audience', entry.audience, 'all', 'missing audience default');
+    if (Array.isArray(entry.audience)) {
+      const first = entry.audience.find((v: unknown) =>
+        typeof v === 'string' && (AUDIENCES as readonly string[]).includes(v),
+      );
+      const resolved = first ?? 'all';
+      recordChange(changes, 'audience', entry.audience, resolved, 'array audience coerced');
+      entry.audience = resolved;
+    } else {
+      recordChange(changes, 'audience', entry.audience, 'all', 'non-string audience default');
       entry.audience = 'all';
     }
     return;

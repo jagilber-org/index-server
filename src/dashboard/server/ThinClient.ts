@@ -19,6 +19,7 @@
 import fs from 'fs';
 import path from 'path';
 import http from 'http';
+import { getRuntimeConfig } from '../../config/runtimeConfig.js';
 
 export interface ThinClientOptions {
   /** URL of the leader's MCP transport (e.g., http://127.0.0.1:9090/mcp) */
@@ -182,6 +183,24 @@ export class ThinClient {
     }
   }
 
+  /**
+   * Admin API key to present to the leader, read per call so a key rotated in
+   * the environment takes effect without a restart.
+   *
+   * #605 put `POST /mcp/rpc` behind the same policy as the dashboard admin
+   * routes: loopback passes without a key, but once INDEX_SERVER_ADMIN_API_KEY
+   * is set the leader requires `Authorization: Bearer`. Followers and thin
+   * clients read the same variable, so a keyed deployment keeps working.
+   */
+  private authHeaders(): Record<string, string> {
+    try {
+      const key = getRuntimeConfig().dashboard.http.adminApiKey;
+      return key ? { Authorization: `Bearer ${key}` } : {};
+    } catch {
+      return {};
+    }
+  }
+
   private async httpPost(url: string, body: unknown): Promise<unknown> {
     const bodyStr = JSON.stringify(body);
 
@@ -195,6 +214,7 @@ export class ThinClient {
         headers: {
           'Content-Type': 'application/json',
           'Content-Length': Buffer.byteLength(bodyStr),
+          ...this.authHeaders(),
         },
         timeout: 10000,
       }, (res) => {

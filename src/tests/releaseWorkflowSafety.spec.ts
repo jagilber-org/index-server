@@ -9,6 +9,10 @@ const packageManifest = JSON.parse(
   fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8'),
 ) as { version: string };
 
+let hasPwsh = false;
+try { execFileSync('pwsh', ['-NoProfile', '-Command', 'exit 0'], { stdio: 'ignore' }); hasPwsh = true; } catch { /* pwsh not available */ }
+const itPwsh = hasPwsh ? it : it.skip;
+
 function runPwsh(scriptPath: string, args: string[], cwd = repoRoot) {
   return execFileSync('pwsh', ['-NoProfile', '-File', scriptPath, ...args], {
     cwd,
@@ -28,7 +32,7 @@ function listCleanRoomTempDirs(repoName: string): Set<string> {
 }
 
 describe('release/publication entrypoint safety', () => {
-  it('smoke-runs the root release workflow front door in dry-run mode', () => {
+  itPwsh('smoke-runs the root release workflow front door in dry-run mode', () => {
     const cleanRoomPath = path.join(os.tmpdir(), `index-server-release-smoke-${process.pid}`);
     const output = runPwsh(path.join(repoRoot, 'scripts', 'Invoke-ReleaseWorkflow.ps1'), [
       '-DryRun',
@@ -44,7 +48,7 @@ describe('release/publication entrypoint safety', () => {
     expect(output).toContain('Public mirror delivery');
   });
 
-  it('cleans the clean-room temp directory when forbidden artifact validation fails', () => {
+  itPwsh('cleans the clean-room temp directory when forbidden artifact validation fails', () => {
     const fixture = fs.mkdtempSync(path.join(os.tmpdir(), 'clean-room-fixture-'));
     const target = path.join(os.tmpdir(), `clean-room-target-${process.pid}`);
     try {

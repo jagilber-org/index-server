@@ -42,9 +42,14 @@ repos:
       - id: gitleaks-pre-push
         name: Run gitleaks before push
         entry: pwsh -NoProfile -File hooks/run-gitleaks-pre-push.ps1
-        language: golang
-        additional_dependencies:
-          - github.com/zricethezav/gitleaks/v8@v8.30.1
+        # `system`, not `golang`: the hook script resolves `gitleaks` from PATH
+        # itself. Under `language: golang` pre-commit ignored that binary and
+        # compiled its own copy at job time, which meant every CI run depended
+        # on sum.golang.org's HTTP/2 checksum path -- the INTERNAL_ERROR that
+        # failed three consecutive runs (git-self-hosted-runner#24). The CI
+        # image now bakes gitleaks 8.30.1 from its checksum-verified release
+        # archive, so PATH resolution is both pinned and offline-capable there.
+        language: system
         pass_filenames: false
         always_run: true
         stages: [pre-push]
@@ -139,9 +144,9 @@ repos:
         always_run: true
         stages: [pre-push]
   - repo: https://github.com/GitGuardian/ggshield
-    rev: v1.49.0
+    rev: v1.53.0
     hooks:
-      - id: ggshield
+      - id: ggshield-push
         language_version: python3
         stages: [pre-push]
   # Credential scanning - Critical for security-focused portfolio project

@@ -347,6 +347,7 @@ export interface EmbeddingCacheData {
   /** Per-entry content hashes for incremental invalidation (required for v2+). */
   entryHashes?: Record<string, string>;
   embeddings: Record<string, number[]>;
+  derivationVersion?: number;
 }
 
 /** A single embedding search result with distance score. */

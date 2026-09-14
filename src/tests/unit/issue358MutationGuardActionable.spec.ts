@@ -128,9 +128,15 @@ describe('issue #358: mutation guard returns actionable error (not silent skip)'
   // ──────────────────────────────────────────────────────────────────────
   // dispatcher: when mutation is disabled, mutation actions return actionable
   // envelope (mutationEnabled:false + mutationHint) — they DO NOT silently
-  // proceed without telling the caller. (The dispatcher is still permitted
-  // to run the operation per design intent; the caller gets the warning so
-  // they can interpret subsequent behavior.)
+  // proceed without telling the caller.
+  //
+  // Updated by issue #580: this block previously noted that "the dispatcher is
+  // still permitted to run the operation per design intent". That is no longer
+  // true, and it was the defect — INDEX_SERVER_MUTATION=0 is now an enforced
+  // read-only runtime (constitution S-3), so the operation is REFUSED rather
+  // than performed-with-a-warning. The #358 contract asserted below is
+  // unchanged: the caller still receives mutationEnabled:false and an
+  // actionable mutationHint. Only the side effect is gone.
   // ──────────────────────────────────────────────────────────────────────
   describe('index_dispatch mutation envelope when INDEX_SERVER_MUTATION=0', () => {
     let dir: string;
@@ -269,7 +275,6 @@ describe('issue #358: mutation guard returns actionable error (not silent skip)'
         },
         overwrite: false,
         lax: true,
-        _viaDispatcher: true,
       }) as Record<string, unknown>;
 
       expect(result).toBeDefined();

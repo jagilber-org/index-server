@@ -179,8 +179,10 @@ describe('Client Scripts E2E', () => {
     if (server) {
       try { await server.stop(); } catch { /* ok */ }
     }
-    process.env.INDEX_SERVER_MUTATION = originalMutation;
-    process.env.INDEX_SERVER_DIR = originalIndexDir;
+    if (originalMutation === undefined) delete process.env.INDEX_SERVER_MUTATION;
+    else process.env.INDEX_SERVER_MUTATION = originalMutation;
+    if (originalIndexDir === undefined) delete process.env.INDEX_SERVER_DIR;
+    else process.env.INDEX_SERVER_DIR = originalIndexDir;
     try { fs.rmSync(CLIENT_E2E_INDEX_DIR, { recursive: true, force: true }); } catch { /* ok */ }
   });
 
@@ -320,7 +322,7 @@ describe('Client Scripts E2E', () => {
   // ═══════════════════════════════════════════════════════════════════════
 
   describe('PowerShell client (index-server-client.ps1)', () => {
-    it.skipIf(!hasPwsh)('health action should return success', async () => {
+    it.skipIf(!hasPwsh)('health action should return success', async () => { // SKIP_OK: environment-gated: requires pwsh on PATH
       if (!server) return;
       const output = await runPwshWithRetry(
         `& '${PS1_SCRIPT}' -BaseUrl '${activeBaseUrl}' -Action health`
@@ -330,7 +332,7 @@ describe('Client Scripts E2E', () => {
       expect(result.result).toBeDefined();
     }, 60_000);
 
-    it.skipIf(!hasPwsh)('list action should return instructions', async () => {
+    it.skipIf(!hasPwsh)('list action should return instructions', async () => { // SKIP_OK: environment-gated: requires pwsh on PATH
       if (!server) return;
       const output = await runPwshWithRetry(
         `& '${PS1_SCRIPT}' -BaseUrl '${activeBaseUrl}' -Action list -Limit 5`
@@ -339,7 +341,7 @@ describe('Client Scripts E2E', () => {
       expect(result.success).toBe(true);
     }, 60_000);
 
-    it.skipIf(!hasPwsh)('get action without id should return error', async () => {
+    it.skipIf(!hasPwsh)('get action without id should return error', async () => { // SKIP_OK: environment-gated: requires pwsh on PATH
       if (!server) return;
       const output = await runPwsh(
         `& '${PS1_SCRIPT}' -BaseUrl '${activeBaseUrl}' -Action get`
@@ -349,7 +351,7 @@ describe('Client Scripts E2E', () => {
       expect(result.error).toContain('Id required');
     }, 60_000);
 
-    it.skipIf(!hasPwsh)('search without keywords should return error', async () => {
+    it.skipIf(!hasPwsh)('search without keywords should return error', async () => { // SKIP_OK: environment-gated: requires pwsh on PATH
       if (!server) return;
       const output = await runPwsh(
         `& '${PS1_SCRIPT}' -BaseUrl '${activeBaseUrl}' -Action search`
@@ -363,7 +365,7 @@ describe('Client Scripts E2E', () => {
       expect(result.error).toContain('required for search');
     }, 60_000);
 
-    it.skipIf(!hasPwsh)('hotset action should return results', async () => {
+    it.skipIf(!hasPwsh)('hotset action should return results', async () => { // SKIP_OK: environment-gated: requires pwsh on PATH
       if (!server) return;
       const output = await runPwshWithRetry(
         `& '${PS1_SCRIPT}' -BaseUrl '${activeBaseUrl}' -Action hotset -Limit 5`
@@ -371,7 +373,7 @@ describe('Client Scripts E2E', () => {
       const result = JSON.parse(output);
       expect(result.success).toBe(true);
     }, 60_000);
-    it.skipIf(!hasPwsh)('add action should create instruction with entry wrapper', async () => {
+    it.skipIf(!hasPwsh)('add action should create instruction with entry wrapper', async () => { // SKIP_OK: environment-gated: requires pwsh on PATH
       if (!server) return;
       const output = await runPwshWithRetry(
         `& '${PS1_SCRIPT}' -BaseUrl '${activeBaseUrl}' -Action add -Id 'e2e-ps1-test-1' -Title 'PS1 E2E Test' -Body 'Created by clientScriptsE2e test' -Priority 42 -Overwrite`
@@ -381,7 +383,7 @@ describe('Client Scripts E2E', () => {
       expect(result.result).toBeDefined();
     }, 60_000);
 
-    it.skipIf(!hasPwsh)('get should retrieve instruction created by add', async () => {
+    it.skipIf(!hasPwsh)('get should retrieve instruction created by add', async () => { // SKIP_OK: environment-gated: requires pwsh on PATH
       if (!server) return;
       // Create first
       await runPwshWithRetry(
@@ -400,7 +402,7 @@ describe('Client Scripts E2E', () => {
       expect(entry.title).toBe('Roundtrip Test');
     }, 60_000);
 
-    it.skipIf(!hasPwsh)('track action should record usage signal', async () => {
+    it.skipIf(!hasPwsh)('track action should record usage signal', async () => { // SKIP_OK: environment-gated: requires pwsh on PATH
       if (!server) return;
       const output = await runPwshWithRetry(
         `& '${PS1_SCRIPT}' -BaseUrl '${activeBaseUrl}' -Action track -Id 'e2e-ps1-roundtrip' -Signal helpful`
@@ -409,7 +411,7 @@ describe('Client Scripts E2E', () => {
       expect(result.success).toBe(true);
     }, 60_000);
 
-    it.skipIf(!hasPwsh)('remove action should delete instruction', async () => {
+    it.skipIf(!hasPwsh)('remove action should delete instruction', async () => { // SKIP_OK: environment-gated: requires pwsh on PATH
       if (!server) return;
       const output = await runPwshWithRetry(
         `& '${PS1_SCRIPT}' -BaseUrl '${activeBaseUrl}' -Action remove -Id 'e2e-ps1-roundtrip'`
@@ -427,7 +429,7 @@ describe('Client Scripts E2E', () => {
   // ═══════════════════════════════════════════════════════════════════════
 
   describe('Bash client (index-server-client.sh)', () => {
-    it.skipIf(!hasBash)('health action should return success', async () => {
+    it.skipIf(!hasBash)('health action should return success', async () => { // SKIP_OK: environment-gated: requires bash on PATH
       if (!server) return;
       const sp = getBashScriptPath();
       const output = await runBash(`INDEX_SERVER_URL='${activeBaseUrl}' bash '${sp}' health`);
@@ -435,7 +437,7 @@ describe('Client Scripts E2E', () => {
       expect(result.success).toBe(true);
     });
 
-    it.skipIf(!hasBash)('list action should return instructions', async () => {
+    it.skipIf(!hasBash)('list action should return instructions', async () => { // SKIP_OK: environment-gated: requires bash on PATH
       if (!server) return;
       const sp = getBashScriptPath();
       const output = await runBash(
@@ -445,7 +447,7 @@ describe('Client Scripts E2E', () => {
       expect(result.success).toBe(true);
     });
 
-    it.skipIf(!hasBash)('unknown action should return error with usage', async () => {
+    it.skipIf(!hasBash)('unknown action should return error with usage', async () => { // SKIP_OK: environment-gated: requires bash on PATH
       if (!server) return;
       const sp = getBashScriptPath();
       try {
@@ -460,7 +462,7 @@ describe('Client Scripts E2E', () => {
       }
     });
 
-    it.skipIf(!hasBash)('hotset action should return results', async () => {
+    it.skipIf(!hasBash)('hotset action should return results', async () => { // SKIP_OK: environment-gated: requires bash on PATH
       if (!server) return;
       const sp = getBashScriptPath();
       const output = await runBash(
@@ -471,7 +473,7 @@ describe('Client Scripts E2E', () => {
     });
 
     // ── CRUD lifecycle tests (add → get → track → remove) ──────────────
-    it.skipIf(!hasBash)('add action should create instruction with entry wrapper', async () => {
+    it.skipIf(!hasBash)('add action should create instruction with entry wrapper', async () => { // SKIP_OK: environment-gated: requires bash on PATH
       if (!server) return;
       const sp = getBashScriptPath();
       const output = await runBash(
@@ -483,7 +485,7 @@ describe('Client Scripts E2E', () => {
       expect(result.result.created).toBe(true);
     }, 30_000);
 
-    it.skipIf(!hasBash)('get should retrieve instruction created by add', async () => {
+    it.skipIf(!hasBash)('get should retrieve instruction created by add', async () => { // SKIP_OK: environment-gated: requires bash on PATH
       if (!server) return;
       const sp = getBashScriptPath();
       await runBash(
@@ -500,7 +502,7 @@ describe('Client Scripts E2E', () => {
       expect(entry.id).toBe('e2e-sh-roundtrip');
     }, 30_000);
 
-    it.skipIf(!hasBash)('track action should record usage signal', async () => {
+    it.skipIf(!hasBash)('track action should record usage signal', async () => { // SKIP_OK: environment-gated: requires bash on PATH
       if (!server) return;
       const sp = getBashScriptPath();
       const output = await runBash(
@@ -510,7 +512,7 @@ describe('Client Scripts E2E', () => {
       expect(result.success).toBe(true);
     }, 30_000);
 
-    it.skipIf(!hasBash)('remove action should delete instruction', async () => {
+    it.skipIf(!hasBash)('remove action should delete instruction', async () => { // SKIP_OK: environment-gated: requires bash on PATH
       if (!server) return;
       const sp = getBashScriptPath();
       const output = await runBash(
@@ -558,7 +560,7 @@ function generateSelfSignedCert(): { cert: string; key: string; certFile: string
   }
 }
 
-describe.skipIf(!hasOpenssl)('HTTPS / TLS Tests', () => {
+describe.skipIf(!hasOpenssl)('HTTPS / TLS Tests', () => { // SKIP_OK: environment-gated: requires openssl on PATH
   let httpsServer: DashboardServer | null = null;
   let tlsCert: ReturnType<typeof generateSelfSignedCert> = null;
 

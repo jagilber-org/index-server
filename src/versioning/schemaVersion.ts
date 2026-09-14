@@ -2,7 +2,7 @@
 // Bump this when making a backward-incompatible on-disk schema change that
 // requires a migration rewrite. Migration logic should detect older versions
 // and transform + persist them once.
-export const SCHEMA_VERSION = '7';
+export const SCHEMA_VERSION = '9';
 
 import { RequirementLevel, AUDIENCES, REQUIREMENTS, STATUSES, PRIORITY_TIERS, CLASSIFICATIONS, PriorityTier } from '../models/instruction';
 
@@ -69,6 +69,20 @@ export function migrateInstructionRecord(rec: Record<string, unknown>): Migratio
   if (prevVersion === '6') {
     // no-op on read: schema v7 fields are optional and absent on legacy records
     notes.push('v6→v7: archive lifecycle metadata is optional, no transform needed');
+  }
+
+  // v7 → v8 migration (spec 511 — structured links array). The new `links`
+  // field is optional and absent on legacy records. Absent is semantically
+  // equivalent to []. First write stamps schemaVersion='8'.
+  if (prevVersion === '7') {
+    notes.push('v7→v8: links field is optional, no transform needed');
+  }
+
+  // v8 → v9 migration (signals design improvement). The new `signalHistory`
+  // and `lastSignaledAt` fields are optional and absent on legacy records.
+  // No data transform needed — first write stamps schemaVersion='9'.
+  if (prevVersion === '8') {
+    notes.push('v8→v9: signalHistory and lastSignaledAt fields are optional, no transform needed');
   }
 
   // Clean optional nullable fields that upstream tools may emit as null

@@ -5,11 +5,12 @@ import crypto from 'crypto';
 import { InstructionEntry } from '../../models/instruction';
 
 import { registerHandler } from '../../server/registry';
-import { ensureLoadedAsync, getInstructionsDir, invalidate, touchIndexVersion, writeEntryAsync } from '../indexContext';
+import { beginBulkMutation, endBulkMutation, ensureLoadedAsync, getInstructionsDir, invalidate, touchIndexVersion, writeEntryAsync } from '../indexContext';
 import { incrementCounter } from '../features';
 import { SCHEMA_VERSION } from '../../versioning/schemaVersion';
 import { ClassificationService } from '../classificationService';
 import { resolveOwner } from '../ownershipService';
+import { governanceDenylistError, isGovernanceDeniedId } from '../governanceDenylist';
 import { validateInstructionInputSurface, validateInstructionRecord } from '../instructionRecordValidation';
 import { isInstructionValidationError } from '../instructionRecordValidation';
 import { splitEntry } from '../../schemas/instructionSchema';
@@ -19,7 +20,7 @@ import { getRuntimeConfig } from '../../config/runtimeConfig';
 import { attemptManifestUpdate } from '../manifestManager';
 import { migrateLegacyInstructionEntry, SchemaMigrationResult } from '../schemaMigrationService';
 
-import { guard, ImportEntry, normalizeInputCategories, IMPORT_GOVERNANCE_KEYS, applyGovernanceKeys } from './instructions.shared';
+import { guard, ImportEntry, normalizeInputCategories, IMPORT_GOVERNANCE_KEYS, applyGovernanceKeys, validateLinks } from './instructions.shared';
 
 // Structured WARN without auto-attached call stack: the log-hygiene gate
 // (scripts/crawl-logs.mjs) treats WARN-with-stack as a budget violation
@@ -116,6 +117,13 @@ registerHandler('index_import', guard('index_import', async (p: { entries?: Impo
   const writtenIds: string[] = [];
   const migrationDetails: Array<Pick<SchemaMigrationResult, 'originalId' | 'id' | 'schemaVersion' | 'changes'>> = [];
   const formatImportValidationError = (validationErrors: string[]) => `invalid_instruction: ${validationErrors.join('; ')}`;
+  // Each writeEntryAsync below materializes into the LIVE index state, so
+  // state.list.length climbs incrementally across this loop. Suppress catalog
+  // sampling until the post-loop reload settles, or the dashboard records a
+  // partial count as if it were a real catalog size. Released in the .finally()
+  // on the reload at the end of the loop; a throw inside the loop is covered by
+  // the guard's own 5-minute self-expiry.
+  beginBulkMutation();
   for (const rawEntry of entries) {
     const migration = migrateLegacyInstructionEntry(rawEntry as unknown as Record<string, unknown>, { source: 'index_import' });
     if (migration.changed) {
@@ -164,6 +172,12 @@ registerHandler('index_import', guard('index_import', async (p: { entries?: Impo
       continue;
     }
     const bodyTrimmed = typeof e.body === 'string' ? e.body.trim() : String(e.body);
+    if (isGovernanceDeniedId(e.id)) {
+      const errMsg = governanceDenylistError(e.id);
+      errors.push({ id: e.id, error: errMsg });
+      warnStruct('[import] entry rejected', { id: e.id, reason: 'governance-denylist' });
+      continue;
+    }
     const { bodyWarnLength: importBodyMax } = getRuntimeConfig().index;
     if (bodyTrimmed.length > importBodyMax) {
       errors.push({ id: e.id, error: `body_too_large: ${bodyTrimmed.length} chars exceeds ${importBodyMax} limit. Split into cross-linked instructions.` });
@@ -201,8 +215,18 @@ registerHandler('index_import', guard('index_import', async (p: { entries?: Impo
     // when the caller did not supply any of those keys.
     const base: InstructionEntry = existing
       ? { ...existing, title: e.title, body: bodyTrimmed, rationale: e.rationale, priority: e.priority, audience: e.audience, requirement: e.requirement, categories, primaryCategory: effectivePrimary, updatedAt: now, ...carryForward } as InstructionEntry
-      : { id: e.id, title: e.title, body: bodyTrimmed, rationale: e.rationale, priority: e.priority, audience: e.audience, requirement: e.requirement, categories, primaryCategory: effectivePrimary, sourceHash: newBodyHash, schemaVersion: SCHEMA_VERSION, deprecatedBy: e.deprecatedBy, createdAt: now, updatedAt: now, riskScore: e.riskScore, createdByAgent: instructionsCfg.agentId, sourceWorkspace: instructionsCfg.workspaceId, extensions: e.extensions, ...carryForward } as InstructionEntry;
+      : { id: e.id, title: e.title, body: bodyTrimmed, rationale: e.rationale, priority: e.priority, audience: e.audience, requirement: e.requirement, categories, primaryCategory: effectivePrimary, sourceHash: newBodyHash, schemaVersion: SCHEMA_VERSION, deprecatedBy: e.deprecatedBy, createdAt: now, updatedAt: now, riskScore: e.riskScore, createdByAgent: instructionsCfg.agentId, sourceWorkspace: instructionsCfg.workspaceId, extensions: e.extensions, links: (e as ImportEntry).links, ...carryForward } as InstructionEntry;
     applyGovernanceKeys(base, e, IMPORT_GOVERNANCE_KEYS);
+    // Link validation (spec 511, V2)
+    if ((e as ImportEntry).links !== undefined) {
+      const linkResult = validateLinks(e.id, (e as ImportEntry).links, stImport.byId);
+      if (linkResult.error) {
+        errors.push({ id: e.id, error: `invalid_links: ${linkResult.error}` });
+        warnStruct('[import] entry rejected', { id: e.id, reason: 'invalid-links', error: linkResult.error });
+        continue;
+      }
+      base.links = linkResult.links.length > 0 ? linkResult.links : undefined;
+    }
     if (!base.sourceWorkspace) base.sourceWorkspace = instructionsCfg.workspaceId;
     base.sourceHash = newBodyHash;
     const record = classifier.normalize(base);
@@ -230,7 +254,8 @@ registerHandler('index_import', guard('index_import', async (p: { entries?: Impo
     writtenIds.push(record.id);
     if (fileExists && mode === 'overwrite') overwritten++; else if (!fileExists) imported++;
   }
-  touchIndexVersion(); invalidate(); const st = await ensureLoadedAsync();
+  touchIndexVersion(); invalidate();
+  const st = await ensureLoadedAsync().finally(() => endBulkMutation());
   // Read-back verification: confirm each written entry is visible in the reloaded index
   const verificationErrors: { id: string; error: string }[] = [];
   for (const id of writtenIds) {

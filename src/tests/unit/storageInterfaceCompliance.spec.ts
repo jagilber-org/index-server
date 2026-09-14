@@ -51,7 +51,7 @@ function call(name: string, params: unknown): unknown {
   return handler(params);
 }
 
-describe.skipIf(!hasSqlite)('Storage Interface Compliance - SQLite', () => {
+describe.skipIf(!hasSqlite)('Storage Interface Compliance - SQLite', () => { // SKIP_OK: environment-gated: requires better-sqlite3 native module
   beforeAll(async () => {
     fs.mkdirSync(INST_DIR, { recursive: true });
     process.env.INDEX_SERVER_MUTATION = '1';

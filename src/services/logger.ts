@@ -267,6 +267,23 @@ export function log(level: LogLevel, msg: string, fields: Partial<Omit<LogRecord
   emit({ ts: new Date().toISOString(), level, msg, ...fields });
 }
 
+/**
+ * Resolve after all log records currently queued for file output have been
+ * handed to the operating system. This is primarily useful for deterministic
+ * shutdown paths and tests that need to read the active log immediately.
+ */
+export function flushLogs(): Promise<void> {
+  const handle = logFileHandle;
+  if (!handle || handle.destroyed) return Promise.resolve();
+
+  return new Promise((resolve, reject) => {
+    handle.write('', (error?: Error | null) => {
+      if (error) reject(error);
+      else resolve();
+    });
+  });
+}
+
 /** TRACE — function entry/exit tracing and low-level diagnostics.
  * Use `→ Class.method` / `← Class.method` prefixes for call graph support.
  * @param msg - Message (use → / ← prefixes for function tracing)

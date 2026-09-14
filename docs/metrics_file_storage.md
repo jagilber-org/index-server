@@ -6,17 +6,43 @@ The MetricsCollector now supports file-based storage to prevent memory accumulat
 
 ### Environment Variables
 
-- `INDEX_SERVER_METRICS_FILE_STORAGE=true` - Enable file storage (default: false for backward compatibility)
-- `INDEX_SERVER_METRICS_DIR=./metrics` - Directory for metrics files (default: `./metrics`)
-- `INDEX_SERVER_METRICS_MAX_FILES=720` - Maximum files to keep (default: 720 = 12 hours)
-- `INDEX_SERVER_METRICS_RETENTION_MINUTES=60` - File retention period (default: 60 minutes)
+Only two environment variables are read (#591):
+
+- `INDEX_SERVER_METRICS_FILE_STORAGE` — enable file storage. Default off
+  (`src/config/serverConfig.ts`), though the `enhanced` and `full` runtime
+  profiles turn it on (`runtimeConfig.ts:462,468`).
+- `INDEX_SERVER_METRICS_DIR` — directory for metrics files. **Default
+  `<STATE_ROOT>/metrics`, not `./metrics`.** `STATE_ROOT` is the OS user-data
+  directory — `%LOCALAPPDATA%\index-server` on Windows,
+  `$XDG_STATE_HOME/index-server` elsewhere — overridable with
+  `INDEX_SERVER_STATE_ROOT`. It has not been cwd-relative since #577; a
+  cwd-relative default gave every MCP client its own private metrics directory.
+  A relative value here is resolved against `STATE_ROOT`, not the working
+  directory.
+
+> **`INDEX_SERVER_METRICS_MAX_FILES` and `INDEX_SERVER_METRICS_RETENTION_MINUTES`
+> do nothing.** This document previously listed both as configuration. Neither is
+> read anywhere in `src/` or `scripts/` — `720` and `60` are constructor defaults
+> on `MetricsCollector` (`src/dashboard/server/MetricsCollector.ts:156-157`),
+> reachable only in code. `MAX_FILES` is additionally still advertised as
+> `editable: true` in the dashboard Configuration panel, where setting it has no
+> effect; that is tracked in #588.
 
 ### Memory vs File Storage
 
+The retention behaviour is the **opposite** of what this document used to claim.
+
 **Memory Only (Default)**:
 - Fast access for real-time queries
-- Limited to ~60 snapshots to prevent memory leaks
+- Keeps **720** snapshots (`options.maxSnapshots`), plus a time cutoff of
+  `retentionMinutes` (60) — `MetricsCollector.ts:748-764`
 - All historical data lost on restart
+
+**The ~60-snapshot cap applies only when file storage is ON.** `MAX_MEMORY_SNAPSHOTS = 60`
+(`MetricsCollector.ts:129`) is selected by `this.useFileStorage ? 60 : maxSnapshots`,
+because with the files on disk there is no reason to hold an hour of history in
+memory. Enabling file storage therefore *reduces* the in-memory window from 720
+to 60 while making history durable.
 
 **File Storage (Recommended)**:
 - Unlimited historical data retention
@@ -29,6 +55,7 @@ The MetricsCollector now supports file-based storage to prevent memory accumulat
 ### Enable File Storage
 ```bash
 export INDEX_SERVER_METRICS_FILE_STORAGE=true
+# Optional. Absolute, or relative to STATE_ROOT — never to the working directory.
 export INDEX_SERVER_METRICS_DIR="/data/mcp-metrics"
 ```
 
@@ -47,16 +74,31 @@ export INDEX_SERVER_METRICS_DIR="/data/mcp-metrics"
 
 ### Memory Impact
 
-**Before**: Up to 720 snapshots × ~2KB each = ~1.4MB growing continuously
-**After**: Only 60 snapshots × ~2KB each = ~120KB stable
+**File storage off**: up to 720 snapshots × ~2KB each = ~1.4MB
+**File storage on**: 60 snapshots × ~2KB each = ~120KB, with history on disk
 
-Historical data stored in individual JSON files:
+### What is written to the metrics directory
+
+Rotated per-snapshot JSON files:
 ```
-metrics/
+<STATE_ROOT>/metrics/
 ├── metrics-1693123456789.json
 ├── metrics-1693123516789.json
 └── ...
 ```
+
+Plus three BufferRing persistence files written to the **same directory**, which
+this document previously omitted (`MetricsCollector.ts:181-190`):
+
+| File | Contents | Capacity |
+|---|---|---|
+| `historical-snapshots.json` | Time-series snapshots | `maxSnapshots` (720) |
+| `tool-call-events.json` | Individual tool invocations | 10,000 |
+| `performance-metrics.json` | Minute-by-minute performance | 1,440 (24h) |
+
+`<STATE_ROOT>/metrics/` also holds `activity.db` (#571/#577). Point
+`INDEX_SERVER_METRICS_DIR` somewhere expecting only metric snapshots and you
+will find these too.
 
 ## Migration
 

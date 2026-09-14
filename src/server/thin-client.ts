@@ -20,11 +20,16 @@
  * and reconnects automatically.
  */
 
-import path from 'path';
 import { ThinClient } from '../dashboard/server/ThinClient.js';
+import { leaderUrl as resolveLeaderUrl, resolveStateDir } from '../config/serviceEnv.js';
 
-const stateDir = process.env.INDEX_SERVER_STATE_DIR || path.join(process.cwd(), 'data', 'state');
-const leaderUrl = process.env.INDEX_SERVER_LEADER_URL || undefined;
+// Both resolved by `config/serviceEnv` (#611), which is also what the leader
+// uses via `dashboardConfig`. This file used to build `<cwd>/data/state`
+// itself; after #577 moved server state under STATE_ROOT that no longer matched
+// where the leader writes its lock, so with INDEX_SERVER_STATE_DIR unset,
+// discovery found nothing and every request fell through to the retry path.
+const stateDir = resolveStateDir();
+const leaderUrl = resolveLeaderUrl();
 
 const client = new ThinClient({
   leaderUrl,

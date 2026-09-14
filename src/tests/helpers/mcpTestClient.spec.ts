@@ -29,14 +29,35 @@ describe('mcpTestClient helper', () => {
 				await conn.close();
 			}
 		}, 30000);
+
+		it('rejects instead of returning a partial client when connection times out', async () => {
+			await expect(spawnServer({
+				args: ['-e', 'setTimeout(() => undefined, 10000)'],
+				connectTimeoutMs: 100,
+			})).rejects.toThrow('MCP server connection timed out after 100ms');
+		}, 10000);
 	});
 
 	describe('createTestClient', () => {
 		const dir = path.join(tmpDir, 'crud-test');
 		let client: TestClient;
+		let tierClient: TestClient | undefined;
 
 		afterAll(async () => {
 			await client?.close();
+			await tierClient?.close();
+		});
+
+		it('enables dispatcher mutation capabilities when ambient extended tools are disabled', async () => {
+			const tierDir = path.join(tmpDir, 'tier-isolation');
+			ensureCleanDir(tierDir);
+			tierClient = await createTestClient({
+				instructionsDir: tierDir,
+				extraEnv: { INDEX_SERVER_FLAG_TOOLS_EXTENDED: '0' },
+			});
+
+			expect(tierClient.hasDispatcher).toBe(true);
+			expect(tierClient.toolNames).toContain('index_add');
 		});
 
 		it('performs full CRUD lifecycle', async () => {

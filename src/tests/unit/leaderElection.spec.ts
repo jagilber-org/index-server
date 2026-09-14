@@ -135,15 +135,13 @@ describe('LeaderElection', () => {
       expect(e.role).toBe('leader');
 
       const firstInfo = e.leaderInfo!;
-      const _firstHeartbeat = firstInfo.heartbeat;
+      const firstHeartbeat = new Date(firstInfo.heartbeat).getTime();
 
-      // Small delay to ensure different timestamp
-      const before = Date.now();
       // Force heartbeat update
       e.updateHeartbeat();
       const updated = e.leaderInfo!;
 
-      expect(new Date(updated.heartbeat).getTime()).toBeGreaterThanOrEqual(before);
+      expect(new Date(updated.heartbeat).getTime()).toBeGreaterThanOrEqual(firstHeartbeat);
     });
 
     it('should not update heartbeat if not leader', () => {

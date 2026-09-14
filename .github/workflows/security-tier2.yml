@@ -26,10 +26,10 @@ jobs:
     env:
       DASHBOARD_PORT: 8787
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6 # pii-allowlist: pinned action SHA
 
       - name: Use Node.js 22
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6 # pii-allowlist: pinned action SHA
         with:
           node-version: 22
           cache: 'npm'
@@ -72,7 +72,7 @@ jobs:
 
       # --- ZAP Baseline Scan ---
       - name: ZAP Baseline Scan
-        uses: zaproxy/action-baseline@v0.15.0
+        uses: zaproxy/action-baseline@de8ad967d3548d44ef623df22cf95c3b0baf8b25 # v0.15.0 # pii-allowlist: pinned action SHA
         with:
           target: http://127.0.0.1:${{ env.DASHBOARD_PORT }}/
           rules_file_name: '.github/zap-baseline-rules.tsv'
@@ -83,7 +83,7 @@ jobs:
       # --- Upload ZAP report ---
       - name: Upload ZAP report
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7 # pii-allowlist: pinned action SHA
         with:
           name: zap-baseline-report
           path: report_html.html
@@ -92,7 +92,7 @@ jobs:
       # --- Upload server logs ---
       - name: Upload server logs and audit trail
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7 # pii-allowlist: pinned action SHA
         with:
           name: dast-server-logs
           path: |
@@ -115,13 +115,13 @@ jobs:
     if: ${{ github.repository_owner == 'jagilber-org' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6 # pii-allowlist: pinned action SHA
 
       - name: Build Docker image
         run: docker build -t index-server:scan .
 
       - name: Trivy container scan
-        uses: aquasecurity/trivy-action@v0.36.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0 # pii-allowlist: pinned action SHA
         with:
           image-ref: 'index-server:scan'
           format: 'sarif'
@@ -131,7 +131,7 @@ jobs:
 
       - name: Upload Trivy results
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7 # pii-allowlist: pinned action SHA
         with:
           name: trivy-container-report
           path: trivy-results.sarif

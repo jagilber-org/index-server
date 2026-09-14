@@ -27,6 +27,8 @@ graph TD
     Tools --> Metrics
     Tools --> UsageTrack
     Tools --> Feedback[Feedback System]
+    Tools --> AuditDispatch[Audit Dispatch]
+    AuditDispatch --> LifecycleHooks[Lifecycle Hooks]
     UsageTrack --> UsageSnap[(usage-snapshot.json)]
     Feedback --> FeedbackStore[(feedback-data.json)]
     Cache --> Dashboard
@@ -46,6 +48,8 @@ graph TD
     style Client fill:#607d8b,stroke:#37474f,stroke-width:2px,color:#fff
     style Dashboard fill:#00bcd4,stroke:#006064,stroke-width:2px,color:#fff
     style Feedback fill:#e91e63,stroke:#880e4f,stroke-width:2px,color:#fff
+    style AuditDispatch fill:#ff9800,stroke:#e65100,stroke-width:2px,color:#fff
+    style LifecycleHooks fill:#9c27b0,stroke:#6a1b9a,stroke-width:2px,color:#fff
     style ManifestMgr fill:#ff9800,stroke:#e65100,stroke-width:2px,color:#fff
 ```
 
@@ -89,25 +93,112 @@ graph LR
 | MCP SDK Transport | Standard MCP over stdio | Emits `server/ready`, handles capabilities |
 | Usage Tracking | usage_track increments with firstSeenTs + debounced persistence | Optional gating via INDEX_SERVER_FEATURES='usage' |
 | Feedback / Emit System | `feedback_submit` MCP tool + dashboard feedback CRUD | Persistent JSON store + feedback audit & security logging |
+| Lifecycle Hooks | Post-commit operator automation dispatched from `logAudit` | Optional create/update/remove/change commands; command data is delivered through env/stdin, never shell interpolation |
 | Metrics Snapshot | Aggregate per-method counts + feature counters | Lightweight in-memory aggregation |
 | Integrity Verify | Recompute vs stored sourceHash | Detects tampering or stale placeholders |
 | Gates Evaluate | Evaluate gating rules from `instructions/gates.json` | Summarizes pass/fail severities |
-| Dashboard | Optional read-only visualization & /tools.json | Enabled via CLI flags |
+| Dashboard | Optional visualization, admin REST API & /tools.json | Enabled via CLI flags. **Not read-only**: 56 `POST`/`PUT`/`PATCH`/`DELETE` handlers across 12 route modules under `src/dashboard/server/routes/`, including instruction CRUD, archive edit, messaging and SQLite operations. 35 of the 56 carry an inline `dashboardAdminAuth`; the authentication posture of the remainder is being reviewed under #605 and is deliberately not characterised here. |
 | Leader Election | [EXPERIMENTAL] Port-based leader election for multi-instance deployments | See `docs/multi-instance-design.md` |
 | ThinClient | [EXPERIMENTAL] Stdio-to-HTTP bridge forwarding JSON-RPC to leader | Follower mode entry point |
-| (Future) Optimizer | Hotset selection / ranking | Not yet implemented |
+| Optimizer | Hotset selection / ranking | Implemented: `usage_hotset` is a registered extended-tier tool returning the most-used entries |
 
 ## Data Flow Summary
 
 1. Loader enumerates `instructions/*.json`, applies Ajv validation (draft-07) and minimal bootstrap defaults.
 2. Classification normalizes + derives governance fields (version/status/owner/priorityTier/review dates/semantic summary) & risk score.
-3. Migration hook updates schemaVersion if older (current schemaVersion: 6 per instruction.schema.json).
+3. Migration hook updates schemaVersion if older (current schemaVersion: 8 per instruction.schema.json).
 4. index hash (id:sourceHash) and governance hash (projection set) computed.
 5. Entries cached (map + sorted list); enrichment persistence pass rewrites placeholders once.
 6. Tools served: diff / list / governanceHash / integrity / gates / prompt review / usage / metrics.
 7. usage_track increments a sub-counter (retrieved/applied); first increment forces immediate flush; subsequent increments debounced.
 8. metrics_snapshot reflects cumulative method invocation stats + feature counters.
 9. gates_evaluate and integrity_verify provide governance & integrity control loops.
+
+## Mutation Lifecycle Hooks
+
+Lifecycle hooks provide an optional post-commit integration boundary for
+instruction CRUD. Mutation handlers complete their durable write before calling
+the central mutation audit point. That point classifies the event and selects an
+operation-specific command plus the change command when configured.
+
+`onChange` is **not** a catch-all for every committed mutation. Only four audit
+actions — `add`, `remove`, `import`, `promote_from_repo` — classify to a
+lifecycle operation; `archive`, `restore`, `archive_edit`, `purge`, `groom`,
+`governanceUpdate`, `patch`, `normalize`, `enrich` and `repair` dispatch nothing
+at all. Full table in [lifecycle-hooks.md](lifecycle-hooks.md).
+
+```mermaid
+---
+config:
+  layout: elk
+---
+flowchart LR
+  Handler["Mutation handler"] --> Durable["Durable instruction write"]
+  Durable --> Audit["logAudit mutation dispatch point"]
+  Audit --> Classify{"Committed CRUD change?"}
+  Classify -->|No| End["No lifecycle hook"]
+  Classify -->|Yes| Resolve["Resolve operation-specific and on-change commands"]
+  Resolve --> Bound{"Below concurrency limit?"}
+  Bound -->|No| Warn["WARN and drop dispatch"]
+  Bound -->|Yes| Spawn["Spawn trusted operator command"]
+  Spawn --> Context["Context through environment and stdin JSON"]
+  Spawn --> Observe["Timeout, exit, and stderr logging"]
+  Audit -.-> AuditFile[("Optional audit JSONL")]
+  Spawn --> Mode{"Blocking mode?"}
+  Mode -->|Off| Return["Mutation response does not wait"]
+  Mode -->|On| Await["Await completion; never roll back mutation"]
+```
+
+Design invariants:
+
+- **Off by default:** no child process is created until at least one
+  `INDEX_SERVER_HOOK_ON_*` command is non-empty.
+- **Single dispatch point:** committed mutation events enter through
+  `logAudit(..., kind: 'mutation')`, independent of whether audit-file output is
+  enabled.
+- **Post-commit isolation:** hook failure, timeout, or concurrency rejection
+  never changes the committed mutation result.
+- **Trusted command, untrusted data:** the command comes only from operator
+  configuration. Mutation context is delivered through environment variables
+  and stdin JSON and is never interpolated into the command string.
+- **Bounded execution:** every child has a timeout and dispatch is constrained
+  by a process-wide in-flight limit.
+- **At-most-once notification:** there is no durable hook queue or retry. A
+  consumer requiring durable delivery must reconcile from the index and make
+  its handler idempotent.
+- **Server-side dashboard redaction:** the Configuration API exposes command
+  presence but never command text. Authenticated operators can submit write-only
+  replacements or clear a command, and no read or write response echoes it.
+
+See [Lifecycle Hooks](lifecycle-hooks.md) for event mapping, configuration,
+security boundaries, delivery semantics, dashboard behavior, and
+troubleshooting.
+
+## Write-Path Validation
+
+Two distinct checks guard an instruction write (`src/services/indexContext.ts`,
+`writeEntry` and `writeEntryAsync`). They have **different strengths**, and the
+difference matters to callers (#591 — neither was documented anywhere).
+
+| Check | When | On failure |
+|---|---|---|
+| Pre-write loader-schema validation | Before the file is written, against the *same* JSON schema the loader uses at reload time | **Throws.** The write does not happen; the error carries `validationErrors` and `isInstructionValidation`. |
+| Post-write read-back | After the write, re-reads the file from disk and re-validates it | **Logs a warning only.** The call still returns success. |
+
+The asymmetry is the point: the pre-write check is a guarantee, the read-back is
+an alarm. A caller that gets a successful `index_add` has been told the record
+passed the loader schema *before* the write, not that the bytes on disk were
+verified afterwards.
+
+Two further limits, both easy to misread:
+
+- **The read-back is skipped entirely when a storage backend is active.** Both
+  functions guard it with `if (!store)`, so the SQLite path has no post-write
+  read-back at all — only the JSON-file path does.
+- A read-back failure produces a `[writeEntry] Post-write validation FAILED`
+  warning in the log. Nothing surfaces it through the MCP response, so it is
+  invisible to an agent that only reads tool results. If you are diagnosing an
+  entry that will not reload, grep the log for that string.
 
 ## Hashing & Integrity Layers
 
@@ -225,7 +316,7 @@ The `ensureLoadedMiddleware` (mounted in `ApiRoutes.ts`) calls `ensureLoaded()` 
 
 ## Usage Persistence Flow
 
-1. usage_track resolves a usage *kind* (retrieved vs applied) from the action/signal, sets firstSeenTs if absent, updates lastUsedAt, and increments the matching sub-counter (`retrievedCount` or `appliedCount`). `usageCount` is the derived total `retrievedCount + appliedCount` (deprecated, kept one minor version per issue #418). Signal-only calls (e.g. `signal:'helpful'`) record the signal without incrementing either counter.
+1. usage_track resolves a usage *kind* (retrieved vs applied) from the action/signal, sets firstSeenTs if absent, updates lastUsedAt, and increments the matching sub-counter (`retrievedCount` or `appliedCount`). `usageCount` is the derived total `retrievedCount + appliedCount`. It was deprecated in #418 and marked "kept one minor version"; that window closed many minors ago and it is still emitted, so treat it as **deprecated but indefinitely retained** rather than about to be removed. Removing it is a breaking change for any consumer reading the field and needs its own issue, not a quiet drop. Signal-only calls (e.g. `signal:'helpful'`) record the signal without incrementing either counter.
 2. First usage forces immediate flush to `data/usage-snapshot.json`.
 3. Subsequent usages debounced (500ms) unless process exits (beforeExit/SIGINT/SIGTERM flush).
 4. On startup, snapshot merged into in-memory entries.
@@ -551,6 +642,7 @@ Archive lifecycle operations emit dedicated audit actions (centralized in
 |---------------------------------|---------------------------------------------------------------|
 | `archive`                       | Entry archived (any source)                                   |
 | `restore`                       | Archived entry restored to active                             |
+| `archive_edit`                  | Archived entry edited in place without a restore round-trip (dashboard `PUT /api/instructions_archived/:name`) |
 | `purge`                         | Archived entry permanently deleted                            |
 | `purge_blocked`                 | Bootstrap mutation gate or bulk limit denied a purge attempt  |
 | `purge_backup`                  | Pre-purge zip backup of `instructionsDir` succeeded           |
@@ -564,6 +656,39 @@ The instruction record schema introduces the new archive metadata fields
 `archivedAt` was already present). The loader is **lax-accept** on v6/v7 —
 older records are accepted as-is — and the writer promotes records to v7 on
 the next write (no big-bang migration; promotion is opportunistic).
+
+## Structured Links (spec 511, schema v7 → v8)
+
+Schema v8 adds an optional `links` array to instruction entries, enabling
+machine-readable cross-references between instructions. Each link has a
+required `target` (instruction ID), an optional `rel` (relationship type:
+`related`, `prerequisite`, `sequel`, `part-of`, `see-also`; default `related`),
+and an optional `label` (max 120 chars). Max 25 links per entry.
+
+Links are stored one-way on the source entry. Inverse edges are materialized
+at query time by graph export — they are never persisted. The existing
+`deprecatedBy`/`supersedes` fields remain as separate first-class fields and
+are not migrated into `links`.
+
+The v7-to-v8 migration is a no-op: `links` is optional and absent on legacy
+records (semantically equivalent to `[]`). First write promotes
+`schemaVersion` to `'8'`.
+
+Write-time validation on `index_add` and `index_import`:
+
+- Self-referencing links (`target` = own `id`) are rejected.
+- Duplicate links (same `target` + same `rel`) are deduplicated silently.
+- Dead-link detection: if a `target` does not exist, a **warning** is emitted
+  (not a rejection).
+- Cycle detection for ordered rels (`prerequisite`, `sequel`, `part-of`):
+  cycles are rejected with the cycle path in the error.
+
+Graph export emits a `link` edge type from each entry's `links` array. In
+enriched mode, inverse edges per the relationship type semantics are also
+emitted (with `inverse: true` metadata).
+
+`index_groom` auto-cleans dangling links whose targets no longer exist in the
+active index.
 
 ## Dashboard Asset Refresh & Cache Strategy (1.4.x)
 
@@ -605,7 +730,22 @@ The instruction index card styling has been generalized:
 
 When adding a new list, apply `class="Index-list"` to the container and emit `.Index-item` blocks with optional `.meta-chip` children to inherit full theming automatically.
 
-## Manifest Manager & Historical Snapshot Flows (1.5.x)
+## Manifest Manager & Historical Snapshot Flows (1.5.x) — PROPOSAL, NOT IMPLEMENTED
+
+> **This section is a design proposal, not a description of the system** (#591).
+> It sits inside an architecture document and reads as current architecture; it
+> is not. Its "Proposed Configuration Flags" and "Rollout Plan" subsections give
+> it away, but only if you reach them.
+>
+> None of `INDEX_SERVER_BUFFER_RING_PERSIST_DEBOUNCE_MS`,
+> `_PERSIST_MIN_ADDS`, `_MAX_PERSIST`, `_LAZY_LOAD` or `_EXIT_FLUSH` exists
+> anywhere in `src/` — verified by grep over the whole tree. Setting any of them
+> does nothing.
+>
+> The BufferRing persistence path itself *does* exist
+> (`src/dashboard/server/MetricsCollector.ts`); what does not exist is the
+> tuning surface and the rollout described below. Do not cite this section as
+> evidence of a configuration option.
 
 Recent additions introduced a lightweight manifest write helper plus a historical snapshot persistence path (BufferRing-based). This section documents the flows, performance considerations, and optimization roadmap to resolve observed startup latency caused by synchronous snapshot rewrites.
 

@@ -29,7 +29,7 @@ This repository is in a staged migration from the legacy VSIX distribution story
 | Release workflow auth | Complete for current internal-repo model | Internal-repo-driven releases must assume `MCP_GITHUB_TOKEN` PAT fallback until release execution moves to the public mirror. |
 | VSIX distribution | Deprecated fallback | Keep the legacy VSIX path available only as a fallback while MCP-native publishing and install flow are proven. |
 | MCP prompts/resources | Deferred | Stage 2 follow-up is tracked in issue #108. |
-| Broader release hardening | In progress | Pre-existing `build:verify` failures remain tracked separately in issue #109. |
+| Broader release hardening | In progress | Issue #109 (`build:verify` failures) closed 2026-04-26; this row cited it as open until #591. Re-open a fresh issue if `build:verify` is red rather than pointing at a closed one. |
 
 ### Follow-up guidance
 

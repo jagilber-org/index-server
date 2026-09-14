@@ -9,7 +9,7 @@ const runGate = process.env.INDEX_SERVER_RUN_SKIP_VISIBILITY_RELIABILITY || '';
 const enabled = /^(1|true|yes|on)$/i.test(runGate);
 
 describe('index_add skip visibility reliability', () => {
-  it.skipIf(!enabled)('duplicate add (skip) preserves immediate visibility', async () => {
+  it.skipIf(!enabled)('duplicate add (skip) preserves immediate visibility', async () => { // SKIP_OK: environment-gated: requires duplicate-add skip feature enabled
     const DEV_DIR = process.cwd();
     const id = 'skip-visibility-' + Date.now();
     const body = 'Test body for skip visibility reliability patch';

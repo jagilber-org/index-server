@@ -8,7 +8,11 @@ and how to verify the server makes no unwanted connections.
 ## Outbound Connection Inventory
 
 Index has exactly **three** code paths that make outbound network connections.
-All three are disabled by default in the standard configuration.
+**Which of them are active depends on the configuration profile** — see the
+per-profile table under [Per-profile defaults](#per-profile-defaults).
+In short: the dashboard listener is on for every profile (bound to loopback),
+the semantic model download is on for `enhanced` and `experimental`, and
+leader/follower RPC is off unless multi-instance mode is enabled.
 
 ### 1. Semantic Search Model Download
 
@@ -26,8 +30,8 @@ All three are disabled by default in the standard configuration.
 
 | Variable | Default | Effect |
 |----------|---------|--------|
-| `INDEX_SERVER_SEMANTIC_ENABLED` | `0` | Set to `0` to disable the entire semantic search subsystem. No model loading, no inference, no network calls. |
-| `INDEX_SERVER_SEMANTIC_LOCAL_ONLY` | `1` | Set to `1` to block remote model downloads. Model must already exist in `INDEX_SERVER_SEMANTIC_CACHE_DIR`. |
+| `INDEX_SERVER_SEMANTIC_ENABLED` | `0` on `default`; **`1` on `enhanced` / `experimental`** | Set to `0` to disable the entire semantic search subsystem. No model loading, no inference, no network calls. |
+| `INDEX_SERVER_SEMANTIC_LOCAL_ONLY` | `1` on `default`; **`0` (remote download allowed) on `enhanced` / `experimental`** | Set to `1` to block remote model downloads. Model must already exist in `INDEX_SERVER_SEMANTIC_CACHE_DIR`. |
 | `INDEX_SERVER_SEMANTIC_MODEL` | `Xenova/all-MiniLM-L6-v2` | The HuggingFace model identifier. Only used when semantic search is enabled. |
 | `INDEX_SERVER_SEMANTIC_CACHE_DIR` | `./data/models` | Local directory where the model is cached after download. |
 
@@ -38,7 +42,8 @@ All three are disabled by default in the standard configuration.
 INDEX_SERVER_SEMANTIC_ENABLED=1 INDEX_SERVER_SEMANTIC_LOCAL_ONLY=0 node dist/server/index-server.js
 # Trigger a semantic search to force model download, then stop the server.
 
-# Step 2: Lock to local-only (this is already the default)
+# Step 2: Lock to local-only (already the default on the `default` profile only —
+# `enhanced` and `experimental` ship with LOCAL_ONLY=0, so set it explicitly)
 INDEX_SERVER_SEMANTIC_ENABLED=1 INDEX_SERVER_SEMANTIC_LOCAL_ONLY=1 node dist/server/index-server.js
 # All subsequent runs use the cached model. Zero network calls.
 ```
@@ -53,8 +58,8 @@ library-level block that prevents any HTTP request to model repositories.
 |-------|-------|
 | **Source file** | `src/dashboard/server/ThinClient.ts` |
 | **Destination** | `http://127.0.0.1:{INDEX_SERVER_LEADER_PORT}/mcp/rpc` |
-| **Protocol** | HTTP (localhost only, never remote) |
-| **When** | Only in follower mode (`INDEX_SERVER_MODE=follower`) |
+| **Protocol** | HTTP. Loopback-enforced on `POST /mcp/rpc` since #605: without `INDEX_SERVER_ADMIN_API_KEY` a non-loopback caller is refused with 403; with a key set, `Authorization: Bearer` is required. |
+| **When** | When running the thin-client entry point (`src/server/thin-client.ts`), or after losing an `INDEX_SERVER_MODE=auto` election. **Not** `INDEX_SERVER_MODE=follower` on the main entry point, which is not implemented — see [multi_instance_design.md](multi_instance_design.md). |
 | **Data sent** | JSON-RPC requests forwarded from stdio to leader |
 | **Data received** | JSON-RPC responses from leader instance |
 
@@ -63,7 +68,8 @@ library-level block that prevents any HTTP request to model repositories.
 | Variable | Default | Effect |
 |----------|---------|--------|
 | `INDEX_SERVER_MODE` | `standalone` | Set to `standalone` to disable all leader/follower networking. |
-| `INDEX_SERVER_LEADER_PORT` | `9191` | Port used for leader RPC. Only relevant in leader/follower mode. |
+| `INDEX_SERVER_LEADER_PORT` | `9090` (`4090` under the `dev` profile) | Port used for leader RPC. Only relevant in leader/follower mode. This said `9191` until #589; the value is in `src/config/defaultValues.ts:63`. |
+| `INDEX_SERVER_ADMIN_API_KEY` | (unset) | When set, `POST /mcp/rpc` requires a Bearer token. When unset, the route is loopback-only. |
 
 **Security note:** The ThinClient connects exclusively to `127.0.0.1`. The address is
 hardcoded to localhost -- it never resolves or connects to remote hosts.
@@ -83,7 +89,7 @@ hardcoded to localhost -- it never resolves or connects to remote hosts.
 
 | Variable | Default | Effect |
 |----------|---------|--------|
-| `INDEX_SERVER_DASHBOARD` | `0` | Set to `0` to disable the dashboard entirely. No HTTP server, no clustering. |
+| `INDEX_SERVER_DASHBOARD` | `1` | Set to `0` to disable the dashboard entirely. No HTTP server, no clustering. |
 
 **Security note:** Like the ThinClient, this connects exclusively to `127.0.0.1`.
 
@@ -125,7 +131,7 @@ the instruction index.
 | **Inference location** | 100% local, on-device |
 | **Training** | None. The model is pre-trained and read-only. |
 | **Data sent externally** | None during inference. Model download is one-time HTTPS GET. |
-| **Enabled by default** | No (`INDEX_SERVER_SEMANTIC_ENABLED=0`) |
+| **Enabled by default** | Profile-dependent: **no** on `default` (`INDEX_SERVER_SEMANTIC_ENABLED=0`), **yes** on `enhanced` and `experimental` |
 
 ### What the model does
 
@@ -144,19 +150,33 @@ where the local inference computation runs.
 
 ---
 
-## Default Configuration = Fully Offline
+## Default Network Posture
 
-The default environment configuration makes **zero outbound network connections**:
+The default configuration makes **zero outbound network connections** but opens a
+**loopback-only** HTTP listener for the admin dashboard:
 
 ```bash
 INDEX_SERVER_SEMANTIC_ENABLED=0    # Semantic search disabled (default)
 INDEX_SERVER_SEMANTIC_LOCAL_ONLY=1  # Remote model downloads blocked (default)
 INDEX_SERVER_MODE=standalone        # No leader/follower networking (default)
-INDEX_SERVER_DASHBOARD=0            # No dashboard HTTP server (default)
+INDEX_SERVER_DASHBOARD=1            # Dashboard HTTP on 127.0.0.1:8787 (default)
 ```
 
-With these defaults (which require no configuration), the server operates as a pure
-stdio process with no network listeners and no outbound connections.
+The dashboard binds exclusively to `127.0.0.1` (loopback) and is not reachable
+from other machines. To disable it entirely, set `INDEX_SERVER_DASHBOARD=0`.
+
+### Per-profile defaults
+
+| Variable | `default` | `enhanced` | `experimental` |
+|----------|-----------|------------|----------------|
+| `INDEX_SERVER_DASHBOARD` | `1` (on, loopback) | `1` | `1` |
+| `INDEX_SERVER_SEMANTIC_ENABLED` | `0` (off) | `1` (on) | `1` (on) |
+| `INDEX_SERVER_SEMANTIC_LOCAL_ONLY` | `1` (no remote) | `0` (remote OK) | `0` (remote OK) |
+
+The `enhanced` and `experimental` profiles enable semantic search with remote model
+downloads. The first download fetches ~90 MB from `huggingface.co` (HTTPS GET);
+subsequent runs use the local cache. Set `INDEX_SERVER_SEMANTIC_LOCAL_ONLY=1` to
+block this on any profile.
 
 ---
 
@@ -170,7 +190,14 @@ $proc = Get-Process -Name node -ErrorAction SilentlyContinue | Where-Object {
     $_.MainModule.FileName -match 'node'
 }
 Get-NetTCPConnection -OwningProcess $proc.Id -State Listen -ErrorAction SilentlyContinue
-# Expected output: empty (no listening ports in standalone mode)
+# Expected output: ONE listener on 127.0.0.1:8787 (the dashboard, which every
+# profile enables by default and which binds to loopback only).
+#
+# A non-empty result here is normal and is NOT a privacy problem: the address
+# must be 127.0.0.1 (or ::1), never 0.0.0.0 or a routable address. Check the
+# LocalAddress column rather than the row count.
+#
+# To have no listener at all, start with INDEX_SERVER_DASHBOARD=0.
 ```
 
 ### Quick check: no outbound connections
@@ -178,7 +205,12 @@ Get-NetTCPConnection -OwningProcess $proc.Id -State Listen -ErrorAction Silently
 ```powershell
 # While the server is running
 Get-NetTCPConnection -OwningProcess $proc.Id -State Established -ErrorAction SilentlyContinue
-# Expected output: empty (no established connections in default config)
+# Expected output: empty on the `default` profile.
+#
+# On `enhanced` / `experimental` the first semantic search performs a one-time
+# HTTPS GET to huggingface.co (~90 MB); after it is cached there are no further
+# outbound connections. Set INDEX_SERVER_SEMANTIC_LOCAL_ONLY=1 to block it on
+# any profile. Loopback entries to the dashboard port are local, not outbound.
 ```
 
 ### Deep verification with Process Monitor

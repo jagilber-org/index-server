@@ -40,6 +40,12 @@ export const DEFAULT_LIMITS = {
   ATOMIC_WRITE_BACKOFF_MS: 10,
   READ_RETRIES: 3,
   READ_BACKOFF_MS: 8,
+  // Default number of items returned by read actions (list/search/query) when
+  // the caller omits `limit`. Keeps large categories within MCP client
+  // tool-result budgets. Mirrors the search tool's historical default of 50.
+  DEFAULT_PAGE_SIZE: 50,
+  // Hard ceiling for a configured/explicit page size.
+  MAX_PAGE_SIZE: 100,
 } as const;
 
 // ── Resource / health thresholds ─────────────────────────────────────

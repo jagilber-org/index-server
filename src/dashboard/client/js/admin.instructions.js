@@ -38,6 +38,20 @@
 
   // Usage snapshot cache (loaded once per loadInstructions call)
   let usageSnapshot = {};
+
+  // Canonical copy-button label. The handle of a pending label reset lives on the
+  // button itself (see flashCopyResult) rather than in one module-level slot, so a
+  // rapid second click cannot capture the transient "✓ Copied" text as the label to
+  // restore, and two simultaneously open preview panes cannot cancel each other's
+  // reset.
+  const COPY_BTN_LABEL = '📋 Copy';
+
+  // Monotonically increasing id for detail-pane loads, and the instruction name
+  // that `globals.instructionPreviewBody` currently holds. Together these keep a
+  // late response from overwriting a newer selection and stop the copy action
+  // from emitting a body that belongs to a different entry.
+  let instructionPreviewRequestSeq = 0;
+  let instructionPreviewBodyName = null;
   let instructionLoadInFlight = null;
   async function fetchUsageSnapshot() {
     try {
@@ -66,6 +80,7 @@
         if (action === 'edit-archived') editArchivedInstruction(instructionName);
         if (action === 'delete') deleteInstruction(instructionName);
         if (action === 'archive') promptArchiveInstruction(instructionName);
+        if (action === 'preview') toggleFlatPreview(instructionName, button);
         if (action === 'restore') promptRestoreInstruction(instructionName);
         if (action === 'purge') promptPurgeArchivedInstruction(instructionName);
       });
@@ -211,7 +226,342 @@
       renderArchivedList(globals.allArchivedInstructions || []);
       return;
     }
+    if (getInstructionViewMode() === 'tree') {
+      renderInstructionTree(globals.allInstructions || []);
+      return;
+    }
     renderInstructionList(globals.allInstructions || []);
+  }
+
+  // ── #449: Tree view + master-detail markdown preview ────────────────────
+  // Adds a category-grouped, collapsible tree with a master-detail preview pane
+  // (rendered markdown by default, raw JSON toggle). The flat list remains
+  // available via the view-mode toggle. View preferences persist in localStorage.
+  const INSTR_VIEW_MODE_KEY = 'instr.viewMode';       // 'tree' | 'flat'  (default 'tree')
+  const INSTR_EXPANDED_KEY = 'instr.expandedCats';    // JSON array of expanded category names
+  const INSTR_PREVIEW_RAW_KEY = 'instr.previewRaw';   // legacy persisted pref — cleared on load
+
+  // Detail pane render mode. Rendered markdown ("Preview") is always the default
+  // when the panel opens; "Raw" is an in-session toggle only, so a previously
+  // persisted raw preference can never make the panel open in JSON view.
+  let instructionDetailRaw = false;
+  function getInstructionDetailRaw() { return instructionDetailRaw; }
+  function setInstructionDetailRaw(value) { instructionDetailRaw = !!value; }
+  try { localStorage.removeItem(INSTR_PREVIEW_RAW_KEY); } catch { /* ignore */ }
+
+  function getInstructionViewMode() {
+    try { return localStorage.getItem(INSTR_VIEW_MODE_KEY) === 'flat' ? 'flat' : 'tree'; }
+    catch { return 'tree'; }
+  }
+  function setInstructionViewMode(mode) {
+    const m = mode === 'flat' ? 'flat' : 'tree';
+    try { localStorage.setItem(INSTR_VIEW_MODE_KEY, m); } catch { /* ignore */ }
+    syncViewModeButtons(m);
+    renderCurrentInstructionView();
+  }
+  function syncViewModeButtons(mode) {
+    const t = document.getElementById('instruction-mode-tree');
+    const f = document.getElementById('instruction-mode-flat');
+    if (t) t.classList.toggle('btn-active', mode === 'tree');
+    if (f) f.classList.toggle('btn-active', mode === 'flat');
+  }
+  function getExpandedCategories() {
+    try { const a = JSON.parse(localStorage.getItem(INSTR_EXPANDED_KEY) || '[]'); return new Set(Array.isArray(a) ? a : []); }
+    catch { return new Set(); }
+  }
+  function setExpandedCategories(set) {
+    try { localStorage.setItem(INSTR_EXPANDED_KEY, JSON.stringify(Array.from(set))); } catch { /* ignore */ }
+  }
+  function instructionCategoryOf(instr) {
+    return instr.primaryCategory || instr.category || (Array.isArray(instr.categories) && instr.categories[0]) || 'uncategorized';
+  }
+
+  // Pure: group instructions into sorted category buckets with counts. Exposed for tests.
+  function buildInstructionTree(instructions) {
+    const groups = new Map();
+    (instructions || []).forEach((instr) => {
+      const cat = instructionCategoryOf(instr);
+      if (!groups.has(cat)) groups.set(cat, []);
+      groups.get(cat).push(instr);
+    });
+    return Array.from(groups.entries())
+      .map(([category, items]) => ({
+        category,
+        count: items.length,
+        items: items.slice().sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''))),
+      }))
+      .sort((a, b) => a.category.localeCompare(b.category));
+  }
+
+  function renderInstructionTree(instructions) {
+    const host = document.getElementById('instructions-list');
+    if (!host) return;
+    // #486: preserve the tree pane's scroll offset across re-renders (e.g. the
+    // 30s background auto-refresh) so the view doesn't jump back to the top
+    // while a user is browsing/reading further down the list.
+    const prevTreeEl = document.getElementById('instruction-tree');
+    const preservedTreeScroll = prevTreeEl ? prevTreeEl.scrollTop : 0;
+    const filtered = getFilteredInstructions(instructions || []);
+    if (filtered.length === 0) {
+      host.innerHTML = '<div class="instr-md-empty">No instructions found</div>';
+      buildInstructionPaginationControls(0);
+      return;
+    }
+    const tree = buildInstructionTree(filtered);
+    const expanded = getExpandedCategories();
+    const nameFilter = (document.getElementById('instruction-filter')?.value || '').trim();
+    const forceExpand = nameFilter.length > 0; // auto-expand so matches are visible when filtering
+
+    const treeHtml = tree.map((group) => {
+      const isOpen = forceExpand || expanded.has(group.category);
+      const leaves = group.items.map((instr) => {
+        const escapedName = escapeHtml(instr.name);
+        const selected = globals.instructionPreviewSelected === instr.name ? ' selected' : '';
+        return `<button type="button" class="instr-tree-leaf${selected}" data-tree-leaf="${escapedName}" title="${escapedName}">${escapedName}</button>`;
+      }).join('');
+      return `
+        <div class="instr-tree-group${isOpen ? ' open' : ''}">
+          <button type="button" class="instr-tree-toggle" data-tree-toggle="${escapeHtml(group.category)}" aria-expanded="${isOpen}">
+            <span class="instr-tree-caret">${isOpen ? '▾' : '▸'}</span>
+            <span class="instr-tree-cat">${escapeHtml(group.category)}</span>
+            <span class="instr-tree-count">${group.count}</span>
+          </button>
+          <div class="instr-tree-leaves"${isOpen ? '' : ' hidden'}>${leaves}</div>
+        </div>`;
+    }).join('');
+
+    host.innerHTML = `
+      <div class="instr-master-detail">
+        <div class="instr-tree" id="instruction-tree">${treeHtml}</div>
+        <div class="instr-detail" id="instruction-detail">
+          <div class="instr-detail-header">
+            <span id="instruction-detail-title" class="instr-detail-title">Select an instruction</span>
+            <div class="instr-detail-actions">
+              <button type="button" id="instruction-detail-preview-btn" class="action-btn btn-green btn-active" data-detail-mode="preview">📖 Preview</button>
+              <button type="button" id="instruction-detail-raw-btn" class="action-btn" data-detail-mode="raw">{} Raw</button>
+              <button type="button" id="instruction-detail-copy-btn" class="action-btn" title="Copy instruction body to clipboard" data-detail-copy>📋 Copy</button>
+              <button type="button" id="instruction-detail-edit-btn" class="action-btn btn-info" data-detail-edit>✏ Edit</button>
+            </div>
+          </div>
+          <div id="instruction-detail-body" class="instr-detail-body instr-preview-content"><div class="instr-detail-hint">Pick an instruction from the tree to preview its content.</div></div>
+        </div>
+      </div>`;
+    wireInstructionTree(host);
+    buildInstructionPaginationControls(0); // tree view is not paginated
+    if (globals.instructionPreviewSelected && filtered.some((i) => i.name === globals.instructionPreviewSelected)) {
+      selectInstructionPreview(globals.instructionPreviewSelected);
+    } else if (globals.instructionPreviewSelected) {
+      // The selected entry is gone (deleted/filtered out) — drop the selection and
+      // its cached body so Copy cannot still emit the removed instruction.
+      globals.instructionPreviewSelected = null;
+      globals.instructionPreviewBody = '';
+      instructionPreviewBodyName = null;
+    }
+    const newTreeEl = document.getElementById('instruction-tree');
+    if (newTreeEl && preservedTreeScroll) newTreeEl.scrollTop = preservedTreeScroll;
+  }
+
+  function wireInstructionTree(host) {
+    host.querySelectorAll('[data-tree-toggle]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const cat = btn.getAttribute('data-tree-toggle');
+        const expanded = getExpandedCategories();
+        if (expanded.has(cat)) expanded.delete(cat); else expanded.add(cat);
+        setExpandedCategories(expanded);
+        renderCurrentInstructionView();
+      });
+    });
+    host.querySelectorAll('[data-tree-leaf]').forEach((btn) => {
+      btn.addEventListener('click', () => selectInstructionPreview(btn.getAttribute('data-tree-leaf')));
+    });
+    const previewBtn = host.querySelector('#instruction-detail-preview-btn');
+    const rawBtn = host.querySelector('#instruction-detail-raw-btn');
+    const copyBtn = host.querySelector('#instruction-detail-copy-btn');
+    const editBtn = host.querySelector('#instruction-detail-edit-btn');
+    if (previewBtn) previewBtn.addEventListener('click', () => { setInstructionDetailRaw(false); if (globals.instructionPreviewSelected) selectInstructionPreview(globals.instructionPreviewSelected); });
+    if (rawBtn) rawBtn.addEventListener('click', () => { setInstructionDetailRaw(true); if (globals.instructionPreviewSelected) selectInstructionPreview(globals.instructionPreviewSelected); });
+    if (copyBtn) copyBtn.addEventListener('click', () => { copySelectedInstructionBody(); });
+    if (editBtn) editBtn.addEventListener('click', () => { if (globals.instructionPreviewSelected) editInstruction(globals.instructionPreviewSelected); });
+  }
+
+  // Clipboard write with a legacy execCommand fallback for non-secure contexts
+  // where navigator.clipboard is unavailable.
+  async function writeClipboardText(text) {
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(text);
+        return true;
+      }
+    } catch { /* fall through to legacy path */ }
+    // The textarea is removed in `finally` so a throw from select()/execCommand
+    // cannot leak a hidden node into the document.
+    let ta = null;
+    try {
+      ta = document.createElement('textarea');
+      ta.value = text;
+      ta.setAttribute('readonly', '');
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      return document.execCommand('copy');
+    } catch { return false; }
+    finally { if (ta) ta.remove(); }
+  }
+
+  // Flash the copy outcome on `btn` and restore the canonical label afterwards.
+  // The reset handle is stored on the button so each copy button owns its own
+  // timer — cancelling one pane's reset can never strand another pane's label.
+  function flashCopyResult(btn, ok) {
+    if (!btn) return;
+    if (btn.__copyResetTimer) clearTimeout(btn.__copyResetTimer);
+    btn.textContent = ok ? '✓ Copied' : '✗ Copy failed';
+    btn.__copyResetTimer = setTimeout(() => { btn.textContent = COPY_BTN_LABEL; btn.__copyResetTimer = null; }, 1500);
+  }
+
+  // Shared instruction-body fetch used by both the preview renderer and the copy
+  // action so the response-unwrap shape lives in exactly one place.
+  async function fetchInstructionBody(name) {
+    const res = await adminAuth.adminFetch('/api/instructions/' + encodeURIComponent(name));
+    if (!res.ok) throw new Error('http ' + res.status);
+    const data = await res.json();
+    const content = data.content || data.data?.content || {};
+    return { content, body: String(content.body || '') };
+  }
+
+  // Copy the selected instruction's markdown body (not the JSON envelope) to the clipboard.
+  async function copySelectedInstructionBody() {
+    const name = globals.instructionPreviewSelected;
+    const btn = document.getElementById('instruction-detail-copy-btn');
+    if (!name) { globals.showError && globals.showError('Select an instruction first'); return; }
+    // Only trust the cache when it demonstrably belongs to the selected entry —
+    // otherwise a body cached for a previous selection could be copied silently.
+    let body = instructionPreviewBodyName === name ? (globals.instructionPreviewBody || '') : '';
+    let loadFailed = false;
+    if (!body) {
+      try {
+        body = (await fetchInstructionBody(name)).body;
+      } catch { loadFailed = true; }
+    }
+    if (loadFailed) { globals.showError && globals.showError('Failed to load instruction body'); return; }
+    if (!body) { globals.showError && globals.showError('No instruction body to copy'); return; }
+    const ok = await writeClipboardText(body);
+    flashCopyResult(btn, ok);
+    if (!ok) globals.showError && globals.showError('Clipboard copy failed');
+  }
+
+  function syncDetailModeButtons(raw) {
+    const p = document.getElementById('instruction-detail-preview-btn');
+    const r = document.getElementById('instruction-detail-raw-btn');
+    if (p) p.classList.toggle('btn-active', !raw);
+    if (r) r.classList.toggle('btn-active', raw);
+  }
+
+  // Load the selected instruction and render its body as sanitized markdown
+  // (default) or raw JSON. Reuses the same sanitize pipeline as the editor preview.
+  async function selectInstructionPreview(name) {
+    if (!name) return;
+    globals.instructionPreviewSelected = name;
+    // Monotonic token: a response that resolves after a newer selection has been
+    // made is discarded, so neither the cache nor the DOM can be overwritten by a
+    // stale in-flight request.
+    const token = ++instructionPreviewRequestSeq;
+    document.querySelectorAll('.instr-tree-leaf').forEach((el) => el.classList.toggle('selected', el.getAttribute('data-tree-leaf') === name));
+    const titleEl = document.getElementById('instruction-detail-title');
+    const bodyEl = document.getElementById('instruction-detail-body');
+    if (titleEl) titleEl.textContent = name;
+    if (!bodyEl) return;
+    const raw = getInstructionDetailRaw();
+    syncDetailModeButtons(raw);
+    bodyEl.innerHTML = '<div class="instr-detail-hint">Loading…</div>';
+    try {
+      const { content, body } = await fetchInstructionBody(name);
+      if (token !== instructionPreviewRequestSeq) return;
+      globals.instructionPreviewBody = body;
+      instructionPreviewBodyName = name;
+      if (raw) {
+        const pre = document.createElement('pre');
+        pre.className = 'instr-detail-raw';
+        pre.textContent = JSON.stringify(content, null, 2);
+        bodyEl.replaceChildren(pre);
+      } else {
+        if (typeof marked !== 'undefined' && marked.parse) {
+          replaceWithSanitizedHtml(bodyEl, marked.parse(body, { breaks: false, gfm: true }));
+        } else {
+          const pre = document.createElement('pre');
+          pre.className = 'instr-detail-raw';
+          pre.textContent = body;
+          bodyEl.replaceChildren(pre);
+        }
+      }
+    } catch (e) {
+      if (token !== instructionPreviewRequestSeq) return;
+      globals.instructionPreviewBody = '';
+      instructionPreviewBodyName = null;
+      bodyEl.innerHTML = '<div class="error">Failed to load instruction preview</div>';
+    }
+  }
+
+  // #552: copy the markdown body a flat-view preview pane is currently showing.
+  // The body is the exact string that pane rendered, so the clipboard can never
+  // disagree with what the operator is looking at.
+  async function copyFlatPreviewBody(body, btn) {
+    if (!body) { globals.showError && globals.showError('No instruction body to copy'); return; }
+    const ok = await writeClipboardText(body);
+    flashCopyResult(btn, ok);
+    if (!ok) globals.showError && globals.showError('Clipboard copy failed');
+  }
+
+  async function toggleFlatPreview(name, button) {
+    const itemEl = button.closest('.instruction-item');
+    if (!itemEl) return;
+    const existing = itemEl.querySelector('.flat-preview-pane');
+    if (existing) { existing.remove(); button.textContent = '👁 Preview'; return; }
+    button.textContent = '⏳ Loading…';
+    try {
+      const { body } = await fetchInstructionBody(name);
+      const pane = document.createElement('div');
+      pane.className = 'flat-preview-pane';
+
+      // Header is built with DOM APIs (not innerHTML) so the instruction name can
+      // be carried on the button without another escaping hop, and the click
+      // handler is attached directly — no inline handler for CSP to reject.
+      const header = document.createElement('div');
+      header.className = 'flat-preview-header';
+      const label = document.createElement('span');
+      label.className = 'flat-preview-label';
+      label.textContent = 'Body Preview (Markdown)';
+      const copyBtn = document.createElement('button');
+      copyBtn.type = 'button';
+      copyBtn.className = 'action-btn';
+      copyBtn.title = 'Copy instruction body to clipboard';
+      copyBtn.setAttribute('data-flat-copy', name);
+      copyBtn.textContent = COPY_BTN_LABEL;
+      copyBtn.addEventListener('click', () => { copyFlatPreviewBody(body, copyBtn); });
+      header.appendChild(label);
+      header.appendChild(copyBtn);
+
+      const content = document.createElement('div');
+      content.className = 'flat-preview-body instr-preview-content';
+      if (!body) {
+        content.innerHTML = '<div class="instr-md-empty">No body content</div>';
+      } else if (typeof marked !== 'undefined' && marked.parse) {
+        replaceWithSanitizedHtml(content, marked.parse(body, { breaks: false, gfm: true }));
+      } else {
+        const pre = document.createElement('pre');
+        pre.className = 'instr-detail-raw';
+        pre.textContent = body;
+        content.appendChild(pre);
+      }
+
+      pane.appendChild(header);
+      pane.appendChild(content);
+      itemEl.appendChild(pane);
+      button.textContent = '👁 Hide';
+    } catch (e) {
+      button.textContent = '👁 Preview';
+      globals.showError && globals.showError('Failed to load preview: ' + (e.message || e));
+    }
   }
 
   function changeInstructionPage(dir) {
@@ -270,6 +620,7 @@
           <div class="instruction-item-header">
             <div class="instruction-name">${highlightedName}</div>
             <div class="instruction-actions">
+              <button class="action-btn btn-green" data-instruction-action="preview" data-instruction-name="${escapedName}">👁 Preview</button>
               <button class="action-btn" data-instruction-action="edit" data-instruction-name="${escapedName}">✏ Edit</button>
               <button class="action-btn btn-info" data-instruction-action="archive" data-instruction-name="${escapedName}">📦 Archive</button>
               <button class="action-btn danger" data-instruction-action="delete" data-instruction-name="${escapedName}">🗑 Delete</button>
@@ -495,6 +846,15 @@
     } catch(e){ globals.showError && globals.showError(e.message || 'Save failed'); }
   }
 
+  // #486: lightweight fingerprint used to detect whether the instruction list
+  // actually changed between silent background refreshes, so we can skip a
+  // needless full tree re-render (which reset scroll position / interrupted
+  // in-progress interactions every 30s even when nothing had changed).
+  function instructionsSnapshotKey(list) {
+    try { return JSON.stringify((list || []).map((i) => [i.name, i.updatedAt || i.version || ''])); }
+    catch { return String((list || []).length); }
+  }
+
   async function loadInstructions(options = {}) {
     if (instructionLoadInFlight) return instructionLoadInFlight;
     const silent = !!options.silent;
@@ -518,13 +878,22 @@
         const data = await res.json();
         if (!('success' in data) && !('data' in data) && !('instructions' in data)) throw new Error('unrecognized instructions payload');
         const rawList = data.instructions || data.data?.instructions || [];
-        globals.allInstructions = Array.isArray(rawList) ? rawList : [];
+        const nextInstructions = Array.isArray(rawList) ? rawList : [];
+        // #486: on a silent background refresh (preservePage), skip the render
+        // entirely when the fetched list is identical to what's already shown —
+        // this is what previously caused the instructions tab tree/scroll
+        // position to reset every ~30s even though nothing had changed.
+        const unchanged = silent && preservePage
+          && instructionsSnapshotKey(globals.allInstructions) === instructionsSnapshotKey(nextInstructions);
+        globals.allInstructions = nextInstructions;
         try { console.log('[admin.instructions] fetched instructions:', globals.allInstructions.length); } catch {}
     try { console.debug('[admin.instructions] loadInstructions: sampleNames=', (globals.allInstructions||[]).slice(0,6).map(i=>i.name)); } catch(e){}
     try { const dbg = document.getElementById('admin-debug'); if(dbg) dbg.textContent = JSON.stringify({ stage:'loadInstructions', count: (globals.allInstructions||[]).length, sample: (globals.allInstructions||[]).slice(0,6).map(i=>i.name) }, null, 2); } catch(e){}
         if(!catNames.length){ try { const select = document.getElementById('instruction-category-filter'); if(select){ const selected = select.value; select.innerHTML = '<option value="">All Categories</option>'; const derived = Array.from(new Set(globals.allInstructions.flatMap(i=> [i.category, ...(Array.isArray(i.categories)? i.categories: [])]).filter(Boolean))).sort(); derived.forEach(n=>{ const opt = document.createElement('option'); opt.value = n; opt.textContent = n; select.appendChild(opt); }); if (selected && derived.includes(selected)) select.value = selected; } } catch(_){} }
-        globals.instructionPage = preservePage ? requestedPage : 1;
-        renderInstructionList(globals.allInstructions || []);
+        if (!unchanged) {
+          globals.instructionPage = preservePage ? requestedPage : 1;
+          renderCurrentInstructionView();
+        }
       } catch(e){ console.warn('loadInstructions error', e); if(listEl && !silent) listEl.innerHTML = '<div class="error">Failed to load instructions</div>'; }
     })();
     instructionLoadInFlight = run.finally(() => { instructionLoadInFlight = null; });
@@ -810,10 +1179,10 @@
   };
 
   // If the legacy script already fetched instructions and populated window.allInstructions,
-  // force a re-render so the UI upgrades to the new chip styling without requiring user action.
+  // force a re-render so the UI upgrades (chip styling / tree view) without requiring user action.
   try {
     if(Array.isArray(window.allInstructions) && window.allInstructions.length){
-      setTimeout(()=>{ try { window.renderInstructionList(window.allInstructions); } catch { /* ignore */ } }, 0);
+      setTimeout(()=>{ try { renderCurrentInstructionView(); } catch { /* ignore */ } }, 0);
     }
   } catch { /* ignore */ }
 
@@ -836,16 +1205,26 @@
       cancelEditInstruction,
       updateInstructionEditorDiagnostics,
       setInstructionView,
+      setInstructionViewMode,
+      buildInstructionTree,
+      selectInstructionPreview,
+      copySelectedInstructionBody,
+      copyFlatPreviewBody,
       loadArchivedInstructions,
       editArchivedInstruction,
       promptArchiveInstruction,
       promptRestoreInstruction,
-      promptPurgeArchivedInstruction
+      promptPurgeArchivedInstruction,
+      toggleFlatPreview
     });
   } catch { /* ignore */ }
 
   // Expose for manual trigger if needed
   window.performGlobalInstructionSearch = performGlobalInstructionSearch;
+
+  // Reflect the persisted view mode on the toggle buttons once the DOM is ready.
+  try { syncViewModeButtons(getInstructionViewMode()); } catch { /* ignore */ }
+  document.addEventListener('DOMContentLoaded', () => { try { syncViewModeButtons(getInstructionViewMode()); } catch { /* ignore */ } });
 
   // Hook after DOM ready if instructions section becomes active later
   document.addEventListener('DOMContentLoaded', attachGlobalSearchHandlers);

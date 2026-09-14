@@ -222,7 +222,7 @@ describe('Concurrent CRUD + Semantic Search', () => {
     expect(matches).toBeGreaterThanOrEqual(1);
   }, 20_000);
 
-  it.skipIf(!isSemanticEnabled)('semantic search should find conceptually related content', async () => {
+  it.skipIf(!isSemanticEnabled)('semantic search should find conceptually related content', async () => { // SKIP_OK: environment-gated: requires semantic search (sqlite-vec) enabled
     const id = uniqueId();
     const addResult = await invoke('index_dispatch', {
       action: 'add',

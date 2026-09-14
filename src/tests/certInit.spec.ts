@@ -2,7 +2,7 @@
  * Integration tests for `runCertInit`: actually shell out to OpenSSL when it
  * is available on PATH and verify the produced files.
  *
- * Cases gated on openssl availability use `it.skipIf(!opensslAvailable)` —
+ * Cases gated on openssl availability use `it.skipIf(!opensslAvailable)` — // SKIP_OK: documentation reference, not executable code
  * mirrors the pattern already established in src/tests/dashboardTls.spec.ts.
  *
  * Constitution refs:
@@ -28,11 +28,32 @@ import { CertInitError } from '../server/certInit.types';
 let opensslAvailable = false;
 let opensslSkipReason = 'openssl not detected';
 try {
-  const probe = spawnSync('openssl', ['version'], { stdio: 'pipe', timeout: 5000 });
-  if (probe.status === 0) {
-    opensslAvailable = true;
-  } else {
-    opensslSkipReason = `openssl probe exited with status ${probe.status}`;
+  // Probe with `req`, not `version`. `openssl version` succeeds without a
+  // config file, but every test below runs `openssl req -x509`, which reads
+  // openssl.cnf. On a machine where the binary is on PATH but the config is
+  // missing -- the default state of several Windows openssl distributions --
+  // `version` returned 0, the suite declared itself available, and all five
+  // integration cases failed with:
+  //   Can't open "C:\Program Files\Common Files\ssl/openssl.cnf" for reading
+  // The breadcrumb printed the contradiction plainly and nobody saw it:
+  //   [certInit.spec] opensslAvailable=true reason="openssl not detected"
+  // A capability gate has to probe the capability, not the executable.
+  const probeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-openssl-probe-'));
+  try {
+    const probe = spawnSync('openssl', [
+      'req', '-x509', '-newkey', 'rsa:2048', '-nodes',
+      '-keyout', path.join(probeDir, 'probe.key'),
+      '-out', path.join(probeDir, 'probe.crt'),
+      '-days', '1', '-subj', '/CN=probe',
+    ], { stdio: 'pipe', timeout: 20000 });
+    if (probe.status === 0) {
+      opensslAvailable = true;
+    } else {
+      const stderr = (probe.stderr?.toString() ?? '').split('\n')[0].trim();
+      opensslSkipReason = `openssl cannot generate a certificate (status ${probe.status}): ${stderr}`;
+    }
+  } finally {
+    fs.rmSync(probeDir, { recursive: true, force: true });
   }
 } catch (e) {
   opensslSkipReason = `openssl probe threw: ${(e instanceof Error) ? e.message : String(e)}`;
@@ -40,7 +61,7 @@ try {
 
 // Emit a single visible breadcrumb so a green-skip in CI is unambiguous.
 
-console.log(`[certInit.spec] opensslAvailable=${opensslAvailable} reason="${opensslSkipReason}"`);
+console.log(`[certInit.spec] opensslAvailable=${opensslAvailable} reason="${opensslAvailable ? 'openssl req succeeded' : opensslSkipReason}"`);
 
 // ── shared tmp dir for the suite ──────────────────────────────────────────
 
@@ -77,7 +98,7 @@ function defaultOpts(certDir: string) {
 // ── 1. Real generation produces parseable cert ────────────────────────────
 
 describe('certInit / integration (openssl-gated)', () => {
-  it.skipIf(!opensslAvailable)('produces a cert file that openssl x509 can re-parse with the requested CN and SAN', async () => {
+  it.skipIf(!opensslAvailable)('produces a cert file that openssl x509 can re-parse with the requested CN and SAN', async () => { // SKIP_OK: environment-gated: requires openssl on PATH
     const certDir = freshCertDir('parse');
     const opts = defaultOpts(certDir);
     const result = await runCertInit(opts);
@@ -92,7 +113,7 @@ describe('certInit / integration (openssl-gated)', () => {
     expect(text).toContain('IP Address:127.0.0.1');
   });
 
-  it.skipIf(!opensslAvailable)('skipped result returned when files already exist and force=false', async () => {
+  it.skipIf(!opensslAvailable)('skipped result returned when files already exist and force=false', async () => { // SKIP_OK: environment-gated: requires openssl on PATH
     const certDir = freshCertDir('skip');
     const opts = defaultOpts(certDir);
     const first = await runCertInit(opts);
@@ -110,7 +131,7 @@ describe('certInit / integration (openssl-gated)', () => {
     expect(after.mtimeMs).toBe(before.mtimeMs);
   });
 
-  it.skipIf(!opensslAvailable)('force=true overwrites existing files and produces a different cert serial', async () => {
+  it.skipIf(!opensslAvailable)('force=true overwrites existing files and produces a different cert serial', async () => { // SKIP_OK: environment-gated: requires openssl on PATH
     const certDir = freshCertDir('force');
     const opts = defaultOpts(certDir);
     await runCertInit(opts);
@@ -136,7 +157,7 @@ describe('certInit / integration (openssl-gated)', () => {
     expect(serialAfter).not.toBe(serialBefore);
   });
 
-  it.skipIf(!opensslAvailable || process.platform === 'win32')('writes private key with 0600 permissions on POSIX', async () => {
+  it.skipIf(!opensslAvailable || process.platform === 'win32')('writes private key with 0600 permissions on POSIX', async () => { // SKIP_OK: environment-gated: requires openssl on PATH and POSIX platform
     const certDir = freshCertDir('perms');
     const opts = defaultOpts(certDir);
     await runCertInit(opts);
@@ -144,7 +165,7 @@ describe('certInit / integration (openssl-gated)', () => {
     expect(mode).toBe(0o600);
   });
 
-  it.skipIf(!opensslAvailable)('opens NO listening sockets during cert-init (network isolation)', async () => {
+  it.skipIf(!opensslAvailable)('opens NO listening sockets during cert-init (network isolation)', async () => { // SKIP_OK: environment-gated: requires openssl on PATH
     // Sanity: runCertInit must not start any server. We assert via the absence
     // of any unref'd handle types beyond what the test runner already holds.
     const certDir = freshCertDir('isolation');
@@ -158,7 +179,7 @@ describe('certInit / integration (openssl-gated)', () => {
     expect(sockAfter).toBeLessThanOrEqual(sockBefore);
   });
 
-  it.skipIf(!opensslAvailable)('respects key-bits=4096 (cert reports a 4096-bit RSA key)', async () => {
+  it.skipIf(!opensslAvailable)('respects key-bits=4096 (cert reports a 4096-bit RSA key)', async () => { // SKIP_OK: environment-gated: requires openssl on PATH
     const certDir = freshCertDir('keybits');
     const opts = validateOptions({ ...defaultOpts(certDir), keyBits: 4096 });
     await runCertInit(opts);
@@ -167,7 +188,7 @@ describe('certInit / integration (openssl-gated)', () => {
     expect(text).toMatch(/4096\s*bit/i);
   });
 
-  it.skipIf(!opensslAvailable)('rejects a certFile that escapes certDir even when openssl is available (SH-4 end-to-end)', async () => {
+  it.skipIf(!opensslAvailable)('rejects a certFile that escapes certDir even when openssl is available (SH-4 end-to-end)', async () => { // SKIP_OK: environment-gated: requires openssl on PATH
     const certDir = freshCertDir('traversal');
     const escape = path.join(certDir, '..', 'evil.crt');
     let caught: unknown;

@@ -86,10 +86,10 @@ describe('.gitignore completeness', () => {
       expect(hasTestRunPattern).toBe(true);
     });
 
-    it('excludes baseline sentinel', () => {
-      const content = load();
-      expect(content).toContain('.baseline.sentinel');
-    });
+    // `.baseline.sentinel` was asserted here until #582. It was the SHA-256 of
+    // INTERNAL-BASELINE.md, a file that does not exist and has no commits, so
+    // the sentinel could never be written. Ignoring a filename that can never
+    // be produced is not a safety net; the whole baseline machinery is gone.
   });
 
   describe('no accidental negation of critical patterns', () => {

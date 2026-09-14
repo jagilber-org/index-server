@@ -9,38 +9,86 @@ import path from 'path';
 import { spawn } from 'child_process';
 import v8 from 'v8';
 import { MetricsCollector } from '../MetricsCollector.js';
+import { getCatalogSampler } from '../CatalogSampler.js';
 import { getRuntimeConfig } from '../../../config/runtimeConfig.js';
 import { logError } from '../../../services/logger.js';
+
+// This project emits CommonJS, so `__filename` / `__dirname` are the portable
+// way to ask "where does the code I am executing live?" (import.meta is
+// unavailable under a CommonJS target).
+const MODULE_PATH = __filename;
+const MODULE_DIR = __dirname;
+
+/**
+ * Root of the *installation this code is actually running from*.
+ *
+ * Everything below resolves from here, never from `process.cwd()`. The server
+ * is normally launched as `node <install>/dist/server/index-server.js` by an
+ * MCP client whose working directory is some unrelated project folder, so
+ * cwd-relative lookups silently found nothing (build time reported "unknown")
+ * or, worse, found the *wrong* thing — `<cwd>/.git/HEAD` resolved to whatever
+ * repo the client happened to be sitting in, so the dashboard displayed a
+ * commit that had nothing to do with the running build.
+ */
+function findInstallRoot(): string | null {
+  let dir = MODULE_DIR;
+  for (let i = 0; i < 10; i++) {
+    if (fs.existsSync(path.join(dir, 'package.json'))) return dir;
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return null;
+}
+
+const INSTALL_ROOT = findInstallRoot();
 
 /** Derive short git commit (best-effort; never throws) */
 function getGitCommit(): string | null {
   try {
-    const head = path.join(process.cwd(), '.git', 'HEAD');
+    if (!INSTALL_ROOT) return null;
+    const gitDir = path.join(INSTALL_ROOT, '.git');
+    const head = path.join(gitDir, 'HEAD');
     if (!fs.existsSync(head)) {
-      // Fallback: read from deployment-manifest.json (local deploy without .git)
+      // Deployed copy has no .git — use the commit the deploy recorded.
       return getDeployManifestField('gitCommit');
     }
     let ref = fs.readFileSync(head, 'utf8').trim();
     if (ref.startsWith('ref:')) {
-      const refPath = path.join(process.cwd(), '.git', ref.split(' ')[1]);
+      const refPath = path.join(gitDir, ref.split(' ')[1]);
       if (fs.existsSync(refPath)) {
         ref = fs.readFileSync(refPath, 'utf8').trim();
+      } else {
+        // Packed refs (fresh clone / worktree) — fall back to the manifest.
+        return getDeployManifestField('gitCommit');
       }
     }
     return ref.substring(0, 12);
   } catch { return null; }
 }
 
-/** Approximate build time via dist/server/index-server.js mtime (falls back to null) */
+/**
+ * Build time, resolved install-relative. Tries, in order: the compiled entry
+ * point's mtime, the deploy manifest's timestamp, and finally this module's own
+ * mtime — the last of which always exists, so this never returns null in a
+ * running server.
+ */
 function getBuildTime(): string | null {
+  const candidates = INSTALL_ROOT
+    ? [path.join(INSTALL_ROOT, 'dist', 'server', 'index-server.js')]
+    : [];
+  for (const candidate of candidates) {
+    try {
+      if (fs.existsSync(candidate)) {
+        return new Date(fs.statSync(candidate).mtimeMs).toISOString();
+      }
+    } catch {/* ignore */}
+  }
+  const deployed = getDeployManifestField('deployedAt');
+  if (deployed) return deployed;
   try {
-    const candidate = path.join(process.cwd(), 'dist', 'server', 'index-server.js');
-    if (fs.existsSync(candidate)) {
-      const stat = fs.statSync(candidate);
-      return new Date(stat.mtimeMs).toISOString();
-    }
-    // Fallback: read from deployment-manifest.json (local deploy)
-    return getDeployManifestField('deployedAt');
+    // Last resort: the file you are reading right now. Always present.
+    return new Date(fs.statSync(MODULE_PATH).mtimeMs).toISOString();
   } catch {/* ignore */}
   return null;
 }
@@ -48,10 +96,13 @@ function getBuildTime(): string | null {
 /** Read a top-level field from deployment-manifest.json (written by deploy-local.ps1) */
 function getDeployManifestField(field: string): string | null {
   try {
-    const manifestPath = path.join(process.cwd(), 'deployment-manifest.json');
+    if (!INSTALL_ROOT) return null;
+    const manifestPath = path.join(INSTALL_ROOT, 'deployment-manifest.json');
     if (fs.existsSync(manifestPath)) {
       const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
       const value = manifest?.[field];
+      // Deploy writes placeholders like '<no-git-dir>' when it cannot resolve
+      // a value; those are absence, not data.
       if (typeof value === 'string' && value && !value.startsWith('<')) return value.substring(0, 64);
     }
   } catch {/* ignore */}
@@ -203,8 +254,11 @@ export function createStatusRoutes(metricsCollector: MetricsCollector): Router {
       let cmd: string;
       let args: string[];
       if (process.platform === 'win32') {
+        // explorer.exe only understands backslash-separated paths. Config values
+        // may contain forward slashes (e.g. from env vars or JSON), which cause
+        // Explorer to silently open the default folder instead of the target.
         cmd = 'explorer.exe';
-        args = [toOpen];
+        args = [toOpen.replace(/\//g, '\\')];
       } else if (process.platform === 'darwin') {
         cmd = 'open';
         args = [toOpen];
@@ -250,12 +304,44 @@ export function createStatusRoutes(metricsCollector: MetricsCollector): Router {
   router.get('/system/resources', (req: Request, res: Response) => {
     try {
       const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 200;
+      // Reject a non-numeric `since` instead of letting NaN through. Downstream
+      // the predicate is `ts >= ?`, and `ts >= NaN` is false for every row, so
+      // `?since=garbage` would return an EMPTY series with `success: true` —
+      // a silent wrong answer that reads as "no data in this window" rather
+      // than as a bad request.
+      let since: number | undefined;
+      if (req.query.since !== undefined) {
+        const parsed = parseInt(req.query.since as string, 10);
+        if (!Number.isFinite(parsed)) {
+          return res.status(400).json({
+            success: false,
+            error: `Invalid 'since': expected an epoch-millisecond integer, got ${JSON.stringify(req.query.since)}`,
+          });
+        }
+        since = parsed;
+      }
       const history = metricsCollector.getResourceHistory(limit);
+      const catalogSampler = getCatalogSampler();
+
+      // Catalog history is the sampled series — real observations at real
+      // wall-clock times.
+      //
+      // This replaces a synthesized `indexTimeline` that sorted entries by
+      // createdAt and cumulatively summed each entry's *current* usage and
+      // signal state. That plotted today's state against entry birth dates: a
+      // signal recorded last week appeared at the entry's creation date months
+      // earlier, the x-axis was entry rank rather than time, and the first few
+      // points had denominators of 1-3 so the leading edge was pinned to 0% or
+      // 100%. Every slope on it was an artifact of when entries were created.
+      const catalogHistory = catalogSampler?.getDurableHistory(limit, since) ?? [];
+
       res.json({
         success: true,
         data: history,
+        catalogHistory,
         limit,
         sampleCount: history.samples.length,
+        catalogSampleCount: catalogHistory.length,
         timestamp: Date.now()
       });
     } catch (error) {

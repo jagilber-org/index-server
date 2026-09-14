@@ -5,7 +5,8 @@
  * WAL mode enabled for concurrent read performance.
  */
 
-export const SCHEMA_VERSION = '2';
+/** Bumped to '3' when the split usage counters (retrieved/applied) were added. */
+export const SCHEMA_VERSION = '3';
 
 export const INSTRUCTIONS_DDL = `
 CREATE TABLE IF NOT EXISTS instructions (
@@ -42,10 +43,17 @@ CREATE TABLE IF NOT EXISTS instructions (
   created_by_agent TEXT,
   source_workspace TEXT,
   extensions TEXT,
+  links TEXT,
   risk_score REAL,
   usage_count INTEGER DEFAULT 0,
   first_seen_ts TEXT,
-  last_used_at TEXT
+  last_used_at TEXT,
+  /* Split usage counters (issue #418). usage_count is the derived total and is
+   * retained for backward compat; these four are the authoritative split. */
+  retrieved_count INTEGER,
+  applied_count INTEGER,
+  last_retrieved_at TEXT,
+  last_applied_at TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_instructions_content_type ON instructions(content_type);
@@ -61,7 +69,11 @@ CREATE TABLE IF NOT EXISTS usage (
   last_used_at TEXT,
   last_action TEXT,
   last_signal TEXT,
-  last_comment TEXT
+  last_comment TEXT,
+  retrieved_count INTEGER,
+  applied_count INTEGER,
+  last_retrieved_at TEXT,
+  last_applied_at TEXT
 );
 
 CREATE TABLE IF NOT EXISTS messages (
@@ -132,10 +144,15 @@ CREATE TABLE IF NOT EXISTS instructions_archive (
   created_by_agent TEXT,
   source_workspace TEXT,
   extensions TEXT,
+  links TEXT,
   risk_score REAL,
   usage_count INTEGER DEFAULT 0,
   first_seen_ts TEXT,
   last_used_at TEXT,
+  retrieved_count INTEGER,
+  applied_count INTEGER,
+  last_retrieved_at TEXT,
+  last_applied_at TEXT,
   archived_by TEXT,
   archive_reason TEXT,
   archive_source TEXT,

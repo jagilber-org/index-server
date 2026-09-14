@@ -27,6 +27,14 @@ const PREFIX_FRAGMENTS = new Set([
 // literals (filenames, doc references) and are never read from process.env.
 const FALSE_POSITIVE_TOKENS = new Set([
   'INDEX_SERVER_TOOL_ACTIVATION_IMPROVEMENT_PLAN', // .md filename in a docstring
+  // Lifecycle hooks (#447): context env vars the server SETS on the hook child
+  // process (output), never reads from process.env — so they are not mcp.json
+  // config keys and need no DOCUMENTED allow-list entry.
+  'INDEX_SERVER_HOOK_OPERATION',
+  'INDEX_SERVER_HOOK_ACTION',
+  'INDEX_SERVER_HOOK_IDS',
+  'INDEX_SERVER_HOOK_CORRELATION_ID',
+  'INDEX_SERVER_HOOK_CONTEXT',
 ]);
 
 function walk(dir: string, files: string[] = []): string[] {

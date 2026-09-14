@@ -106,6 +106,7 @@ export interface RuntimeConfig {
     strictRemove: boolean;
     requireCategory: boolean;
     traceQueryDiag: boolean;
+    defaultPageSize: number;
     manifest: {
       writeEnabled: boolean;
       fastload: boolean;

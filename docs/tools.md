@@ -1,9 +1,15 @@
 # Index - Tools API Reference
 
-**Version:** 1.17.0 (MCP Protocol Compliant)  
 **Protocol:** Model Context Protocol (MCP) v1.0+  
 **Transport:** JSON-RPC 2.0 over stdio, REST bridge via dashboard HTTP(S)  
-**Last Updated:** February 24, 2026
+**Server version:** see `package.json` — this document tracks the tool registry, not a release.  
+**Currency:** the [Tool Inventory](#tool-inventory-authoritative-reference) below is generated from
+`src/services/toolRegistry.ts` and gated by `npm run contract:tools`. The surrounding prose is
+hand-written and dated by git history.
+
+> The hand-maintained header this replaces claimed "Version 1.17.0, last updated February 24 2026"
+> against a package at 1.41.2 (#587). A version number restated by hand in a document nothing
+> checks is a claim that is wrong by default; it is not restated here for that reason.
 
 ## 📖 Overview
 
@@ -548,7 +554,7 @@ Exports a structural or enriched graph representation of the instruction index. 
 
 | Param | Type | Default | Description |
 |-------|------|---------|-------------|
-| `includeEdgeTypes` | string[] (subset of `primary`,`category`,`belongs`) | all | Edge type allowlist (filter applied before truncation) |
+| `includeEdgeTypes` | string[] (subset of `primary`,`category`,`belongs`,`link`) | all | Edge type allowlist (filter applied before truncation) |
 | `maxEdges` | number >=0 | unlimited | Truncate edge list (stable slice) |
 | `format` | `json` \| `dot` \| `mermaid` | `json` | Output format (DOT & Mermaid visualizations). Mermaid now emits a `flowchart TB` block (top-bottom); edges use `---` (no arrows) so the layout appears undirected. |
 | `enrich` | boolean | false | Enable schema v2 enrichment (metadata + optional new edge type) |
@@ -569,7 +575,7 @@ Exports a structural or enriched graph representation of the instruction index. 
   "type": "object",
   "additionalProperties": false,
   "properties": {
-    "includeEdgeTypes": {"type": "array", "items": {"type": "string", "enum": ["primary","category","belongs"]}, "maxItems": 3},
+    "includeEdgeTypes": {"type": "array", "items": {"type": "string", "enum": ["primary","category","belongs","link"]}, "maxItems": 4},
     "maxEdges": {"type": "number", "minimum": 0},
   "format": {"type": "string", "enum": ["json","dot","mermaid"]},
     "enrich": {"type": "boolean"},
@@ -583,7 +589,7 @@ Exports a structural or enriched graph representation of the instruction index. 
 
 ```ts
 const GraphExportParams = z.object({
-  includeEdgeTypes: z.array(z.enum(['primary','category','belongs'])).max(3).optional(),
+  includeEdgeTypes: z.array(z.enum(['primary','category','belongs','link'])).max(4).optional(),
   maxEdges: z.number().int().min(0).optional(),
   format: z.enum(['json','dot','mermaid']).optional(),
   enrich: z.boolean().optional(),
@@ -738,6 +744,7 @@ The dashboard provides:
 * Future planned additions: weighted edges from real usage metrics (`includeUsage` will switch placeholder to actual counts).
 * Enriched & formatted responses intentionally excluded from current cache to prevent stale metadata propagation while schema evolves.
 * `usageCount` now reflects live Index usage counters (monotonic) when `includeUsage:true`; enriched nodes also expose `retrievedCount`/`appliedCount` (issue #418).
+* **Link edges** (schema v8, issue #511): a new `link` edge type is emitted from each instruction's `links` array. Edge metadata includes `rel` and `label`. In enriched mode, inverse edges are materialized per relationship semantics (`prerequisite`/`sequel`/`part-of` produce directional inverses, `related` produces bidirectional edges, `see-also` is directed only). Inverse edges carry `inverse: true` metadata. Category-based edges (`primary`, `category`, `belongs`) are unchanged.
 
 ### 🔐 Administrative Operations
 
@@ -896,6 +903,137 @@ Error Codes Added:
 | hydration_mismatch | Body omitted but internal read failed     | Retry or resubmit with explicit body              |
 
 These behaviors are fully described in `VERSIONING.md` (Governance Enhancements 1.3.1) and surfaced here for quick implementer reference.
+
+##### Structured Links (schema v8, issue #511)
+
+`index_add` accepts an optional `links` array on the entry:
+
+```json
+{
+  "action": "add",
+  "entry": {
+    "id": "my-instruction",
+    "body": "Content...",
+    "links": [
+      { "target": "prerequisite-id", "rel": "prerequisite" },
+      { "target": "related-id", "rel": "related", "label": "See this for context" },
+      { "target": "parent-id", "rel": "part-of" }
+    ]
+  },
+  "lax": true
+}
+```
+
+**Validation behavior:**
+
+| Check | Outcome |
+|-------|---------|
+| Max 25 links | Schema-enforced rejection |
+| `rel` not in enum | Schema-enforced rejection |
+| `target` does not match ID pattern | Schema-enforced rejection |
+| Self-referencing link (`target` = own `id`) | Rejected |
+| Duplicate link (same `target` + same `rel`) | Silently deduplicated |
+| Dead link (`target` ID not in current index) | **Warning** in response (not rejected) |
+| Cycle in `prerequisite`/`sequel`/`part-of` edges | Rejected with cycle path in error |
+
+`related` and `see-also` links are exempt from cycle detection (symmetric/informational).
+
+**Relationship types:**
+
+| `rel` | Semantics |
+|-------|-----------|
+| `related` | General association (default) |
+| `prerequisite` | This entry requires the target |
+| `sequel` | This entry precedes the target |
+| `part-of` | This entry is part of the target |
+| `see-also` | Informational reference |
+
+#### `patch` - Partial Body Update
+
+**Purpose**: Edit an instruction body **in place** without resending the whole body
+**Mutation**: Yes
+**Tool**: `index_patch` (tier: extended) — also available as `index_dispatch` action `patch`
+
+Prefer `patch` over `add` + `overwrite:true` whenever you are changing part of an
+existing body. `add` requires the complete body on every edit, which costs tokens
+twice (a full `get` plus a full write), risks silent truncation when a model
+regenerates a large body, and has no lost-update protection.
+
+```typescript
+// Request
+{
+  "action": "patch",
+  "id": string,                                              // REQUIRED
+  "op": "splice" | "append" | "prepend" | "replace" | "metadata",  // REQUIRED
+
+  // op=append | prepend
+  "text"?: string,
+
+  // op=splice — a character window, mirroring get's bodyOffset/bodyLimit
+  "bodyOffset"?: number,        // window start (UTF-16 code units)
+  "bodyLength"?: number,        // units to remove; default 0 => pure insertion
+  "text"?: string,              // replacement text; default "" => deletion
+
+  // op=replace — LITERAL substring, never a regex
+  "find"?: string,
+  "replaceWith"?: string,       // default "" => deletion
+  "replaceAll"?: boolean,       // default false => first occurrence only
+
+  "expectedSourceHash"?: string,               // optimistic concurrency
+  "bump"?: "patch"|"minor"|"major"|"none",     // optional semver bump
+  "summary"?: string,                          // changelog summary when bumping
+  "dryRun"?: boolean                           // compute without writing
+}
+
+// Success response
+{
+  "id": string,
+  "changed": true,
+  "op": string,
+  "sourceHash": string,
+  "previousSourceHash": string,
+  "bodyLength": number,
+  "previousBodyLength": number,
+  "version": string,
+  "updatedAt": string
+}
+```
+
+**Lost-update protection.** Pass the `sourceHash` you read as `expectedSourceHash`.
+If the entry changed in the meantime the patch is refused and **nothing is written**:
+
+```jsonc
+{
+  "id": "my-instruction",
+  "error": "precondition_failed",
+  "expectedSourceHash": "<yours>",
+  "actualSourceHash": "<current>",
+  "hint": "The instruction changed since it was read. Re-read the entry and retry the patch against the current sourceHash."
+}
+```
+
+**Round-tripping a window.** `bodyOffset` uses the same units and the same
+surrogate-safe boundary snapping as the `get` action, so a window you read can be
+written straight back. A pair is never split: an offset landing on the low half of
+a surrogate pair snaps back to the pair boundary.
+
+Error codes:
+
+| code                  | Condition                                            | Guidance                                                        |
+|-----------------------|------------------------------------------------------|-----------------------------------------------------------------|
+| `invalid_params`      | Missing `id`/`op`, unknown op, or missing operand    | Response includes `reason`; unknown ops also return `validOps`  |
+| `notFound`            | No instruction with that id                           | Verify the id via `search` or `list`                            |
+| `precondition_failed` | `expectedSourceHash` did not match                    | Re-read the entry and retry against `actualSourceHash`          |
+| `find_not_found`      | `op:"replace"` and `find` is absent from the body     | Never silently succeeds — re-read and adjust the search text    |
+| `body_limit_exceeded` | Result would exceed `INDEX_SERVER_BODY_WARN_LENGTH`   | Split into cross-linked instructions (same rule as `add`)       |
+| `empty_body`          | Patch would leave the body empty                      | Use `remove`/`archive` to retire an instruction instead         |
+
+Notes:
+
+- A patch that produces an identical body returns `{ "changed": false }` and does not write.
+- Unlike `add`, the patched body is **not** trimmed — trimming would shift character
+  offsets and break round-trip symmetry with the windowed `get` read.
+- `find` is always literal. There is deliberately no regex mode, to avoid a ReDoS surface.
 
 #### `import` - Bulk Import
 
@@ -1450,18 +1588,40 @@ All mutation operations now return enhanced error information:
 }
 ```
 
+### 📬 Inter-Agent Messaging
+
+Eleven `messaging_*` tools (extended tier) provide short-lived inter-agent messaging. They are
+**not** part of the instruction index: messages persist to JSONL on disk and expire, and nothing
+about them enters the governed catalog.
+
+`messaging_manage` is the recommended entry point — a single dispatcher whose `action` mirrors the
+ten standalone `messaging_<action>` tools 1:1 (#373). The standalone tools remain registered.
+
+All eleven are gated at registration on `INDEX_SERVER_MESSAGING_ENABLED` (default on). With it set
+to `0` they vanish from `tools/list`, the dashboard REST routes are skipped, and the Messaging tab
+is hidden — see the environment table above and #353.
+
+Full semantics, channel model, TTL and acknowledgement rules, and the REST surface:
+**[messaging.md](messaging.md)**. Until #587 this 82 KB API reference mentioned messaging exactly
+once, in an environment-variable row, and documented none of the tools.
+
 ## Tool Inventory (Authoritative Reference)
 
-> **45 registered tools** — This table is generated from the live tool registry and is the authoritative tool name reference. Use `meta_tools` to get the runtime version of this list.
+<!-- BEGIN GENERATED: tool inventory (npm run docs:tools) -->
+
+> **65 registered tools** — core 8, extended 26, admin 31.
 >
-> Classification is the registry visibility/gating contract, not a guarantee
-> that a tool has no persistence side effects. `stable` means non-privileged and
-> normally visible for its tier; `mutation` means a privileged write operation
-> controlled by mutation gates. `feedback_submit` is intentionally `stable` and
-> `core` so agents can always report issues, even though it appends to feedback
-> storage and writes an audit entry. `feedback_manage` is the single MCP
-> dispatcher for feedback management (`submit`, `list`, `get`, `update`,
-> `delete`, `stats`) and is both `stable` and `mutation`.
+> Generated from `src/services/toolRegistry.ts` at the **admin** tier, which is the
+> full declared surface. `npm run contract:tools` fails when this table drifts from
+> the registry. Use `meta_tools` for the runtime view of a specific server.
+>
+> `stable` and `mutation` are the registry visibility/gating contract, not a claim
+> about persistence side effects. `feedback_submit` is `stable` and `core` so agents
+> can always report issues even though it writes. The three `diagnostics_*` tools are
+> `mutation` *and* gated at registration on `INDEX_SERVER_STRESS_DIAG=1` or
+> `INDEX_SERVER_DEBUG=1`; without one of those they are not registered at all. The
+> eleven `messaging_*` tools are likewise gated on `INDEX_SERVER_MESSAGING_ENABLED=1`
+> and documented in [messaging.md](messaging.md).
 
 | Tool Name | Classification | Tier | Description |
 |-----------|---------------|------|-------------|
@@ -1469,53 +1629,89 @@ All mutation operations now return enhanced error information:
 | `bootstrap_confirmFinalize` | mutation | admin | Finalize bootstrap by submitting issued token; enables guarded mutations. |
 | `bootstrap_request` | mutation | admin | Request a human confirmation bootstrap token (hash persisted, raw returned once). |
 | `bootstrap_status` | stable | admin | Return bootstrap gating status (referenceMode, confirmed, requireConfirmation). |
-| `diagnostics_block` | stable | admin | Intentionally CPU blocks the event loop for N ms (diagnostic stress). |
-| `diagnostics_memoryPressure` | stable | admin | Allocate & release transient memory to induce GC / memory pressure. |
-| `diagnostics_microtaskFlood` | stable | admin | Flood the microtask queue with many Promise resolutions to probe event loop starvation. |
+| `dashboard_config` | stable | admin | Deterministic snapshot of every recognized environment / feature flag with metadata (category, stability, default, reload behavior). Flags marked sensitive return only a present boolean, never the value. |
+| `diagnostics_block` | mutation | admin | Intentionally CPU blocks the event loop for N ms (diagnostic stress). |
+| `diagnostics_handshake` | stable | admin | Return recent handshake events (ordering/ready/list_changed trace). |
+| `diagnostics_memoryPressure` | mutation | admin | Allocate &amp; release transient memory to induce GC / memory pressure. |
+| `diagnostics_microtaskFlood` | mutation | admin | Flood the microtask queue with many Promise resolutions to probe event loop starvation. |
 | `feature_status` | stable | admin | Report active index feature flags and counters. |
-| `feedback_manage` | stable, mutation | core | Manage feedback entries through a single action dispatcher. |
-| `feedback_submit` | stable | core | Submit feedback entry (issue, status report, security alert, feature request). |
-| `gates_evaluate` | stable | extended | Evaluate configured gating criteria over current Index. |
+| `feedback_manage` | mutation | extended | Manage feedback entries through a single action dispatcher. Actions: submit, list, get, update, delete, stats. |
+| `feedback_submit` | stable | core | Submit feedback entry (issue, status report, security alert, feature request, etc.). |
+| `gates_evaluate` | stable | extended | Evaluate configured gating criteria over current index. |
 | `graph_export` | stable | extended | Export instruction relationship graph (schema v1 minimal or v2 enriched). |
-| `health_check` | stable | core | Returns server health status & version. |
-| `help_overview` | stable | core | Structured onboarding guidance for new agents. |
+| `health_check` | stable | core | Returns server health status &amp; version. |
+| `help_overview` | stable | core | Structured onboarding guidance for new agents (tool discovery, index lifecycle, promotion workflow). |
 | `index_add` | mutation | extended | Add a single instruction (lax mode fills defaults; overwrite optional). |
-| `index_debug` | stable | admin | Dump raw Index state for debugging (entry count, keys, load status). |
-| `index_diagnostics` | stable | admin | Summarize loader diagnostics: scanned vs accepted, skipped reasons, missing IDs. |
-| `index_dispatch` | stable | core | Unified dispatcher for instruction index operations. |
+| `index_archive` | mutation | admin | Archive one or more active instructions (move to archive store, atomically). Closed-enum reason taxonomy (deprecated\|superseded\|duplicate-merge\|manual\|legacy-scope). Restorable unless restoreEligible:false. Surfaced via index_dispatch action:"archive". |
+| `index_debug` | stable | admin | Dump raw index state for debugging (entry count, keys, load status). |
+| `index_diagnostics` | stable | admin | Summarize loader diagnostics: scanned vs accepted, skipped reasons, missing IDs, optional trace sample. |
+| `index_dispatch` | stable | core | Unified dispatcher for instruction index operations. Required: "action". Key params by action: get/getEnhanced(id, bodyOffset?, bodyLimit?), search(q/searchString/keywords/fields, includeCategories, caseSensitive, limit, mode, includeBody?), query(text,categoriesAny,limit,offset), list(category, limit?, offset?, includeBody?), diff(clientHash), export(ids,metaOnly), patch(id, op:"splice"\|"append"\|"prepend"\|"replace", text?/find?/replaceWith?, bodyOffset?, bodyLength?, expectedSourceHash?, dryRun?), remove(id or ids, mode:"archive"\|"purge"), archive(ids, reason), restore(ids, restoreMode), listArchived/getArchived/purgeArchive. Use patch to edit an instruction body in place instead of resending the whole body via add+overwrite. list/search return body-light items by default (bodyPreview+bodyLength); pass includeBody:true for full bodies or use get (supports bodyOffset/bodyLimit pagination). list/search default to INDEX_SERVER_DEFAULT_PAGE_SIZE results (default 50) when limit is omitted; pass limit:0 on list to return all. Read actions accept includeArchived/onlyArchived flags (mutually exclusive). Use action="capabilities" to discover all supported actions. |
 | `index_enrich` | mutation | admin | Persist normalization of placeholder governance fields to disk. |
-| `index_governanceHash` | stable | extended | Return governance projection & deterministic governance hash. |
-| `index_governanceUpdate` | mutation | extended | Patch limited governance fields (owner/status/review dates + optional version bump). |
-| `index_groom` | mutation | admin | Groom Index: normalize, repair hashes, merge duplicates, archive deprecated (spec 006). |
-| `index_health` | stable | admin | Compare live Index to canonical snapshot for drift. |
-| `index_import` | mutation | extended | Import (create/overwrite) instruction entries from provided objects. |
+| `index_getArchived` | stable | admin | Read a single archived entry by id. Surfaced via index_dispatch action:"getArchived". Returns null when not present. |
+| `index_governanceHash` | stable | extended | Return governance projection &amp; deterministic governance hash. |
+| `index_governanceUpdate` | mutation | extended | Patch governance fields (owner/status/review dates/riskScore/priority/priorityTier/requirement + optional version bump). |
+| `index_groom` | mutation | admin | Groom index: normalize, repair hashes, merge duplicates, ARCHIVE deprecated (was: remove), remap categories, apply usage signal feedback (outdated/not-relevant/helpful/applied) to instruction priority and requirement. Spec 006 Phase D: retirement paths now archive instead of permanently delete; pass mode.purgeArchive=true (mutually exclusive with retirement flags) to permanently purge archived entries. |
+| `index_health` | stable | admin | Compare live index to canonical snapshot for drift. |
+| `index_import` | mutation | extended | Import instruction entries from: inline array (entries), stringified JSON array, file path to JSON array (entries as string), or directory of .json files (source). |
 | `index_inspect` | stable | admin | Return raw instruction entry by ID for debugging (full JSON). |
-| `index_normalize` | mutation | admin | Normalize instruction JSON files (hash repair, version hydrate, timestamps). |
+| `index_listArchived` | stable | admin | List archived entries with optional filters (category, contentType, reason, source, archivedBy, restoreEligible). Set includeContent:true to include bodies. Surfaced via index_dispatch action:"listArchived". |
+| `index_normalize` | mutation | admin | Normalize instruction JSON files (hash repair, version hydrate, timestamps) with optional dryRun. |
+| `index_patch` | mutation | extended | Patch an instruction body in place (splice/append/prepend/replace) or update metadata fields (title/semanticSummary/categories/primaryCategory/contentType) via op:metadata without touching the body; supports an expectedSourceHash precondition for lost-update protection. |
+| `index_purgeArchive` | mutation | admin | Permanently delete archived entries. IRREVERSIBLE. Subject to bootstrap mutation gating, INDEX_SERVER_MAX_BULK_DELETE bulk limit, and auto-backup. Surfaced via index_dispatch action:"purgeArchive". |
 | `index_reload` | mutation | extended | Force reload of instruction index from disk. |
-| `index_remove` | mutation | extended | Retire (mode:"archive") or permanently delete (mode:"purge", current default) one or more instruction entries (spec 006). |
+| `index_remove` | mutation | extended | Delete one or more instruction entries by id. Bulk deletes exceeding INDEX_SERVER_MAX_BULK_DELETE (default 5) require force=true and auto-create a backup first. Use dryRun=true to preview. NOTE: spec 006-archive-lifecycle introduces a new mode parameter ("archive" \| "purge"). Today the omitted-mode default remains destructive ("purge") for backwards compatibility, but the response includes defaultBehaviorChangeWarning — pass mode:"archive" to opt into the upcoming default (move to archive store, restorable) or mode:"purge" (or purge:true alias) to keep destructive behavior. The default WILL change to "archive" in a future release. |
 | `index_repair` | mutation | admin | Repair out-of-sync sourceHash fields (noop if none drifted). |
-| `index_schema` | stable | extended | Return instruction JSON schema, examples, validation rules, and promotion workflow guidance. |
-| `index_search` | stable | core | Search instructions by keywords — returns instruction IDs for targeted retrieval. Supports `mode`: keyword (default), regex, or semantic. |
-| `integrity_manifest` | stable | admin | Verify integrity of Index manifest entries against stored sourceHash values. |
+| `index_restore` | mutation | admin | Restore archived entries back to the active store. restoreMode:"reject" (default) fails on id collision; restoreMode:"overwrite" replaces the active entry. Entries marked restoreEligible:false cannot be restored. Surfaced via index_dispatch action:"restore". |
+| `index_schema` | stable | extended | Return instruction JSON schema, examples, validation rules, and promotion workflow guidance for self-documentation. |
+| `index_search` | stable | core | 🔍 PRIMARY: Search instructions by keywords, searchString phrase input, and/or structural fields — returns instruction IDs for targeted retrieval. Supports mode: "keyword" (substring match), "regex" (patterns like "deploy\|release"), or "semantic" (embedding similarity). Default mode is semantic when INDEX_SERVER_SEMANTIC_ENABLED=1, otherwise keyword. Omit the mode parameter to let the server choose the best default. Use this FIRST to discover relevant instructions, then use index_dispatch get for details. |
+| `integrity_manifest` | stable | admin | Verify integrity of index manifest entries against stored sourceHash values. |
 | `integrity_verify` | stable | extended | Verify each instruction body hash against stored sourceHash. |
-| `manifest_refresh` | mutation | admin | Rewrite manifest from current Index state. |
-| `manifest_repair` | mutation | admin | Repair manifest by reconciling drift with Index. |
-| `manifest_status` | stable | admin | Report Index manifest presence and drift summary. |
-| `meta_activation_guide` | stable | admin | Comprehensive guide for activating Index tools in VSCode. |
-| `meta_check_activation` | stable | admin | Check activation requirements for a specific tool. |
-| `meta_tools` | stable | admin | Enumerate available tools & their metadata. |
+| `manifest_refresh` | mutation | admin | Rewrite manifest from current index state. |
+| `manifest_repair` | mutation | admin | Repair manifest by reconciling drift with index. |
+| `manifest_status` | stable | admin | Report index manifest presence and drift summary. |
+| `messaging_ack` | mutation | extended | Acknowledge (mark as read) one or more messages by ID. |
+| `messaging_get` | stable | extended | Get a single message by ID with full details. |
+| `messaging_list_channels` | stable | extended | List all active messaging channels with message counts and latest timestamps. |
+| `messaging_manage` | mutation | extended | Dispatcher consolidating all 10 messaging_&lt;action&gt; tools into a single MCP surface. Pick the underlying operation with action= (send/read/list_channels/ack/stats/get/update/purge/reply/thread). Mirrors the individual tools 1:1; the standalone messaging_&lt;action&gt; tools remain available but messaging_manage is the recommended entry-point (#373). |
+| `messaging_purge` | mutation | extended | Delete messages: all, by channel, or by specific IDs. |
+| `messaging_read` | stable | extended | Read messages from a channel with visibility filtering. Supports unread-only, limit, mark-as-read, tag filtering, and sender filtering. |
+| `messaging_reply` | mutation | extended | Reply to a message with auto-populated channel and parentId. Supports reply-all (all original recipients) or reply-to-sender. |
+| `messaging_send` | mutation | extended | Send a message to a channel with recipient targeting. Supports broadcast (*), directed, priority, TTL, threading, and structured payloads. |
+| `messaging_stats` | stable | extended | Get messaging statistics for a reader: total, unread, channel count. |
+| `messaging_thread` | stable | extended | Retrieve a full message thread by root parentId. Returns parent + all nested replies sorted chronologically. |
+| `messaging_update` | mutation | extended | Update mutable fields of a message (body, recipients, payload, persistent flag). |
+| `meta_activation_guide` | stable | admin | Comprehensive guide for activating Index Server tools in VSCode. Explains why settings.json alone is insufficient and provides activation function reference for all tool categories. |
+| `meta_check_activation` | stable | admin | Check activation requirements for a specific tool. Returns the VSCode activation function needed and step-by-step instructions. |
+| `meta_tools` | stable | admin | Enumerate available tools &amp; their metadata. |
 | `metrics_snapshot` | stable | extended | Performance metrics summary for handled methods. |
-| `promote_from_repo` | mutation | extended | Scan a local Git repository and promote its knowledge content into the index. |
-| `prompt_review` | stable | core | Static analysis of a prompt returning issues & summary. |
-| `usage_flush` | mutation | admin | Flush usage snapshot to persistent storage. |
+| `promote_from_repo` | mutation | extended | Scan a local Git repository and promote its knowledge content (constitutions, docs, instructions, specs) into the instruction index. Reads .specify/config/promotion-map.json and instructions/*.json from the target repo. |
+| `prompt_review` | stable | core | Static analysis of a prompt returning issues &amp; summary. |
+| `trace_dump` | stable | admin | Write the in-memory trace ring buffer to a file and return a summary (records count, bytes, env). Requires tracing to be enabled. |
+| `usage_flush` | mutation | admin | Reset usage counters for a specific instruction (by id) or for entries with lastUsedAt before a given date. |
 | `usage_hotset` | stable | extended | Return the most-used instruction entries (hot set). |
-| `usage_track` | stable | extended | Increment usage counters & timestamps for an instruction id. |
+| `usage_track` | stable | core | Track instruction usage with optional qualitative signal. Params: id (required), action (retrieved\|applied\|cited), signal (helpful\|not-relevant\|outdated\|applied), comment (short text, max 256 chars). |
+
+<!-- END GENERATED: tool inventory -->
 
 ### Tier Visibility
 
-- **Core** (7 tools): Always visible. Essential daily-use tools.
-- **Extended** (14 tools): Opt-in via `INDEX_SERVER_FLAG_TOOLS_EXTENDED=1`
-- **Admin** (23 tools): Opt-in via `INDEX_SERVER_FLAG_TOOLS_ADMIN=1`. Operations/debug tools.
+- **Core**: Always visible. Essential daily-use tools.
+- **Extended**: Opt-in via `INDEX_SERVER_FLAG_TOOLS_EXTENDED=1`
+- **Admin**: Opt-in via `INDEX_SERVER_FLAG_TOOLS_ADMIN=1`. Operations/debug tools.
+
+**Tiers control what `tools/list` advertises, not what may be called.** A tool
+hidden by tier stays callable by a client that already knows its name — that is
+the intended contract (`specs/002-tool-consolidation.md`: "reduces visible count
+without removing anything"). Enforcement is a separate concern, handled by the
+mutation gate (`INDEX_SERVER_MUTATION`), bootstrap confirmation, and the
+registration-time gates for dangerous diagnostics and messaging.
+
+What `tools/call` *does* enforce, since #592, is that the name is **declared in
+the tool registry at all**. A handler registered without a registry entry is
+refused with `-32601`, identically to an unknown tool, so the callable surface
+always equals the declared surface (constitution A-2). Do not "upgrade" that
+check to the flag-resolved tier: it would make `index_add`, `index_patch`,
+`index_remove` and every other extended/admin tool uncallable by default.
 
 ## 📈 Performance Characteristics
 
@@ -1746,7 +1942,7 @@ interface InstructionEntry {
   
   // Classification
   categories: string[]          // Topical tags
-  priority: number              // 1-10 priority scale
+  priority: number              // integer 1-100, LOWER = more important; defaults to 50
   requirement: 'mandatory' | 'critical' | 'recommended' | 'optional' | 'deprecated'
   
   // Governance
@@ -1776,6 +1972,13 @@ interface InstructionEntry {
   tags?: string[]             // Additional tags
   dependencies?: string[]      // Instruction dependencies
   deprecatedBy?: string       // Replacement instruction ID
+
+  // Cross-references (schema v8)
+  links?: Array<{
+    target: string             // Target instruction ID
+    rel?: 'related' | 'prerequisite' | 'sequel' | 'part-of' | 'see-also'  // Default: 'related'
+    label?: string             // Human-readable annotation (max 120 chars)
+  }>                           // Max 25 links per entry
 }
 ```
 
@@ -1820,7 +2023,7 @@ Mutation actions (enabled by default unless `INDEX_SERVER_MUTATION=0`):
 | groom | { mode? } | { previousHash, hash, scanned, repairedHashes, normalizedCategories, deprecatedRemoved, duplicatesMerged, signalApplied, filesRewritten, purgedScopes, migrated, remappedCategories, dryRun, notes } | Normalization, duplicate merge, signal feedback |
 | repair | { clientHash?, known? } | diff-like OR { repaired, updated:[id] } | Fix stored sourceHash mismatches |
 | enrich | none | { enriched, updated } | Persist missing governance fields |
-| governanceUpdate | { id, patch?, bump?, owner?, status?, lastReviewedAt?, nextReviewDue? } | { id, changed, previousVersion?, newVersion? } | Controlled governance metadata edit |
+| governanceUpdate | { id, patch?, bump?, owner?, status?, lastReviewedAt?, nextReviewDue?, riskScore?, priority?, priorityTier?, requirement? } | { id, changed, previousVersion?, newVersion? } | Controlled governance metadata edit. Unsupported values are rejected with an explicit error rather than ignored. |
 
 Batch example:
 
@@ -1852,7 +2055,7 @@ Legacy per-method names were removed; clients must call the dispatcher and suppl
 
 Params: { entries: InstructionEntryInput[], mode: "skip" | "overwrite" }
 Result: { hash, imported, skipped, overwritten, total, errors: [] }
-Notes: Automatically computes sourceHash; timestamps set to now.
+Notes: Automatically computes sourceHash; timestamps set to now. Entries may include an optional `links` array (same shape and validation as `index_add`: self-ref rejection, dedup, dead-link warnings, cycle detection for ordered rels).
 
 ### index_repair (mutation when rewriting)
 
@@ -1880,7 +2083,7 @@ Notes:
 ### index_groom (mutation)
 
 Params: { ids?: string[], force?: boolean, mode?: { dryRun?: boolean, mergeDuplicates?: boolean, removeDeprecated?: boolean, purgeLegacyScopes?: boolean, remapCategories?: boolean, purgeArchive?: boolean } }
-Result: { previousHash, hash, scanned, repairedHashes, normalizedCategories, deprecatedRemoved, duplicatesMerged, signalApplied, filesRewritten, purgedScopes, migrated, remappedCategories, archived?, archivedIds?, archiveErrors?, archiveLocation?, dryRun, notes: string[] }
+Result: { previousHash, hash, scanned, repairedHashes, normalizedCategories, deprecatedRemoved, duplicatesMerged, signalApplied, filesRewritten, purgedScopes, migrated, remappedCategories, archived?, archivedIds?, archiveErrors?, archiveLocation?, danglingLinksRemoved?, danglingLinkDetails?, dryRun, notes: string[] }
 Notes:
 
 * dryRun reports planned changes without modifying files (hash remains the same).
@@ -1895,6 +2098,7 @@ Notes:
 * signalApplied counts instructions mutated by usage signal feedback (outdated -> deprecated requirement, not-relevant -> priority -10, helpful -> priority +5, applied -> priority +2).
 * migrated counts entries with missing required fields auto-filled (e.g., contentType).
 * remappedCategories counts entries whose primaryCategory was derived from CATEGORY_RULES.
+* danglingLinksRemoved counts links removed because their target no longer exists in the active index (schema v8, issue #511). `danglingLinkDetails` lists each removed link as `{ id, target, rel }`.
 * notes array contains lightweight action hints (e.g., would-rewrite:N, would-archive:N in dryRun).
 
 ### promote_from_repo (mutation)

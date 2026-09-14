@@ -160,7 +160,7 @@ Some agent platforms use terms such as plugin, MCP server, or connector for depl
       audience: 'all',
       requirement: 'recommended',
       priority: 95,
-      priorityTier: 'P1',
+      priorityTier: 'P4',
       contentType: 'knowledge',
       categories: ['bootstrap', 'content-model', 'reference', 'schema'],
       primaryCategory: 'reference',
