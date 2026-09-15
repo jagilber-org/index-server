@@ -12,8 +12,28 @@ const DIAGRAM_PATH = path.join(ROOT, 'docs', 'diagrams', 'tool-tier-architecture
 const DOC_GENERATOR = path.join(ROOT, 'scripts', 'build', 'generate-tools-doc.mjs');
 const MAPPING_GENERATOR = path.join(ROOT, 'scripts', 'build', 'generate-server-env-tools.mjs');
 const INVENTORY_GENERATOR = path.join(ROOT, 'scripts', 'build', 'generate-tool-inventory.mjs');
+/**
+ * `scripts/mappings/` is stripped from the published mirror by `.publish-exclude`,
+ * so this suite's subject does not exist there. Reading it at MODULE scope meant
+ * the whole file failed to load, which surfaced as "1 failed suite / 0 failed
+ * tests" — 365 files passing and CI still red — and took down both `build-test`
+ * and `Coverage` at once. A collection error is not a test failure, and it does
+ * not name itself in the usual summary; guard module-scope reads accordingly.
+ *
+ * Gate on the MIRROR SENTINEL, not on `existsSync(MAPPING_PATH)`. Keying off the
+ * subject's own absence would make the suite disappear silently in the source
+ * repo too — exactly where a missing mapping is a real regression this suite
+ * exists to catch. `.publish-manifest.json` is written only by
+ * `New-CleanRoomCopy.ps1` and is untracked here, so it is true in the mirror and
+ * false in the governed repo. This mirrors `scripts/lib/published-mirror.mjs`
+ * (`isPublishedMirror`), which is the canonical helper; it cannot be imported
+ * here because tsconfig sets `rootDir: "src"` with no `allowJs`, so a
+ * `scripts/**` import breaks `npm run build`. Keep the two in sync.
+ */
+const HAS_PUBLISH_MANIFEST = fs.existsSync(path.join(ROOT, '.publish-manifest.json'));
+
 const originalDoc = fs.readFileSync(DOC_PATH, 'utf8');
-const originalMapping = fs.readFileSync(MAPPING_PATH, 'utf8');
+const originalMapping = HAS_PUBLISH_MANIFEST ? '' : fs.readFileSync(MAPPING_PATH, 'utf8');
 const originalToolsMd = fs.readFileSync(TOOLS_MD_PATH, 'utf8');
 const originalDiagram = fs.readFileSync(DIAGRAM_PATH, 'utf8');
 
@@ -37,7 +57,8 @@ afterEach(() => {
   if (savedStressDiag === undefined) delete process.env.INDEX_SERVER_STRESS_DIAG;
   else process.env.INDEX_SERVER_STRESS_DIAG = savedStressDiag;
   fs.writeFileSync(DOC_PATH, originalDoc);
-  fs.writeFileSync(MAPPING_PATH, originalMapping);
+  // Never conjure the mapping where publication deliberately removed it.
+  if (!HAS_PUBLISH_MANIFEST) fs.writeFileSync(MAPPING_PATH, originalMapping);
   fs.writeFileSync(TOOLS_MD_PATH, originalToolsMd);
   fs.writeFileSync(DIAGRAM_PATH, originalDiagram);
 });
@@ -52,7 +73,10 @@ function inventoryRows(markdown: string): string[] {
   return [...block.matchAll(/^\| `([^`]+)` \|/gm)].map(m => m[1]);
 }
 
-describe('generated tool artifacts', () => {
+// Every test here regenerates artifacts through generators that read the
+// mapping, so the suite is not meaningfully runnable without it. It runs in
+// full in the source repo, which is the only place the mapping is maintained.
+describe.skipIf(HAS_PUBLISH_MANIFEST)('generated tool artifacts', () => { // SKIP_OK: environment-gated: scripts/mappings/ is publish-excluded, so the subject is absent in the mirror only
   it('keeps checked-in tool docs and mappings aligned with the registry', () => {
     const documented = (originalDoc.match(/^### (.+)$/gm) ?? []).map(line => line.slice(4));
     const mapped = (JSON.parse(originalMapping) as { toolNames: string[] }).toolNames;

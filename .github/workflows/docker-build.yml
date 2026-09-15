@@ -210,7 +210,14 @@ jobs:
           category: 'container-security'
         continue-on-error: true
 
+      # if: always() is load-bearing. Without it this step is skipped whenever the
+      # gate above fails — so the only human-readable list of findings printed
+      # exactly when there was nothing to read, and a real failure showed a bare
+      # "exit code 1" with the SARIF the only record. Diagnosing one CRITICAL took
+      # a round-trip through the code-scanning API that this table would have
+      # answered in the log.
       - name: Trivy summary (table)
+        if: always()
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0 # pii-allowlist: pinned action SHA
         with:
           image-ref: 'index-server:scan'
