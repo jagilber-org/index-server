@@ -1,5 +1,5 @@
 {
-  "version": "1.42.1",
+  "version": "1.42.3",
   "trackedDir": "schemas",
   "distDir": "dist/schemas",
   "jsonSchemas": [
@@ -106,7 +106,7 @@
       "src",
       "scripts"
     ],
-    "fileCount": 307,
+    "fileCount": 308,
     "features": {
       "jsdoc": true,
       "lineNumbers": false,

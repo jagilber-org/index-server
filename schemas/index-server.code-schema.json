@@ -1,18 +1,18 @@
 {
   "name": "@jagilber-org/index-server",
-  "version": "1.42.1",
+  "version": "1.42.3",
   "sourceRoots": [
     "src",
     "scripts"
   ],
   "summary": {
-    "fileCount": 307,
-    "exportCount": 1208,
+    "fileCount": 308,
+    "exportCount": 1210,
     "classCount": 43,
     "interfaceCount": 353,
     "typeAliasCount": 93,
     "enumCount": 1,
-    "functionCount": 1219
+    "functionCount": 1221
   },
   "files": [
     {
@@ -361,6 +361,14 @@
           "namedImports": [
             "trackedFiles",
             "docSummary"
+          ],
+          "namespaceImport": null
+        },
+        {
+          "module": "../lib/published-mirror.mjs",
+          "defaultImport": null,
+          "namedImports": [
+            "skipOnPublishedMirror"
           ],
           "namespaceImport": null
         }
@@ -4552,6 +4560,14 @@
             "fileURLToPath"
           ],
           "namespaceImport": null
+        },
+        {
+          "module": "../lib/published-mirror.mjs",
+          "defaultImport": null,
+          "namedImports": [
+            "skipOnPublishedMirror"
+          ],
+          "namespaceImport": null
         }
       ],
       "exports": [],
@@ -4649,6 +4665,14 @@
             "resolveRef",
             "existsTracked",
             "docFiles"
+          ],
+          "namespaceImport": null
+        },
+        {
+          "module": "../lib/published-mirror.mjs",
+          "defaultImport": null,
+          "namedImports": [
+            "skipOnPublishedMirror"
           ],
           "namespaceImport": null
         }
@@ -6155,6 +6179,85 @@
       "typeAliases": [],
       "enums": [],
       "functions": [],
+      "constants": []
+    },
+    {
+      "path": "scripts/lib/published-mirror.mjs",
+      "imports": [
+        {
+          "module": "fs",
+          "defaultImport": null,
+          "namedImports": [
+            "existsSync"
+          ],
+          "namespaceImport": null
+        },
+        {
+          "module": "path",
+          "defaultImport": null,
+          "namedImports": [
+            "join"
+          ],
+          "namespaceImport": null
+        }
+      ],
+      "exports": [
+        {
+          "name": "isPublishedMirror",
+          "kinds": [
+            "FunctionDeclaration"
+          ]
+        },
+        {
+          "name": "skipOnPublishedMirror",
+          "kinds": [
+            "FunctionDeclaration"
+          ]
+        }
+      ],
+      "classes": [],
+      "interfaces": [],
+      "typeAliases": [],
+      "enums": [],
+      "functions": [
+        {
+          "name": "isPublishedMirror",
+          "isExported": true,
+          "isAsync": false,
+          "parameters": [
+            {
+              "name": "repoRoot",
+              "type": null,
+              "optional": false
+            }
+          ],
+          "returnType": null
+        },
+        {
+          "name": "skipOnPublishedMirror",
+          "isExported": true,
+          "isAsync": false,
+          "parameters": [
+            {
+              "name": "repoRoot",
+              "type": null,
+              "optional": false
+            },
+            {
+              "name": "label",
+              "type": null,
+              "optional": false
+            },
+            {
+              "name": "reason",
+              "type": null,
+              "optional": false
+            }
+          ],
+          "returnType": null,
+          "description": "Skip helper: prints why, then returns true if the caller should bail out."
+        }
+      ],
       "constants": []
     },
     {

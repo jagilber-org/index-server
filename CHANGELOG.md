@@ -6,6 +6,24 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 
 ## [Unreleased]
 
+## [1.42.3] - 2026-09-15
+
+### Fixed
+
+- **The public mirror's `guards` lane, exposed once v1.42.2 cleared the link before it.** `guard:all` is a `&&` chain, so fixing `guard:constitution` revealed `guard:docs` failing with `docs/docs_index.md is stale`. The index is a derived artifact copied verbatim into a clean room from which `.publish-exclude` has removed some of the docs it was derived from, so it is stale there by construction; `check-docs-reachability` then reports those same docs as dead references because it resolves against `git ls-files`. Both gates, plus `guard:constitution`, now route through a shared `scripts/lib/published-mirror.mjs` sentinel instead of a fourth inline copy.
+
+### Known issue
+
+- `docs/PR330-REMEDIATION.md` is stripped by `.publish-exclude` but linked from `docs/docs_index.md` and from the published `docs/design_review_action_plan_2026-09.md`, so the public mirror carries dead documentation links. Pre-existing and unrelated to this release — mirror CI simply never got far enough to report it. Resolution is a content decision: publish those docs, or stop linking to them from published ones.
+
+## [1.42.2] - 2026-09-15
+
+### Fixed
+
+- **The public mirror's CI had been red on every workflow since v1.42.0.** Two symptoms, one cause: `.publish-exclude` strips files that published tooling still depends on.
+  - `npm run build` died with `ENOENT` on `scripts/mappings/server-env-tools.json`, taking CI, Coverage, Manifest Verify, Governance Hash, Instruction Governance and Bootstrap Guard down on the same step. `generate-server-env-tools.mjs` now skips regeneration when the mapping is absent rather than crashing.
+  - `guard:constitution` reported ~50 violations and demoted 8 rules to "prose only", because `enforcedBy` paths under `.instructions/`, `.specify/`, `.squad/` and `.github/` cannot resolve in a clean-room copy. The guard now no-ops in a published mirror, detected via `.publish-manifest.json`, and still runs in full in the source repo.
+
 ## [1.42.0] - 2026-09-14
 
 ### Migration
