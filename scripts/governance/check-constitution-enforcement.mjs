@@ -33,6 +33,7 @@
 import { existsSync, readFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import { skipOnPublishedMirror } from '../lib/published-mirror.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const CONSTITUTION_JSON = join(ROOT, 'constitution.json');
@@ -65,6 +66,27 @@ const REVIEW_ENFORCED = new Set([
   'CQ-2', 'CQ-3', 'CQ-4', 'CQ-6',
   'DI-1', 'DI-2',
 ]);
+
+/*
+ * This guard has no jurisdiction over a published mirror.
+ *
+ * `New-CleanRoomCopy.ps1` strips `.instructions/`, `.specify/`, `.squad/` and
+ * `.github/copilot-instructions.md` per `.publish-exclude`, then drops a
+ * `.publish-manifest.json` that exists only in the mirror. Those stripped paths
+ * are exactly what most `enforcedBy` entries name, so `enforcerExists()` returns
+ * false for all of them and the guard reports ~50 violations plus 8 rules
+ * falsely demoted to "prose only" (ratchet reads 31 against a baseline of 23).
+ *
+ * Every one of those is an artifact of publication, not an enforcement gap: the
+ * enforcers exist and are checked in the source repo, which is where this guard
+ * runs for real. Reporting them in the mirror is the guard describing its own
+ * amputation. The sentinel is absent from the source repo, so the full check
+ * still runs — and can still fail — everywhere it means anything.
+ */
+if (skipOnPublishedMirror(ROOT, 'constitution-guard',
+  'Enforcer paths under .instructions/, .specify/, .squad/ and .github/ are stripped by .publish-exclude and cannot resolve here.')) {
+  process.exit(0);
+}
 
 const errors = [];
 const notes = [];

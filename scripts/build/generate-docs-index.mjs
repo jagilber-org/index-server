@@ -20,6 +20,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { trackedFiles, docSummary } from '../governance/docs-graph.mjs';
+import { skipOnPublishedMirror } from '../lib/published-mirror.mjs';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const OUT = 'docs/docs_index.md';
@@ -177,6 +178,14 @@ const outPath = path.join(repoRoot, OUT);
 const existing = fs.existsSync(outPath) ? fs.readFileSync(outPath, 'utf8') : null;
 
 if (process.argv.includes('--check')) {
+  // The index is a derived artifact copied verbatim into the clean-room mirror,
+  // where .publish-exclude has since removed some of the docs it was derived
+  // from. It is therefore stale there by construction, through no fault of the
+  // committed file. Writing (non --check) still works if ever wanted.
+  if (skipOnPublishedMirror(repoRoot, 'docs-index',
+    'docs/docs_index.md is derived from the source doc set; .publish-exclude strips some of those docs, so a verbatim copy cannot match here.')) {
+    process.exit(0);
+  }
   if (existing !== output) {
     console.error('[docs-index] FAIL docs/docs_index.md is stale. Run `npm run docs:index`.');
     process.exit(1);
