@@ -1,11 +1,11 @@
 {
   "forbiddenArtifactCheck": "passed",
-  "commitSha": "ded3c2736b44af923f301d5d6e7dfce6939e92b9",
-  "sourceRepo": "index-server",
+  "fileCount": 3152,
   "manifestVersion": 2,
-  "preparedAt": "2026-09-14T13:06:17.8745422Z",
-  "contentHash": "8f9272ef10daa58e5b7088c05c8b48275faec70296399b5aeb208f54dff9df5d",
+  "contentHash": "742e437b4a0d7b297d497e6b4471686804e6e5c7cc94516fa58bf0facedd32bb",
+  "preparedAt": "2026-09-15T10:37:23.7466736Z",
   "piiScanPassed": true,
-  "tag": "v1.42.1",
-  "fileCount": 3150
+  "tag": "v1.42.2",
+  "commitSha": "b1312e6a30563f0bda0210df5c6ea8fca39e63ce",
+  "sourceRepo": "index-server"
 }

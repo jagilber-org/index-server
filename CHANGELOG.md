@@ -6,6 +6,14 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 
 ## [Unreleased]
 
+## [1.42.2] - 2026-09-15
+
+### Fixed
+
+- **The public mirror's CI had been red on every workflow since v1.42.0.** Two symptoms, one cause: `.publish-exclude` strips files that published tooling still depends on.
+  - `npm run build` died with `ENOENT` on `scripts/mappings/server-env-tools.json`, taking CI, Coverage, Manifest Verify, Governance Hash, Instruction Governance and Bootstrap Guard down on the same step. `generate-server-env-tools.mjs` now skips regeneration when the mapping is absent rather than crashing.
+  - `guard:constitution` reported ~50 violations and demoted 8 rules to "prose only", because `enforcedBy` paths under `.instructions/`, `.specify/`, `.squad/` and `.github/` cannot resolve in a clean-room copy. The guard now no-ops in a published mirror, detected via `.publish-manifest.json`, and still runs in full in the source repo.
+
 ## [1.42.0] - 2026-09-14
 
 ### Migration

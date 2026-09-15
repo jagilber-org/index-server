@@ -7,6 +7,16 @@ const root = process.cwd();
 const registryPath = path.join(root, 'dist', 'services', 'toolRegistry.js');
 const mappingPath = path.join(root, 'scripts', 'mappings', 'server-env-tools.json');
 
+// `scripts/mappings/` is stripped from the public mirror by .publish-exclude,
+// but this script ships with it and runs as part of `npm run build`. Without
+// this guard the mirror's build dies here with ENOENT, taking every workflow
+// that builds down with it. The mapping is a checked-in source artifact we
+// regenerate; where there is nothing to regenerate, there is nothing to do.
+if (!fs.existsSync(mappingPath)) {
+  console.error(`[server-env-tools] ${path.relative(root, mappingPath)} not present — skipping regeneration.`);
+  process.exit(0);
+}
+
 if (!fs.existsSync(registryPath)) {
   console.error('Build output not found. Run `npm run build` first.');
   process.exit(1);
