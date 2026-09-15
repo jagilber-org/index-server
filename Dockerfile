@@ -57,6 +57,34 @@ RUN if command -v apk >/dev/null 2>&1; then \
       [ -e /sbin/tini ] || ln -s /usr/bin/tini /sbin/tini; \
     fi
 
+# Remove the bundled npm/yarn CLIs from the RUNTIME image.
+#
+# Nothing here uses them: ENTRYPOINT is tini, CMD calls `node` directly, and the
+# HEALTHCHECK uses wget. But the base image vendors npm, and npm vendors its own
+# copies of pacote, sigstore, tar, ip-address, picomatch and brace-expansion —
+# which is where ALL 11 of this image's CRITICAL/HIGH Trivy findings live. Every
+# one sits under /usr/local/lib/node_modules/npm/; zero come from app/. They are
+# NOT this project's dependencies and no lockfile change can reach them: our tar
+# is 7.5.22 while npm's vendored copy is 7.5.11, and pacote/sigstore/picomatch/
+# brace-expansion are absent from the runtime tree entirely. Deleting the unused
+# CLI removes the entire class.
+#
+# Measured locally against this Dockerfile (trivy 0.6x, --severity CRITICAL,HIGH,
+# the same args CI passes): before = exit 1 / 11 findings, after = exit 0 / 0.
+# Runtime after removal: node v22.22.3, tini, wget and dist entrypoint all intact.
+#
+# Caveat: npm lives in a base-image layer, so this RUN only writes a whiteout —
+# it hides the files from the scanner and the running container, but does not
+# shrink the image (1.67GB either way). Runtime exposure is gone; image size is a
+# separate, pre-existing concern (CI warns above 500MB).
+#
+# If a future runtime step needs npm, install it explicitly rather than
+# reinstating this — silently shipping a package manager you do not call is how
+# the findings came back.
+RUN rm -rf /usr/local/lib/node_modules/npm \
+           /usr/local/bin/npm /usr/local/bin/npx \
+           /opt/yarn-* /usr/local/bin/yarn /usr/local/bin/yarnpkg || true
+
 # OCI labels
 LABEL org.opencontainers.image.title="index-server" \
       org.opencontainers.image.description="MCP instruction indexing server for AI assistant governance" \

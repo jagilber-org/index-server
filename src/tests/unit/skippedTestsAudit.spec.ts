@@ -28,6 +28,14 @@
  *     or PowerShell publish script may not exist in all checkout states.
  *     Skip is appropriate — fix: ensure scripts/ are checked out.
  *
+ *     - generatedToolArtifacts.spec.ts — skipIf(HAS_PUBLISH_MANIFEST)
+ *     WHY: Inverted sense on purpose. This one skips when the manifest IS
+ *     present, because `.publish-manifest.json` exists only in a published
+ *     clean-room mirror, where `.publish-exclude` has stripped the suite's
+ *     subject (scripts/mappings/). Gating on the sentinel rather than on the
+ *     mapping's own absence keeps the suite loud in the source repo, which is
+ *     the only place a missing mapping is a real regression.
+ *
  *  3. Copilot instructions file missing:
  *     - renameValidation.spec.ts — skipIf(!hasCopilotInstructions)
  *     WHY: Tests that the .github/copilot-instructions.md file says "Index Server"
